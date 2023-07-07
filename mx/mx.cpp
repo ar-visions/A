@@ -253,7 +253,7 @@ void memory::drop() {
     }
 }
 
-/// now we start allocating the total_size (or type->base_sz if not schema-bound (mx classes accept schema.  they say, icanfly.. imapilot))
+/// now we start allocating the total_size (or type->base_sz if not an mx/schema-based class)
 memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
     memory *result = null;
     size_t type_sz = type->size();
@@ -263,7 +263,7 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
     
     memory *mem = memory::raw_alloc(type, type_sz, count, reserve);
 
-    if (type->singleton)
+    if (type->traits & traits::singleton)
         type->singleton = mem;
     
     /// schema needs to have if its a ptr or not

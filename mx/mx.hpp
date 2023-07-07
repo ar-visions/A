@@ -386,7 +386,7 @@ constexpr bool _boolean_impl(...) {
     return false;
 }
 
-#define register1(C)\
+#define register(C)\
     static void _construct(C *dst, size_t count) {\
         for (size_t i = 0; i < count; i++)\
             if constexpr (!is_opaque<C>()) new (dst) C();\
@@ -983,7 +983,7 @@ struct doubly {
         size_t   icount;
         item<T> *ifirst, *ilast;
 
-        register1(ldata);
+        register(ldata);
 
         /// life-cycle on items, in data destructor
         ~ldata() {
@@ -1117,7 +1117,7 @@ struct hmap {
         bucket *h_pairs;
         size_t sz;
 
-        register1(hmdata);
+        register(hmdata);
 
         /// i'll give you a million quid, or, This Bucket.
         bucket &operator[](u64 k) {
@@ -1303,7 +1303,7 @@ struct util {
 template <typename T>
 size_t schema_info(alloc_schema *schema, int depth, T *p, idata *ctx_type) {
     ///
-    if constexpr (!identical<T, none>()) {
+    if constexpr (!identical<T, none>() && !identical<T, mx>()) {
         /// count is set to schema_info after first return
         if (schema->bind_count) {
             context_bind &bind = schema->composition[schema->bind_count - 1 - depth]; /// would be not-quite-ideal casting-wise to go the other way, lol.
@@ -1317,7 +1317,6 @@ size_t schema_info(alloc_schema *schema, int depth, T *p, idata *ctx_type) {
                 schema->total_bytes += bind.ref_sz;
             }
         }
-        
         typename T::parent_class *placeholder = null;
         return schema_info(schema, depth + 1, placeholder, null);
         ///
@@ -1328,11 +1327,11 @@ size_t schema_info(alloc_schema *schema, int depth, T *p, idata *ctx_type) {
 
 template <typename T>
 void schema_populate(idata *type, T *p) {
-    type->schema         = (alloc_schema*)calloc(1, sizeof(alloc_schema) * 16);
+    type->schema         = (alloc_schema*)calloc(1, sizeof(alloc_schema));
     alloc_schema &schema = *type->schema;
     ///
     schema.bind_count    = schema_info(&schema, 0, (T*)null, type);
-    schema.composition   = (context_bind*)calloc(schema.bind_count, sizeof(context_bind) * 16);
+    schema.composition   = (context_bind*)calloc(schema.bind_count, sizeof(context_bind));
     schema_info(&schema, 0, (T*)null, type);
     /// summarize recursion
     size_t offset = 0;
@@ -1835,7 +1834,7 @@ struct lambda<R(Args...)>:mx {
     /// just so we can set it in construction
     struct container {
         fdata *fn;
-        register1(container);
+        register(container);
         ~container() {
             delete fn;
         }
@@ -2888,7 +2887,7 @@ struct map:mx {
         doubly<field<V>>  fields;
         hmap           *hash_map;
 
-        register1(mdata);
+        register(mdata);
 
         /// boolean operator for key
         bool operator()(mx key) {
@@ -3110,7 +3109,7 @@ struct states:mx {
     struct fdata {
         type_t type;
         u64    bits;
-        register1(fdata);
+        register(fdata);
     };
 
     /// get the bitmask (1 << value); 0 = 1bit set

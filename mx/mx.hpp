@@ -46,6 +46,8 @@
 #include <type_traits>
 #include <string.h>
 #include <stdarg.h>
+#include <typeinfo>
+
 #ifndef _WIN32
 #   include <unistd.h>
 #endif
@@ -89,33 +91,6 @@ void*   mem_origin(memory *mem);
 memory*    cstring(cstr cs, size_t len, size_t reserve, bool is_constant);
 
 template <typename T> T *mdata(memory *mem, size_t index);
-
-/*
-/// i8 -> 64
-using i8  = signed char;
-using i16 = signed short;
-using i32 = signed int;
-using i64 = long long;
-
-/// u8 -> 64
-using u8  = unsigned char;
-using u16 = unsigned short;
-using u32 = unsigned int;
-using u64 = unsigned long long;
-
-/// basic types
-using ulong    = unsigned long;
-using r32      = float;
-using r64      = double;
-using real     = r64;
-using cstr     = char*;
-using symbol   = const char*;
-using cchar_t  = const char;
-//using ssize_t = i64;
-using num      = i64;
-using handle_t = void*;
-using raw_t    = void*;
- */
 
 using        null_t      = std::nullptr_t;
 static const null_t null = nullptr;
@@ -219,7 +194,9 @@ constexpr int num_occurances(const char* cs, char c) {
             if (!psym) throw C();\
             return (enum etype)((*psym)->id);\
         }\
-        C(enum etype t =        etype::D) :ex(t, this), value(ref<enum etype>()) { if (!init) initialize(); }\
+        C(enum etype t = etype::D):ex(t,             this), value(ref<enum etype>()) { if (!init) initialize(); }\
+        C(size_t     t)           :ex((enum etype)t, this), value(ref<enum etype>()) { if (!init) initialize(); }\
+        C(int        t)           :ex((enum etype)t, this), value(ref<enum etype>()) { if (!init) initialize(); }\
         C(str raw):C(C::convert(raw)) { }\
         C(mx  raw):C(C::convert(raw)) { }\
         inline  operator etype() { return value; }\
@@ -386,6 +363,27 @@ constexpr bool _boolean_impl(...) {
     return false;
 }
 
+template <typename T, typename = std::void_t<>> struct has_bool_op: std::false_type {};
+template <typename T> struct has_bool_op<T, std::void_t<decltype(static_cast<bool>(std::declval<const T&>()))>> : std::true_type {};
+template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
+
+template <typename T>
+struct has_public_destructor
+{
+    template <typename C>
+    static std::true_type test(decltype(std::declval<C>().~C())*);
+
+    template <typename C>
+    static std::false_type test(...);
+
+    static constexpr bool value = std::is_same<decltype(test<T>(nullptr)), std::true_type>::value;
+};
+
+template <typename T>
+struct is_opaque_dtr : std::false_type {};
+
+template <> struct is_opaque_dtr<std::filesystem::path> : std::true_type {};
+
 #define register(C)\
     static void _construct(C *dst, size_t count) {\
         for (size_t i = 0; i < count; i++)\
@@ -404,14 +402,49 @@ constexpr bool _boolean_impl(...) {
         return        type_sz;\
     }\
     static bool _boolean(C *src) {\
-        if constexpr (has_bool_op<C>::value) \
+        if constexpr (has_bool<C>) \
             return bool(*src); \
         else \
             return false; \
     }\
-    static void _free(C *dst, size_t count) {\
+    static void _destruct(C *dst, size_t count) {\
         for (size_t i = 0; i < count; i++) {\
             if constexpr (!is_opaque<C>()) dst[i].~C();\
+        }\
+    }\
+    static void _copy(C *dst, C *src, size_t count) { \
+        if constexpr (std::is_assignable_v<C&, const C&>) for (size_t i = 0; i < count; i++) dst[i] = src[i];\
+        else assert(false);\
+    }\
+
+#define external(C)\
+    static void _construct(C *dst, size_t count) {\
+        for (size_t i = 0; i < count; i++)\
+            if constexpr (!is_opaque<C>()) new (dst) C();\
+    }\
+    static void _assign(C *dst, C *src) {\
+        if constexpr (!is_opaque<C>() && std::is_copy_constructible<C>()) {\
+            delete dst;\
+            new (dst) C(*src);\
+        }\
+    }\
+    static size_t _type_sz(C *src) {\
+        static type_t type    = typeof(C);\
+        static size_t type_sz = (type->schema) ? type->schema->total_bytes : type->base_sz;\
+        assert(type_sz > 0);\
+        return type_sz;\
+    }\
+    static bool _boolean(C *src) {\
+        return false; \
+    }\
+    static void _destruct(C *dst, size_t count) {\
+        for (size_t i = 0; i < count; i++) {\
+            if constexpr (std::is_trivially_destructible<C>::value) {\
+                if constexpr (!is_opaque<C>()) dst[i].~C();\
+            } else {\
+                delete dst;\
+                break;\
+            }\
         }\
     }\
     static void _copy(C *dst, C *src, size_t count) { \
@@ -585,12 +618,6 @@ template <typename T>             constexpr bool is_primitive()    { return  ide
 template <typename T>             constexpr bool is_class()        { return !is_primitive<T>() && std::is_default_constructible<T>(); }
 template <typename T>             constexpr bool is_destructible() { return  is_class<T>()     && std::is_destructible<T>(); }
 template <typename A, typename B> constexpr bool is_convertible()  { return std::is_same<A, B>() || std::is_convertible<A, B>::value; }
-
-template <typename T, typename = std::void_t<>> struct has_bool_op: std::false_type {};
-template <typename T> struct has_bool_op<T, std::void_t<decltype(static_cast<bool>(std::declval<const T&>()))>> : std::true_type {};
-
-
-template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
 
 template <typename> struct is_lambda : std::false_type { };
 
@@ -936,7 +963,7 @@ template <typename T> using        HashFn =        size_t(*)(T*, size_t);      /
 /// use functions, not lambdas (WHY DONT I TEST ANYTHING? WHY DONT I COMPLETE ANYTHING? WHY DO I MOVE ON AND LEAVE MYSELF FOR DEAD LATER?)
 template <typename T>
 struct ops {
-         FreeFn<T> free;
+        //FreeFn<T> free;
          InitFn<T> init;
       CompareFn<T> compare;
       BooleanFn<T> boolean;
@@ -948,6 +975,7 @@ struct ops {
        AssignFn<T> assign;
          HashFn<T> hash;
          void     *meta;
+         bool      private_destructor; /// std::filesystem::path is a massive penis you cant see
 };
 
 struct symbol_data;
@@ -1224,50 +1252,64 @@ template <typename T, typename = void> struct registered_copy        : std::fals
 template <typename T, typename = void> struct registered_to_string   : std::false_type { bool operator()() const { return value; }};
 template <typename T, typename = void> struct registered_from_string : std::false_type { bool operator()() const { return value; }};
 template <typename T, typename = void> struct registered_init        : std::false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct registered_free        : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct registered_destruct    : std::false_type { bool operator()() const { return value; }};
 template <typename T, typename = void> struct registered_meta        : std::false_type { bool operator()() const { return value; }};
 template <typename T, typename = void> struct registered_hash        : std::false_type { bool operator()() const { return value; }};
 template <typename T, typename = void> struct registered_construct   : std::false_type { bool operator()() const { return value; }};
 
-template <typename T, typename = void> struct registered_instance_meta        : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_registered  : std::false_type { bool operator()() const { return value; }};
 
-template <typename T> struct registered            <T, std::enable_if_t<std::is_same_v<decltype(T::_type_sz    (std::declval<T*>  ())),
-    size_t>>>       : std::true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_assign     <T, std::enable_if_t<std::is_same_v<decltype(T::_assign     (std::declval<T*>  (), std::declval<T*>())),
-    void>>>         : std::true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_compare    <T, std::enable_if_t<std::is_same_v<decltype(T::_compare    (std::declval<T*>  (), std::declval<T*>())),
-    int>>>          : std::true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_bool       <T, std::enable_if_t<std::is_same_v<decltype(T::_boolean    (std::declval<T*>  ())),
-    bool>>>         : std::true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_copy       <T, std::enable_if_t<std::is_same_v<decltype(T::_copy       (std::declval<T*>  (), 
-    std::declval<T*>(), size_t(0))), void>>>         : std::true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_construct  <T, std::enable_if_t<std::is_same_v<decltype(T::_construct  (std::declval<T*>  (), size_t(0))),
-    void>>> : std::true_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_assign      : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_compare     : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_bool        : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_copy        : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_to_string   : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_from_string : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_init        : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_destruct    : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_meta        : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_hash        : std::false_type { bool operator()() const { return value; }};
+template <typename T, typename = void> struct external_construct   : std::false_type { bool operator()() const { return value; }};
 
-/// merge dtr and free
-/// dtr called from free.
+template <typename T, typename = void> struct registered_instance_meta : std::false_type { bool operator()() const { return value; }};
 
+/// we need two sets because data types can be registered in templates.  you dont want to hard code all of the types you use
+/// you also dont want to limit yourself to your own data types, so we have the idea of external
 
-static int *from_string(cstr in) {
-    return null;
+template <typename T> struct registered            <T, std::enable_if_t<std::is_same_v<decltype(T::_type_sz    (std::declval<T*>  ())), size_t>>>       : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct registered_assign     <T, std::enable_if_t<std::is_same_v<decltype(T::_assign     (std::declval<T*>  (), std::declval<T*>())), void>>>         : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct registered_compare    <T, std::enable_if_t<std::is_same_v<decltype(T::_compare    (std::declval<T*>  (), std::declval<T*>())), int>>>          : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct registered_bool       <T, std::enable_if_t<std::is_same_v<decltype(T::_boolean    (std::declval<T*>  ())), bool>>>                     : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct registered_copy       <T, std::enable_if_t<std::is_same_v<decltype(T::_copy       (std::declval<T*>  (),  std::declval<T*>(), size_t(0))), void>>>         : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct registered_construct  <T, std::enable_if_t<std::is_same_v<decltype(T::_construct  (std::declval<T*>  (), size_t(0))), void>>>          : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct registered_to_string  <T, std::enable_if_t<std::is_same_v<decltype(T::_to_string  (std::declval<T*>  ())), memory*>>>                  : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct registered_from_string<T, std::enable_if_t<std::is_same_v<decltype(T::_from_string(std::declval<cstr>())), T*>>>                       : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct registered_init       <T, std::enable_if_t<std::is_same_v<decltype(T::_init       (std::declval<T*>  ())), void>>>                     : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct registered_destruct   <T, std::enable_if_t<std::is_same_v<decltype(T::_destruct   (std::declval<T*>  ())), void>>>                     : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct registered_meta       <T, std::enable_if_t<std::is_same_v<decltype(T::meta        (std::declval<T*>  ())), doubly<prop>>>>             : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct registered_hash       <T, std::enable_if_t<std::is_same_v<decltype(T::hash        (std::declval<T*>  (), size_t(0))), size_t>>>        : std::true_type { bool operator()() const { return value; }};
+
+template <typename T> struct external_registered   <T, std::enable_if_t<std::is_same_v<decltype(_type_sz       (std::declval<T*>  ())), size_t>>>                   : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct external_assign       <T, std::enable_if_t<std::is_same_v<decltype(_assign        (std::declval<T*>  (), std::declval<T*>())), void>>> : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct external_compare      <T, std::enable_if_t<std::is_same_v<decltype(_compare       (std::declval<T*>  (), std::declval<T*>())), int>>>  : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct external_bool         <T, std::enable_if_t<std::is_same_v<decltype(_boolean       (std::declval<T*>  ())), bool>>>                     : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct external_copy         <T, std::enable_if_t<std::is_same_v<decltype(_copy          (std::declval<T*>  (), std::declval<T*>(), size_t(0))), void>>> : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct external_construct    <T, std::enable_if_t<std::is_same_v<decltype(_construct     (std::declval<T*>  (), size_t(0))), void>>>          : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct external_to_string    <T, std::enable_if_t<std::is_same_v<decltype(_to_string     (std::declval<T*>  ())), memory*>>>                  : std::true_type { bool operator()() const { return value; }};
+//template <typename T> struct external_from_string  <T, std::enable_if_t<std::is_same_v<decltype(_from_string (std::declval<cstr>())), T*>>>                       : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct external_init         <T, std::enable_if_t<std::is_same_v<decltype(_init          (std::declval<T*>  ())), void>>>                     : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct external_destruct     <T, std::enable_if_t<std::is_same_v<decltype(_destruct      (std::declval<T*>  ())), void>>>                     : std::true_type { bool operator()() const { return value; }};
+template <typename T> struct external_meta         <T, std::enable_if_t<std::is_same_v<decltype(_meta          (std::declval<T*>  ())), doubly<prop>>>>             : std::true_type { bool operator()() const { return value; }};
+//template <typename T> struct external_hash         <T, std::enable_if_t<std::is_same_v<decltype(_hash          (std::declval<T*>  (), size_t(0))), size_t>>>        : std::true_type { bool operator()() const { return value; }};
+
+static cstr _from_string(cstr input) {
+    return input;
 }
-
-
-template <typename T> struct registered_to_string  <T, std::enable_if_t<std::is_same_v<decltype(T::to_string (std::declval<T*>  ())), memory*>>>      : std::true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_from_string<T, std::enable_if_t<std::is_same_v<decltype(T::from_string (std::declval<cstr>())), T*>>>           : std::true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_init       <T, std::enable_if_t<std::is_same_v<decltype(T::init        (std::declval<T*>  ())), void>>>         : std::true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_free       <T, std::enable_if_t<std::is_same_v<decltype(T::free        (std::declval<T*>  ())), void>>>         : std::true_type { bool operator()() const { return value; }};
 
 template <typename T>
 struct registered_instance_meta<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().meta()), doubly<prop>>>> : std::true_type {
     bool operator()() const { return value; }
 };
-
-template <typename T> struct registered_meta       <T, std::enable_if_t<std::is_same_v<decltype(T::meta        (std::declval<T*>  ())), doubly<prop>>>> : std::true_type { bool operator()() const { return value; }};
-
-template <typename T> struct registered_hash       <T, std::enable_if_t<std::is_same_v<decltype(T::hash        (std::declval<T*>  ())), size_t>>>       : std::true_type { bool operator()() const { return value; }};
-
-/// djb2 should be the hash_fn for char/8bit
 
 template <typename T>
 static ops<T> *ftable();
@@ -3257,6 +3299,19 @@ struct logger {
 /// define a logger for global use; 'console' can certainly be used as delegate in mx or node, for added context
 extern logger console;
 
+struct basic_string {
+    cstr cs;
+    int  len;
+};
+
+/// make file-system path hang out with the boys
+external(fs::path);
+
+//static void _construct(std::filesystem::path *p, size_t c) {
+//    int test = 0;
+//    test++;
+//}
+
 /// use char as base.
 struct path:mx {
     inline static std::error_code ec;
@@ -4115,17 +4170,45 @@ size_t ident::type_size() {
 }
 
 template <typename T>
+struct has_construct
+{
+    template <typename C>
+    static auto test(int) -> decltype(std::declval<C>()._construct(), std::true_type());
+
+    template <typename>
+    static auto test(...) -> std::false_type;
+
+    static constexpr bool value = decltype(test<T>(0))::value;
+};
+
+
+template <typename T>
 ops<T> *ftable() {
     static ops<T> gen;
-    if constexpr (registered_free        <T>()) gen.free        = FreeFn       <T>(T::_free);
-    if constexpr (registered_construct   <T>()) gen.construct   = ConstructFn  <T>(T::_construct);
-    if constexpr (registered_copy        <T>()) gen.copy        = CopyFn       <T>(T::_copy);
-    if constexpr (registered_compare     <T>()) gen.compare     = CompareFn    <T>(T::_compare);
-    if constexpr (registered_bool        <T>()) gen.boolean     = BooleanFn    <T>(T::_boolean);
-    if constexpr (registered_to_string   <T>()) gen.to_string   = ToStringFn   <T>(T::_to_string);
-    if constexpr (registered_from_string <T>()) gen.from_string = FromStringFn <T>(T::_from_string);
-    if constexpr (registered_assign      <T>()) gen.assign      = AssignFn     <T>(T::_assign);
-    if constexpr (registered_hash        <T>()) gen.hash        = HashFn       <T>(T::_from_string);
+    if constexpr (registered<T>()) {
+        if constexpr (registered_construct   <T>()) gen.construct   = ConstructFn  <T>(T::_construct);
+        if constexpr (registered_destruct    <T>()) gen.destruct    = DestructFn   <T>(T::_destruct);
+        if constexpr (registered_copy        <T>()) gen.copy        = CopyFn       <T>(T::_copy);
+        if constexpr (registered_compare     <T>()) gen.compare     = CompareFn    <T>(T::_compare);
+        if constexpr (registered_bool        <T>()) gen.boolean     = BooleanFn    <T>(T::_boolean);
+        if constexpr (registered_to_string   <T>()) gen.to_string   = ToStringFn   <T>(T::_to_string);
+        if constexpr (registered_from_string <T>()) gen.from_string = FromStringFn <T>(T::_from_string);
+        if constexpr (registered_assign      <T>()) gen.assign      = AssignFn     <T>(T::_assign);
+        if constexpr (registered_hash        <T>()) gen.hash        = HashFn       <T>(T::_hash);
+    } else {
+        type_t t = typeof(T);
+        gen.construct   = ConstructFn  <T>(_construct);
+        gen.destruct    = DestructFn   <T>(_destruct);
+        //gen.free        = FreeFn       <T>(_free);
+        gen.copy        = CopyFn       <T>(_copy);
+        //if constexpr (external_compare       <T>()) gen.compare     = CompareFn    <T>(_compare);
+        gen.boolean     = BooleanFn    <T>(_boolean);
+        //if constexpr (external_to_string     <T>()) gen.to_string   = ToStringFn   <T>(_to_string);
+        //if constexpr (external_from_string   <T>()) gen.from_string = FromStringFn <T>(_from_string);
+        gen.assign      = AssignFn     <T>(_assign);
+        //if constexpr (external_hash          <T>()) gen.hash        = HashFn       <T>(_hash);
+    }
+    gen.private_destructor = !has_public_destructor<C>::value;
     return (ops<T>*)&gen;
 }
 

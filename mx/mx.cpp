@@ -155,7 +155,11 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
         else /// subtract off constructed-already
             type->functions->construct(&dst[mn], alloc_reserve - mn);
     }
-    free(origin);
+    
+    /// private destructors break meta, cant vectorize them
+    if (!type->functions || !type->functions->private_destructor)
+        free(origin);
+    
     origin  = raw_t(dst);
     reserve = alloc_reserve;
     return origin;

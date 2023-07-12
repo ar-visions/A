@@ -1,7 +1,21 @@
 #include <mx/mx.hpp>
 
 namespace ion {
-    
+
+external_implement(fs::path);
+external_implement(std::nullptr_t);
+external_implement(char);
+external_implement(i8);
+external_implement(i16);
+external_implement(i32);
+external_implement(i64);
+external_implement(u8);
+external_implement(u16);
+external_implement(u32);
+external_implement(u64);
+external_implement(r32);
+external_implement(r64);
+
 logger console;
 
 size_t length(std::ifstream& in) {
@@ -125,40 +139,40 @@ attachment *memory::find_attachment(ion::symbol id) {
 }
 
 void *memory::realloc(size_t alloc_reserve, bool fill_default) {
-    size_t          sz        = type->base_sz; /// this function 
+    type_t          ty        = (type->traits & traits::array) != 0 ? type->schema->bind->data : type;
+    size_t          sz        = ty->base_sz; /// size of actual data consumed -- we dont use functions that are emitted from array<T> we use T in vector form (which they are already)
     u8             *dst       = (u8*)calloc(alloc_reserve, sz);
     u8             *src       = (u8*)origin;
     size_t          mn        = math::min(alloc_reserve, count);
-    const bool      prim      = (type->traits & traits::primitive) != 0;
-    ///
+    const bool      prim      = (ty->traits & traits::primitive) != 0;
+    alloc_schema   *mx        = ty->schema; // issues with array<str>, resolving element type
+    size_t          stride    = mx->total_bytes;
+
     if (prim) {
         memcpy(dst, src, sz * mn);
     } else {
-        alloc_schema *mx = type->schema;
-        /// 1-depth of mx here; not supporting schema
-        if (mx) {
-            for (size_t i = 0; i < mx->bind_count; i++) {
-                context_bind &c  = mx->composition[i];
-                c.data->functions->copy    (&dst[c.offset], &src[c.offset], mn); /// copy prior data
-                c.data->functions->destruct(&src[c.offset], mn); /// destruct prior data
+        for (size_t i = 0; i < mx->bind_count; i++) {
+            context_bind &c  = mx->composition[i];
+            for (size_t ii = 0; ii < mn; ii++) {
+                c.data->functions->copy    (&dst[c.offset + ii * stride], &src[c.offset + ii * stride]); /// copy prior data
+                c.data->functions->destruct(&src[c.offset + ii * stride]); /// destruct prior data
             }
-        } else {
-            type->functions->copy    (dst, origin, mn);
-            type->functions->destruct(origin, mn);
         }
     }
     /// this controls the 'count' which is in-effect the constructed count.  if we are not constructing, no updating count
     if (fill_default) {
         count = alloc_reserve;
-        if (prim)
-            memset(&dst[sz * mn], 0, sz * (alloc_reserve - mn));
-        else /// subtract off constructed-already
-            type->functions->construct(&dst[mn], alloc_reserve - mn);
+        if (!prim) {
+            for (size_t i = 0; i < mx->bind_count; i++) {
+                context_bind &c  = mx->composition[i];
+                for (size_t ii = mn; ii < alloc_reserve; ii++)
+                    c.data->functions->construct(&dst[c.offset + ii * stride]);
+            }
+        }
     }
-    
+
     /// private destructors break meta, cant vectorize them
-    if (!type->functions || !type->functions->private_destructor)
-        free(origin);
+    free(origin); // char type destruct seems to be a free call on memory, not the no-op i thought
     
     origin  = raw_t(dst);
     reserve = alloc_reserve;
@@ -167,17 +181,15 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
 
 /// mx-objects are clearable which brings their count to 0 after destruction
 void memory::clear() {
-    alloc_schema *mx  = type->schema; ///
+    alloc_schema *mx  = type->schema;
     u8           *dst = (u8*)origin;
-    /// 1-depth of mx here; not supporting schema
     if (mx) {
         for (size_t i = 0; i < mx->bind_count; i++) { /// count should be called bind_count or something; its too ambiguous with memory
             context_bind &c  = mx->composition[i];
-            c.data->functions->destruct(&dst[c.offset], count); /// destruct prior data
+            for (size_t ii = 0; ii < count; ii++)
+                c.data->functions->destruct(&dst[c.offset + ii * mx->total_bytes]);
         }
-    } else
-        type->functions->destruct(dst, count);
-    
+    }
     count = 0;
 }
 
@@ -259,6 +271,10 @@ void memory::drop() {
 
 /// now we start allocating the total_size (or type->base_sz if not an mx/schema-based class)
 memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
+    if (strstr(type->name, "lambda")) {
+        int test = 0;
+        test++;
+    }
     memory *result = null;
     size_t type_sz = type->size();
 
@@ -269,39 +285,39 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
 
     if (type->traits & traits::singleton)
         type->singleton = mem;
-    
-    /// schema needs to have if its a ptr or not
+
+    /// from here we need to use the contained type within array, and all copies are within the schema of the element
+    type_t ty = (type->traits & traits::array) != 0 ? type->schema->bind->data : type;
+
+    const bool prim = (ty->traits & traits::primitive);
+
     /// if allocating a schema-based object (mx being first user of this)
     if (count > 0) {
-        if (type->schema) {
-            if (v_src) {
-                /// if schema-copy-construct (call cpctr for each data type in composition)
-                for (size_t i = 0; i < type->schema->bind_count; i++) {
-                    context_bind &bind = type->schema->composition[i];
-                    u8 *dst = &((u8*)mem->origin)[bind.offset];
-                    u8 *src = &((u8*)      v_src)[bind.offset];
-                    if (bind.data) bind.data->functions->copy(dst, src, count);
-                }
-            } else {
-                /// ctr: call construct across the composition
-                for (size_t i = 0; i < type->schema->bind_count; i++) {
-                    context_bind &bind = type->schema->composition[i];
-                    u8 *dst  = &((u8*)mem->origin)[bind.offset];
-                    if (bind.data) bind.data->functions->construct(dst, count); /// issue is origin passed and effectively reused memory! /// probably good to avoid the context bind at all if there is no data; in some cases it may not be required and the context does offer some insight by itself
-                }
+        size_t stride = ty->schema->total_bytes;
+        if (v_src) {
+            /// if schema-copy-construct (call cpctr for each data type in composition)
+            for (size_t i = 0; i < ty->schema->bind_count; i++) {
+                context_bind &bind = ty->schema->composition[i];
+                u8 *dst = &((u8*)mem->origin)[bind.offset];
+                u8 *src = &((u8*)      v_src)[bind.offset];
+                if (bind.data)
+                    for (size_t ii = 0; ii < count; ii++) {
+                        if (bind.data->functions) /// enums dont have this set; in order for that to be the case we cannot embed them and must do 2 part decl/impl
+                            bind.data->functions->copy(&dst[ii * stride], &src[ii * stride]);
+                        else
+                            memcpy(&dst[ii * stride], &src[ii * stride], bind.data_sz); /// needs an assert check to be sure its primitive
+                    }
             }
-        } else if (type->functions) {
-            const bool prim = (type->traits & traits::primitive);
-            if (v_src)
-                type->functions->copy(mem->origin, v_src, count);
-            else if (!prim && type->functions->construct) {
-                printf("type name = %s\n", type->name);
-                type->functions->construct(mem->origin, count);
-            } else if (!prim && !type->functions->construct) {
-                printf("no constructor for: %s (should be opaques or nullptr)\n", type->name);
+        } else {
+            /// ctr: call construct across the composition
+            for (size_t i = 0; i < ty->schema->bind_count; i++) {
+                context_bind &bind = ty->schema->composition[i];
+                u8 *dst  = &((u8*)mem->origin)[bind.offset];
+                if (bind.data && bind.data->functions)
+                    for (size_t ii = 0; ii < count; ii++) {
+                        bind.data->functions->construct(&dst[ii * stride]);
+                    }
             }
-        } else if (v_src) {
-            memcpy(mem->origin, v_src, type->base_sz * count);
         }
     }
     return mem;

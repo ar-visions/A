@@ -2,20 +2,6 @@
 
 namespace ion {
 
-external_implement(fs::path);
-external_implement(std::nullptr_t);
-external_implement(char);
-external_implement(i8);
-external_implement(i16);
-external_implement(i32);
-external_implement(i64);
-external_implement(u8);
-external_implement(u16);
-external_implement(u32);
-external_implement(u64);
-external_implement(r32);
-external_implement(r64);
-
 logger console;
 
 size_t length(std::ifstream& in) {
@@ -139,23 +125,20 @@ attachment *memory::find_attachment(ion::symbol id) {
 }
 
 void *memory::realloc(size_t alloc_reserve, bool fill_default) {
-    type_t          ty        = (type->traits & traits::array) != 0 ? type->schema->bind->data : type;
-    size_t          sz        = ty->base_sz; /// size of actual data consumed -- we dont use functions that are emitted from array<T> we use T in vector form (which they are already)
-    u8             *dst       = (u8*)calloc(alloc_reserve, sz);
+    size_t          type_sz   = type->size(); /// size of actual data consumed -- we dont use functions that are emitted from array<T> we use T in vector form (which they are already)
+    u8             *dst       = (u8*)calloc(alloc_reserve, type_sz);
     u8             *src       = (u8*)origin;
     size_t          mn        = math::min(alloc_reserve, count);
-    const bool      prim      = (ty->traits & traits::primitive) != 0;
-    alloc_schema   *mx        = ty->schema; // issues with array<str>, resolving element type
-    size_t          stride    = mx->total_bytes;
+    const bool      prim      = (type->traits & traits::primitive) != 0;
 
     if (prim) {
-        memcpy(dst, src, sz * mn);
+        memcpy(dst, src, type_sz * mn);
     } else {
-        for (size_t i = 0; i < mx->bind_count; i++) {
-            context_bind &c  = mx->composition[i];
+        for (size_t i = 0; i < type->schema->bind_count; i++) {
+            context_bind &c  = type->schema->composition[i];
             for (size_t ii = 0; ii < mn; ii++) {
-                c.data->functions->copy    (&dst[c.offset + ii * stride], &src[c.offset + ii * stride]); /// copy prior data
-                c.data->functions->destruct(&src[c.offset + ii * stride]); /// destruct prior data
+                c.data->functions->copy    (raw_t(0), &dst[c.offset + ii * type_sz], &src[c.offset + ii * type_sz]); /// copy prior data
+                c.data->functions->destruct(raw_t(0), &src[c.offset + ii * type_sz]); /// destruct prior data
             }
         }
     }
@@ -163,16 +146,15 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
     if (fill_default) {
         count = alloc_reserve;
         if (!prim) {
-            for (size_t i = 0; i < mx->bind_count; i++) {
-                context_bind &c  = mx->composition[i];
+            for (size_t i = 0; i < type->schema->bind_count; i++) {
+                context_bind &c  = type->schema->composition[i];
                 for (size_t ii = mn; ii < alloc_reserve; ii++)
-                    c.data->functions->construct(&dst[c.offset + ii * stride]);
+                    c.data->functions->construct(raw_t(0), &dst[c.offset + ii * type_sz]);
             }
         }
     }
 
-    /// private destructors break meta, cant vectorize them
-    free(origin); // char type destruct seems to be a free call on memory, not the no-op i thought
+    free(origin);
     
     origin  = raw_t(dst);
     reserve = alloc_reserve;
@@ -187,7 +169,7 @@ void memory::clear() {
         for (size_t i = 0; i < mx->bind_count; i++) { /// count should be called bind_count or something; its too ambiguous with memory
             context_bind &c  = mx->composition[i];
             for (size_t ii = 0; ii < count; ii++)
-                c.data->functions->destruct(&dst[c.offset + ii * mx->total_bytes]);
+                c.data->functions->destruct(raw_t(0), &dst[c.offset + ii * mx->total_bytes]);
         }
     }
     count = 0;
@@ -228,12 +210,12 @@ memory *memory::symbol (ion::symbol s, type_t ty, i64 id) {
 
 memory *memory::raw_alloc(type_t type, size_t sz, size_t count, size_t res) {
     size_t elements = math::max(count, res);
-    memory*     mem = (memory*)calloc(1, sizeof(memory) + elements * sz); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
+    memory*     mem = (memory*)calloc(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
     mem->count      = count;
     mem->reserve    = res;
     mem->refs       = 1;
     mem->type       = type;
-    mem->origin     = (void*)&mem[1];
+    mem->origin     = calloc(sz, count); /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
     return mem;
 }
 /*
@@ -250,7 +232,7 @@ memory *memory::wrap(raw_t m, type_t ty) {
 
 /// starting at 1, it should remain active.  shall not be freed as a result
 void memory::drop() {
-    if (--refs <= 0 && !constant) { /// <= because ptr does a defer on the actual construction of the container class
+    if (--refs <= 0 && !constant) { /// <= because mx_object does a defer on the actual construction of the container class
         origin = null;
         // delete attachment lambda after calling it
         if (atts) {
@@ -265,18 +247,13 @@ void memory::drop() {
             delete shape;
             shape = null;
         }
-        //free(this);
+        free(this);
     }
 }
 
-/// now we start allocating the total_size (or type->base_sz if not an mx/schema-based class)
 memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
-    if (strstr(type->name, "lambda")) {
-        int test = 0;
-        test++;
-    }
     memory *result = null;
-    size_t type_sz = type->size();
+    size_t  type_sz = type->size(); /// this is the 'data size', should name the function just that; if the type has no schema the data size is its own size
 
     if (type->singleton)
         return type->singleton->grab();
@@ -286,36 +263,30 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
     if (type->traits & traits::singleton)
         type->singleton = mem;
 
-    /// from here we need to use the contained type within array, and all copies are within the schema of the element
-    type_t ty = (type->traits & traits::array) != 0 ? type->schema->bind->data : type;
-
-    const bool prim = (ty->traits & traits::primitive);
-
     /// if allocating a schema-based object (mx being first user of this)
     if (count > 0) {
-        size_t stride = ty->schema->total_bytes;
         if (v_src) {
             /// if schema-copy-construct (call cpctr for each data type in composition)
-            for (size_t i = 0; i < ty->schema->bind_count; i++) {
-                context_bind &bind = ty->schema->composition[i];
+            for (size_t i = 0; i < type->schema->bind_count; i++) {
+                context_bind &bind = type->schema->composition[i];
                 u8 *dst = &((u8*)mem->origin)[bind.offset];
                 u8 *src = &((u8*)      v_src)[bind.offset];
                 if (bind.data)
                     for (size_t ii = 0; ii < count; ii++) {
                         if (bind.data->functions) /// enums dont have this set; in order for that to be the case we cannot embed them and must do 2 part decl/impl
-                            bind.data->functions->copy(&dst[ii * stride], &src[ii * stride]);
+                            bind.data->functions->copy(raw_t(0), &dst[ii * type_sz], &src[ii * type_sz]);
                         else
-                            memcpy(&dst[ii * stride], &src[ii * stride], bind.data_sz); /// needs an assert check to be sure its primitive
+                            memcpy(&dst[ii * type_sz], &src[ii * type_sz], bind.base_sz); /// needs an assert check to be sure its primitive
                     }
             }
         } else {
             /// ctr: call construct across the composition
-            for (size_t i = 0; i < ty->schema->bind_count; i++) {
-                context_bind &bind = ty->schema->composition[i];
+            for (size_t i = 0; i < type->schema->bind_count; i++) {
+                context_bind &bind = type->schema->composition[i];
                 u8 *dst  = &((u8*)mem->origin)[bind.offset];
                 if (bind.data && bind.data->functions)
                     for (size_t ii = 0; ii < count; ii++) {
-                        bind.data->functions->construct(&dst[ii * stride]);
+                        bind.data->functions->construct(raw_t(0), &dst[ii * type_sz]);
                     }
             }
         }

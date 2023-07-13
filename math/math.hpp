@@ -152,7 +152,7 @@ struct rect {
 /// try to express in 1 word when succinct
 template <typename T>
 struct Rect:mx {
-    ptr(Rect, mx, rect<T>);
+    mx_object(Rect, mx, rect<T>);
     movable(Rect);
 };
 
@@ -247,7 +247,7 @@ struct Rounded:Rect<T> {
                      vec4 {r.x + r.w, r.y + r.h, rx, ry}, vec4 {r.x, r.y + r.h, rx, ry}) { }
         
     };
-    ptr(Rounded, Rect<T>, rdata);
+    mx_object(Rounded, Rect<T>, rdata);
     movable(Rounded);
 
     /// needs routines for all prims
@@ -269,7 +269,7 @@ struct Arc:mx {
         vec2d degs; /// x:from [->y:distance]
         vec2d origin;
     };
-    ptr(Arc, mx, adata);
+    mx_object(Arc, mx, adata);
 };
 
 struct Line:mx {
@@ -277,12 +277,12 @@ struct Line:mx {
         vec2d to;
         vec2d origin;
     };
-    ptr(Line, mx, ldata);
+    mx_object(Line, mx, ldata);
     movable(Line);
 };
 
 struct Movement:mx {
-    ptr(Movement, mx, vec2d);
+    mx_object(Movement, mx, vec2d);
     movable(Movement); /// makes a certain amount of sense
 };
 
@@ -293,12 +293,12 @@ struct Bezier:mx {
         vec2d b;
         vec2d origin;
     };
-    ptr(Bezier, mx, bdata);
+    mx_object(Bezier, mx, bdata);
 };
 
 template <typename T>
 struct Vec2:mx {
-    ptr(Vec2<T>, mx, vec2<T>);
+    mx_object(Vec2<T>, mx, vec2<T>);
 };
 
 }

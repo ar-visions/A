@@ -120,7 +120,7 @@ public:
     inline static int              exit_code = 0;
 
     ///
-    ptr(process, mx, runtime);
+    mx_object(process, mx, runtime);
 
     static inline void manager() {
         std::unique_lock<mutex> lock(mtx_list);

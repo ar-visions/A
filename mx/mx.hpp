@@ -1943,7 +1943,7 @@ lambda<R(Args...)>::lambda(F&& fn) : mx() {
         data    = (container*)mem->origin;
     } else {
         if constexpr (std::is_invocable_r_v<R, F, Args...>) {
-            mx::mem  = mx::alloc<container>();
+            mx::mem  = mx::alloc<lambda>();
             data     = (container*)mem->origin;
             data->fn = new fdata(std::forward<F>(fn));
         } else {

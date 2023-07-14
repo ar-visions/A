@@ -185,6 +185,7 @@ memory *memory::stringify(cstr cs, size_t len, size_t rsv, bool constant, type_t
         if (!m) {
             size_t ln = (len == memory::autolen) ? strlen(sym) : len; /// like auto-wash
             m = memory::alloc(typeof(char), len, len + 1, raw_t(sym));
+            m->id    = id;
             m->attrs = attr::constant;
             ctype->symbols->ids[id] = m; /// was not hashing by id, it was the djb2 again (incorrect)
             //ctype->symbol_djb2[h_sym] = m; 'redundant due to the setting of the memory*& (which [] operator always inserts item)
@@ -195,6 +196,7 @@ memory *memory::stringify(cstr cs, size_t len, size_t rsv, bool constant, type_t
         size_t     ln = (len == memory::autolen) ? strlen(sym) : len;
         size_t     al = rsv ? rsv : (strlen(sym) + 1);
         memory*   mem = memory::alloc(typeof(char), ln, al, raw_t(sym));
+        mem->id       = id;
         cstr  start   = mem->data<char>(0);
         start[ln]     = 0;
         return mem;

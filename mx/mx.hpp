@@ -108,6 +108,10 @@ struct false_type {
     constexpr operator bool() const noexcept { return value; }
 };
 
+template <typename T, typename = void> struct registered_instance_to_string : false_type { };
+template <typename T>                  struct registered_instance_to_string<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().to_string()), memory *>>> : true_type { };
+
+
 //template <typename> struct is_registered : false_type { };
 template <typename> struct is_external   : false_type { };
 template <typename> struct is_opaque     : false_type { };
@@ -160,69 +164,29 @@ constexpr int num_occurances(const char* cs, char c) {
 #define num_args(...) (ion::num_occurances(#__VA_ARGS__, ',') + 1)
 #define str_args(...) (str(#__VA_ARGS__))
 
+/// deprecate the 'S' after this works; too quirky.
 #define enums(C,D,S,...)\
     struct C:ex {\
-        inline static bool init;\
         enum etype { __VA_ARGS__ };\
         enum etype&    value;\
         static memory* lookup(symbol sym) { return typeof(C)->lookup(sym); }\
         static memory* lookup(u64    id)  { return typeof(C)->lookup(id);  }\
         inline static const int count = num_args(__VA_ARGS__);\
         inline static const str raw   = str_args(__VA_ARGS__);\
-        static void initialize() {\
-            init            = true;\
-            array<str>   ra = raw.split(", ");\
-            array<str>   sp = str(S).split(", ");\
-            size_t        c = sp.len();\
-            type_t       ty = typeof(C);\
-            i64        next = 0;\
-            for (size_t i = 0; i < c; i++) {\
-                size_t idx = ra.index_of("=");\
-                if (idx >= 0) {\
-                    str val = ra[i].mid(idx + 1);\
-                    mem_symbol(sp[i].data, ty, val.integer_value());\
-                } else\
-                    mem_symbol(sp[i].data, ty, i64(next));\
-                next = i + 1;\
-            };\
-        }\
         ion::symbol symbol() {\
             memory *mem = typeof(C)->lookup(u64(value));\
+            if (!mem) printf("symbol: mem is null for value %d\n", (int)value);\
             assert(mem);\
             return (char*)mem->origin;\
         }\
         str name() { return (char*)symbol(); }\
-        static enum etype convert(mx raw) {\
-            if (!init) initialize();\
-            type_t   type = typeof(C);\
-            memory **psym = null;\
-            if (raw.type() == typeof(char)) {\
-                char  *d = &raw.ref<char>();\
-                u64 hash = djb2(d);\
-                psym     = type->symbols->djb2.lookup(hash);\
-            } else if (raw.type() == typeof(int)) {\
-                i64   id = i64(raw.ref<int>());\
-                psym     = type->symbols->ids.lookup(id);\
-            } else if (raw.type() == typeof(i64)) {\
-                i64   id = raw.ref<i64>();\
-                psym     = type->symbols->ids.lookup(id);\
-            } else if (raw.type() == typeof(etype)) {\
-                i64   id = raw.ref<etype>();\
-                psym     = type->symbols->ids.lookup(id);\
-            }\
-            if (!psym) throw C();\
-            return (enum etype)((*psym)->id);\
-        }\
-        C(enum etype t = etype::D):ex(t,             this), value(ref<enum etype>()) { if (!init) initialize(); }\
-        C(size_t     t)           :ex((enum etype)t, this), value(ref<enum etype>()) { if (!init) initialize(); }\
-        C(int        t)           :ex((enum etype)t, this), value(ref<enum etype>()) { if (!init) initialize(); }\
-        C(str raw):C(C::convert(raw)) { }\
-        C(mx  raw):C(C::convert(raw)) { }\
+        struct memory *to_string() { return mem_symbol(symbol(), typeof(C)); }\
+        C(enum etype t = etype::D):ex(initialize(this,             t, S, typeof(C)), this), value(ref<enum etype>()) { }\
+        C(size_t     t)           :ex(initialize(this, (enum etype)t, S, typeof(C)), this), value(ref<enum etype>()) { }\
+        C(int        t)           :ex(initialize(this, (enum etype)t, S, typeof(C)), this), value(ref<enum etype>()) { }\
+        C(str raw):C(ex::convert(raw, S, (C*)null)) { }\
+        C(mx  raw):C(ex::convert(raw, S, (C*)null)) { }\
         inline  operator etype() { return value; }\
-        static doubly<memory*> &symbols() {\
-            if (!init) initialize();\
-            return typeof(C)->symbols->list;\
-        }\
         C&      operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
         bool    operator== (enum etype v) { return value == v; }\
         bool    operator!= (enum etype v) { return value != v; }\
@@ -232,12 +196,12 @@ constexpr int num_occurances(const char* cs, char c) {
         bool    operator<= (C &b)       { return value <= b.value; }\
         explicit operator int()         { return int(value); }\
         explicit operator u64()         { return u64(value); }\
+        type_register(C);\
     };\
 
 #define enums_declare(C,D,W,S,...)\
     struct ::W;\
     struct C:ex {\
-        static bool init;\
         enum etype { __VA_ARGS__ };\
         enum etype&    value;\
         static memory* lookup(symbol sym);\
@@ -245,16 +209,13 @@ constexpr int num_occurances(const char* cs, char c) {
         inline static const int count = num_args(__VA_ARGS__);\
         inline static const str raw   = str_args(__VA_ARGS__);\
         inline static const symbol raw_cstr = S;\
-        static void initialize();\
         ion::symbol symbol();\
         str name();\
-        static enum etype convert(mx raw);\
         C(enum etype t = etype::D);\
         C(str raw);\
         C(mx  raw);\
         C(const W &r);\
         operator etype();\
-        static doubly<memory*> &symbols();\
         C&      operator=  (const C b);\
         bool    operator== (enum etype v);\
         bool    operator!= (enum etype v);\
@@ -267,62 +228,19 @@ constexpr int num_occurances(const char* cs, char c) {
     };\
 
 #define enums_define(C,W)\
-    bool C::init;\
     memory*     C::lookup(ion::symbol sym) { return typeof(C)->lookup(sym); }\
     memory*     C::lookup(u64    id)       { return typeof(C)->lookup(id);  }\
-    void        C::initialize() {\
-        init            = true;\
-        array<str>   ra = raw.split(", ");\
-        array<str>   sp = str(raw_cstr).split(", ");\
-        size_t        c = sp.len();\
-        type_t       ty = typeof(C);\
-        i64        next = 0;\
-        for (size_t i = 0; i < c; i++) {\
-            size_t idx = ra.index_of("=");\
-            if (idx >= 0) {\
-                str val = ra[i].mid(idx + 1);\
-                mem_symbol(sp[i].data, ty, val.integer_value());\
-            } else\
-                mem_symbol(sp[i].data, ty, i64(next));\
-            next = i + 1;\
-        };\
-    }\
     ion::symbol C::symbol() {\
         memory *mem = typeof(C)->lookup(u64(value));\
         assert(mem);\
         return (char*)mem->origin;\
     }\
     str       C::name() { return (char*)symbol(); }\
-    C::etype  C::convert(mx raw) {\
-        if (!init) initialize();\
-        type_t   type = typeof(C);\
-        memory **psym = null;\
-        if (raw.type() == typeof(char)) {\
-            char  *d = &raw.ref<char>();\
-            u64 hash = djb2(d);\
-            psym     = type->symbols->djb2.lookup(hash);\
-        } else if (raw.type() == typeof(int)) {\
-            i64   id = i64(raw.ref<int>());\
-            psym     = type->symbols->ids.lookup(id);\
-        } else if (raw.type() == typeof(i64)) {\
-            i64   id = raw.ref<i64>();\
-            psym     = type->symbols->ids.lookup(id);\
-        } else if (raw.type() == typeof(etype)) {\
-            i64   id = raw.ref<etype>();\
-            psym     = type->symbols->ids.lookup(id);\
-        }\
-        if (!psym) throw C();\
-        return (enum etype)((*psym)->id);\
-    }\
-    C::C(enum etype t) :ex(t, this), value(ref<enum etype>()) { if (!init) initialize(); }\
-    C::C(str    raw):C(C::convert(raw)) { }\
-    C::C(mx     raw):C(C::convert(raw)) { }\
+    C::C(enum etype t) :ex(ex::initialize(this, t, (symbol)C::raw.origin, typeof(C)), this), value(ref<enum etype>()) { }\
+    C::C(str    raw):C(C::convert(raw, (C*)null)) { }\
+    C::C(mx     raw):C(C::convert(raw, (C*)null)) { }\
     C::C(const W &r):C((enum etype)(int)r) { }\
     C::operator etype() { return value; }\
-    doubly<memory*> &C::symbols() {\
-        if (!init) initialize();\
-        return typeof(C)->symbols->list;\
-    }\
     C&       C::operator=  (const C b)    { return (C&)assign_mx(*this, b); }\
     bool     C::operator== (enum etype v) { return value == v; }\
     bool     C::operator!= (enum etype v) { return value != v; }\
@@ -385,6 +303,12 @@ template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
         return type_sz;\
     }\
     template <typename _T>\
+    static struct memory *_to_string(C *dst0, _T *dst) {\
+        if constexpr (registered_instance_to_string<_T>())\
+            return dst ? dst->to_string() : null;\
+        return null;\
+    }\
+    template <typename _T>\
     static void _construct(C *dst0, _T *dst) {\
         if constexpr (!is_opaque<_T>()) new (dst) _T();\
     }\
@@ -431,7 +355,6 @@ template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
             new (dst) _T(*src);\
         }\
     }\
-    size_t _type_sz(C *dst);\
     template <typename _T>\
     bool _boolean(C *dst0, _T *src) {\
         if constexpr (has_bool<_T>) \
@@ -982,6 +905,8 @@ struct idata {
     ops<void>       *functions;
     symbol_data     *symbols;
     memory          *singleton;
+    idata           *parent; /// if you are given a primitive enum, you can find the schema and symbols on parent (see: to_string)
+    bool             secondary_init; /// used by enums but flag can be used elsewhere.  could use 'flags' too
 
     size_t size();
     memory *lookup(symbol sym);
@@ -1244,74 +1169,76 @@ using     prop_map = hmap<symbol, prop>;
 
 struct context_bind;
 
-/// type-api-check
-/// typeof usage need not apply registration, registration is about ops on the object not its identification; that only requires a name)
-template <typename T, typename = void> struct registered             : false_type { bool operator()() const { return value; }};
-
-/// granular-checks
-template <typename T, typename = void> struct registered_assign      : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct registered_compare     : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct registered_bool        : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct registered_copy        : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct registered_to_string   : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct registered_from_string : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct registered_init        : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct registered_destruct    : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct registered_meta        : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct registered_hash        : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct registered_construct   : false_type { bool operator()() const { return value; }};
-
-template <typename T, typename = void> struct external_assign      : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct external_compare     : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct external_bool        : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct external_copy        : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct external_to_string   : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct external_from_string : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct external_init        : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct external_destruct    : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct external_meta        : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct external_hash        : false_type { bool operator()() const { return value; }};
-template <typename T, typename = void> struct external_construct   : false_type { bool operator()() const { return value; }};
-
-template <typename T, typename = void> struct registered_instance_meta : false_type { bool operator()() const { return value; }};
-
-/// we need two sets because data types can be registered in templates.  you dont want to hard code all of the types you use
-/// you also dont want to limit yourself to your own data types, so we have the idea of external
-
-template <typename T> struct registered            <T, std::enable_if_t<std::is_same_v<decltype(T::_type_sz    (std::declval<T*>  ())), size_t>>>       : true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_assign     <T, std::enable_if_t<std::is_same_v<decltype(T::_assign     (std::declval<T*>  (), std::declval<T*>  (), std::declval<T*>())), void>>>         : true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_compare    <T, std::enable_if_t<std::is_same_v<decltype(T::_compare    (std::declval<T*>  (), std::declval<T*>  (), std::declval<T*>())), int>>>          : true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_bool       <T, std::enable_if_t<std::is_same_v<decltype(T::_boolean    (std::declval<T*>  (), std::declval<T*>  ())), bool>>>                     : true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_copy       <T, std::enable_if_t<std::is_same_v<decltype(T::_copy       (std::declval<T*>  (), std::declval<T*>  (),  std::declval<T*>(), size_t(0))), void>>>         : true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_construct  <T, std::enable_if_t<std::is_same_v<decltype(T::_construct  (std::declval<T*>  (), std::declval<T*>  (), size_t(0))), void>>>          : true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_to_string  <T, std::enable_if_t<std::is_same_v<decltype(T::_to_string  (std::declval<T*>  (), std::declval<T*>  ())), memory*>>>                  : true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_from_string<T, std::enable_if_t<std::is_same_v<decltype(T::_from_string(std::declval<T*>  (), std::declval<cstr>())), T*>>>                       : true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_init       <T, std::enable_if_t<std::is_same_v<decltype(T::_init       (std::declval<T*>  (), std::declval<T*>  ())), void>>>                     : true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_destruct   <T, std::enable_if_t<std::is_same_v<decltype(T::_destruct   (std::declval<T*>  (), std::declval<T*>  ())), void>>>                     : true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_meta       <T, std::enable_if_t<std::is_same_v<decltype(T::meta        (std::declval<T*>  (), std::declval<T*>  ())), doubly<prop>>>>             : true_type { bool operator()() const { return value; }};
-template <typename T> struct registered_hash       <T, std::enable_if_t<std::is_same_v<decltype(T::hash        (std::declval<T*>  (), std::declval<T*>  (), size_t(0))), size_t>>>        : true_type { bool operator()() const { return value; }};
-
-/// externals need two args (first unused); its so we are explicit about its definition
-template <typename T> struct external_assign       <T, std::enable_if_t<std::is_same_v<decltype(_assign        (std::declval<T*>(), std::declval<T*>(), std::declval<T*>())), void>>> : true_type { bool operator()() const { return value; }};
-template <typename T> struct external_compare      <T, std::enable_if_t<std::is_same_v<decltype(_compare       (std::declval<T*>(), std::declval<T*>(), std::declval<T*>())), int>>>  : true_type { bool operator()() const { return value; }};
-template <typename T> struct external_bool         <T, std::enable_if_t<std::is_same_v<decltype(_boolean       (std::declval<T*>(), std::declval<T*>())), bool>>>                     : true_type { bool operator()() const { return value; }};
-template <typename T> struct external_copy         <T, std::enable_if_t<std::is_same_v<decltype(_copy          (std::declval<T*>(), std::declval<T*>(), std::declval<T*>(), size_t(0))), void>>> : true_type { bool operator()() const { return value; }};
-template <typename T> struct external_construct    <T, std::enable_if_t<std::is_same_v<decltype(_construct     (std::declval<T*>(), std::declval<T*>(), size_t(0))), void>>>          : true_type { bool operator()() const { return value; }};
-template <typename T> struct external_to_string    <T, std::enable_if_t<std::is_same_v<decltype(_to_string     (std::declval<T*>(), std::declval<T*>())), memory*>>>                  : true_type { bool operator()() const { return value; }};
-//template <typename T> struct external_from_string  <T, std::enable_if_t<std::is_same_v<decltype(_from_string (std::declval<T*>(), std::declval<cstr>())), T*>>>                       : true_type { bool operator()() const { return value; }};
-template <typename T> struct external_init         <T, std::enable_if_t<std::is_same_v<decltype(_init          (std::declval<T*>(), std::declval<T*>())), void>>>                     : true_type { bool operator()() const { return value; }};
-template <typename T> struct external_destruct     <T, std::enable_if_t<std::is_same_v<decltype(_destruct      (std::declval<T*>(), std::declval<T*>())), void>>>                     : true_type { bool operator()() const { return value; }};
-template <typename T> struct external_meta         <T, std::enable_if_t<std::is_same_v<decltype(_meta          (std::declval<T*>(), std::declval<T*>())), doubly<prop>>>>             : true_type { bool operator()() const { return value; }};
-//template <typename T> struct external_hash         <T, std::enable_if_t<std::is_same_v<decltype(_hash          (std::declval<T*>  (), std::declval<T*>  (), size_t(0))), size_t>>>        : true_type { bool operator()() const { return value; }};
-
 static cstr _from_string(cstr input) {
     return input;
 }
 
+
+
+/// type-api-check
+/// typeof usage need not apply registration, registration is about ops on the object not its identification; that only requires a name)
+template <typename T, typename = void> struct registered             : false_type { };
+
+/// granular-checks
+template <typename T, typename = void> struct registered_assign      : false_type { };
+template <typename T, typename = void> struct registered_compare     : false_type { };
+template <typename T, typename = void> struct registered_bool        : false_type { };
+template <typename T, typename = void> struct registered_copy        : false_type { };
+template <typename T, typename = void> struct registered_to_string   : false_type { };
+template <typename T, typename = void> struct registered_from_string : false_type { };
+template <typename T, typename = void> struct registered_init        : false_type { };
+template <typename T, typename = void> struct registered_destruct    : false_type { };
+template <typename T, typename = void> struct registered_meta        : false_type { };
+template <typename T, typename = void> struct registered_hash        : false_type { };
+template <typename T, typename = void> struct registered_construct   : false_type { };
+
+template <typename T, typename = void> struct external_assign      : false_type { };
+template <typename T, typename = void> struct external_compare     : false_type { };
+template <typename T, typename = void> struct external_bool        : false_type { };
+template <typename T, typename = void> struct external_copy        : false_type { };
+template <typename T, typename = void> struct external_to_string   : false_type { };
+template <typename T, typename = void> struct external_from_string : false_type { };
+template <typename T, typename = void> struct external_init        : false_type { };
+template <typename T, typename = void> struct external_destruct    : false_type { };
+template <typename T, typename = void> struct external_meta        : false_type { };
+template <typename T, typename = void> struct external_hash        : false_type { };
+template <typename T, typename = void> struct external_construct   : false_type { };
+
+template <typename T, typename = void> struct registered_instance_meta : false_type { };
+
+
+/// we need two sets because data types can be registered in templates.  you dont want to hard code all of the types you use
+/// you also dont want to limit yourself to your own data types, so we have the idea of external
+
+template <typename T> struct registered            <T, std::enable_if_t<std::is_same_v<decltype(T::_type_sz    (std::declval<T*>  ())), size_t>>>       : true_type { };
+template <typename T> struct registered_assign     <T, std::enable_if_t<std::is_same_v<decltype(T::_assign     (std::declval<T*>  (), std::declval<T*>  (), std::declval<T*>())), void>>> : true_type { };
+template <typename T> struct registered_compare    <T, std::enable_if_t<std::is_same_v<decltype(T::_compare    (std::declval<T*>  (), std::declval<T*>  (), std::declval<T*>())), int>>>  : true_type { };
+template <typename T> struct registered_bool       <T, std::enable_if_t<std::is_same_v<decltype(T::_boolean    (std::declval<T*>  (), std::declval<T*>  ())), bool>>>                     : true_type { };
+template <typename T> struct registered_copy       <T, std::enable_if_t<std::is_same_v<decltype(T::_copy       (std::declval<T*>  (), std::declval<T*>  (),  std::declval<T*>(), size_t(0))), void>>> : true_type { };
+template <typename T> struct registered_construct  <T, std::enable_if_t<std::is_same_v<decltype(T::_construct  (std::declval<T*>  (), std::declval<T*>  (), size_t(0))), void>>>          : true_type { };
+template <typename T> struct registered_to_string  <T, std::enable_if_t<std::is_same_v<decltype(T::_to_string  (std::declval<T*>  (), std::declval<T*>  ())), memory*>>>                  : true_type { };
+template <typename T> struct registered_from_string<T, std::enable_if_t<std::is_same_v<decltype(T::_from_string(std::declval<T*>  (), std::declval<cstr>())), T*>>>                       : true_type { };
+template <typename T> struct registered_init       <T, std::enable_if_t<std::is_same_v<decltype(T::_init       (std::declval<T*>  (), std::declval<T*>  ())), void>>>                     : true_type { };
+template <typename T> struct registered_destruct   <T, std::enable_if_t<std::is_same_v<decltype(T::_destruct   (std::declval<T*>  (), std::declval<T*>  ())), void>>>                     : true_type { };
+template <typename T> struct registered_meta       <T, std::enable_if_t<std::is_same_v<decltype(T::meta        (std::declval<T*>  (), std::declval<T*>  ())), doubly<prop>>>>             : true_type { };
+template <typename T> struct registered_hash       <T, std::enable_if_t<std::is_same_v<decltype(T::hash        (std::declval<T*>  (), std::declval<T*>  (), size_t(0))), size_t>>>        : true_type { };
+
+/// externals need two args (first unused); its so we are explicit about its definition
+template <typename T> struct external_assign       <T, std::enable_if_t<std::is_same_v<decltype(_assign        (std::declval<T*>(), std::declval<T*>(), std::declval<T*>())), void>>> : true_type { };
+template <typename T> struct external_compare      <T, std::enable_if_t<std::is_same_v<decltype(_compare       (std::declval<T*>(), std::declval<T*>(), std::declval<T*>())), int>>>  : true_type { };
+template <typename T> struct external_bool         <T, std::enable_if_t<std::is_same_v<decltype(_boolean       (std::declval<T*>(), std::declval<T*>())), bool>>>                     : true_type { };
+template <typename T> struct external_copy         <T, std::enable_if_t<std::is_same_v<decltype(_copy          (std::declval<T*>(), std::declval<T*>(), std::declval<T*>(), size_t(0))), void>>> : true_type { };
+template <typename T> struct external_construct    <T, std::enable_if_t<std::is_same_v<decltype(_construct     (std::declval<T*>(), std::declval<T*>(), size_t(0))), void>>>          : true_type { };
+template <typename T> struct external_to_string    <T, std::enable_if_t<std::is_same_v<decltype(_to_string     (std::declval<T*>(), std::declval<T*>())), memory*>>>                  : true_type { };
+//template <typename T> struct external_from_string  <T, std::enable_if_t<std::is_same_v<decltype(_from_string (std::declval<T*>(), std::declval<cstr>())), T*>>>                     : true_type { };
+template <typename T> struct external_init         <T, std::enable_if_t<std::is_same_v<decltype(_init          (std::declval<T*>(), std::declval<T*>())), void>>>                     : true_type { };
+template <typename T> struct external_destruct     <T, std::enable_if_t<std::is_same_v<decltype(_destruct      (std::declval<T*>(), std::declval<T*>())), void>>>                     : true_type { };
+template <typename T> struct external_meta         <T, std::enable_if_t<std::is_same_v<decltype(_meta          (std::declval<T*>(), std::declval<T*>())), doubly<prop>>>>             : true_type { };
+//template <typename T> struct external_hash         <T, std::enable_if_t<std::is_same_v<decltype(_hash          (std::declval<T*>  (), std::declval<T*>  (), size_t(0))), size_t>>>  : true_type { };
+
 template <typename T>
-struct registered_instance_meta<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().meta()), doubly<prop>>>> : true_type {
-    bool operator()() const { return value; }
-};
+struct registered_instance_meta<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().meta()), doubly<prop>>>> : true_type { };
+
 
 template <typename T>
 static ops<T> *ftable();
@@ -1529,7 +1456,7 @@ template <typename T> T* mdata(memory *mem, size_t index) { return mem ? mem->da
 
 template <typename T>
 inline T &assign_mx(T &a, const T &b) {
-    typeof(T)->functions->assign(raw_t(0), (void *)&a, b.mem);
+    typeof(T)->functions->assign(raw_t(0), raw_t(&a), raw_t(&b));
     return a;
 }
 
@@ -1747,6 +1674,7 @@ struct mx {
     type_t  type() const { return mem ? mem->type  : null; }
 
     memory  *to_string() const {
+
         if      (mem->type == typeof(i8) ) return memory::string(std::to_string(*(i8*)  mem->origin));
         else if (mem->type == typeof(i16)) return memory::string(std::to_string(*(i16*) mem->origin));
         else if (mem->type == typeof(i32)) return memory::string(std::to_string(*(i32*) mem->origin));
@@ -1759,6 +1687,9 @@ struct mx {
         else if (mem->type == typeof(r64)) return memory::string(std::to_string(*(r64*) mem->origin));
         else if (mem->type == typeof(bool))return memory::string(std::to_string(*(bool*)mem->origin));
         
+        else if  (mem->type->parent) { // this is reserved for enumerables; the symbol is stored in memory uniformly.  enum values are always stored with a prior symbol lookup.  the memory* in effect is symbolized
+            return mem->grab();//mem->type->parent->functions->to_string(raw_t(0), mem);
+        }
         else if   (mem->type->functions->to_string)
             return mem->type->functions->to_string(raw_t(0), mem->origin); /// call to_string() on context class
         
@@ -2376,8 +2307,37 @@ struct ex:mx {
     ///
     template <typename C>
     ex(memory *m, C *inst) : mx(m) {
-        mem->attach("container", typeof(C), null);
+        mem->attach("container", typeof(C), null); /// idata should facilitate this without attachment into doubly
     }
+
+    /// called in construction by enum class
+    template <typename C>
+    static typename C::etype convert(mx raw, symbol S, C *p) {
+        type_t type = typeof(C);
+        ex::initialize((C*)null, (typename C::etype)0, S, type);
+        memory **psym = null;
+        if (raw.type() == typeof(char)) {
+            char  *d = &raw.ref<char>();
+            u64 hash = djb2(d);
+            psym     = type->symbols->djb2.lookup(hash);
+        } else if (raw.type() == typeof(int)) {
+            i64   id = i64(raw.ref<int>());
+            psym     = type->symbols->ids.lookup(id);
+        } else if (raw.type() == typeof(i64)) {
+            i64   id = raw.ref<i64>();
+            psym     = type->symbols->ids.lookup(id);
+        } else if (raw.type() == typeof(typename C::etype)) {
+            i64   id = raw.ref<typename C::etype>();
+            psym     = type->symbols->ids.lookup(id);
+        }
+        if (!psym) throw C();
+        return (typename C::etype)((*psym)->id);
+    }
+    
+    /// we need to bootstrap the symbols from the construction level of enum classes
+    template <typename C, typename E>
+    static E initialize(C *p, E v, symbol names, type_t ty);
+
     ///
     ex() : mx() { }
     ///
@@ -2468,10 +2428,6 @@ struct str:mx {
     str(memory        *mem) : mx(mem->type == typeof(null_t) ? alloc<char>(null, 0, 16) : mem), data(&mx::ref<char>()) { }
     str(mx               m) : mx(m.grab())                       { } // damn teh expense!
     str(nullptr_t n = null) : str(alloc<char>(null, 0, 16))      { }
-    str(symbol         ccs) : str(mem_symbol(ccs, typeof(char))) {
-        int test = 0;
-        test++;
-    }
     str(char            ch) : str(alloc<char>(null, 1, 2))       { *data = ch; }
     str(size_t          sz) : str(alloc<char>(null, 0, sz + 1))  { }
     
@@ -2486,7 +2442,9 @@ struct str:mx {
     str(float          f32, int n = 6) : str(memory::string(string_from_real(f32, n))) { }
     str(double         f64, int n = 6) : str(memory::string(string_from_real(f64, n))) { }
 
-    str(cstr cs, size_t len = memory::autolen, size_t rs = 0) : str(cstring(cs, len, rs)) { } 
+    /// no more symbol usage in str. thats garbage
+    str(symbol cs, size_t len = memory::autolen, size_t rs = 0) : str(cstring((cstr)cs, len, rs)) { }
+    str(cstr   cs, size_t len = memory::autolen, size_t rs = 0) : str(cstring(      cs, len, rs)) { }
     str(std::string s) : str(cstr(s.c_str()), s.length()) { } // error: member initializer 'str' does not name a non-static data member or base class
 
 
@@ -2585,7 +2543,7 @@ struct str:mx {
     bool        operator!()                 const { return !(operator bool());           }
     inline str  operator+    (const str sb) const { return combine(*this, sb);           }
     inline str &operator+=   (str        b) {
-        if (!mem->constant && (mem->reserve >= (mem->count + b.mem->count) + 1)) {
+        if (mem->reserve >= (mem->count + b.mem->count) + 1) {
             cstr    ap =   data;
             cstr    bp = b.data;
             size_t  bc = b.mem->count;
@@ -2914,6 +2872,31 @@ struct str:mx {
     size_t reserve() const { return mx::mem->reserve; }
     type_register(str);
 };
+
+template <typename C, typename E>
+E ex::initialize(C *p, E v, symbol names, type_t ty) {
+    /// names should support normal enum syntax like abc = 2, abc2 = 4, abc3, abc4; we can infer what C++ does to its values
+    /// get this value from raw.origin (symbol) instead of the S
+    if (ty->secondary_init) return v;
+    ty->secondary_init = true;
+    array<str>   sp = str((cstr)names).split(", ");
+    int           c = (int)sp.len();
+    i64        next = 0;
+    if (strcmp(ty->name, "ion::Asset") == 0) {
+        int test = 0;
+        test++;
+    }
+    for (int i = 0; i < c; i++) {
+        int idx = sp.index_of("=");
+        if (idx >= 0) {
+            str val = sp[i].mid(idx + 1);
+            mem_symbol(sp[i].data, ty, val.integer_value());
+        } else
+            mem_symbol(sp[i].data, ty, i64(next));
+        next = i + 1;
+    };
+    return v;
+}
 
 enums(split_signal, none,
     "none, discard, retain",
@@ -4087,8 +4070,7 @@ idata *ident::for_type() {
     static idata *type;
 
     if (!type) {
-
-        ///
+        /// this check was to hide lambdas to prevent lambdas being generated on lambdas
         if constexpr (std::is_function_v<T>) {
             memory         *mem = memory::raw_alloc(null, sizeof(idata), 1, 1);
             type                = (idata*)mem_origin(mem);
@@ -4107,9 +4089,9 @@ idata *ident::for_type() {
           else if constexpr (std::is_reference<T>::value) return ident::for_type<std::remove_reference_t<T>>();
           else if constexpr (std::is_pointer  <T>::value) return ident::for_type<std::remove_pointer_t  <T>>();
           else {
-            bool is_mx = ion::is_mx<T>();
-            memory *mem  = memory::raw_alloc(null, sizeof(idata), 1, 1);
-            type         = (idata*)mem_origin(mem);
+            bool is_mx    = ion::is_mx<T>();
+            memory *mem   = memory::raw_alloc(null, sizeof(idata), 1, 1);
+            type          = (idata*)mem_origin(mem);
             type->name    = parse_fn(__PRETTY_FUNCTION__);
             type->base_sz = sizeof(T);
             type->traits  = (is_primitive<T> () ? traits::primitive : 0) |
@@ -4125,30 +4107,19 @@ idata *ident::for_type() {
                 type->functions = (ops<void>*)ftable<T>();
             }
 
-            if constexpr (is_lambda<T>()) {
-                printf("before meta: T is lambda: %s\n", type->name);
+            /// if the type contains enum, we want to link the enum back to its parent type
+            /// if there is a parent type, we etype == schema->data
+            if constexpr (has_etype<T>::value) {
+                type_t etype = typeof(typename T::etype);
+                etype->parent = type; ///
             }
 
             if constexpr (is_lambda<T>() || is_primitive<T>() || inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value) {
-                if constexpr (is_lambda<T>()) {
-                    printf("1.T is lambda: %s, schema: %p\n", type->name, type->schema);
-                }
-
                 schema_populate(type, (T*)null);
-
-                if constexpr (is_lambda<T>()) {
-                    printf("2.T is lambda: %s, schema: %p\n", type->name, type->schema);
-                }
             }
 
             ///
             if constexpr (registered_instance_meta<T>()) {
-
-                if constexpr (is_lambda<T>()) {
-                    printf("error: T is lambda: %s\n", type->name);
-                    assert(false);
-                }
-
                 static T *def = new T();
                 doubly<prop> props;
                 props.mem    = def->meta().mem->grab();
@@ -4231,9 +4202,8 @@ ops<T> *ftable() {
         gen.copy       = CopyFn     <T>(T::_copy);
         gen.boolean    = BooleanFn  <T>(T::_boolean);
         gen.assign     = AssignFn   <T>(T::_assign); // assign is copy, deprecate (used in mx_object assign)
-
+        gen.to_string  = ToStringFn <T>(T::_to_string);
         if constexpr (registered_compare     <T>()) gen.compare     = CompareFn    <T>(T::_compare);
-        if constexpr (registered_to_string   <T>()) gen.to_string   = ToStringFn   <T>(T::_to_string);
         if constexpr (registered_from_string <T>()) gen.from_string = FromStringFn <T>(T::_from_string);
         if constexpr (registered_hash        <T>()) gen.hash        = HashFn       <T>(T::_hash);
 

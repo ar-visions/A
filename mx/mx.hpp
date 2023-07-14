@@ -439,7 +439,6 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     intern *data;\
     intern &operator *();\
     intern *operator->();\
-    intern *operator &();\
             operator intern *();\
             operator intern &();\
     C      &operator=(const C b);\
@@ -454,7 +453,6 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C::C(intern &&data) : C(mx::alloc<C>(&data)) { }\
     C::intern  &C::operator *() { return *data; }\
     C::intern  *C::operator->() { return  data; }\
-    C::intern  *C::operator &() { return  data; }\
     C::operator C::intern   *() { return  data; }\
     C::operator C::intern   &() { return *data; }\
     C &C::operator=(const C b) { mem->type->functions->assign(raw_t(0), (void*)this, (void*)&b); return *this; }\
@@ -480,7 +478,6 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C()              : C(mx::alloc<C>()) { }\
     intern    &operator *() { return *data; }\
     intern    *operator->() { return  data; }\
-    intern    *operator &() { return  data; }\
     operator     intern *() { return  data; }\
     operator     intern &() { return *data; }\
     C      &operator=(const C b) {\
@@ -1354,8 +1351,6 @@ constexpr bool is_debug() {
 #endif
 }
 
-void usleep(u64 u);
-
 struct prop;
 
 template <typename T>
@@ -1911,15 +1906,15 @@ public:
     using parent_class   = mx;\
     using context_class  = array;\
     using intern         = T;\
-    intern*    data;\
+    T*    data;\
+
     array(memory*   mem) : mx(mem), data(mx::data<T>()) { }\
     array(mx          o) : array(o.mem->grab()) { }\
-    array()              : array(mx::alloc<array>(null, 0, 1)) { }\
-    intern    &operator *() { return *data; }\
-    intern    *operator->() { return  data; }\
-    intern    *operator &() { return  data; }\
-    operator     intern *() { return  data; }\
-    operator     intern &() { return *data; }\
+    array()              : array(mx::alloc<array>(null, 0, 1)) { }
+
+    intern    *operator &() { return  data; }
+    operator     intern *() { return  data; }
+
     array      &operator=(const array b) {\
         mx::drop();\
         mx::mem = b.mem->grab();\
@@ -2008,10 +2003,11 @@ public:
     
     static array<T> empty() { return array<T>(size_t(1)); }
 
-    array(initial<T> args) : array(size(args.size()), size(args.size())) {
-        num i = 0; /// typesize must be sizeof mx if its an mx type
-        T* e = data;
-        for (auto &v:args) new (&data[i++]) T(v); /// copy construct, we allocated memory raw in reserve
+    array(initial<T> args) : array() {
+        for (auto &v:args) {
+            T &element = (T &)v;
+            push(element);
+        }
     }
 
     inline void set_size(size sz) {
@@ -2961,9 +2957,9 @@ struct map:mx {
             }
         }
 
-        field<V> &first()  { return fields.first(); }
-        field<V> & last()  { return fields. last(); }
-        size_t    count()  { return fields.len();   }
+        field<V> &first()  { return fields->first(); }
+        field<V> & last()  { return fields-> last(); }
+        size_t    count()  { return fields->len();   }
 
         size_t    count(mx k) {
             type_t tk = k.type();
@@ -3009,7 +3005,7 @@ struct map:mx {
 
         bool remove(field<V> &f) {
             item<field<V>> *i = item<field<V>>::container(f); // the container on field<V> is item<field<V>>, a negative offset
-            fields.remove(i);
+            fields->remove(i);
             return true;
         }
 

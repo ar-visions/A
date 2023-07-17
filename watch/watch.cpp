@@ -10,10 +10,10 @@ watch watch::spawn(array<path> paths, array<str> exts, states<path::option> opti
     s.watch_fn    = watch_fn;
     s.exts        = exts;
     s.options     = options;
-    state&     ss = s;
+    state*     ps = w.data;
     ///
-    async { size_t(1), [ss, options] (runtime &p, int index) -> var { /// give w a ref and copy into lambda
-        state& s = (state &)ss;
+    async { size_t(1), [ps, options] (runtime *p, int index) -> var { /// give w a ref and copy into lambda
+        state& s = *ps; /// was being copied!
         while (!s.canceling) {
             s.ops = array<path_op>(size_t(32 + s.largest * 2));
             
@@ -100,6 +100,12 @@ watch watch::spawn(array<path> paths, array<str> exts, states<path::option> opti
         s.safe = true;
         return null;
     }};
+    /// wait for 1 iteration before returning
+    while (s.iter == 0) {
+        usleep(1000);
+        if (s.safe)
+            break;
+    }
     return w;
 }
 

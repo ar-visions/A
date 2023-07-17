@@ -437,12 +437,13 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C(mx o);\
     C();\
     intern *data;\
-    intern &operator *();\
-    intern *operator->();\
-            operator intern *();\
-            operator intern &();\
-    C      &operator=(const C b);\
-    intern *operator=(const intern *b);
+    intern  &operator *();\
+    intern  *operator->();\
+    explicit operator intern *();\
+             operator intern &();\
+    C       &operator=(const C b);\
+    intern  *operator=(const intern *b);\
+    type_register(Vulkan);
 
 #define mx_implement(C, B) \
     C::C(memory*   mem) : B(mem), data(mdata<intern>(mem, 0)) { }\
@@ -478,7 +479,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C()              : C(mx::alloc<C>()) { }\
     intern    &operator *() { return *data; }\
     intern    *operator->() { return  data; }\
-    operator     intern *() { return  data; }\
+    explicit operator intern *() { return  data; }\
     operator     intern &() { return *data; }\
     C      &operator=(const C b) {\
         mx::drop();\
@@ -614,7 +615,7 @@ template <typename T> using func    = std::function<T>;
 template <typename K, typename V> using umap = std::unordered_map<K,V>;
 namespace fs  = std::filesystem;
 
-template <> struct is_opaque<fs::path> : true_type { }; /// destructor seems broken on that one (we need to not use this type)
+//template <> struct is_opaque<fs::path> : true_type { }; /// destructor seems broken on that one (we need to not use this type)
 
 template <typename T, typename B>
                       T mix(T a, T b, B f) { return a * (B(1.0) - f) + b * f; }
@@ -1575,7 +1576,7 @@ struct mx {
     ///
     inline memory *grab() const { return mem->grab(); }
     inline size  *shape() const { return mem->shape;  }
-    inline void    drop() const { mem->drop();        }
+    inline void    drop() const { if (mem) mem->drop(); }
 
 
     inline attachment *find_attachment(symbol id) {
@@ -1787,6 +1788,8 @@ struct mx {
     explicit operator  r64()      { return mem->ref<r64>(); }
     explicit operator  memory*()  { return mem->grab(); } /// trace its uses
     explicit operator  symbol()   { assert(mem->attrs & memory::constant); return mem->ref<symbol>(); }
+
+    type_register(mx);
 };
 
 template <typename T>
@@ -2339,6 +2342,8 @@ struct ex:mx {
     ///
     template <typename E, typename C>
     ex(E v, C *inst) : ex(alloc<E>(&v), this) { }
+
+    type_register(ex);
 };
 
 /// useful for constructors that deal with ifstream
@@ -3406,7 +3411,9 @@ struct path:mx {
     }
 
     /// operators
-    operator        bool()         const { return data->string().length() > 0; }
+    operator        bool()         const {
+        return data->string().length() > 0;
+    }
     operator         str()         const { return str(data->string()); }
     path          parent()         const { return  data->parent_path(); }
     
@@ -3489,7 +3496,7 @@ struct path:mx {
         ///
         res = [&](path a) {
             auto fn_filter = [&](path p) -> bool {
-                str      ext = ext4();
+                str      ext = p.ext4();
                 bool proceed = false;
                 /// proceed if the extension is matching one, or no extensions are given
                 for (size_t i = 0; i < exts.len(); i++)
@@ -3503,7 +3510,7 @@ struct path:mx {
                 
                 if (proceed && use_gitignore) {
                     path    pp = path(parent);
-                    path   rel = pp.relative(pp); // original parent, not resource parent
+                    path   rel = pp.relative(p); // original parent, not resource parent
                     str   srel = rel;
                     ///
                     for (str& i: ignore)
@@ -3525,10 +3532,10 @@ struct path:mx {
             if (a.is_dir()) {
                 if (!no_hidden || !a.is_hidden())
                     for (fs::directory_entry e: fs::directory_iterator(*a)) {
-                        path p  = path(e.path());
+                        path p  = e.path();
                         path li = p.link();
-                        if (li)
-                            continue;
+                        //if (li)
+                        //    continue;
                         path pp = li ? li : p;
                         if (recursive && pp.is_dir()) {
                             if (fetched_dir.lookup(mx(pp)))
@@ -3544,7 +3551,8 @@ struct path:mx {
             else if (a.exists())
                 fn_filter(a);
         };
-        return res(path(*data));
+        path rpath = *data;
+        return res(rpath);
     }
 
     array<path> matching(array<str> exts) {

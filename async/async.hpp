@@ -10,9 +10,7 @@ namespace ion {
 struct exec:str {
     exec(str s) : str(s) { }
     ion::path path() {
-        /// atm no spaces supported, not sure how i want to format
-        array<str> sp = str::split();
-        return ion::path(sp[0].cs());
+        return data;
     }
 };
 
@@ -104,6 +102,7 @@ struct runtime {
     int                        done      = 0; /// 
     bool                       failure   = false;
     bool                       join      = false;
+    type_register(runtime);
     ///
 };
 
@@ -196,7 +195,7 @@ public:
             yield();
     }
     ///
-    process(size_t count, FnProcess fn) : process(alloc<runtime>()) {
+    process(size_t count, FnProcess fn) : process(alloc<process>()) {
         if(!init) {
             init       = true;
             th_manager = std::thread(manager);
@@ -233,15 +232,20 @@ struct async {
     array<mx> sync();
 
     /// await all async processes to complete
-    static int await();
+    static int await_all();
 
     /// return future for this async
     operator future();
 };
 
+/// sync just performs sync on construction
 struct sync:async {
-    sync(size_t count, FnProcess fn) : async(count, fn) { }
-    sync(path p) : async(p) { }
+    sync(size_t count, FnProcess fn) : async(count, fn) {
+        async::sync();
+    }
+    sync(exec p) : async(p) {
+        async::sync();
+    }
 
     /// call array<S> src -> T conversion
     template <typename T>

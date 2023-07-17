@@ -23,25 +23,7 @@ async::async(size_t count, FnProcess fn) : async() {
     process::procs->push(ps);
 }
 
-/// path to execute, we dont host a bunch of environment vars. ar.
-/// make path a string instance i think; fs::path doesnt offs
-async::async(exec command) : async(1, [&](runtime &proc, int i) -> mx {
-    path p   = command.path();
-    path dir = p.parent();
-    
-    if (dir == "" || dir == ".") {
-        path   cwd = dir::cwd(); /// this always puts a trailing slash on
-        path local = cwd / p;
-        assert(local != "");
-        exec   cmd = fmt {"{0}{1}", { str(local.cs()), command }};
-        command    = cmd;
-        assert(local.exists());
-    } else {
-        /// would rather not use anything in PATH
-        if (p.exists()) {
-            console.log("std::system (shell) will default to PATH for command:\n > {0}", { p });
-        }
-    }
+async::async(exec command) : async(1, [&](runtime *proc, int i) -> mx {
     console.log("shell > {0}", { command });
     int exit_code = int(std::system(command.cs()));
     return exit_code;
@@ -64,7 +46,7 @@ array<mx> async::sync() {
 }
 
 /// await all async processes to complete
-int async::await() {
+int async::await_all() {
     for (;;) {
         process::mtx_global.lock();
         if (!process::procs->len()) {

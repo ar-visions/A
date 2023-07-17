@@ -131,6 +131,7 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
     size_t          mn        = math::min(alloc_reserve, count);
     const bool      prim      = (type->traits & traits::primitive) != 0;
 
+    /// if single primitive, it can be mem copied.  otherwise this is interleaved vector
     if (prim) {
         memcpy(dst, src, type_sz * mn);
     } else {
@@ -153,9 +154,7 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
             }
         }
     }
-
     free(origin);
-    
     origin  = raw_t(dst);
     reserve = alloc_reserve;
     return origin;
@@ -214,23 +213,12 @@ memory *memory::raw_alloc(type_t type, size_t sz, size_t count, size_t res) {
     size_t elements = math::max(count, res);
     memory*     mem = (memory*)calloc(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
     mem->count      = count;
-    mem->reserve    = res;
+    mem->reserve    = math::max(res, count);
     mem->refs       = 1;
     mem->type       = type;
-    mem->origin     = calloc(sz, count); /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
+    mem->origin     = calloc(sz, mem->reserve); /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
     return mem;
 }
-/*
-memory *memory::wrap(raw_t m, type_t ty) {
-    memory*     mem = (memory*)calloc(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
-    mem->count      = 1;
-    mem->reserve    = 1;
-    mem->refs       = 1;
-    mem->type       = ty;
-    mem->origin     = m;
-    return mem;
-}
-*/
 
 /// starting at 1, it should remain active.  shall not be freed as a result
 void memory::drop() {
@@ -254,7 +242,6 @@ void memory::drop() {
 }
 
 memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
-    memory *result = null;
     size_t  type_sz = type->size(); /// this is the 'data size', should name the function just that; if the type has no schema the data size is its own size
 
     if (type->singleton)
@@ -264,29 +251,30 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
 
     if (type->traits & traits::singleton)
         type->singleton = mem;
+    bool primitive = (type->traits & traits::primitive);
 
     /// if allocating a schema-based object (mx being first user of this)
     if (count > 0) {
         if (v_src) {
-            /// if schema-copy-construct (call cpctr for each data type in composition)
-            for (size_t i = 0; i < type->schema->bind_count; i++) {
-                context_bind &bind = type->schema->composition[i];
-                u8 *dst = &((u8*)mem->origin)[bind.offset];
-                u8 *src = &((u8*)      v_src)[bind.offset];
-                if (bind.data)
-                    for (size_t ii = 0; ii < count; ii++) {
-                        if (bind.data->functions) /// enums dont have this set; in order for that to be the case we cannot embed them and must do 2 part decl/impl
+            if (primitive)
+                memcpy(mem->origin, v_src, type_sz * count);
+            else {
+                /// if schema-copy-construct (call cpctr for each data type in composition)
+                for (size_t i = 0; i < type->schema->bind_count; i++) {
+                    context_bind &bind = type->schema->composition[i];
+                    u8 *dst = &((u8*)mem->origin)[bind.offset];
+                    u8 *src = &((u8*)      v_src)[bind.offset];
+                    if (bind.data) {
+                        for (size_t ii = 0; ii < count; ii++)
                             bind.data->functions->copy(raw_t(0), &dst[ii * type_sz], &src[ii * type_sz]);
-                        else
-                            memcpy(&dst[ii * type_sz], &src[ii * type_sz], bind.base_sz); /// needs an assert check to be sure its primitive
                     }
+                }
             }
-        } else {
-            /// ctr: call construct across the composition
+        } else if (!primitive) {
             for (size_t i = 0; i < type->schema->bind_count; i++) {
                 context_bind &bind = type->schema->composition[i];
                 u8 *dst  = &((u8*)mem->origin)[bind.offset];
-                if (bind.data && bind.data->functions)
+                if (bind.data && !(bind.data->traits & traits::primitive))
                     for (size_t ii = 0; ii < count; ii++) {
                         bind.data->functions->construct(raw_t(0), &dst[ii * type_sz]);
                     }

@@ -22,25 +22,24 @@ struct completer:mx {
         bool            completed;
         array<mx>       l_success;
         array<mx>       l_failure;
-    } &cd;
+        type_register(cdata);
+    };
+    mx_object(completer, mx, cdata);
 
-    completer() : mx(alloc<cdata>()), cd(ref<cdata>()) { }
     completer(lambda<void(mx)>& fn_success,
               lambda<void(mx)>& fn_failure) : completer() {
         
-        completer::cdata &cd = ref<completer::cdata>();
-        
-        fn_success = [&cd](mx d) { /// should not need a grab and drop; if
-            cd.completed = true;
-            for (mx &s: cd.l_success) {
+        fn_success = [data=data](mx d) { /// should not need a grab and drop; if
+            data->completed = true;
+            for (mx &s: data->l_success) {
                 FnFuture &lambda = s.mem->ref<FnFuture>();
                 lambda(d);
             }
         };
         
-        fn_failure = [&cd](mx d) {
-            cd.completed = true;
-            for (mx &f: cd.l_failure) {
+        fn_failure = [data=data](mx d) {
+            data->completed = true;
+            for (mx &f: data->l_failure) {
                 FnFuture &lambda = f.mem->ref<FnFuture>();
                 lambda(d);
             }

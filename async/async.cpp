@@ -27,7 +27,7 @@ async::async(exec command) : async(1, [&](runtime *proc, int i) -> mx {
     console.log("shell > {0}", { command });
     
     char cmd[256];
-    sprintf(cmd, "%s > stdout.txt", command.cs());
+    snprintf(cmd, 256, "%s > stdout.txt", command.cs());
     int exit_code = int(std::system(command.cs()));
 
     if (exit_code != 0)

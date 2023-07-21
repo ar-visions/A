@@ -153,7 +153,7 @@ struct rect {
 template <typename T>
 struct Rect:mx {
     mx_object(Rect, mx, rect<T>);
-    movable(Rect);
+    //movable(Rect);
 };
 
 using recti   = rect <i32>;
@@ -248,7 +248,7 @@ struct Rounded:Rect<T> {
         
     };
     mx_object(Rounded, Rect<T>, rdata);
-    movable(Rounded);
+    //movable(Rounded);
 
     /// needs routines for all prims
     inline bool contains(vec2 v) { return (v >= data->p_tl && v < data->p_br); }
@@ -258,7 +258,7 @@ struct Rounded:Rect<T> {
     vec2       xy() { return data->p_tl; }
     operator bool() { return data->l_tl <= 0; }
 
-    /// set og rect (r4r) and compute the bezier
+    /// set og rect (rectd) and compute the bezier
     Rounded(rect &r, T rx, T ry) : Rounded(rdata(r, rx, ry)) { *Rect<T>::data = r; }
 };
 
@@ -278,12 +278,12 @@ struct Line:mx {
         vec2d origin;
     };
     mx_object(Line, mx, ldata);
-    movable(Line);
+    //movable(Line);
 };
 
 struct Movement:mx {
     mx_object(Movement, mx, vec2d);
-    movable(Movement); /// makes a certain amount of sense
+    //movable(Movement); /// makes a certain amount of sense
 };
 
 struct Bezier:mx {

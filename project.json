@@ -10,6 +10,18 @@
             "cmake": {
                 "args": ["-DBUILD_STATIC_LIBS=Yes"]
             }
+        },
+        {
+            "name":     "zlib",
+            "version":  "1.2.13",
+            "commit":   "04f42ce",
+            "url":      "https://github.com/madler/zlib"
+        },
+        {
+            "name":     "libpng",
+            "version":  "1.6.39",
+            "commit":   "07b8803",
+            "url":      "https://github.com/glennrp/libpng"
         }
     ]
 }

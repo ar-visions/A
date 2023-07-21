@@ -171,6 +171,7 @@ constexpr int num_occurances(const char* cs, char c) {
         enum etype&    value;\
         static memory* lookup(symbol sym) { return typeof(C)->lookup(sym); }\
         static memory* lookup(u64    id)  { return typeof(C)->lookup(id);  }\
+        static doubly<memory*> &symbols() { return typeof(C)->symbols->list; }\
         inline static const int count = num_args(__VA_ARGS__);\
         inline static const str raw   = str_args(__VA_ARGS__);\
         ion::symbol symbol() {\
@@ -206,6 +207,7 @@ constexpr int num_occurances(const char* cs, char c) {
         enum etype&    value;\
         static memory* lookup(symbol sym);\
         static memory* lookup(u64    id);\
+        static doubly<memory*> &symbols();\
         inline static const int count = num_args(__VA_ARGS__);\
         inline static const str raw   = str_args(__VA_ARGS__);\
         inline static const symbol raw_cstr = S;\
@@ -228,6 +230,7 @@ constexpr int num_occurances(const char* cs, char c) {
     };\
 
 #define enums_define(C,W)\
+    doubly<memory*> &C::symbols()          { return typeof(C)->symbols->list; }\
     memory*     C::lookup(ion::symbol sym) { return typeof(C)->lookup(sym); }\
     memory*     C::lookup(u64    id)       { return typeof(C)->lookup(id);  }\
     ion::symbol C::symbol() {\
@@ -443,7 +446,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
              operator intern &();\
     C       &operator=(const C b);\
     intern  *operator=(const intern *b);\
-    type_register(Vulkan);
+    type_register(C);
 
 #define mx_implement(C, B) \
     C::C(memory*   mem) : B(mem), data(mdata<intern>(mem, 0)) { }\
@@ -467,13 +470,14 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
 /// for templates in header
 /// the following is delegated to movable(C): (array<T> blows up for good reason)
 ///     inline C(intern    ref) : B(mx::alloc<C>(&ref)), data(mx::data<D>()) { }
+
 #define mx_object(C, B, D) \
     using parent_class   = B;\
     using context_class  = C;\
     using intern         = D;\
     intern*    data;\
     C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
-    C(intern** memb) : B(mx::alloc<C>()),     data(mx::data<D>()) { assert(memb == &data); }\
+    C(intern   memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
     C(intern*  data) : C(mx::wrap <C>(raw_t(data), 1)) { }\
     C(mx          o) : C(o.mem->grab()) { }\
     C()              : C(mx::alloc<C>()) { }\
@@ -497,8 +501,8 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     }\
     type_register(C)\
 
-#define movable(C)\
-    inline C(intern data) : C(mx::alloc<C>((raw_t)&data, 1)) { }\
+//#define movable(C)\
+//    inline C(intern data) : C(mx::alloc<C>((raw_t)&data, 1)) { }\
 
 template <typename DC>
 static constexpr void inplace(DC *p, bool dtr) {
@@ -1939,7 +1943,7 @@ public:
     T &push() {
         size_t csz = mem->count;
         if (csz + 1 > alloc_size())
-            data = mem->realloc(csz + 1, false);
+            data = (T*)mem->realloc(csz + 1, false);
 
         new (&data[csz]) T();
         mem->count++;
@@ -3348,7 +3352,7 @@ struct path:mx {
     }
     ///
     mx_object(path, mx, fs::path);
-    movable(path);
+    //movable(path);
 
     inline path(str      s) : path(new fs::path(symbol(s.cs()))) { }
     inline path(symbol  cs) : path(new fs::path(cs)) { }

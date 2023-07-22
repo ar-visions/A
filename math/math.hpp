@@ -144,16 +144,12 @@ struct rect {
             math::min(y + h, input.y + input.h) - math::max(y, input.y),
         };
     }
+    type_register(rect);
 };
 
-
-
-/// high level class begins with Capitalisation, spelling words properly
-/// try to express in 1 word when succinct
 template <typename T>
 struct Rect:mx {
     mx_object(Rect, mx, rect<T>);
-    //movable(Rect);
 };
 
 using recti   = rect <i32>;
@@ -163,6 +159,7 @@ using rectf   = rect <r32>;
 using Recti   = Rect <i32>;
 using Rectd   = Rect <r64>;
 using Rectf   = Rect <r32>;
+
 
 /// shortening methods
 template <typename T> inline vec2<T> xy  (vec4<T> v) { return { v.x, v.y }; }

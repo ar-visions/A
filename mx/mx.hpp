@@ -340,12 +340,6 @@ template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
     }\
 
 #define external(C)\
-    static size_t _type_sz(C *dst) {\
-        static type_t type    = typeof(C);\
-        static size_t type_sz = (type->schema) ? type->schema->total_bytes : type->base_sz;\
-        assert(type_sz > 0);\
-        return type_sz;\
-    }\
     template <> struct is_external<C> : true_type { };\
     template <typename _T>\
     void _construct(C *dst0, _T *dst) {\
@@ -354,7 +348,7 @@ template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
     template <typename _T>\
     void _assign(C *dst0, _T *dst, _T *src) {\
         if constexpr (!is_opaque<_T>() && std::is_copy_constructible<_T>()) {\
-            delete dst;\
+            dst -> ~_T();\
             new (dst) _T(*src);\
         }\
     }\
@@ -475,6 +469,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     using parent_class   = B;\
     using context_class  = C;\
     using intern         = D;\
+    static const inline type_t intern_t = typeof(D);\
     intern*    data;\
     C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
     C(intern   memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
@@ -1915,6 +1910,20 @@ public:
     using intern         = T;\
     T*    data;\
 
+    static array<T> read_file(symbol filename) {
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+        if (!file.is_open())
+            throw std::runtime_error("failed to open file!");
+
+        size_t byte_sz = (size_t) file.tellg();
+        array<T> result(byte_sz / sizeof(T), byte_sz / sizeof(T));
+        file.seekg(0);
+        file.read((char*)result.data, byte_sz);
+        file.close();
+        return result;
+    }
+
     array(memory*   mem) : mx(mem), data(mx::data<T>()) { }\
     array(mx          o) : array(o.mem->grab()) { }\
     array()              : array(mx::alloc<array>(null, 0, 1)) { }
@@ -2225,9 +2234,19 @@ public:
         return push(v);
     }
 
+    /// clearing a list reallocates to 1, destructing previous
     void clear() {
         data = (T*)mem->realloc(1, false);
     }
+
+    /// destructing a list means it keeps the size
+    void destruct() {
+        for (int i = 0; i < mem->count; i++) {
+            data[i] -> ~T();
+        }
+        mem->count = 0;
+    }
+
     type_register(array);
 };
 

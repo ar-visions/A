@@ -2242,7 +2242,7 @@ public:
     /// destructing a list means it keeps the size
     void destruct() {
         for (int i = 0; i < mem->count; i++) {
-            data[i] -> ~T();
+            data[i] . ~T();
         }
         mem->count = 0;
     }

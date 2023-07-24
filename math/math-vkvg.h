@@ -2,7 +2,7 @@
 #define _math_h_
 
 #include <string.h>
-#include <math.h>
+#include <cmath>
 #include <glm/glm.h>
 
 

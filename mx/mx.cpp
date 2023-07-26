@@ -4,6 +4,23 @@ namespace ion {
 
 logger console;
 
+raw_t memory::typed_data(type_t dtype, size_t index) const {
+    size_t mxc = math::max(reserve, count);
+    //static type_t mx_t  = typeof(mx);
+    alloc_schema *schema = type->schema;
+    if (dtype != type && schema) {
+        size_t offset = 0;
+        for (size_t i = 0; i < schema->bind_count; i++) {
+            context_bind &c = schema->composition[i];
+            if (c.data == dtype)
+                return (raw_t)&cstr(origin)[c.offset * mxc + c.data->base_sz * index];
+        }
+        console.fault("type not found in schema: {0}", { str(dtype->name) });
+        return (raw_t)null;
+    } else
+        return (raw_t)(cstr(origin) + dtype->base_sz * index);
+}
+
 size_t length(std::ifstream& in) {
     std::streamsize base = in.tellg();
     in.seekg(0, std::ios::end);

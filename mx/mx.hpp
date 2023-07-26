@@ -312,6 +312,10 @@ template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
         return null;\
     }\
     template <typename _T>\
+    static _T *_new(C *dst0, _T *dst) {\
+        return new _T();\
+    }\
+    template <typename _T>\
     static void _construct(C *dst0, _T *dst) {\
         if constexpr (!is_opaque<_T>()) new (dst) _T();\
     }\
@@ -341,6 +345,10 @@ template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
 
 #define external(C)\
     template <> struct is_external<C> : true_type { };\
+    template <typename _T>\
+    _T *_new(C *dst0, _T *dst) {\
+        if constexpr (!is_opaque<_T>()) return new _T(); else return null;\
+    }\
     template <typename _T>\
     void _construct(C *dst0, _T *dst) {\
         if constexpr (!is_opaque<_T>()) new (dst) _T();\
@@ -600,7 +608,8 @@ struct traits {
         array     = 16,
         map       = 32,
         mx        = 64,
-        opaque    = 128 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
+        enum_primitive = 128,
+        opaque         = 256 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
     };
 };
 
@@ -854,9 +863,6 @@ struct ident {
     template <typename T>
     static idata* for_type();
 
-    template <typename T>
-    static size_t type_size(); /// does not strip the pointer; sz is for its non pointer base sz (will call it that)
-    
     ident(memory* mem) : mem(mem) { }
 };
 
@@ -868,6 +874,7 @@ template <typename T> using  FromStringFn =            T*(*)(T*, cstr);    /// s
 template <typename T> using        CopyFn =          void(*)(T*, T*, T*);  /// dst, src (realloc case)
 template <typename T> using    DestructFn =          void(*)(T*, T*);      /// src
 template <typename T> using   ConstructFn =          void(*)(T*, T*);      /// src
+template <typename T> using         NewFn =            T*(*)(T*, T*);      /// src
 template <typename T> using      AssignFn =          void(*)(T*, T*, T*);  /// dst, src
 template <typename T> using        HashFn =        size_t(*)(T*, T*);      /// src
 
@@ -881,6 +888,7 @@ struct ops {
          CopyFn<T> copy;
      DestructFn<T> destruct;
     ConstructFn<T> construct;
+          NewFn<T> alloc_new;
        AssignFn<T> assign;
          HashFn<T> hash;
          void     *meta;
@@ -901,8 +909,10 @@ struct idata {
     ops<void>       *functions;
     symbol_data     *symbols;
     memory          *singleton;
-    idata           *parent; /// if you are given a primitive enum, you can find the schema and symbols on parent (see: to_string)
+    idata           *ref; /// if you are given a primitive enum, you can find the schema and symbols on ref (see: to_string)
+    idata           *parent; 
     bool             secondary_init; /// used by enums but flag can be used elsewhere.  could use 'flags' too
+
 
     size_t size();
     memory *lookup(symbol sym);
@@ -1206,7 +1216,7 @@ template <typename T, typename = void> struct registered_instance_meta : false_t
 /// we need two sets because data types can be registered in templates.  you dont want to hard code all of the types you use
 /// you also dont want to limit yourself to your own data types, so we have the idea of external
 
-template <typename T> struct registered            <T, std::enable_if_t<std::is_same_v<decltype(T::_type_sz    (std::declval<T*>  ())), size_t>>>       : true_type { };
+template <typename T> struct registered            <T, std::enable_if_t<std::is_same_v<decltype(T::_new        (std::declval<T*>  (), std::declval<T*>  ())), T*>>>       : true_type { };
 template <typename T> struct registered_assign     <T, std::enable_if_t<std::is_same_v<decltype(T::_assign     (std::declval<T*>  (), std::declval<T*>  (), std::declval<T*>())), void>>> : true_type { };
 template <typename T> struct registered_compare    <T, std::enable_if_t<std::is_same_v<decltype(T::_compare    (std::declval<T*>  (), std::declval<T*>  (), std::declval<T*>())), int>>>  : true_type { };
 template <typename T> struct registered_bool       <T, std::enable_if_t<std::is_same_v<decltype(T::_boolean    (std::declval<T*>  (), std::declval<T*>  ())), bool>>>                     : true_type { };
@@ -1380,8 +1390,6 @@ struct memory {
     bool                managed; /// origin is allocated by us
     raw_t               origin;
 
-    size_t type_size() { return type->base_sz; } /// base_sz is the sizeof(context_class)
-
     static memory *raw_alloc(type_t type, size_t sz, size_t count, size_t res);
     static memory *    alloc(type_t type, size_t count, size_t reserve, raw_t src);
            void   *  realloc(size_t res,  bool fill_default);
@@ -1416,6 +1424,8 @@ struct memory {
     /// also supports the primative store, non-mx
     template <typename T>
     T *data(size_t index) const;
+
+    raw_t typed_data(type_t data_type, size_t index) const;
 
     template <typename T>
     T &ref() const { return *data<T>(0); }
@@ -1495,8 +1505,6 @@ struct rand {
 
     static bool coin(seq& s = global) { return uniform(0.0, 1.0) >= 0.5; }
 };
-
-using arg = pair<mx, mx>;
 
 struct size;
 
@@ -1639,8 +1647,11 @@ struct mx {
     template <typename E, typename = std::enable_if_t<std::is_enum_v<E>>>
     inline mx(E v) : mem(alloc(&v)) { }
 
-    inline size_t  type_size() const { return mem->type_size(); }
-    inline size_t   byte_len() const { return count() * type_size(); }
+    inline size_t   byte_len() const {
+        type_t type = mem->type;
+        size_t t    = (type->schema && type->schema->total_bytes) ? type->schema->total_bytes : type->base_sz;
+        return count() * t;
+    }
 
     memory    *copy(size_t res = 0) const { return mem->copy(res); }
     memory *quantum(size_t res = 0) const { return (res == 0 && mem->refs == 1) ? mem : mem->copy(); }
@@ -1679,9 +1690,9 @@ struct mx {
         else if (mem->type == typeof(r32)) return memory::string(std::to_string(*(r32*) mem->origin));
         else if (mem->type == typeof(r64)) return memory::string(std::to_string(*(r64*) mem->origin));
         else if (mem->type == typeof(bool))return memory::string(std::to_string(*(bool*)mem->origin));
-        
-        else if  (mem->type->parent) { // this is reserved for enumerables; the symbol is stored in memory uniformly.  enum values are always stored with a prior symbol lookup.  the memory* in effect is symbolized
-            return mem->grab();//mem->type->parent->functions->to_string(raw_t(0), mem);
+        // this is reserved for enumerables; the symbol is stored in memory uniformly.  enum values are always stored with a prior symbol lookup.  the memory* in effect is symbolized
+        else if  ((mem->type->traits & traits::enum_primitive) && mem->type->ref) { 
+            return mem->grab();
         }
         else if   (mem->type->functions->to_string)
             return mem->type->functions->to_string(raw_t(0), mem->origin); /// call to_string() on context class
@@ -2248,7 +2259,10 @@ public:
     type_register(array);
 };
 
+using arg = pair<mx, mx>;
 using ax  = array<arg>;
+
+external(arg);
 
 using ichar = int;
 
@@ -4090,8 +4104,8 @@ idata *ident::for_type() {
         num              ln = cn.find(en, p) - p;
         std::string      nm = cn.substr(p, ln);
         auto             sp = nm.find(' ');
-        std::string   namco = (sp != std::string::npos) ? nm.substr(sp + 1) : nm;
-        return util::copy(namco.c_str());
+        std::string    name = (sp != std::string::npos) ? nm.substr(sp + 1) : nm;
+        return util::copy(name.c_str());
     };
     ///
     static idata *type;
@@ -4129,6 +4143,7 @@ idata *ident::for_type() {
                             (is_map      <T> () ? traits::map       : 0) |
                             (is_mx              ? traits::mx        : 0);
             
+
             if constexpr (registered<T>() || is_external<T>::value) {
                 printf("registering function table: T = %s\n", type->name);
                 type->functions = (ops<void>*)ftable<T>();
@@ -4138,7 +4153,13 @@ idata *ident::for_type() {
             /// if there is a parent type, we etype == schema->data
             if constexpr (has_etype<T>::value) {
                 type_t etype = typeof(typename T::etype);
-                etype->parent = type; ///
+                etype->ref = type; ///
+                etype->traits |= traits::enum_primitive;
+            }
+            
+            /// all mx classes have a parent_class; we use this to know the polymorphic chain
+            if constexpr (!identical<mx, T>() && inherits<mx, T>()) {
+                type->parent = typeof(typename T::parent_class);
             }
 
             if constexpr (is_lambda<T>() || is_primitive<T>() || inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value) {
@@ -4164,6 +4185,9 @@ idata *ident::for_type() {
                 }
                 type->meta_map = (raw_t)pmap;
             }
+
+            
+
         }
     }
     return type_t(type);
@@ -4172,21 +4196,8 @@ idata *ident::for_type() {
 template <typename T>
 T *memory::data(size_t index) const {
     if constexpr (type_complete<T>) {
-        type_t queried_type = ident::for_type<T>();
-        size_t mxc          = math::max(reserve, count);
-        static type_t mx_t  = typeof(mx);
-        alloc_schema *schema = type->schema;
-        if (queried_type != type && schema) { // dont insert schema for mx type duh
-            size_t offset = 0;
-            for (size_t i = 0; i < schema->bind_count; i++) {
-                context_bind &c = schema->composition[i];
-                if (c.data == queried_type)
-                    return (T*)&cstr(origin)[c.offset * mxc + c.data->base_sz * index];
-            }
-            console.fault("type not found in schema: {0}", { str(queried_type->name) });
-            return (T*)null;
-        } else
-            return (T*)origin + index;
+        type_t dtype = ident::for_type<T>();
+        return (T*)typed_data(dtype, index);
     } else {
         assert(index == 0);
         return (T*)origin;
@@ -4194,36 +4205,11 @@ T *memory::data(size_t index) const {
 }
 
 template <typename T>
-size_t ident::type_size() {
-    static type_t type    = typeof(T);
-    if constexpr (type_complete<T>) {
-        static size_t type_sz = std::is_pointer<T>::value ? sizeof(T) : 
-            (type->schema && type->schema->total_bytes)
-        ? type->schema->total_bytes : type->base_sz;
-        return type_sz;
-    } else {
-        return sizeof(T*);
-    }
-}
-
-template <typename T>
-struct has_construct
-{
-    template <typename C>
-    static auto test(int) -> decltype(std::declval<C>()._construct(), true_type());
-
-    template <typename>
-    static auto test(...) -> false_type;
-
-    static constexpr bool value = decltype(test<T>(0))::value;
-};
-
-
-template <typename T>
 ops<T> *ftable() {
     static ops<T> gen;
-
+    ///
     if constexpr (registered<T>()) { // if the type is registered as a data class with its own methods declared inside
+        gen.alloc_new  = NewFn      <T>(T::_new);
         gen.construct  = ConstructFn<T>(T::_construct);
         gen.destruct   = DestructFn <T>(T::_destruct);
         gen.copy       = CopyFn     <T>(T::_copy);
@@ -4233,9 +4219,10 @@ ops<T> *ftable() {
         if constexpr (registered_compare     <T>()) gen.compare     = CompareFn    <T>(T::_compare);
         if constexpr (registered_from_string <T>()) gen.from_string = FromStringFn <T>(T::_from_string);
         if constexpr (registered_hash        <T>()) gen.hash        = HashFn       <T>(T::_hash);
-
+        ///
     } else if constexpr (is_external<T>::value) { /// primitives, std::filesystem, and other foreign objects
         type_t t = typeof(T);
+        gen.alloc_new   = NewFn        <T>(_new);
         gen.construct   = ConstructFn  <T>(_construct);
         gen.destruct    = DestructFn   <T>(_destruct);
         gen.copy        = CopyFn       <T>(_copy);

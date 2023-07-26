@@ -297,31 +297,44 @@ template <typename T, typename = std::void_t<>> struct has_bool_op: false_type {
 template <typename T> struct has_bool_op<T, std::void_t<decltype(static_cast<bool>(std::declval<T&>()))>> : true_type {};
 template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
 
+/// primitive to/from string here
+memory *_to_string(cstr data);
+memory *_to_string(int *data);
+int *_from_string(int *type, cstr data);
+
 /// the first arg is not needed as its needed for externals because these are embedded on the struct
+/// to fix _from_string we would need a central allocator, removal of new or flagging of what type of allocation it was
+/// i honestly would prefer latter but i prefer not to over optimize for now
+/// another possibility is to have a _delete in the table
 #define type_register(C)\
-    static size_t _type_sz(C *dst) {\
-        static type_t type    = typeof(C);\
-        static size_t type_sz = (type->schema) ? type->schema->total_bytes : type->base_sz;\
-        assert(type_sz > 0);\
-        return type_sz;\
-    }\
     template <typename _T>\
-    static struct memory *_to_string(C *dst0, _T *dst) {\
+    static struct memory *_to_string(_T *src) {\
         if constexpr (registered_instance_to_string<_T>())\
-            return dst ? dst->to_string() : null;\
+            return src ? src->to_string() : null;\
         return null;\
     }\
     template <typename _T>\
-    static _T *_new(C *dst0, _T *dst) {\
+    static _T *_from_string(_T *placeholder, cstr src) {\
+        if constexpr (std::is_constructible<_T, cstr>::value) {\
+            return new _T(src);\
+        } else\
+            return null;\
+    }\
+    template <typename _T>\
+    static _T *_new(C *ph, _T *type) {\
         return new _T();\
     }\
     template <typename _T>\
+    static void _del(C *ph, _T *instance) {\
+        delete instance;\
+    }\
+    template <typename _T>\
     static void _construct(C *dst0, _T *dst) {\
-        if constexpr (!is_opaque<_T>()) new (dst) _T();\
+        new (dst) _T();\
     }\
     template <typename _T>\
     static void _assign(C *dst0, _T *dst, _T *src) {\
-        if constexpr (!is_opaque<_T>() && std::is_copy_constructible<_T>()) {\
+        if constexpr (std::is_copy_constructible<_T>()) {\
             dst -> ~_T();\
             new (dst) _T(*src);\
         }\
@@ -346,8 +359,12 @@ template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
 #define external(C)\
     template <> struct is_external<C> : true_type { };\
     template <typename _T>\
-    _T *_new(C *dst0, _T *dst) {\
+    _T *_new(C *ph, _T *type) {\
         if constexpr (!is_opaque<_T>()) return new _T(); else return null;\
+    }\
+    template <typename _T>\
+    void _del(C *ph, _T *instance) {\
+        if constexpr (!is_opaque<_T>()) delete instance;\
     }\
     template <typename _T>\
     void _construct(C *dst0, _T *dst) {\
@@ -869,12 +886,13 @@ struct ident {
 /// these should be vectorized but its not worth it for now
 template <typename T> using     CompareFn =           int(*)(T*, T*, T*);  /// a, b
 template <typename T> using     BooleanFn =          bool(*)(T*, T*);      /// src
-template <typename T> using    ToStringFn =       memory*(*)(T*, T*);      /// src
-template <typename T> using  FromStringFn =            T*(*)(T*, cstr);    /// src-cstring
+template <typename T> using    ToStringFn =       memory*(*)(T*);          /// src (user implemented on external)
+template <typename T> using  FromStringFn =            T*(*)(T*, cstr);    /// placeholder, src-cstring
 template <typename T> using        CopyFn =          void(*)(T*, T*, T*);  /// dst, src (realloc case)
 template <typename T> using    DestructFn =          void(*)(T*, T*);      /// src
 template <typename T> using   ConstructFn =          void(*)(T*, T*);      /// src
-template <typename T> using         NewFn =            T*(*)(T*, T*);      /// src
+template <typename T> using         NewFn =            T*(*)(T*, T*);      /// placeholder, placeholder2 (LOL.  C++ sucks)
+template <typename T> using         DelFn =          void(*)(T*, T*);      /// placeholder, instance
 template <typename T> using      AssignFn =          void(*)(T*, T*, T*);  /// dst, src
 template <typename T> using        HashFn =        size_t(*)(T*, T*);      /// src
 
@@ -889,6 +907,7 @@ struct ops {
      DestructFn<T> destruct;
     ConstructFn<T> construct;
           NewFn<T> alloc_new;
+          DelFn<T> del;
        AssignFn<T> assign;
          HashFn<T> hash;
          void     *meta;
@@ -1175,10 +1194,6 @@ using     prop_map = hmap<symbol, prop>;
 
 struct context_bind;
 
-static cstr _from_string(cstr input) {
-    return input;
-}
-
 
 
 /// type-api-check
@@ -1222,7 +1237,10 @@ template <typename T> struct registered_compare    <T, std::enable_if_t<std::is_
 template <typename T> struct registered_bool       <T, std::enable_if_t<std::is_same_v<decltype(T::_boolean    (std::declval<T*>  (), std::declval<T*>  ())), bool>>>                     : true_type { };
 template <typename T> struct registered_copy       <T, std::enable_if_t<std::is_same_v<decltype(T::_copy       (std::declval<T*>  (), std::declval<T*>  (),  std::declval<T*>(), size_t(0))), void>>> : true_type { };
 template <typename T> struct registered_construct  <T, std::enable_if_t<std::is_same_v<decltype(T::_construct  (std::declval<T*>  (), std::declval<T*>  (), size_t(0))), void>>>          : true_type { };
-template <typename T> struct registered_to_string  <T, std::enable_if_t<std::is_same_v<decltype(T::_to_string  (std::declval<T*>  (), std::declval<T*>  ())), memory*>>>                  : true_type { };
+
+/// this does not need the double argument because the user-implemented function does not have the prototype
+template <typename T> struct registered_to_string  <T, std::enable_if_t<std::is_same_v<decltype(T::_to_string  (std::declval<T*>  ())), memory*>>> : true_type { };
+
 template <typename T> struct registered_from_string<T, std::enable_if_t<std::is_same_v<decltype(T::_from_string(std::declval<T*>  (), std::declval<cstr>())), T*>>>                       : true_type { };
 template <typename T> struct registered_init       <T, std::enable_if_t<std::is_same_v<decltype(T::_init       (std::declval<T*>  (), std::declval<T*>  ())), void>>>                     : true_type { };
 template <typename T> struct registered_destruct   <T, std::enable_if_t<std::is_same_v<decltype(T::_destruct   (std::declval<T*>  (), std::declval<T*>  ())), void>>>                     : true_type { };
@@ -1235,8 +1253,11 @@ template <typename T> struct external_compare      <T, std::enable_if_t<std::is_
 template <typename T> struct external_bool         <T, std::enable_if_t<std::is_same_v<decltype(_boolean       (std::declval<T*>(), std::declval<T*>())), bool>>>                     : true_type { };
 template <typename T> struct external_copy         <T, std::enable_if_t<std::is_same_v<decltype(_copy          (std::declval<T*>(), std::declval<T*>(), std::declval<T*>(), size_t(0))), void>>> : true_type { };
 template <typename T> struct external_construct    <T, std::enable_if_t<std::is_same_v<decltype(_construct     (std::declval<T*>(), std::declval<T*>(), size_t(0))), void>>>          : true_type { };
-template <typename T> struct external_to_string    <T, std::enable_if_t<std::is_same_v<decltype(_to_string     (std::declval<T*>(), std::declval<T*>())), memory*>>>                  : true_type { };
-//template <typename T> struct external_from_string  <T, std::enable_if_t<std::is_same_v<decltype(_from_string (std::declval<T*>(), std::declval<cstr>())), T*>>>                     : true_type { };
+
+/// user must implement this one (see mx.cpp:_to_string of char*)
+template <typename T> struct external_to_string    <T, std::enable_if_t<std::is_same_v<decltype(_to_string     (std::declval<T*>())), memory*>>> : true_type { };
+
+template <typename T> struct external_from_string  <T, std::enable_if_t<std::is_same_v<decltype(_from_string   (std::declval<T*>(), std::declval<cstr>())), T*>>> : true_type { };
 template <typename T> struct external_init         <T, std::enable_if_t<std::is_same_v<decltype(_init          (std::declval<T*>(), std::declval<T*>())), void>>>                     : true_type { };
 template <typename T> struct external_destruct     <T, std::enable_if_t<std::is_same_v<decltype(_destruct      (std::declval<T*>(), std::declval<T*>())), void>>>                     : true_type { };
 template <typename T> struct external_meta         <T, std::enable_if_t<std::is_same_v<decltype(_meta          (std::declval<T*>(), std::declval<T*>())), doubly<prop>>>>             : true_type { };
@@ -1295,10 +1316,6 @@ size_t schema_info(alloc_schema *schema, int depth, B *top, T *p, idata *ctx_typ
         /// this crawls through mx-compatible for schema data
         if constexpr (!identical<T, none>() && !identical<T, mx>()) {
             /// count is set to schema_info after first return
-            if (strstr(typeof(T)->name, "lambda")) {
-                int test = 0;
-                test++;
-            }
             if (schema->bind_count) {
                 context_bind &bind = schema->composition[schema->bind_count - 1 - depth]; /// [ base data ][ mid data ][ top data ]
                 bind.ctx     = ctx_type ? ctx_type : typeof(T);
@@ -1695,12 +1712,12 @@ struct mx {
             return mem->grab();
         }
         else if   (mem->type->functions->to_string)
-            return mem->type->functions->to_string(raw_t(0), mem->origin); /// call to_string() on context class
+            return mem->type->functions->to_string(mem->origin); /// call to_string() on context class
         
         else   if (mem->type->schema &&
                    mem->type->schema->bind->data->functions &&
                    mem->type->schema->bind->data->functions->to_string)
-            return mem->type->schema->bind->data->functions->to_string(raw_t(0), mem->origin); /// or data...
+            return mem->type->schema->bind->data->functions->to_string(mem->origin); /// or data...
         
         else if (mem->type == typeof(char))
             return mem->grab();
@@ -4204,25 +4221,37 @@ T *memory::data(size_t index) const {
     }
 }
 
+/// its interesting that C++ requires these placeholders even when constexpr blocks the lookups of such
+/// thats a clang issue
+//static void *_from_string(void *abc, cstr p) { return null; }
+
 template <typename T>
 ops<T> *ftable() {
     static ops<T> gen;
     ///
     if constexpr (registered<T>()) { // if the type is registered as a data class with its own methods declared inside
         gen.alloc_new  = NewFn      <T>(T::_new);
+        gen.del        = DelFn      <T>(T::_del);
         gen.construct  = ConstructFn<T>(T::_construct);
         gen.destruct   = DestructFn <T>(T::_destruct);
         gen.copy       = CopyFn     <T>(T::_copy);
         gen.boolean    = BooleanFn  <T>(T::_boolean);
         gen.assign     = AssignFn   <T>(T::_assign); // assign is copy, deprecate (used in mx_object assign)
         gen.to_string  = ToStringFn <T>(T::_to_string);
-        if constexpr (registered_compare     <T>()) gen.compare     = CompareFn    <T>(T::_compare);
-        if constexpr (registered_from_string <T>()) gen.from_string = FromStringFn <T>(T::_from_string);
-        if constexpr (registered_hash        <T>()) gen.hash        = HashFn       <T>(T::_hash);
+
+        if constexpr (registered_compare<T>())
+            gen.compare = CompareFn<T>(T::_compare);
+        
+        if constexpr (std::is_constructible<T, cstr>::value)
+            gen.from_string = FromStringFn<T>(T::_from_string);
+        
+        if constexpr (registered_hash<T>())
+            gen.hash = HashFn<T>(T::_hash);
         ///
     } else if constexpr (is_external<T>::value) { /// primitives, std::filesystem, and other foreign objects
         type_t t = typeof(T);
         gen.alloc_new   = NewFn        <T>(_new);
+        gen.del         = DelFn        <T>(_del);
         gen.construct   = ConstructFn  <T>(_construct);
         gen.destruct    = DestructFn   <T>(_destruct);
         gen.copy        = CopyFn       <T>(_copy);
@@ -4230,8 +4259,12 @@ ops<T> *ftable() {
         gen.assign      = AssignFn     <T>(_assign);
 
         //if constexpr (external_compare       <T>()) gen.compare     = CompareFn    <T>(_compare);
-        //if constexpr (external_to_string     <T>()) gen.to_string   = ToStringFn   <T>(_to_string);
-        if constexpr (external_from_string   <T>()) gen.from_string = FromStringFn <T>(_from_string);
+        if constexpr (external_to_string<T>())
+            gen.to_string   = ToStringFn<T>(_to_string);
+
+        if constexpr (external_from_string<T>())
+            gen.from_string = FromStringFn<T>(_from_string);
+
         //if constexpr (external_hash          <T>()) gen.hash        = HashFn       <T>(_hash);
     }
     return (ops<T>*)&gen;

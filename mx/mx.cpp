@@ -117,10 +117,8 @@ memory *grab(memory *mem) {
 }
 
 i64 millis() {
-    return i64(
-               std::chrono::duration_cast<std::chrono::milliseconds>(
-                                                                     std::chrono::system_clock::now().time_since_epoch()).count()
-               );
+    return i64(std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count());
 }
 
 /// attach arbs to memory (uses a pointer)
@@ -175,6 +173,20 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
     origin  = raw_t(dst);
     reserve = alloc_reserve;
     return origin;
+}
+
+/// put primitive conversions here, and mx.hpp needs the declarations
+memory *_to_string(cstr data) {
+    return memory::stringify(data, memory::autolen, 0, false);
+}
+
+memory *_to_string(int *data) {
+    std::string s = std::to_string(*data);
+    return memory::stringify((cstr)s.c_str(), memory::autolen, 0, false);
+}
+
+int *_from_string(int *type, cstr data) {
+    return new int(atoi(data));
 }
 
 /// mx-objects are clearable which brings their count to 0 after destruction

@@ -871,7 +871,6 @@ template <typename T> using   ConstructFn =          void(*)(T*, T*);      /// s
 template <typename T> using      AssignFn =          void(*)(T*, T*, T*);  /// dst, src
 template <typename T> using        HashFn =        size_t(*)(T*, T*);      /// src
 
-/// use functions, not lambdas (WHY DONT I TEST ANYTHING? WHY DONT I COMPLETE ANYTHING? WHY DO I MOVE ON AND LEAVE MYSELF FOR DEAD LATER?)
 template <typename T>
 struct ops {
         //FreeFn<T> free;
@@ -1498,7 +1497,6 @@ struct rand {
 };
 
 using arg = pair<mx, mx>;
-using ax  = doubly<arg>;
 
 struct size;
 
@@ -2249,6 +2247,8 @@ public:
 
     type_register(array);
 };
+
+using ax  = array<arg>;
 
 using ichar = int;
 

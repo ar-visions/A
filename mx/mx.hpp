@@ -2386,7 +2386,7 @@ struct ex:mx {
         if (!psym) throw C();
         return (typename C::etype)((*psym)->id);
     }
-    
+
     /// we need to bootstrap the symbols from the construction level of enum classes
     template <typename C, typename E>
     static E initialize(C *p, E v, symbol names, type_t ty);

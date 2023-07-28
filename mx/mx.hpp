@@ -187,6 +187,7 @@ constexpr int num_occurances(const char* cs, char c) {
         C(int        t)           :ex(initialize(this, (enum etype)t, S, typeof(C)), this), value(ref<enum etype>()) { }\
         C(str raw):C(ex::convert(raw, S, (C*)null)) { }\
         C(mx  raw):C(ex::convert(raw, S, (C*)null)) { }\
+        C(memory* mem):C(mx(raw)) { }\
         inline  operator etype() { return value; }\
         C&      operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
         bool    operator== (enum etype v) { return value == v; }\
@@ -307,6 +308,14 @@ int *_from_string(int *type, cstr data);
 /// i honestly would prefer latter but i prefer not to over optimize for now
 /// another possibility is to have a _delete in the table
 #define type_register(C)\
+    template <typename _T>\
+    static void _set_memory(_T *dst, ion::memory *mem) {\
+        if constexpr (inherits<mx, _T>())\
+            if (dst->mem != mem) {\
+                dst -> ~_T();\
+                new (dst) _T(mem ? ion::grab(mem) : (ion::memory*)null);\
+            }\
+    }\
     template <typename _T>\
     static struct memory *_to_string(_T *src) {\
         if constexpr (registered_instance_to_string<_T>())\
@@ -625,8 +634,9 @@ struct traits {
         array     = 16,
         map       = 32,
         mx        = 64,
-        enum_primitive = 128,
-        opaque         = 256 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
+        mx_obj    = 128,
+        enum_primitive = 256,
+        opaque         = 512 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
     };
 };
 
@@ -884,6 +894,7 @@ struct ident {
 };
 
 /// these should be vectorized but its not worth it for now
+template <typename T> using   SetMemoryFn =          void(*)(T*, memory*);  /// a (inst), b (memory)
 template <typename T> using     CompareFn =           int(*)(T*, T*, T*);  /// a, b
 template <typename T> using     BooleanFn =          bool(*)(T*, T*);      /// src
 template <typename T> using    ToStringFn =       memory*(*)(T*);          /// src (user implemented on external)
@@ -899,6 +910,7 @@ template <typename T> using        HashFn =        size_t(*)(T*, T*);      /// s
 template <typename T>
 struct ops {
         //FreeFn<T> free;
+    SetMemoryFn<T> set_memory;
       CompareFn<T> compare;
       BooleanFn<T> boolean;
      ToStringFn<T> to_string;
@@ -2396,6 +2408,8 @@ struct ex:mx {
     ///
     template <typename E, typename C>
     ex(E v, C *inst) : ex(alloc<E>(&v), this) { }
+
+    ex(memory *mem) : mx(mem) {}
 
     type_register(ex);
 };
@@ -4147,7 +4161,8 @@ idata *ident::for_type() {
           else if constexpr (std::is_reference<T>::value) return ident::for_type<std::remove_reference_t<T>>();
           else if constexpr (std::is_pointer  <T>::value) return ident::for_type<std::remove_pointer_t  <T>>();
           else {
-            bool is_mx    = ion::is_mx<T>();
+            bool is_mx    = ion::is_mx<T>(); /// this one checks just for type == mx
+            bool is_obj   = !is_mx && inherits<mx, T>(); /// used in composer for assignment; will merge in is_mx when possible
             memory *mem   = memory::raw_alloc(null, sizeof(idata), 1, 1);
             type          = (idata*)mem_origin(mem);
             type->name    = parse_fn(__PRETTY_FUNCTION__);
@@ -4158,9 +4173,9 @@ idata *ident::for_type() {
                             (is_singleton<T> () ? traits::singleton : 0) |
                             (is_array    <T> () ? traits::array     : 0) |
                             (is_map      <T> () ? traits::map       : 0) |
-                            (is_mx              ? traits::mx        : 0);
+                            (is_mx              ? traits::mx        : 0) |
+                            (is_obj             ? traits::mx_obj    : 0);
             
-
             if constexpr (registered<T>() || is_external<T>::value) {
                 printf("registering function table: T = %s\n", type->name);
                 type->functions = (ops<void>*)ftable<T>();
@@ -4230,6 +4245,8 @@ ops<T> *ftable() {
     static ops<T> gen;
     ///
     if constexpr (registered<T>()) { // if the type is registered as a data class with its own methods declared inside
+        if constexpr (inherits<mx, T>())
+            gen.set_memory = SetMemoryFn<T>(T::_set_memory);
         gen.alloc_new  = NewFn      <T>(T::_new);
         gen.del        = DelFn      <T>(T::_del);
         gen.construct  = ConstructFn<T>(T::_construct);

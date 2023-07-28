@@ -1791,20 +1791,13 @@ struct mx {
             
             if (ty == typeof(null_t))
                 return false;
-
-            /// always try context first. in theory gives more context
-            if (ty->functions->boolean) {
-                BooleanFn<void> ctx = ty->functions->boolean;
-                return    ctx(raw_t(0), (void*)this);
-            }
             
-            /// then try this chain necklace
-            if (ty->schema) {
+            /// use boolean operator on the data
+            if (ty->schema && ty->schema->bind->data->functions->boolean) {
                 BooleanFn<void> data = ty->schema->bind->data->functions->boolean;
-                return    data(raw_t(0), (void*)mem->origin);
+                return data(raw_t(0), (void*)mem->origin);
             }
             
-            /// then we've got backup.  if you got count i got an op
             return mem->count > 0;
         } else
             return false;
@@ -1967,7 +1960,7 @@ public:
     array()              : array(mx::alloc<array>(null, 0, 1)) { }
 
     intern    *operator &() { return  data; }
-    operator     intern *() { return  data; }
+    //operator     intern *() { return  data; }
 
     array      &operator=(const array b) {\
         mx::drop();\

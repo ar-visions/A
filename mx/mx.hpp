@@ -883,6 +883,7 @@ struct alloc_schema {
     context_bind *bind; // this is a pointer to the top bind
 };
 
+struct str;
 /// mx-mock-type
 struct ident {
     memory *mem;
@@ -891,6 +892,7 @@ struct ident {
     static idata* for_type();
 
     ident(memory* mem) : mem(mem) { }
+    static idata *lookup(str &);
 };
 
 /// these should be vectorized but its not worth it for now
@@ -2277,7 +2279,7 @@ public:
         }
         mem->count = 0;
     }
-
+    
     type_register(array);
 };
 
@@ -4260,22 +4262,24 @@ ops<T> *ftable() {
         ///
     } else if constexpr (is_external<T>::value) { /// primitives, std::filesystem, and other foreign objects
         type_t t = typeof(T);
-        gen.alloc_new   = NewFn        <T>(_new);
-        gen.del         = DelFn        <T>(_del);
-        gen.construct   = ConstructFn  <T>(_construct);
-        gen.destruct    = DestructFn   <T>(_destruct);
-        gen.copy        = CopyFn       <T>(_copy);
-        gen.boolean     = BooleanFn    <T>(_boolean);
-        gen.assign      = AssignFn     <T>(_assign);
+        if constexpr (!is_opaque<T>()) {
+            gen.alloc_new   = NewFn        <T>(_new);
+            gen.del         = DelFn        <T>(_del);
+            gen.construct   = ConstructFn  <T>(_construct);
+            gen.destruct    = DestructFn   <T>(_destruct);
+            gen.copy        = CopyFn       <T>(_copy);
+            gen.boolean     = BooleanFn    <T>(_boolean);
+            gen.assign      = AssignFn     <T>(_assign);
 
-        //if constexpr (external_compare       <T>()) gen.compare     = CompareFn    <T>(_compare);
-        if constexpr (external_to_string<T>())
-            gen.to_string   = ToStringFn<T>(_to_string);
+            //if constexpr (external_compare       <T>()) gen.compare     = CompareFn    <T>(_compare);
+            if constexpr (external_to_string<T>())
+                gen.to_string   = ToStringFn<T>(_to_string);
 
-        if constexpr (external_from_string<T>())
-            gen.from_string = FromStringFn<T>(_from_string);
+            if constexpr (external_from_string<T>())
+                gen.from_string = FromStringFn<T>(_from_string);
 
-        //if constexpr (external_hash          <T>()) gen.hash        = HashFn       <T>(_hash);
+            //if constexpr (external_hash          <T>()) gen.hash        = HashFn       <T>(_hash);
+        }
     }
     return (ops<T>*)&gen;
 }

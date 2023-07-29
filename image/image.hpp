@@ -88,9 +88,12 @@ struct color:rgba<T> {
 
 /// always have a beginning, middle and end -- modules && classes && functions
 struct image:array<rgba8> {
-    image(memory *m)       : array<rgba8>(m)  { }
+    //image(memory *m)       : array<rgba8>(m)  { }
+
     image(size   sz)       : array<rgba8>(sz) { }
-    image(null_t n = null) : image(size { 1, 1 })  { }
+    mx_object(image, array, rgba8);
+
+    image(null_t n) : image(size { 1, 1 }) { }
     image(path p);
     image(size sz, rgba8 *px, int scanline = 0);
     ///
@@ -105,25 +108,6 @@ struct image:array<rgba8> {
         size_t index = mem->shape->index_value(pos);
         return data[index];
     }
-};
-
-mx inflate(mx);
-
-/// isolating the types and then designing from there brings the isolated types together
-/// i dont want these constructors implied, its a bit too much and a reduction effort should be of value
-struct audio:mx {
-    mx_declare(audio, mx, struct iaudio);
-    ///
-    audio(path res, bool force_mono = false);
-    void      convert_mono();
-    array<short>  pcm_data();
-    int           channels();
-    bool              save(path dest, i64 bitrate = 64000);
-    ion::image    fft_image(ion::size);
-    operator          bool();
-    bool         operator!();
-    size_t            size();
-    size_t       mono_size();
 };
 
 }

@@ -64,6 +64,12 @@ using rgba8   = vec4 <u8>;
 using rgbad   = vec4 <r64>;
 using rgbaf   = vec4 <r32>;
 
+external(rgba8);
+external(rgbad);
+external(rgbaf);
+
+template <> struct is_opaque<rgba8> : true_type { };
+
 /// would be nice to have bezier/composite-offsets
 template <typename T>
 struct edge {

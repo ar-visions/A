@@ -351,4 +351,12 @@ void *mem_origin(memory *mem) {
 memory *cstring(cstr cs, size_t len, size_t reserve, bool is_constant) {
     return memory::stringify(cs, len, 0, is_constant, typeof(char), 0);
 }
+
+static ion::hmap<str, type_t> type_map;
+
+idata *ident::lookup(str &type_name) {
+    type_t type = type_map[type_name];
+    assert(type);
+    return type;
+}
 }

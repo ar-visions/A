@@ -1725,8 +1725,8 @@ struct mx {
         return count() * t;
     }
 
-    memory    *copy(size_t res = 0) const { return mem->copy((res == 0 && mem->type == typeof(char)) ? (mem->count + 1) : 0); }
-    memory *quantum(size_t res = 0) const { return (res == 0 && mem->refs == 1) ? mem : mem->copy(); }
+    memory    *copy(size_t res = 0) const { return mem->copy((res == 0 && mem->type == typeof(char)) ? (mem->count + 1) : res); }
+    memory *quantum()               const { return (mem->refs == 1) ? mem : mem->copy(); }
 
     bool is_string() const {
         return mem->type == typeof(char) || (mem->type->schema && mem->type->schema->bind->data == typeof(char));

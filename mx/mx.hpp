@@ -300,6 +300,8 @@ template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
 
 /// primitive to/from string here
 memory *_to_string(cstr data);
+size_t  _hash(cstr data, size_t count);
+
 memory *_to_string(int *data);
 int *_from_string(int *type, cstr data);
 
@@ -510,6 +512,37 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C(intern*  data) : C(mx::wrap <C>(raw_t(data), 1)) { }\
     C(mx          o) : C(o.mem->grab()) { }\
     C()              : C(mx::alloc<C>()) { }\
+    intern    &operator *() { return *data; }\
+    intern    *operator->() { return  data; }\
+    explicit operator intern *() { return  data; }\
+    operator     intern &() { return *data; }\
+    C      &operator=(const C b) {\
+        mx::drop();\
+        mx::mem = b.mem->grab();\
+        data = (intern*)mx::mem->data<intern>(0);\
+        return *this;\
+    }\
+    intern *operator=(const intern *b) {\
+        if (data != b) {\
+            mx::drop();\
+            mx::mem = mx::wrap<C>(raw_t(b), 1);\
+            data = (intern*)mx::mem->origin;\
+        }\
+        return data;\
+    }\
+    type_register(C)\
+
+#define mx_object_0(C, B, D) \
+    using parent_class   = B;\
+    using context_class  = C;\
+    using intern         = D;\
+    static const inline type_t intern_t = typeof(D);\
+    intern*    data;\
+    C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
+    C(intern   memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
+    C(intern*  data) : C(mx::wrap <C>(raw_t(data), 1)) { }\
+    C(mx          o) : C(o.mem->grab()) { }\
+    C()              : C(mx::alloc<C>(null, 0, 1)) { }\
     intern    &operator *() { return *data; }\
     intern    *operator->() { return  data; }\
     explicit operator intern *() { return  data; }\
@@ -904,10 +937,10 @@ template <typename T> using  FromStringFn =            T*(*)(T*, cstr);    /// p
 template <typename T> using        CopyFn =          void(*)(T*, T*, T*);  /// dst, src (realloc case)
 template <typename T> using    DestructFn =          void(*)(T*, T*);      /// src
 template <typename T> using   ConstructFn =          void(*)(T*, T*);      /// src
-template <typename T> using         NewFn =            T*(*)(T*, T*);      /// placeholder, placeholder2 (LOL.  C++ sucks)
+template <typename T> using         NewFn =            T*(*)(T*, T*);      /// placeholder, placeholder2
 template <typename T> using         DelFn =          void(*)(T*, T*);      /// placeholder, instance
 template <typename T> using      AssignFn =          void(*)(T*, T*, T*);  /// dst, src
-template <typename T> using        HashFn =        size_t(*)(T*, T*);      /// src
+template <typename T> using        HashFn =        size_t(*)(T*, size_t);  /// src
 
 template <typename T>
 struct ops {
@@ -1178,6 +1211,14 @@ static inline u64 djb2(cstr str) {
     return  h;
 }
 
+template <typename T>
+static inline u64 djb2(T *str, size_t count) {
+    u64     h = 5381;
+    for (size_t i = 0; i < count; i++)
+        h = h * 33 + u64(str[i]);
+    return  h;
+}
+
 /// now that we have allowed for any, make entry for meta description
 struct prop {
     memory *key;
@@ -1259,7 +1300,7 @@ template <typename T> struct registered_from_string<T, std::enable_if_t<std::is_
 template <typename T> struct registered_init       <T, std::enable_if_t<std::is_same_v<decltype(T::_init       (std::declval<T*>  (), std::declval<T*>  ())), void>>>                     : true_type { };
 template <typename T> struct registered_destruct   <T, std::enable_if_t<std::is_same_v<decltype(T::_destruct   (std::declval<T*>  (), std::declval<T*>  ())), void>>>                     : true_type { };
 template <typename T> struct registered_meta       <T, std::enable_if_t<std::is_same_v<decltype(T::meta        (std::declval<T*>  (), std::declval<T*>  ())), doubly<prop>>>>             : true_type { };
-template <typename T> struct registered_hash       <T, std::enable_if_t<std::is_same_v<decltype(T::hash        (std::declval<T*>  (), std::declval<T*>  (), size_t(0))), size_t>>>        : true_type { };
+template <typename T> struct registered_hash       <T, std::enable_if_t<std::is_same_v<decltype(T::hash        (std::declval<T*>  (), size_t(0))), size_t>>>        : true_type { };
 
 /// externals need two args (first unused); its so we are explicit about its definition
 template <typename T> struct external_assign       <T, std::enable_if_t<std::is_same_v<decltype(_assign        (std::declval<T*>(), std::declval<T*>(), std::declval<T*>())), void>>> : true_type { };
@@ -1275,7 +1316,7 @@ template <typename T> struct external_from_string  <T, std::enable_if_t<std::is_
 template <typename T> struct external_init         <T, std::enable_if_t<std::is_same_v<decltype(_init          (std::declval<T*>(), std::declval<T*>())), void>>>                     : true_type { };
 template <typename T> struct external_destruct     <T, std::enable_if_t<std::is_same_v<decltype(_destruct      (std::declval<T*>(), std::declval<T*>())), void>>>                     : true_type { };
 template <typename T> struct external_meta         <T, std::enable_if_t<std::is_same_v<decltype(_meta          (std::declval<T*>(), std::declval<T*>())), doubly<prop>>>>             : true_type { };
-//template <typename T> struct external_hash         <T, std::enable_if_t<std::is_same_v<decltype(_hash          (std::declval<T*>  (), std::declval<T*>  (), size_t(0))), size_t>>>  : true_type { };
+template <typename T> struct external_hash         <T, std::enable_if_t<std::is_same_v<decltype(_hash          (std::declval<T*>(), size_t(0))), size_t>>>  : true_type { };
 
 template <typename T>
 struct registered_instance_meta<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().meta()), doubly<prop>>>> : true_type { };
@@ -1372,7 +1413,7 @@ u64 hash_value(T &key) {
     } else if constexpr (is_convertible<hash, T>()) {
         return hash(key);
     } else if constexpr (inherits<mx, T>() || is_mx<T>()) {
-        return key.mx::mem->type->functions->hash(raw_t(0), key.mem->origin);
+        return key.mx::mem->type->functions->hash(key.mem->origin, key.mem->count);
     } else {
         return 0;
     }
@@ -1684,7 +1725,7 @@ struct mx {
         return count() * t;
     }
 
-    memory    *copy(size_t res = 0) const { return mem->copy(res); }
+    memory    *copy(size_t res = 0) const { return mem->copy((res == 0 && mem->type == typeof(char)) ? (mem->count + 1) : 0); }
     memory *quantum(size_t res = 0) const { return (res == 0 && mem->refs == 1) ? mem : mem->copy(); }
 
     bool is_string() const {
@@ -2509,10 +2550,8 @@ struct str:mx {
     /// no more symbol usage in str. thats garbage
     str(symbol cs, size_t len = memory::autolen, size_t rs = 0) : str(cstring((cstr)cs, len, rs)) { }
     str(cstr   cs, size_t len = memory::autolen, size_t rs = 0) : str(cstring(      cs, len, rs)) { }
-    str(std::string s) : str(cstr(s.c_str()), s.length()) { } // error: member initializer 'str' does not name a non-static data member or base class
-
-
-    str(const str &s) : str(s.mem->grab()) { }
+    str(std::string s) : str(cstr(s.c_str()), s.length()) { }
+    str(const str &s)  : str(s.mem->grab()) { }
 
     inline cstr cs() { return cstr(data); }
 
@@ -2584,8 +2623,15 @@ struct str:mx {
         return str(cs).format(args);
     }
 
-    operator fs::path()                     const { return fs::path(std::string(data));  }
-    void        clear()                     const { if    (mem)  mem->count = *data = 0; }
+    operator fs::path() const { return fs::path(std::string(data));  }
+    
+    void        clear() const {
+        if (mem) {
+            if (mem->refs == 1)
+                mem->count = *data = 0;
+        }
+    }
+
     bool        contains   (array<str>   a) const { return index_of_first(a, null) >= 0; }
     str         operator+  (symbol       s) const { return combine(*this, (cstr )s);     }
     bool        operator<  (const str    b) const { return strcmp(data, b.data) <  0;    }
@@ -2765,7 +2811,7 @@ struct str:mx {
     /// mid = substr; also used with array so i thought it would be useful to see them as same
     str mid(int start, int len = -1) const {
         int ilen = int(count());
-        assert(abs(start) < ilen);
+        assert(abs(start) <= ilen);
         if (start < 0) start = ilen + start;
         int cp_count = len <= 0 ? (ilen - start) : len;
         assert(start + cp_count <= ilen);
@@ -2823,7 +2869,7 @@ struct str:mx {
     array<str> split(symbol s) const { return split(str(s)); }
     array<str> split() { /// common split, if "abc, and 123", result is "abc", "and", "123"}
         array<str> result;
-        str        chars;
+        str        chars(mem->count + 1);
         ///
         cstr pc = data;
         for (;;) {
@@ -2832,7 +2878,7 @@ struct str:mx {
             bool is_ws = isspace(c) || c == ',';
             if (is_ws) {
                 if (chars) {
-                    result += chars;
+                    result += chars.copy();
                     chars.clear();
                 }
             } else
@@ -2921,15 +2967,12 @@ struct str:mx {
         int   h = 0;
         int   t = 0;
 
-        /// measure head
         while (isspace(s[h]))
             h++;
 
-        /// measure tail
         while (isspace(s[c - 1 - t]) && (c - t) > h)
             t++;
 
-        /// take body
         return str(&s[h], c - (h + t));
     }
 
@@ -4119,9 +4162,12 @@ pair<K,V> *hmap<K, V>::shared_lookup(K input) {
     return p;
 }
 
+struct types {
+    static inline std::unordered_map<cstr, type_t> *type_map;
+};
+
 template <typename T>
 idata *ident::for_type() {
-
     /// get string name of class (works on win, mac and linux)
     static auto parse_fn = [](std::string cn) -> cstr {
         std::string      st = is_win() ? "<"  : "T =";
@@ -4212,10 +4258,11 @@ idata *ident::for_type() {
                 }
                 type->meta_map = (raw_t)pmap;
             }
-
-            
-
         }
+        /// hash types by name
+        if (!types::type_map)
+             types::type_map = new std::unordered_map<cstr, type_t>(64);
+        (*types::type_map)[type->name] = type;
     }
     return type_t(type);
 }
@@ -4258,28 +4305,27 @@ ops<T> *ftable() {
             gen.from_string = FromStringFn<T>(T::_from_string);
         
         if constexpr (registered_hash<T>())
-            gen.hash = HashFn<T>(T::_hash);
+            gen.hash = HashFn<T>(T::hash);
         ///
     } else if constexpr (is_external<T>::value) { /// primitives, std::filesystem, and other foreign objects
         type_t t = typeof(T);
-        if constexpr (!is_opaque<T>()) {
-            gen.alloc_new   = NewFn        <T>(_new);
-            gen.del         = DelFn        <T>(_del);
-            gen.construct   = ConstructFn  <T>(_construct);
-            gen.destruct    = DestructFn   <T>(_destruct);
-            gen.copy        = CopyFn       <T>(_copy);
-            gen.boolean     = BooleanFn    <T>(_boolean);
-            gen.assign      = AssignFn     <T>(_assign);
+        gen.alloc_new   = NewFn        <T>(_new);
+        gen.del         = DelFn        <T>(_del);
+        gen.construct   = ConstructFn  <T>(_construct);
+        gen.destruct    = DestructFn   <T>(_destruct);
+        gen.copy        = CopyFn       <T>(_copy);
+        gen.boolean     = BooleanFn    <T>(_boolean);
+        gen.assign      = AssignFn     <T>(_assign);
 
-            //if constexpr (external_compare       <T>()) gen.compare     = CompareFn    <T>(_compare);
-            if constexpr (external_to_string<T>())
-                gen.to_string   = ToStringFn<T>(_to_string);
+        //if constexpr (external_compare       <T>()) gen.compare     = CompareFn    <T>(_compare);
+        if constexpr (external_to_string<T>())
+            gen.to_string   = ToStringFn<T>(_to_string);
 
-            if constexpr (external_from_string<T>())
-                gen.from_string = FromStringFn<T>(_from_string);
+        if constexpr (external_from_string<T>())
+            gen.from_string = FromStringFn<T>(_from_string);
 
-            //if constexpr (external_hash          <T>()) gen.hash        = HashFn       <T>(_hash);
-        }
+        if constexpr (external_hash<T>())
+            gen.hash = HashFn<T>(_hash);
     }
     return (ops<T>*)&gen;
 }

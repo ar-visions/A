@@ -1,2 +1,2 @@
-dep(mx:mx mx:math libpng:png zlib:z)
+dep(mx:mx glm:glm_static libpng:png zlib:z)
 cpp(17)

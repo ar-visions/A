@@ -185,6 +185,10 @@ memory *_to_string(int *data) {
     return memory::stringify((cstr)s.c_str(), memory::autolen, 0, false);
 }
 
+size_t  _hash(cstr data, size_t count) {
+    return djb2(data, count);
+}
+
 int *_from_string(int *type, cstr data) {
     return new int(atoi(data));
 }
@@ -212,7 +216,7 @@ memory *memory::stringify(cstr cs, size_t len, size_t rsv, bool constant, type_t
         memory *&m = ctype->symbols->djb2[h_sym];
         if (!m) {
             size_t ln = (len == memory::autolen) ? strlen(sym) : len; /// like auto-wash
-            m = memory::alloc(typeof(char), len, len + 1, raw_t(sym));
+            m = memory::alloc(typeof(char), ln, ln + 1, raw_t(sym));
             m->id    = id;
             m->attrs = attr::constant;
             ctype->symbols->ids[id] = m; /// was not hashing by id, it was the djb2 again (incorrect)
@@ -222,7 +226,7 @@ memory *memory::stringify(cstr cs, size_t len, size_t rsv, bool constant, type_t
         return m->grab();
     } else {
         size_t     ln = (len == memory::autolen) ? strlen(sym) : len;
-        size_t     al = rsv ? rsv : (strlen(sym) + 1);
+        size_t     al = (rsv >= (ln + 1)) ? rsv : (ln + 1);
         memory*   mem = memory::alloc(typeof(char), ln, al, raw_t(sym));
         mem->id       = id;
         cstr  start   = mem->data<char>(0);
@@ -352,11 +356,9 @@ memory *cstring(cstr cs, size_t len, size_t reserve, bool is_constant) {
     return memory::stringify(cs, len, 0, is_constant, typeof(char), 0);
 }
 
-static ion::hmap<str, type_t> type_map;
-
 idata *ident::lookup(str &type_name) {
-    type_t type = type_map[type_name];
-    assert(type);
+    type_t type = (*types::type_map)[type_name.cs()];
+    //assert(type); -- can fail when the button is not yet looked up.  the issue now is we cant hash the types in style
     return type;
 }
 }

@@ -1,5 +1,4 @@
 #include <mx/mx.hpp>
-#include <math/math.hpp>
 #include <image/image.hpp>
 #include <png.h>
 

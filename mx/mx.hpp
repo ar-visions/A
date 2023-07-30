@@ -505,7 +505,8 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     using parent_class   = B;\
     using context_class  = C;\
     using intern         = D;\
-    static const inline type_t intern_t = typeof(D);\
+    static const inline type_t context_t = typeof(C);\
+    static const inline type_t intern_t  = typeof(D);\
     intern*    data;\
     C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
     C(intern   memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
@@ -1225,7 +1226,9 @@ struct prop {
     size_t  member_addr;
     size_t  offset; /// this is set by once-per-type meta fetcher
     type_t  member_type;
-
+    raw_t   init_value; /// value obtained after constructed on the parent type
+    str    *s_key;
+    
     prop() : key(null), member_addr(0), offset(0), member_type(null) { }
 
     template <typename M>
@@ -2000,9 +2003,12 @@ public:
 
     array(memory*   mem) : mx(mem), data(mx::data<T>()) { }\
     array(mx          o) : array(o.mem->grab()) { }\
-    array()              : array(mx::alloc<array>(null, 0, 1)) { }
+    array()              : array(mx::alloc<array>(null, 0, 1)) {
+        int test = 0;
+        test++;
+    }
 
-    intern    *operator &() { return  data; }
+    //intern    *operator &() { return  data; } -- dont ever do these!
     //operator     intern *() { return  data; }
 
     array      &operator=(const array b) {\
@@ -4246,7 +4252,19 @@ idata *ident::for_type() {
                 props.mem    = def->meta().mem->grab();
                 type->meta   = new doubly<prop>(props.mem);
                 for (prop &p: *(doubly<prop>*)type->meta) {
-                    p.offset = size_t(p.member_addr) - size_t(def);
+                    p.offset     = size_t(p.member_addr) - size_t(def);
+                    p.s_key      = new str(p.key->grab());
+
+                    /// this use-case is needed for user interfaces without css defaults
+                    p.init_value = p.member_type->functions->alloc_new(null, null);
+
+                    u8 *prop_dest = &(((u8*)def)[p.offset]);
+                    if (p.member_type->traits & traits::mx_obj) {
+                        mx *mx_data = (mx*)prop_dest;
+                        p.member_type->functions->set_memory(p.init_value, mx_data->mem);
+                    } else {
+                        p.member_type->functions->assign(null, p.init_value, prop_dest);
+                    }
                 }
                 delete def;
                 hmap<symbol, prop> *pmap = new hmap<symbol, prop>(size_t(16));

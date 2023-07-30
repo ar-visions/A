@@ -4183,6 +4183,9 @@ idata *ident::for_type() {
         std::string      nm = cn.substr(p, ln);
         auto             sp = nm.find(' ');
         std::string    name = (sp != std::string::npos) ? nm.substr(sp + 1) : nm;
+        num ns = name.find("::");
+        if (ns >= 0 && name.substr(0, ns) != "std")
+            name = name.substr(ns + 2);
         return util::copy(name.c_str());
     };
     ///
@@ -4280,7 +4283,14 @@ idata *ident::for_type() {
         /// hash types by name
         if (!types::type_map)
              types::type_map = new std::unordered_map<cstr, type_t>(64);
+        if (strcmp(type->name, "Button") == 0) {
+            int test = 0;
+            test++;
+        }
         (*types::type_map)[type->name] = type;
+        type_t test1 = (*types::type_map)[type->name];
+
+        assert(test1 && strcmp(test1->name, type->name) == 0 && type == test1);
     }
     return type_t(type);
 }

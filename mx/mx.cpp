@@ -358,7 +358,6 @@ memory *cstring(cstr cs, size_t len, size_t reserve, bool is_constant) {
 
 idata *ident::lookup(str &type_name) {
     type_t type = (*types::type_map)[type_name.cs()];
-    //assert(type); -- can fail when the button is not yet looked up.  the issue now is we cant hash the types in style
     return type;
 }
 }

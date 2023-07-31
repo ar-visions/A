@@ -605,8 +605,14 @@ template <typename T> constexpr bool is_numeric()   {
 template <typename A, typename B>
 constexpr bool inherits() { return std::is_base_of<A, B>(); }
 
-template <typename A, typename B> constexpr bool identical()       { return std::is_same<A, B>(); }
-template <typename T>             constexpr bool is_primitive()    { return  identical<T, std::nullptr_t>() || identical<T, char*>() || identical<T, const char*>() || is_numeric<T>() || std::is_enum<T>(); }
+template <typename A, typename B> constexpr bool identical()    { return std::is_same<A, B>(); }
+template <typename T>             constexpr bool is_primitive() {
+    return identical<T, std::nullptr_t>() || 
+           identical<T, char*>() || 
+           std::is_pointer<T>::value || 
+           is_numeric<T>() || 
+           std::is_enum<T>();
+}
 template <typename T>             constexpr bool is_class()        { return !is_primitive<T>() && std::is_default_constructible<T>(); }
 template <typename T>             constexpr bool is_destructible() { return  is_class<T>()     && std::is_destructible<T>(); }
 template <typename A, typename B> constexpr bool is_convertible()  { return std::is_same<A, B>() || std::is_convertible<A, B>::value; }
@@ -926,7 +932,6 @@ struct ident {
     static idata* for_type();
 
     ident(memory* mem) : mem(mem) { }
-    static idata *lookup(str &);
 };
 
 /// these should be vectorized but its not worth it for now
@@ -2003,10 +2008,7 @@ public:
 
     array(memory*   mem) : mx(mem), data(mx::data<T>()) { }\
     array(mx          o) : array(o.mem->grab()) { }\
-    array()              : array(mx::alloc<array>(null, 0, 1)) {
-        int test = 0;
-        test++;
-    }
+    array()              : array(mx::alloc<array>(null, 0, 1)) { }
 
     //intern    *operator &() { return  data; } -- dont ever do these!
     //operator     intern *() { return  data; }
@@ -4169,54 +4171,56 @@ pair<K,V> *hmap<K, V>::shared_lookup(K input) {
 }
 
 struct types {
-    static inline std::unordered_map<cstr, type_t> *type_map;
+    static inline std::unordered_map<std::string, type_t> *type_map;
+    static idata *lookup(str &);
+    static void hash_type(type_t);
 };
 
 template <typename T>
 idata *ident::for_type() {
+    static idata *type;
+
     /// get string name of class (works on win, mac and linux)
-    static auto parse_fn = [](std::string cn) -> cstr {
+    static auto    parse_fn = [&](std::string cn) -> cstr {
         std::string      st = is_win() ? "<"  : "T =";
         std::string      en = is_win() ? ">(" : "]";
         num		         p  = cn.find(st) + st.length();
         num              ln = cn.find(en, p) - p;
         std::string      nm = cn.substr(p, ln);
         auto             sp = nm.find(' ');
-        std::string    name = (sp != std::string::npos) ? nm.substr(sp + 1) : nm;
-        num ns = name.find("::");
-        if (ns >= 0 && name.substr(0, ns) != "std")
-            name = name.substr(ns + 2);
-        return util::copy(name.c_str());
+        std::string  s_name = (sp != std::string::npos) ? nm.substr(sp + 1) : nm;
+        num ns = s_name.find("::");
+        if (ns >= 0 && s_name.substr(0, ns) != "std")
+            s_name = s_name.substr(ns + 2);
+        cstr  name = util::copy(s_name.c_str());
+        return name;
     };
-    ///
-    static idata *type;
 
     if (!type) {
         /// this check was to hide lambdas to prevent lambdas being generated on lambdas
-        if constexpr (std::is_function_v<T>) {
+        if constexpr (std::is_function_v<T>) { /// i dont believe we need this case now.
             memory         *mem = memory::raw_alloc(null, sizeof(idata), 1, 1);
             type                = (idata*)mem_origin(mem);
             type->src           = type;
-            type->name          = parse_fn(__PRETTY_FUNCTION__);
             type->base_sz       = sizeof(T);
+            type->name          = parse_fn(__PRETTY_FUNCTION__);
         } else if constexpr (!type_complete<T> || is_opaque<T>()) {
             /// minimal processing on 'opaque'; certain std design-time calls blow up the vulkan types
             memory         *mem = memory::raw_alloc(null, sizeof(idata), 1, 1);
             type                = (idata*)mem_origin(mem);
             type->src           = type;
-            type->name          = parse_fn(__PRETTY_FUNCTION__);
-            type->base_sz       = sizeof(T*); /// must retain a flag of sort
+            type->base_sz       = sizeof(T*);
             type->traits        = traits::opaque;
+            type->name          = parse_fn(__PRETTY_FUNCTION__);
         } else if constexpr (std::is_const    <T>::value) return ident::for_type<std::remove_const_t    <T>>();
           else if constexpr (std::is_reference<T>::value) return ident::for_type<std::remove_reference_t<T>>();
-          else if constexpr (std::is_pointer  <T>::value) return ident::for_type<std::remove_pointer_t  <T>>();
+          else if constexpr (std::is_pointer  <T>::value && sizeof(T) == 1) /// char* is abstracted away to char because we vectorize them as char elements
+            return ident::for_type<std::remove_pointer_t  <T>>(); /// for everything else, we set the pointer type to a primitive so we dont lose context
           else {
             bool is_mx    = ion::is_mx<T>(); /// this one checks just for type == mx
             bool is_obj   = !is_mx && inherits<mx, T>(); /// used in composer for assignment; will merge in is_mx when possible
             memory *mem   = memory::raw_alloc(null, sizeof(idata), 1, 1);
             type          = (idata*)mem_origin(mem);
-            type->name    = parse_fn(__PRETTY_FUNCTION__);
-            type->base_sz = sizeof(T);
             type->traits  = (is_primitive<T> () ? traits::primitive : 0) |
                             (is_integral <T> () ? traits::integral  : 0) |
                             (is_realistic<T> () ? traits::realistic : 0) | // if references radioshack catalog
@@ -4225,7 +4229,9 @@ idata *ident::for_type() {
                             (is_map      <T> () ? traits::map       : 0) |
                             (is_mx              ? traits::mx        : 0) |
                             (is_obj             ? traits::mx_obj    : 0);
-            
+            type->base_sz = sizeof(T);
+            type->name    = parse_fn(__PRETTY_FUNCTION__);
+
             if constexpr (registered<T>() || is_external<T>::value) {
                 printf("registering function table: T = %s\n", type->name);
                 type->functions = (ops<void>*)ftable<T>();
@@ -4279,18 +4285,8 @@ idata *ident::for_type() {
                 }
                 type->meta_map = (raw_t)pmap;
             }
+            types::hash_type(type);
         }
-        /// hash types by name
-        if (!types::type_map)
-             types::type_map = new std::unordered_map<cstr, type_t>(64);
-        if (strcmp(type->name, "Button") == 0) {
-            int test = 0;
-            test++;
-        }
-        (*types::type_map)[type->name] = type;
-        type_t test1 = (*types::type_map)[type->name];
-
-        assert(test1 && strcmp(test1->name, type->name) == 0 && type == test1);
     }
     return type_t(type);
 }

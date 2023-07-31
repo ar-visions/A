@@ -356,8 +356,19 @@ memory *cstring(cstr cs, size_t len, size_t reserve, bool is_constant) {
     return memory::stringify(cs, len, 0, is_constant, typeof(char), 0);
 }
 
-idata *ident::lookup(str &type_name) {
-    type_t type = (*types::type_map)[type_name.cs()];
+idata *types::lookup(str &name) {
+    std::string type_name = name;
+    type_t type = (*types::type_map)[type_name];
     return type;
 }
+
+void types::hash_type(type_t type) {
+    std::string type_name = type->name;
+     //memory *symbol = type_name.symbolize(); // issue with using symbol table on type bootstrap; the hmap and doubly would have to set flags to avoid the schema registration
+    if (!types::type_map)
+        types::type_map = new std::unordered_map<std::string, type_t>(64);
+    type_t &n_data = (*types::type_map)[type_name];
+    n_data = type;
+}
+
 }

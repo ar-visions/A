@@ -153,8 +153,13 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
         for (size_t i = 0; i < type->schema->bind_count; i++) {
             context_bind &c  = type->schema->composition[i];
             for (size_t ii = 0; ii < mn; ii++) {
-                c.data->functions->copy    (raw_t(0), &dst[c.offset + ii * type_sz], &src[c.offset + ii * type_sz]); /// copy prior data
-                c.data->functions->destruct(raw_t(0), &src[c.offset + ii * type_sz]); /// destruct prior data
+                const bool data_prim = (c.data->traits & traits::primitive) != 0;
+                if (data_prim) {
+                    memcpy(&dst[c.offset + ii * type_sz], &src[c.offset + ii * type_sz], type_sz);
+                } else {
+                    c.data->functions->copy    (raw_t(0), &dst[c.offset + ii * type_sz], &src[c.offset + ii * type_sz]); /// copy prior data
+                    c.data->functions->destruct(raw_t(0), &src[c.offset + ii * type_sz]); /// destruct prior data
+                }
             }
         }
     }
@@ -164,8 +169,9 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
         if (!prim) {
             for (size_t i = 0; i < type->schema->bind_count; i++) {
                 context_bind &c  = type->schema->composition[i];
-                for (size_t ii = mn; ii < alloc_reserve; ii++)
-                    c.data->functions->construct(raw_t(0), &dst[c.offset + ii * type_sz]);
+                if (!(c.data->traits & traits::primitive))
+                    for (size_t ii = mn; ii < alloc_reserve; ii++)
+                        c.data->functions->construct(raw_t(0), &dst[c.offset + ii * type_sz]);
             }
         }
     }
@@ -299,7 +305,10 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
                     u8 *src = &((u8*)      v_src)[bind.offset];
                     if (bind.data) {
                         for (size_t ii = 0; ii < count; ii++)
-                            bind.data->functions->copy(raw_t(0), &dst[ii * type_sz], &src[ii * type_sz]);
+                            if (bind.data->traits & traits::primitive)
+                                memcpy(&dst[ii * type_sz], &src[ii * type_sz], type_sz);
+                            else
+                                bind.data->functions->copy(raw_t(0), &dst[ii * type_sz], &src[ii * type_sz]);
                     }
                 }
             }

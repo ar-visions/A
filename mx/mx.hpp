@@ -2023,7 +2023,7 @@ public:
     /// push an element, return its reference
     T &push(T &v) {
         size_t csz = mem->count;
-        if (csz + 1 > alloc_size())
+        if (csz >= alloc_size())
             data = (T*)mem->realloc(csz + 1, false); /// when you realloc you must have a pointer. 
         ///
         new (&data[csz]) T(v);
@@ -2033,7 +2033,7 @@ public:
 
     T &push() {
         size_t csz = mem->count;
-        if (csz + 1 > alloc_size())
+        if (csz >= alloc_size())
             data = (T*)mem->realloc(csz + 1, false);
 
         new (&data[csz]) T();
@@ -2106,6 +2106,8 @@ public:
             T &element = (T &)v;
             push(element);
         }
+        int test = 0;
+        test++;
     }
 
     inline void set_size(size sz) {

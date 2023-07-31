@@ -366,17 +366,17 @@ memory *cstring(cstr cs, size_t len, size_t reserve, bool is_constant) {
 }
 
 idata *types::lookup(str &name) {
-    std::string type_name = name;
-    type_t type = (*types::type_map)[type_name];
+    memory *sym = name.symbolize();
+    type_t type = (*types::type_map)[(symbol)sym->origin];
     return type;
 }
 
 void types::hash_type(type_t type) {
-    std::string type_name = type->name;
-     //memory *symbol = type_name.symbolize(); // issue with using symbol table on type bootstrap; the hmap and doubly would have to set flags to avoid the schema registration
+    str  type_name = type->name;
+    memory    *sym = type_name.symbolize(); // issue with using symbol table on type bootstrap; the hmap and doubly would have to set flags to avoid the schema registration
     if (!types::type_map)
-        types::type_map = new std::unordered_map<std::string, type_t>(64);
-    type_t &n_data = (*types::type_map)[type_name];
+         types::type_map = new hmap<ion::symbol, type_t>(64);
+    type_t &n_data = (*types::type_map)[(symbol)sym->origin];
     n_data = type;
 }
 

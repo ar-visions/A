@@ -15,11 +15,93 @@ template <typename T> using m33  = glm::tmat3x3<T>;
 template <typename T> using m22  = glm::tmat2x2<T>;
 
 
+template <typename T>
+struct rgba;
+
+template <typename T>
+str color_value(rgba<T> &c) {
+    char    res[64];
+    u8      arr[4];
+    ///
+    real sc;
+    ///
+    if constexpr (identical<T, uint8_t>())
+        sc = 1.0;
+    else
+        sc = 255.0;
+    ///
+    arr[0] = uint8_t(math::round(c.r * sc));
+    arr[1] = uint8_t(math::round(c.g * sc));
+    arr[2] = uint8_t(math::round(c.b * sc));
+    arr[3] = uint8_t(math::round(c.a * sc));
+    ///
+    res[0]  = '#';
+    ///
+    for (size_t i = 0, len = sizeof(arr) - (arr[3] == 255); i < len; i++) {
+        size_t index = 1 + i * 2;
+        snprintf(&res[index], sizeof(res) - index, "%02x", arr[i]); /// secure.
+    }
+    ///
+    return (symbol)res;
+}
+
 /// having trouble with glm's vec4 regarding introspection
 template <typename T>
 struct rgba {
     T r, g, b, a;
+
     operator bool() { return a > 0; }
+
+    rgba() : r(0), g(0), b(0), a(0) { }
+
+    rgba(T r, T g, T b, T a) : r(r), g(g), b(b), a(a) { }
+
+    rgba(cstr h) {
+        size_t sz = strlen(h);
+        i32    ir = 0, ig = 0,
+               ib = 0, ia = 255;
+        if (sz && h[0] == '#') {
+            auto nib = [&](char const n) -> i32 const {
+                return (n >= '0' && n <= '9') ?       (n - '0')  :
+                       (n >= 'a' && n <= 'f') ? (10 + (n - 'a')) :
+                       (n >= 'A' && n <= 'F') ? (10 + (n - 'A')) : 0;
+            };
+            switch (sz) {
+                case 5:
+                    ia  = nib(h[4]) << 4 | nib(h[4]);
+                    [[fallthrough]];
+                case 4:
+                    ir  = nib(h[1]) << 4 | nib(h[1]);
+                    ig  = nib(h[2]) << 4 | nib(h[2]);
+                    ib  = nib(h[3]) << 4 | nib(h[3]);
+                    break;
+                case 9:
+                    ia  = nib(h[7]) << 4 | nib(h[8]);
+                    [[fallthrough]];
+                case 7:
+                    ir  = nib(h[1]) << 4 | nib(h[2]);
+                    ig  = nib(h[3]) << 4 | nib(h[4]);
+                    ib  = nib(h[5]) << 4 | nib(h[6]);
+                    break;
+            }
+        }
+        if constexpr (sizeof(T) == 1) {
+            r = T(ir);
+            g = T(ig);
+            b = T(ib);
+            a = T(ia);
+        } else {
+            r = T(math::round(T(ir) / T(255.0)));
+            g = T(math::round(T(ig) / T(255.0)));
+            b = T(math::round(T(ib) / T(255.0)));
+            a = T(math::round(T(ia) / T(255.0)));
+        }
+    }
+
+    operator str() {
+        return color_value(*this);
+    }
+
     type_register(rgba);
 };
 
@@ -308,88 +390,6 @@ struct Bezier:mx {
 template <typename T>
 struct Vec2:mx {
     mx_object(Vec2<T>, mx, vec2<T>);
-};
-
-template <typename T>
-str color_value(rgba<T> &c) {
-    char    res[64];
-    u8      arr[4];
-    ///
-    real sc;
-    ///
-    if constexpr (identical<T, uint8_t>())
-        sc = 1.0;
-    else
-        sc = 255.0;
-    ///
-    arr[0] = uint8_t(math::round(c.r * sc));
-    arr[1] = uint8_t(math::round(c.g * sc));
-    arr[2] = uint8_t(math::round(c.b * sc));
-    arr[3] = uint8_t(math::round(c.a * sc));
-    ///
-    res[0]  = '#';
-    ///
-    for (size_t i = 0, len = sizeof(arr) - (arr[3] == 255); i < len; i++) {
-        size_t index = 1 + i * 2;
-        snprintf(&res[index], sizeof(res) - index, "%02x", arr[i]); /// secure.
-    }
-    ///
-    return (symbol)res;
-}
-
-template <typename T>
-struct color:rgba<T> {
-    using  base = ion::vec4<T>;
-    using  data = ion::rgba<T>;
-
-    color(cstr h) {
-        size_t sz = strlen(h);
-        i32    ir = 0, ig = 0,
-               ib = 0, ia = 255;
-        if (sz && h[0] == '#') {
-            auto nib = [&](char const n) -> i32 const {
-                return (n >= '0' && n <= '9') ?       (n - '0')  :
-                       (n >= 'a' && n <= 'f') ? (10 + (n - 'a')) :
-                       (n >= 'A' && n <= 'F') ? (10 + (n - 'A')) : 0;
-            };
-            switch (sz) {
-                case 5:
-                    ia  = nib(h[4]) << 4 | nib(h[4]);
-                    [[fallthrough]];
-                case 4:
-                    ir  = nib(h[1]) << 4 | nib(h[1]);
-                    ig  = nib(h[2]) << 4 | nib(h[2]);
-                    ib  = nib(h[3]) << 4 | nib(h[3]);
-                    break;
-                case 9:
-                    ia  = nib(h[7]) << 4 | nib(h[8]);
-                    [[fallthrough]];
-                case 7:
-                    ir  = nib(h[1]) << 4 | nib(h[2]);
-                    ig  = nib(h[3]) << 4 | nib(h[4]);
-                    ib  = nib(h[5]) << 4 | nib(h[6]);
-                    break;
-            }
-        }
-        if constexpr (sizeof(T) == 1) {
-            base::r = T(ir);
-            base::g = T(ig);
-            base::b = T(ib);
-            base::a = T(ia);
-        } else {
-            base::r = T(math::round(T(ir) / T(255.0)));
-            base::g = T(math::round(T(ig) / T(255.0)));
-            base::b = T(math::round(T(ib) / T(255.0)));
-            base::a = T(math::round(T(ia) / T(255.0)));
-        }
-    }
-
-    color(str s) : color(s.data) { }
-    
-    /// #hexadecimal formatted str
-    operator str() {
-        return color_value(*this);
-    }
 };
 
 /// always have a beginning, middle and end -- modules && classes && functions

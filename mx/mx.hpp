@@ -326,7 +326,10 @@ int *_from_string(int *type, cstr data);
     }\
     template <typename _T>\
     static _T *_from_string(_T *placeholder, cstr src) {\
-        if constexpr (std::is_constructible<_T, cstr>::value) {\
+        if constexpr (identical<_T, mx>()) {\
+            return new _T(src, typeof(char));\
+        }\
+        else if constexpr (std::is_constructible<_T, cstr>::value) {\
             return new _T(src);\
         } else\
             return null;\
@@ -657,45 +660,7 @@ static inline void yield() {
 #endif
 }
 
-static inline void sleep(u64 u) {
-    #ifdef _WIN32
-        Sleep(u);
-    #else
-        usleep(useconds_t(u));
-    #endif
-}
-
-struct traits {
-    enum bit {
-        primitive = 1,
-        integral  = 2,
-        realistic = 4,
-        singleton = 8,
-        array     = 16,
-        map       = 32,
-        mx        = 64,
-        mx_obj    = 128,
-        enum_primitive = 256,
-        opaque         = 512 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
-    };
-};
-
-///
 template <typename T> using initial = std::initializer_list<T>;
-template <typename T> using func    = std::function<T>;
-
-
-//template <typename T> using lambda  = std::function<T>;
-
-template <typename K, typename V> using umap = std::unordered_map<K,V>;
-namespace fs  = std::filesystem;
-
-//template <> struct is_opaque<fs::path> : true_type { }; /// destructor seems broken on that one (we need to not use this type)
-
-template <typename T, typename B>
-                      T mix(T a, T b, B f) { return a * (B(1.0) - f) + b * f; }
-template <typename T> T radians(T degrees) { return degrees * static_cast<T>(0.01745329251994329576923690768489); }
-template <typename T> T degrees(T radians) { return radians * static_cast<T>(57.295779513082320876798154814105); }
 
 template <typename T>
 struct item {
@@ -725,6 +690,283 @@ struct liter {
     inline bool operator==  (liter& b) const { return cur == b.cur; }
     inline bool operator!=  (liter& b) const { return cur != b.cur; }
 };
+
+
+/// iterator
+template <typename T>
+struct iter {
+    T      *start;
+    size_t  index;
+
+    iter       &operator++()       { index++; return *this; }
+    iter       &operator--()       { index--; return *this; }
+    T&         operator * () const { return start[index];   }
+    bool operator==(iter &b) const { return start == b.start && index == b.index; }
+    bool operator!=(iter &b) const { return start != b.start || index != b.index; }
+};
+
+template <typename K, typename V>
+struct pair {
+    V value;
+    K key;
+    ///
+    inline pair() { }
+    inline pair(K k, V v) : key(k), value(v)  { }
+};
+
+/// doubly does not require memory* or type
+template <typename T>
+struct doubly {
+    /// might be good not to reference ldata elsewhere
+    struct ldata {
+        size_t   refs = 1;
+        size_t   icount;
+        item<T> *ifirst, *ilast;
+
+        ~ldata() {
+            item<T>* d = ifirst;
+            while   (d) {
+                item<T>* dn = d->next;
+                delete   d;
+                d      = dn;
+            }
+            icount = 0;
+            ifirst = ilast = 0;
+        }
+
+        operator  bool() const { return ifirst != null; }
+        bool operator!() const { return ifirst == null; }
+
+        /// push by value, return its new instance
+        T &push(T v) {
+            item<T> *plast = ilast;
+            ilast = new item<T> { null, ilast, v };
+            ///
+            (!ifirst) ? 
+            ( ifirst      = ilast) : 
+            ( plast->next = ilast);
+            ///
+            icount++;
+            return ilast->data;
+        }
+
+        /// push and return default instance
+        T &push() {
+            item<T> *plast = ilast;
+                ilast = new item<T> { null, ilast }; /// default-construction on data
+            ///
+            (!ifirst) ? 
+                (ifirst      = ilast) : 
+                (  plast->next = ilast);
+            ///
+            icount++;
+            return ilast->data;
+        }
+
+        /// 
+        item<T> *get(num index) const {
+            item<T> *i;
+            if (index < 0) { /// if i is negative, its from the end.
+                i = ilast;
+                while (++index <  0 && i)
+                    i = i->prev;
+                assert(index == 0); // (negative-count) length mismatch
+            } else { /// otherwise 0 is positive and thats an end of it.
+                i = ifirst;
+                while (--index >= 0 && i)
+                    i = i->next;
+                assert(index == -1); // (positive-count) length mismatch
+            }
+            return i;
+        }
+
+        size_t    len() { return icount; }
+        size_t length() { return icount; }
+
+        bool remove(item<T> *i) {
+            if (i) {
+                if (i->next)    i->next->prev = i->prev;
+                if (i->prev)    i->prev->next = i->next;
+                if (ifirst == i) ifirst   = i->next;
+                if (ilast  == i) ilast    = i->prev;
+                --icount;
+                delete i;
+                return true;
+            }
+            return false;
+        }
+
+        bool remove(num index) {
+            item<T> *i = get(index);
+            return remove(i);
+        }
+        size_t             count() const { return icount;       }
+        T                 &first() const { return ifirst->data; }
+        T                  &last() const { return ilast->data;  }
+        ///
+        void          pop(T *prev = null) { assert(icount); if (prev) *prev = last();  remove(-1);     }
+        void        shift(T *prev = null) { assert(icount); if (prev) *prev = first(); remove(int(0)); }
+        ///
+        T                  pop_v()       { assert(icount); T cp =  last(); remove(-1); return cp; }
+        T                shift_v()       { assert(icount); T cp = first(); remove( 0); return cp; }
+        T   &operator[]   (num ix) const { assert(ix >= 0 && ix < num(icount)); return get(ix)->data; }
+        liter<T>           begin() const { return { ifirst }; }
+        liter<T>             end() const { return { null  }; }
+        T   &operator+=    (T   v)       { return push  (v); }
+        bool operator-=    (num i)       { return remove(i); }
+    } *data;
+
+    doubly(ldata *data) : data(data) {
+        data->refs++;
+    }
+    
+    doubly() : doubly(new ldata()) { }
+    
+    doubly(initial<T> a) : doubly() {
+        for (auto &v: a)
+            data->push(v);
+    }
+
+    operator bool() const { return bool(*data); }
+    
+    ldata &operator *() { return *data; }
+    ldata *operator->() { return  data; }
+
+    inline T   &operator[]   (num ix) const { return (*data)[ix];         }
+    inline liter<T>           begin() const { return (*data).begin();     }
+	inline liter<T>             end() const { return (*data).end();       }
+    inline T   &operator+=    (T   v)       { return (*data) += v;        }
+    inline bool operator-=    (num i)       { return (*data) -= i;        }
+
+    inline doubly<T>& operator=(const doubly<T> &b) {
+             this -> ~doubly( ); /// destruct this
+        new (this)    doubly(b); /// copy construct into this, from b; lets us reset refs
+        return *this;
+    }
+
+     doubly(const doubly &ref) : doubly(ref.data) {
+        if (data)
+            data->refs++;
+     }
+
+    ~doubly() {
+        if (data && --data->refs == 0) {
+            delete data;
+        }
+    }
+};
+
+/// a simple hash K -> V impl; used by types so it does not use types itsself
+template <typename K, typename V>
+struct hmap {
+  //using hmap   = ion::hmap <K,V>;
+    using pair   = ion::pair <K,V>;
+    using bucket = typename doubly<pair>::ldata; /// no reason i should have to put typename. theres no conflict on data.
+
+    struct hmdata {
+        int     refs = 1;
+        bucket *h_pairs;
+        size_t  sz;
+
+        /// i'll give you a million quid, or, This Bucket.
+        bucket &operator[](u64 k) {
+            if (!h_pairs)
+                 h_pairs = (bucket*)calloc(sz, sizeof(bucket));
+            return h_pairs[k];
+        }
+        
+        ~hmdata() {
+            for (size_t  i = 0; i < sz; i++) h_pairs[i]. ~ bucket(); // data destructs but does not construct and thats safe to do
+            free(h_pairs);
+        }
+    };
+
+    hmdata *data;
+
+    hmap(hmdata *data) : data(data) {
+        data->refs++; /// a bit different than other cases
+    }
+    hmap(size_t   sz = 0) : hmap(new hmdata()) { data->sz = sz; }
+    hmap(initial<pair> a) : hmap(a.size()) { for (auto &v: a) push(v); }
+
+    hmap& operator=(hmap &a) {
+        if (data && --data->refs == 0) {
+            delete data;
+        }
+        data = a.data;
+        data->refs++;
+        return *this;
+    }
+
+    inline pair* shared_lookup(K key); 
+    
+    V* lookup(K input, u64 *pk = null, bucket **b = null) const;
+    V &operator[](K key);
+
+    inline size_t    len() { return data->sz; }
+    inline operator bool() { return data->sz > 0; }
+};
+
+template <typename>
+struct is_hmap : false_type {};
+
+template <typename K, typename V>
+struct is_hmap<hmap<K, V>> : true_type {};
+
+template <typename T>
+struct is_doubly : false_type {};
+
+template <typename T>
+struct is_doubly<doubly<T>> : true_type {};
+
+struct prop;
+using prop_map = hmap<ion::symbol, prop*>;
+
+struct symbol_data {
+    hmap<u64, memory*> djb2 { 32 };
+    hmap<i64, memory*> ids  { 32 };
+    doubly<memory*>    list { };
+};
+
+
+static inline void sleep(u64 u) {
+    #ifdef _WIN32
+        Sleep(u);
+    #else
+        usleep(useconds_t(u) * 1000);
+    #endif
+}
+
+struct traits {
+    enum bit {
+        primitive = 1,
+        integral  = 2,
+        realistic = 4,
+        singleton = 8,
+        array     = 16,
+        map       = 32,
+        mx        = 64,
+        mx_obj    = 128,
+        enum_primitive = 256,
+        opaque         = 512 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
+    };
+};
+
+///
+template <typename T> using func    = std::function<T>;
+
+
+//template <typename T> using lambda  = std::function<T>;
+
+template <typename K, typename V> using umap = std::unordered_map<K,V>;
+namespace fs  = std::filesystem;
+
+//template <> struct is_opaque<fs::path> : true_type { }; /// destructor seems broken on that one (we need to not use this type)
+
+template <typename T, typename B>
+                      T mix(T a, T b, B f) { return a * (B(1.0) - f) + b * f; }
+template <typename T> T radians(T degrees) { return degrees * static_cast<T>(0.01745329251994329576923690768489); }
+template <typename T> T degrees(T radians) { return radians * static_cast<T>(57.295779513082320876798154814105); }
 
 template <> struct is_singleton<std::nullptr_t> : true_type { };
 
@@ -862,19 +1104,6 @@ struct size:buffer<num, 16> {
 template <typename T>
 memory *talloc(size_t count = 1, size_t reserve = 0);
 
-/// iterator
-template <typename T>
-struct iter {
-    T      *start;
-    size_t  index;
-
-    iter       &operator++()       { index++; return *this; }
-    iter       &operator--()       { index--; return *this; }
-    T&         operator * () const { return start[index];   }
-    bool operator==(iter &b) const { return start == b.start && index == b.index; }
-    bool operator!=(iter &b) const { return start != b.start || index != b.index; }
-};
-
 struct hash { u64 value; hash(u64 v) : value(v) { } operator u64() { return value; } };
 
 template <typename T>
@@ -882,15 +1111,6 @@ u64 hash_value(T &key);
 
 template <typename T>
 u64 hash_index(T &key, size_t mod);
-
-template <typename K, typename V>
-struct pair {
-    V value;
-    K key;
-    ///
-    inline pair() { }
-    inline pair(K k, V v) : key(k), value(v)  { }
-};
 
 /// a field can be single param, value only resorting and that reduces code in many cases
 /// to remove pair is a better idea if we want to reduce the template arg confusion away
@@ -975,8 +1195,8 @@ struct idata {
     size_t           base_sz; /// a types base sz is without regards to pointer state
     size_t           traits;
     bool             pointer; /// allocate enough space for a pointer to be stored
-    raw_t            meta;    /// doubly<prop>
-    raw_t            meta_map; // prop_map
+    doubly<prop>    *meta;    /// doubly<prop>
+    prop_map        *meta_map; // prop_map
     alloc_schema    *schema;  /// primitives dont need this one -- used by array and map for type aware contents, also any mx-derrived object containing data will populate this polymorphically
     ops<void>       *functions;
     symbol_data     *symbols;
@@ -989,211 +1209,6 @@ struct idata {
     size_t size();
     memory *lookup(symbol sym);
     memory *lookup(i64 id);
-};
-
-
-/// doubly is usable two ways. vector patterns are the same with v2 [struct] vs vector2 [mx-struct]
-template <typename T>
-struct doubly {
-    memory *mem;
-    /// memory should have a struct *marker and if you are reading that, you are at origin header
-    /// so you allocate type+micro_header which is just the memory* origin; again when it equals the same address space one may read into it
-    struct ldata { /// the reduced form of that is just read the pointer
-        size_t   icount;
-        item<T> *ifirst, *ilast;
-
-        type_register(ldata);
-
-        /// life-cycle on items, in data destructor
-        ~ldata() {
-            item<T>* d = ifirst;
-            while   (d) {
-                item<T>* dn = d->next;
-                delete   d;
-                d      = dn;
-            }
-            icount = 0;
-            ifirst = ilast = 0;
-        }
-
-        operator  bool() const { return ifirst != null; }
-        bool operator!() const { return ifirst == null; }
-
-        /// push by value, return its new instance
-        T &push(T v) {
-            item<T> *plast = ilast;
-            ilast = new item<T> { null, ilast, v };
-            ///
-            (!ifirst) ? 
-            ( ifirst      = ilast) : 
-            ( plast->next = ilast);
-            ///
-            icount++;
-            return ilast->data;
-        }
-
-        /// push and return default instance
-        T &push() {
-            item<T> *plast = ilast;
-                ilast = new item<T> { null, ilast }; /// default-construction on data
-            ///
-            (!ifirst) ? 
-                (ifirst      = ilast) : 
-                (  plast->next = ilast);
-            ///
-            icount++;
-            return ilast->data;
-        }
-
-        /// 
-        item<T> *get(num index) const {
-            item<T> *i;
-            if (index < 0) { /// if i is negative, its from the end.
-                i = ilast;
-                while (++index <  0 && i)
-                    i = i->prev;
-                assert(index == 0); // (negative-count) length mismatch
-            } else { /// otherwise 0 is positive and thats an end of it.
-                i = ifirst;
-                while (--index >= 0 && i)
-                    i = i->next;
-                assert(index == -1); // (positive-count) length mismatch
-            }
-            return i;
-        }
-
-        size_t    len() { return icount; }
-        size_t length() { return icount; }
-
-        bool remove(item<T> *i) {
-            if (i) {
-                if (i->next)    i->next->prev = i->prev;
-                if (i->prev)    i->prev->next = i->next;
-                if (ifirst == i) ifirst   = i->next;
-                if (ilast  == i) ilast    = i->prev;
-                --icount;
-                delete i;
-                return true;
-            }
-            return false;
-        }
-
-        bool remove(num index) {
-            item<T> *i = get(index);
-            return remove(i);
-        }
-        size_t             count() const { return icount;       }
-        T                 &first() const { return ifirst->data; }
-        T                  &last() const { return ilast->data;  }
-        ///
-        void          pop(T *prev = null) { assert(icount); if (prev) *prev = last();  remove(-1);     }
-        void        shift(T *prev = null) { assert(icount); if (prev) *prev = first(); remove(int(0)); }
-        ///
-        T                  pop_v()       { assert(icount); T cp =  last(); remove(-1); return cp; }
-        T                shift_v()       { assert(icount); T cp = first(); remove( 0); return cp; }
-        T   &operator[]   (num ix) const { assert(ix >= 0 && ix < num(icount)); return get(ix)->data; }
-        liter<T>           begin() const { return { ifirst }; }
-        liter<T>             end() const { return { null  }; }
-        T   &operator+=    (T   v)       { return push  (v); }
-        bool operator-=    (num i)       { return remove(i); }
-    } *data;
-
-    using parent_class = none;
-    using intern       = ldata;
-
-    doubly(memory *mem) : mem(mem), data(mdata<ldata>(mem, 0)) { }
-    
-    doubly() : doubly(talloc<doubly>()) { }
-    doubly(initial<T> a) : doubly() { for (auto &v: a) data->push(v); }
-
-    operator bool() const { return bool(*data); }
-    
-    ldata &operator *() { return *data; }
-    ldata *operator->() { return  data; }
-
-    inline T   &operator[]   (num ix) const { return (*data)[ix];         }
-    inline liter<T>           begin() const { return (*data).begin();     }
-	inline liter<T>             end() const { return (*data).end();       }
-    inline T   &operator+=    (T   v)       { return (*data) += v;        }
-    inline bool operator-=    (num i)       { return (*data) -= i;        }
-
-    inline doubly<T>& operator=(const doubly<T> &b) {
-             this -> ~doubly( ); /// destruct this
-        new (this)    doubly(b); /// copy construct into this, from b; lets us reset refs
-        return *this;
-    }
-
-     doubly(const doubly &ref) : doubly(grab(ref.mem)) { }
-    ~doubly() { drop(mem); }
-};
-
-/// a simple hash K -> V impl; mx-compatible with schema.  who cares if we cant declare mx first.  we got this
-template <typename K, typename V>
-struct hmap {
-  //using hmap   = ion::hmap <K,V>;
-    using pair   = ion::pair <K,V>;
-    using bucket = typename doubly<pair>::ldata; /// no reason i should have to put typename. theres no conflict on data.
-    memory *mem  = null;
-
-    struct hmdata {
-        bucket *h_pairs;
-        size_t sz;
-        /// the context type has an issue with this allocation because its not proper mx
-        type_register(hmdata);
-
-        /// i'll give you a million quid, or, This Bucket.
-        bucket &operator[](u64 k) {
-            if (!h_pairs)
-                 h_pairs = (bucket*)calloc(sz, sizeof(bucket));
-            return h_pairs[k];
-        }
-        
-        ~hmdata() {
-            for (size_t  i = 0; i < sz; i++) h_pairs[i]. ~ bucket(); // data destructs but does not construct and thats safe to do
-            free(h_pairs);
-        }
-    };
-
-    using parent_class = none;
-    using intern = hmdata; /// this is an mx-style standard
-
-    hmdata *data;
-
-    hmap(memory     *mem) : mem(mem), data(mdata<hmdata>(mem, 0)) { }
-    hmap(size_t   sz = 0) : hmap(talloc<hmap>()) { data->sz = sz; }
-    hmap(initial<pair> a) : hmap() { for (auto &v: a) push(v); }
-
-    hmap& operator=(hmap a) {
-        drop(mem);
-        mem = grab(a.mem);
-        return *this;
-    }
-
-    inline pair* shared_lookup(K key); 
-    
-    V* lookup(K input, u64 *pk = null, bucket **b = null) const;
-    V &operator[](K key);
-
-    inline size_t    len() { return data->sz; }
-    inline operator bool() { return data->sz > 0; }
-};
-
-template <typename>
-struct is_hmap : false_type {};
-
-template <typename K, typename V>
-struct is_hmap<hmap<K, V>> : true_type {};
-
-template <typename T>
-struct is_doubly : false_type {};
-
-template <typename T>
-struct is_doubly<doubly<T>> : true_type {};
-
-struct symbol_data {
-    hmap<u64, memory*> djb2 { 32 };
-    hmap<i64, memory*> ids  { 32 };
-    doubly<memory*>    list { };
 };
 
 #undef min
@@ -1253,7 +1268,7 @@ template <typename T> using MetaFn = doubly<prop>(*)(T*);
 /// symbols 
 using symbol_djb2  = hmap<u64, memory*>;
 using symbol_ids   = hmap<i64, memory*>;
-using     prop_map = hmap<symbol, prop>;
+using     prop_map = hmap<symbol, prop*>;
 
 struct context_bind;
 
@@ -1626,7 +1641,9 @@ struct mx {
     
     ///
     inline mx(std::string s) : mem(memory:: string(s)) { }
-    inline mx(cstr        s) : mem(memory::cstring(s)) { }
+
+    // the null_t messes this case up.  should migrate away from those if possible.
+    //mx(cstr s) : mem(memory::cstring(s)) { }
 
     /// instance is fine here
     /// should be agnostic to vector; meaning the embedded types should not repeat across schema; reduce and simplify!
@@ -1691,20 +1708,17 @@ struct mx {
 
     inline ~mx() { if (mem) mem->drop(); }
     
-    
-
     /// interop with shared; needs just base type functionality for lambda
     inline mx(null_t n = null): mem(alloc<null_t>()) { }
     inline mx(memory *mem)    : mem(mem) { }
     inline mx(symbol ccs, type_t type = typeof(char)) : mx(mem_symbol(ccs, type)) { }
-    inline mx(  cstr  cs, type_t type = typeof(char)) : mx(memory::stringify(cs, memory::autolen, 0, false, type)) { }
+    
+    mx(  cstr  cs, type_t type = typeof(char)) : mx(memory::stringify(cs, memory::autolen, 0, false, type)) { }
+    
     inline mx(const mx     & b) :  mx( b.mem ?  b.mem->grab() : null) { }
 
     //template <typename T>
     //mx(T& ref, bool cp1) : mx(memory::alloc(typeof(T), 1, 0, cp1 ? &ref : (T*)null), ctx) { }
-
-    inline mx(cstr src, size_t len = memory::autolen, size_t rs = 0) :
-        mem(mx::copy<char>(src, len, 0)) { }
 
     template <typename T> inline T *data() const { return  mem->data<T>(0); }
     template <typename T> inline T &ref () const { return *mem->data<T>(0); }
@@ -3432,6 +3446,7 @@ struct basic_string {
 external(std::nullptr_t);
 external(std::filesystem::path);
 external(char);
+external(bool);
 external(i8);
 external(i16);
 external(i32);
@@ -4173,7 +4188,7 @@ pair<K,V> *hmap<K, V>::shared_lookup(K input) {
 }
 
 struct types {
-    static inline std::unordered_map<std::string, type_t> *type_map;
+    static inline hmap<ion::symbol, type_t> *type_map;
     static idata *lookup(str &);
     static void hash_type(type_t);
 };
@@ -4259,10 +4274,8 @@ idata *ident::for_type() {
             ///
             if constexpr (registered_instance_meta<T>()) {
                 static T *def = new T();
-                doubly<prop> props;
-                props.mem    = def->meta().mem->grab();
-                type->meta   = new doubly<prop>(props.mem);
-                for (prop &p: *(doubly<prop>*)type->meta) {
+                type->meta    = new doubly<prop> { def->meta() }; /// make a reference to this data
+                for (prop &p: *type->meta) {
                     p.offset     = size_t(p.member_addr) - size_t(def);
                     p.s_key      = new str(p.key->grab());
 
@@ -4278,14 +4291,13 @@ idata *ident::for_type() {
                     }
                 }
                 delete def;
-                hmap<symbol, prop> *pmap = new hmap<symbol, prop>(size_t(16));
-                doubly<prop>       *meta = (doubly<prop>*)type->meta;
+                prop_map     *pmap = new prop_map(size_t(16));
+                doubly<prop> *meta = (doubly<prop>*)type->meta;
                 for (ion::prop &prop: *meta) {
                     symbol prop_name = prop.name();
-                    ion::prop &mp = (*pmap)[prop_name];
-                    mp = prop;
+                    (*pmap)[prop_name] = &prop;
                 }
-                type->meta_map = (raw_t)pmap;
+                type->meta_map = pmap;
             }
             types::hash_type(type);
         }
@@ -4327,14 +4339,13 @@ ops<T> *ftable() {
         if constexpr (registered_compare<T>())
             gen.compare = CompareFn<T>(T::_compare);
         
-        if constexpr (std::is_constructible<T, cstr>::value)
+        if constexpr (identical<T, mx>() || std::is_constructible<T, cstr>::value)
             gen.from_string = FromStringFn<T>(T::_from_string);
-        
+
         if constexpr (registered_hash<T>())
             gen.hash = HashFn<T>(T::hash);
         ///
     } else if constexpr (is_external<T>::value) { /// primitives, std::filesystem, and other foreign objects
-        type_t t = typeof(T);
         gen.alloc_new   = NewFn        <T>(_new);
         gen.del         = DelFn        <T>(_del);
         gen.construct   = ConstructFn  <T>(_construct);
@@ -4478,5 +4489,33 @@ T path::read() const {
         }
     }
 }
+
+template <typename T>
+u8* get_member_address(T *data, str &name, prop *&rprop) {
+    type_t  t   = typeof(T);
+    memory *sym = name.symbolize();
+    prop  **p   = t->meta_map->lookup((symbol)sym->origin);
+    assert(p && *p);
+    rprop       = *p;
+    u8 *p_value = &(((u8*)data)[(*p)->offset]);
+    return p_value;
+}
+
+template <typename T>
+bool get_bool(T *data, str &name) {
+    prop  *p;
+    u8    *p_value = get_member_address(data, name, p);
+    bool   result  = p->member_type->functions->boolean(null, p_value);
+    return result;
+}
+
+template <typename T>
+memory *get_string(T *data, str &name) {
+    prop   *p;
+    u8     *p_value = get_member_address(data, name, p);
+    memory *m       = p->member_type->functions->to_string(p_value);
+    return  m;
+}
+
 
 }

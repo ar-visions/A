@@ -2589,7 +2589,7 @@ struct str:mx {
     }
 
     str(memory        *mem) : mx(mem->type == typeof(null_t) ? alloc<char>(null, 0, 16) : mem), data(&mx::ref<char>()) { }
-    str(mx               m) : mx(m.grab())                       { } // damn teh expense!
+    str(mx               m) : str(m.grab())                      { }
     str(nullptr_t n = null) : str(alloc<char>(null, 0, 16))      { }
     str(char            ch) : str(alloc<char>(null, 1, 2))       { *data = ch; }
     str(size_t          sz) : str(alloc<char>(null, 0, sz + 1))  { }

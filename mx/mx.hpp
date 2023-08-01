@@ -90,7 +90,9 @@ memory*       grab(memory *mem);
 memory*       drop(memory *mem);
 memory* mem_symbol(symbol cs, type_t ty, i64 id);
 void*   mem_origin(memory *mem);
-memory*    cstring(cstr cs, size_t len, size_t reserve, bool is_constant);
+//memory*    cstring(cstr cs, size_t len, size_t reserve, bool is_constant);
+memory*    cstring(cstr cs, size_t len = UINT64_MAX, size_t reserve = 0, bool sym = false);
+
 
 template <typename T> T *mdata(memory *mem, size_t index);
 
@@ -302,8 +304,36 @@ template <typename T> constexpr bool has_bool = has_bool_op<T>::value;
 memory *_to_string(cstr data);
 size_t  _hash(cstr data, size_t count);
 
-memory *_to_string(int *data);
-int *_from_string(int *type, cstr data);
+template <typename T>
+typename std::enable_if<std::is_same<T, double>::value
+                     || std::is_same<T, float>::value
+                     || std::is_same<T, i64>::value
+                     || std::is_same<T, u64>::value
+                     || std::is_same<T, i32>::value
+                     || std::is_same<T, u32>::value
+                     || std::is_same<T, i16>::value
+                     || std::is_same<T, u16>::value,
+                     T>::type* _to_string(T* v) {
+    std::string s = std::to_string(*v);
+    memory   *mem = cstring((cstr)s.c_str(), s.length(), 0, false);
+    return mem;
+}
+
+template <typename T>
+typename std::enable_if<std::is_same<T, double>::value
+                     || std::is_same<T, float>::value
+                     || std::is_same<T, i64>::value
+                     || std::is_same<T, u64>::value
+                     || std::is_same<T, i32>::value
+                     || std::is_same<T, u32>::value
+                     || std::is_same<T, i16>::value
+                     || std::is_same<T, u16>::value,
+                     T>::type* _from_string(T* type, cstr data) {
+    if constexpr (std::is_floating_point<T>::value)
+        return new T(T(std::stod(data)));
+    else
+        return new T(T(std::stoi(data)));
+}
 
 /// the first arg is not needed as its needed for externals because these are embedded on the struct
 /// to fix _from_string we would need a central allocator, removal of new or flagging of what type of allocation it was
@@ -1558,9 +1588,6 @@ inline T &assign_mx(T &a, const T &b) {
     typeof(T)->functions->assign(raw_t(0), raw_t(&a), raw_t(&b));
     return a;
 }
-
-memory *cstring(cstr cs, size_t len = memory::autolen, size_t reserve = 0, bool sym = false);
-
 
 using fn_t = func<void()>;
 
@@ -4490,32 +4517,8 @@ T path::read() const {
     }
 }
 
-template <typename T>
-u8* get_member_address(T *data, str &name, prop *&rprop) {
-    type_t  t   = typeof(T);
-    memory *sym = name.symbolize();
-    prop  **p   = t->meta_map->lookup((symbol)sym->origin);
-    assert(p && *p);
-    rprop       = *p;
-    u8 *p_value = &(((u8*)data)[(*p)->offset]);
-    return p_value;
-}
-
-template <typename T>
-bool get_bool(T *data, str &name) {
-    prop  *p;
-    u8    *p_value = get_member_address(data, name, p);
-    bool   result  = p->member_type->functions->boolean(null, p_value);
-    return result;
-}
-
-template <typename T>
-memory *get_string(T *data, str &name) {
-    prop   *p;
-    u8     *p_value = get_member_address(data, name, p);
-    memory *m       = p->member_type->functions->to_string(p_value);
-    return  m;
-}
-
+u8*     get_member_address(type_t type, raw_t data, str &name, prop *&rprop);
+bool    get_bool(type_t type, raw_t data, str &name);
+memory *get_string(type_t type, raw_t data, str &name);
 
 }

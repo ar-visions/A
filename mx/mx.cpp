@@ -186,17 +186,8 @@ memory *_to_string(cstr data) {
     return memory::stringify(data, memory::autolen, 0, false);
 }
 
-memory *_to_string(int *data) {
-    std::string s = std::to_string(*data);
-    return memory::stringify((cstr)s.c_str(), memory::autolen, 0, false);
-}
-
 size_t  _hash(cstr data, size_t count) {
     return djb2(data, count);
-}
-
-int *_from_string(int *type, cstr data) {
-    return new int(atoi(data));
 }
 
 /// mx-objects are clearable which brings their count to 0 after destruction
@@ -378,6 +369,31 @@ void types::hash_type(type_t type) {
          types::type_map = new hmap<ion::symbol, type_t>(64);
     type_t &n_data = (*types::type_map)[(symbol)sym->origin];
     n_data = type;
+}
+
+u8* get_member_address(type_t type, raw_t data, str &name, prop *&rprop) {
+    memory *sym = name.symbolize();
+    prop  **p   = type->meta_map->lookup((symbol)sym->origin);
+    if (p) {
+        rprop       = *p;
+        u8 *p_value = &(((u8*)data)[(*p)->offset]);
+        return p_value;
+    }
+    return null;
+}
+
+bool get_bool(type_t type, raw_t data, str &name) {
+    prop  *p;
+    u8    *p_value = get_member_address(type, data, name, p);
+    bool   result  = p->member_type->functions->boolean(null, p_value);
+    return result;
+}
+
+memory *get_string(type_t type, raw_t data, str &name) {
+    prop   *p;
+    u8     *p_value = get_member_address(type, data, name, p);
+    memory *m       = p->member_type->functions->to_string(p_value);
+    return  m;
 }
 
 }

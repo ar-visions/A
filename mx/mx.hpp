@@ -2472,6 +2472,13 @@ struct ex:mx {
             char  *d = &raw.ref<char>();
             u64 hash = djb2(d);
             psym     = type->symbols->djb2.lookup(hash);
+
+            if (!psym) {
+                /// if lookup fails, compare by the number of chars given
+                for (memory *mem: type->symbols->list) 
+                    if (strncmp((symbol)mem->origin, (symbol)d, raw.mem->count) == 0)
+                        return (typename C::etype)mem->id;
+            }
         } else if (raw.type() == typeof(int)) {
             i64   id = i64(raw.ref<int>());
             psym     = type->symbols->ids.lookup(id);
@@ -4427,12 +4434,24 @@ V &hmap<K,V>::operator[](K input) {
     return result;
 }
 
+struct test1 {
+    static inline int test;
+};
+
 template <typename K, typename V>
 V* hmap<K,V>::lookup(K input, u64 *pk, bucket **pbucket) const {
     u64 k = hash_index(input, data->sz); // todo: make sure this has uniformity
     if (pk) *pk  =   k;
     bucket &hist = (*data)[k];
-    
+
+    test1::test++;
+    printf("%d\n", test1::test);
+
+    if (test1::test == 1208) {
+        int test = 0;
+        test++;
+    }
+
     for (pair &p: hist)
         if (p.key == input) {
             if (pbucket) *pbucket = &hist;

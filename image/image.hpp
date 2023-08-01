@@ -399,6 +399,7 @@ struct image:array<rgba8> {
 
     image(null_t n) : image() { }
     image(path p);
+    image(cstr s):image(path(s)) { }
     image(size sz, rgba8 *px, int scanline = 0);
     ///
     bool    save(path p) const;

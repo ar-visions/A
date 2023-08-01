@@ -2881,12 +2881,10 @@ struct str:mx {
     ///
     template <typename L>
     array<str> split(L delim) const {
-
         array<str>  result;
         size_t start = 0;
         size_t end   = 0;
         cstr   pc    = (cstr)data;
-
         ///
         if constexpr (inherits<str, L>()) {
             int  delim_len = int(delim.byte_len());
@@ -2908,8 +2906,8 @@ struct str:mx {
                     bool discard;
                     if (sps != 0) {
                         discard = sps == 1;
-                        result += str { &pc[start], discard ? (i - start) : (i - start + 1) };
-                        start   = int(i + 1);
+                        result += str { &pc[start], (i - start) };
+                        start   = discard ? int(i + 1) : int(i);
                     }
                     continue;
                 }

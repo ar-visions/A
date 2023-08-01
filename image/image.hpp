@@ -7,7 +7,7 @@ namespace ion {
 
 template <typename T> using vec2 = glm::tvec2<T>;
 template <typename T> using vec3 = glm::tvec3<T>;
-template <typename T> using vec4 = glm::tvec4<T>;
+//template <typename T> using vec4 = glm::tvec4<T>;
 //template <typename T> using rgba = glm::tvec4<T>;
 
 template <typename T> using m44  = glm::tmat4x4<T>;
@@ -44,6 +44,42 @@ str color_value(rgba<T> &c) {
     ///
     return (symbol)res;
 }
+
+template <typename T>
+struct vec4 {
+    T x, y, z, w;
+
+    operator bool() { return !(x == 0 && y == 0 && z == 0 && w == 0); }
+
+    vec4() : x(0), y(0), z(0), w(0) { }
+
+    vec4(T x) : x(x), y(x), z(x), w(x) { }
+
+    vec4(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) { }
+
+    vec4(cstr s) : vec4(str(s)) { }
+
+    vec4(str s) {
+        array<str> v = s.split();
+        size_t len = v.len();
+        if (len == 1) {
+            x = T(v[0].real_value<real>());
+            y = x;
+            z = x;
+            w = x;
+        }
+        else if (len == 4) {
+            x = T(v[0].real_value<real>());
+            y = T(v[1].real_value<real>());
+            z = T(v[2].real_value<real>());
+            w = T(v[3].real_value<real>());
+        } else {
+            assert(false);
+        }
+    }
+
+    type_register(vec4);
+};
 
 /// having trouble with glm's vec4 regarding introspection
 template <typename T>

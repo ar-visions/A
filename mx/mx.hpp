@@ -4442,14 +4442,6 @@ V* hmap<K,V>::lookup(K input, u64 *pk, bucket **pbucket) const {
     if (pk) *pk  =   k;
     bucket &hist = (*data)[k];
 
-    test1::test++;
-    printf("%d\n", test1::test);
-
-    if (test1::test == 1208) {
-        int test = 0;
-        test++;
-    }
-
     for (pair &p: hist)
         if (p.key == input) {
             if (pbucket) *pbucket = &hist;

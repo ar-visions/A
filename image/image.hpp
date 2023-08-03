@@ -244,9 +244,10 @@ template <typename T>
 struct rect {
     using vec2 = ion::vec2<T>;
     T x, y, w, h;
+    T rx, ry;
     
-    inline rect(T x = 0, T y = 0, T w = 0, T h = 0) : x(x), y(y), w(w), h(h) { }
-    inline rect(vec2 p0, vec2 p1) : x(p0.x), y(p0.y), w(p1.x - p0.x), h(p1.y - p0.y) { }
+    inline rect(T x = 0, T y = 0, T w = 0, T h = 0, T rx = 0, T ry = 0) : x(x), y(y), w(w), h(h), rx(rx), ry(ry) { }
+    inline rect(vec2 p0, vec2 p1) : x(p0.x), y(p0.y), w(p1.x - p0.x), h(p1.y - p0.y), rx(0), ry(0) { }
 
     inline rect  offset(T a)                const { return { x - a, y - a, w + (a * 2), h + (a * 2) }; }
     inline vec2  size()                     const { return { w, h }; }
@@ -266,14 +267,21 @@ struct rect {
     inline       operator rect<double>()    const { return { double(x), double(y), double(w), double(h) }; }
     inline       operator bool()            const { return w > 0 && h > 0; }
 
+    void set_rounded(T rx, T ry) {
+        this->rx = rx;
+        this->ry = ry;
+    }
+
     rect clip(rect &input) const {
         return rect {
             math::max(x, input.x),
             math::max(y, input.y),
             math::min(x + w, input.x + input.w) - math::max(x, input.x),
             math::min(y + h, input.y + input.h) - math::max(y, input.y),
+            0, 0
         };
     }
+
     type_register(rect);
 };
 

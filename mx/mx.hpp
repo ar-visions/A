@@ -4377,11 +4377,6 @@ ops<T> *ftable() {
 
         if constexpr (has_mix<T>::value)
             gen.mix = MixFn<T>(T::_mix);
-        
-        if (gen.mix) {
-            int test = 0;
-            test++;
-        }
 
         gen.construct  = ConstructFn<T>(T::_construct);
         gen.destruct   = DestructFn <T>(T::_destruct);

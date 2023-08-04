@@ -1293,6 +1293,7 @@ struct prop {
     size_t  member_addr;
     size_t  offset; /// this is set by once-per-type meta fetcher
     type_t  member_type;
+    type_t  parent_type;
     raw_t   init_value; /// value obtained after constructed on the parent type
     str    *s_key;
     
@@ -2164,8 +2165,6 @@ public:
             T &element = (T &)v;
             push(element);
         }
-        int test = 0;
-        test++;
     }
 
     inline void set_size(size sz) {
@@ -3062,10 +3061,7 @@ E ex::initialize(C *p, E v, symbol names, type_t ty) {
     array<str>   sp = str((cstr)names).split(", ");
     int           c = (int)sp.len();
     i64        next = 0;
-    if (strcmp(ty->name, "ion::Asset") == 0) {
-        int test = 0;
-        test++;
-    }
+
     for (int i = 0; i < c; i++) {
         int idx = sp.index_of("=");
         if (idx >= 0) {
@@ -4327,6 +4323,7 @@ idata *ident::for_type() {
                 for (prop &p: *type->meta) {
                     p.offset     = size_t(p.member_addr) - size_t(def);
                     p.s_key      = new str(p.key->grab());
+                    p.parent_type = type; /// we need to store what type it comes from, as we dont always have this context
 
                     /// this use-case is needed for user interfaces without css defaults
                     p.init_value = p.member_type->functions->alloc_new(null, null);

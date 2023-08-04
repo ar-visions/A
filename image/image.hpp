@@ -59,6 +59,16 @@ struct vec4 {
 
     vec4(cstr s) : vec4(str(s)) { }
 
+    vec4 mix(vec4 &b, double v) {
+        vec4 &a = *this;
+        return vec4 {
+            T(a.x * (1.0 - v) + b.x * v),
+            T(a.y * (1.0 - v) + b.y * v),
+            T(a.z * (1.0 - v) + b.z * v),
+            T(a.w * (1.0 - v) + b.w * v)
+        };
+    }
+
     vec4(str s) {
         array<str> v = s.split();
         size_t len = v.len();
@@ -132,6 +142,16 @@ struct rgba {
             b = T(math::round(T(ib) / T(255.0)));
             a = T(math::round(T(ia) / T(255.0)));
         }
+    }
+
+    rgba mix(rgba &bb, double f) {
+        double i = 1.0 - f;
+        return rgba {
+            T(r * i + bb.r * f),
+            T(g * i + bb.g * f),
+            T(b * i + bb.b * f),
+            T(a * i + bb.a * f)
+        };
     }
 
     operator str() {
@@ -244,10 +264,14 @@ template <typename T>
 struct rect {
     using vec2 = ion::vec2<T>;
     T x, y, w, h;
-    T rx, ry;
-    
-    inline rect(T x = 0, T y = 0, T w = 0, T h = 0, T rx = 0, T ry = 0) : x(x), y(y), w(w), h(h), rx(rx), ry(ry) { }
-    inline rect(vec2 p0, vec2 p1) : x(p0.x), y(p0.y), w(p1.x - p0.x), h(p1.y - p0.y), rx(0), ry(0) { }
+
+    vec2 r_tl;
+    vec2 r_tr;
+    vec2 r_bl;
+    vec2 r_br;
+
+    inline rect(T x = 0, T y = 0, T w = 0, T h = 0) : x(x), y(y), w(w), h(h) { }
+    inline rect(vec2 p0, vec2 p1) : x(p0.x), y(p0.y), w(p1.x - p0.x), h(p1.y - p0.y) { }
 
     inline rect  offset(T a)                const { return { x - a, y - a, w + (a * 2), h + (a * 2) }; }
     inline vec2  size()                     const { return { w, h }; }
@@ -267,9 +291,11 @@ struct rect {
     inline       operator rect<double>()    const { return { double(x), double(y), double(w), double(h) }; }
     inline       operator bool()            const { return w > 0 && h > 0; }
 
-    void set_rounded(T rx, T ry) {
-        this->rx = rx;
-        this->ry = ry;
+    void set_rounded(vec2 &tl, vec2 &tr, vec2 &br, vec2 &bl) {
+        this->r_tl = tl;
+        this->r_tr = tr;
+        this->r_br = br;
+        this->r_bl = bl;
     }
 
     rect clip(rect &input) const {
@@ -297,7 +323,6 @@ using rectf   = rect <r32>;
 using Recti   = Rect <i32>;
 using Rectd   = Rect <r64>;
 using Rectf   = Rect <r32>;
-
 
 /// shortening methods
 template <typename T> inline vec2<T> xy  (vec4<T> v) { return { v.x, v.y }; }
@@ -383,7 +408,6 @@ struct Rounded:Rect<T> {
         
     };
     mx_object(Rounded, Rect<T>, rdata);
-    //movable(Rounded);
 
     /// needs routines for all prims
     inline bool contains(vec2 v) { return (v >= data->p_tl && v < data->p_br); }

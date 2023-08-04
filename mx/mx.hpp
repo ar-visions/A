@@ -110,6 +110,14 @@ struct false_type {
     constexpr operator bool() const noexcept { return value; }
 };
 
+
+template <typename T, typename = std::void_t<>>
+struct has_mix : std::false_type {};
+
+template <typename T>
+struct has_mix<T, std::void_t<decltype(std::declval<T>().mix(std::declval<T&>(), 1.0))>> : std::true_type {};
+
+
 template <typename T, typename = void> struct registered_instance_to_string : false_type { };
 template <typename T>                  struct registered_instance_to_string<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().to_string()), memory *>>> : true_type { };
 
@@ -339,7 +347,14 @@ typename std::enable_if<std::is_same<T, double>::value
 /// to fix _from_string we would need a central allocator, removal of new or flagging of what type of allocation it was
 /// i honestly would prefer latter but i prefer not to over optimize for now
 /// another possibility is to have a _delete in the table
+/// transitionable at runtime = add & scale ops
 #define type_register(C)\
+    template <typename _T>\
+    static _T* _mix(_T *a, _T *b, double v) {\
+        if constexpr (has_mix<_T>::value)\
+            return new _T(a->mix(*b, v));\
+        return null;\
+    }\
     template <typename _T>\
     static void _set_memory(_T *dst, ion::memory *mem) {\
         if constexpr (inherits<mx, _T>())\
@@ -1186,6 +1201,7 @@ struct ident {
 
 /// these should be vectorized but its not worth it for now
 template <typename T> using   SetMemoryFn =          void(*)(T*, memory*);  /// a (inst), b (memory)
+template <typename T> using         MixFn =            T*(*)(T*, T*, double); /// placeholder, src-cstring
 template <typename T> using     CompareFn =           int(*)(T*, T*, T*);  /// a, b
 template <typename T> using     BooleanFn =          bool(*)(T*, T*);      /// src
 template <typename T> using    ToStringFn =       memory*(*)(T*);          /// src (user implemented on external)
@@ -1204,6 +1220,7 @@ struct ops {
     SetMemoryFn<T> set_memory;
       CompareFn<T> compare;
       BooleanFn<T> boolean;
+          MixFn<T> mix;
      ToStringFn<T> to_string;
    FromStringFn<T> from_string;
          CopyFn<T> copy;
@@ -4348,10 +4365,6 @@ T *memory::data(size_t index) const {
     }
 }
 
-/// its interesting that C++ requires these placeholders even when constexpr blocks the lookups of such
-/// thats a clang issue
-//static void *_from_string(void *abc, cstr p) { return null; }
-
 template <typename T>
 ops<T> *ftable() {
     static ops<T> gen;
@@ -4361,6 +4374,15 @@ ops<T> *ftable() {
             gen.set_memory = SetMemoryFn<T>(T::_set_memory);
         gen.alloc_new  = NewFn      <T>(T::_new);
         gen.del        = DelFn      <T>(T::_del);
+
+        if constexpr (has_mix<T>::value)
+            gen.mix = MixFn<T>(T::_mix);
+        
+        if (gen.mix) {
+            int test = 0;
+            test++;
+        }
+
         gen.construct  = ConstructFn<T>(T::_construct);
         gen.destruct   = DestructFn <T>(T::_destruct);
         gen.copy       = CopyFn     <T>(T::_copy);

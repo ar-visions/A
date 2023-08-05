@@ -265,10 +265,10 @@ struct rect {
     using vec2 = ion::vec2<T>;
     T x, y, w, h;
 
-    vec2 r_tl;
-    vec2 r_tr;
-    vec2 r_bl;
-    vec2 r_br;
+    vec2 r_tl = { 0, 0 };
+    vec2 r_tr = { 0, 0 };
+    vec2 r_bl = { 0, 0 };
+    vec2 r_br = { 0, 0 };
 
     inline rect(T x = 0, T y = 0, T w = 0, T h = 0) : x(x), y(y), w(w), h(h) { }
     inline rect(vec2 p0, vec2 p1) : x(p0.x), y(p0.y), w(p1.x - p0.x), h(p1.y - p0.y) { }

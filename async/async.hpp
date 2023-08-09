@@ -58,7 +58,8 @@ struct future:mx {
         mutex mtx;
         if (!cd.completed) {
             mtx.lock();
-            FnFuture fn = [mtx=&mtx] (mx) { mtx->unlock(); };
+            void *v_mtx = &mtx;
+            FnFuture fn = [v_mtx] (mx) { ((mutex*)v_mtx)->unlock(); };
             mx mx_fn = fn.mem->grab();
             cd.l_success.push(mx_fn);
             cd.l_failure.push(mx_fn);

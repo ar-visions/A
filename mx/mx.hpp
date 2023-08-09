@@ -10,7 +10,9 @@
 #pragma warning(disable:4267) /// size_t to int warnings (minimp3)
 
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
@@ -265,6 +267,10 @@ constexpr int num_occurances(const char* cs, char c) {
              C::operator int()            { return int(value); }\
              C::operator u64()            { return u64(value); }\
 };\
+
+#ifdef WIN32
+void usleep(__int64 usec);
+#endif
 
 #define infinite_loop() { for (;;) { usleep(1000); } }
 
@@ -1754,7 +1760,7 @@ struct mx {
     inline ~mx() { if (mem) mem->drop(); }
     
     /// interop with shared; needs just base type functionality for lambda
-    inline mx(null_t n = null): mem(alloc<null_t>()) { }
+    inline mx(null_t = null): mem(alloc<null_t>()) { }
     inline mx(memory *mem)    : mem(mem) { }
     inline mx(symbol ccs, type_t type = typeof(char)) : mx(mem_symbol(ccs, type)) { }
     
@@ -2606,7 +2612,7 @@ struct str:mx {
 
     str(memory        *mem) : mx(mem->type == typeof(null_t) ? alloc<char>(null, 0, 16) : mem), data(&mx::ref<char>()) { }
     str(mx               m) : str(m.grab())                      { }
-    str(nullptr_t n = null) : str(alloc<char>(null, 0, 16))      { }
+    str(null_t = null) : str(alloc<char>(null, 0, 16))      { }
     str(char            ch) : str(alloc<char>(null, 1, 2))       { *data = ch; }
     str(size_t          sz) : str(alloc<char>(null, 0, sz + 1))  { }
     

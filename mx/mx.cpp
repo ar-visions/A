@@ -250,6 +250,21 @@ memory *memory::raw_alloc(type_t type, size_t sz, size_t count, size_t res) {
     return mem;
 }
 
+#ifdef WIN32
+void usleep(__int64 usec) 
+{ 
+    HANDLE timer; 
+    LARGE_INTEGER ft; 
+
+    ft.QuadPart = -(10*usec); // Convert to 100 nanosecond interval, negative value indicates relative time
+
+    timer = CreateWaitableTimer(NULL, TRUE, NULL); 
+    SetWaitableTimer(timer, &ft, 0, NULL, NULL, 0); 
+    WaitForSingleObject(timer, INFINITE); 
+    CloseHandle(timer); 
+}
+#endif
+
 /// starting at 1, it should remain active.  shall not be freed as a result
 void memory::drop() {
     if (--refs <= 0 && !constant) { /// <= because mx_object does a defer on the actual construction of the container class

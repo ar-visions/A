@@ -468,7 +468,7 @@ struct image:array<rgba8> {
     image(null_t n) : image() { }
     image(path p);
     image(cstr s):image(path(s)) { }
-    image(size sz, rgba8 *px, int scanline = 0);
+    image(ion::size sz, rgba8 *px, int scanline = 0);
     ///
     bool    save(path p) const;
     rgba8      *pixels() const { return array<rgba8>::data; }
@@ -476,8 +476,9 @@ struct image:array<rgba8> {
     size_t      height() const { return (mem && mem->shape) ? (*mem->shape)[0] : 0; }
     size_t      stride() const { return (mem && mem->shape) ? (*mem->shape)[1] : 0; }
     recti         rect() const { return { 0, 0, int(width()), int(height()) }; }
+    vec2i         size() const { return { int(width()), int(height()) }; }
     ///
-    rgba8 &operator[](size pos) const {
+    rgba8 &operator[](ion::size pos) const {
         size_t index = mem->shape->index_value(pos);
         return data[index];
     }

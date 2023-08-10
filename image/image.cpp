@@ -5,8 +5,8 @@
 namespace ion {
 
 /// load an image into 32bit rgba format
-image::image(size sz, rgba8 *px, int scanline) : array() {
-    mem->shape  = new size(sz);
+image::image(ion::size sz, rgba8 *px, int scanline) : array() {
+    mem->shape  = new ion::size(sz);
     mem->origin = px;
     data        = px;
     assert(scanline == 0 || scanline == sz[1]);
@@ -132,7 +132,7 @@ image::image(path p) : array() {
 
     /// Create array to hold image data
     mem->count = h * w;
-    mem->shape = new size { h, w };
+    mem->shape = new ion::size { h, w };
     data = new rgba8[mem->count];
 
     /// Copy image data to elements array

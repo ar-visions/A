@@ -5,7 +5,7 @@
 namespace ion {
 
 
-template <typename T> using vec2 = glm::tvec2<T>;
+//template <typename T> using vec2 = glm::tvec2<T>;
 template <typename T> using vec3 = glm::tvec3<T>;
 //template <typename T> using vec4 = glm::tvec4<T>;
 //template <typename T> using rgba = glm::tvec4<T>;
@@ -44,6 +44,93 @@ str color_value(rgba<T> &c) {
     ///
     return (symbol)res;
 }
+
+
+template <typename T>
+struct vec2 {
+    T x, y;
+
+    operator bool() { return !(x == 0 && y == 0); }
+
+    vec2() : x(0), y(0) { }
+
+    vec2(T x) : x(x), y(x) { }
+
+    vec2(T x, T y) : x(x), y(y) { }
+
+    vec2(cstr s) : vec2(str(s)) { }
+
+    vec2 mix(vec2 &b, double v) {
+        vec2 &a = *this;
+        return vec2 {
+            T(a.x * (1.0 - v) + b.x * v),
+            T(a.y * (1.0 - v) + b.y * v)
+        };
+    }
+
+    vec2(str s) {
+        array<str> v = s.split();
+        size_t len = v.len();
+        if (len == 1) {
+            x = T(v[0].real_value<real>());
+            y = x;
+        }
+        else if (len == 4) {
+            x = T(v[0].real_value<real>());
+            y = T(v[1].real_value<real>());
+        } else {
+            assert(false);
+        }
+    }
+
+    inline double length() {
+        return sqrt((x * x) + (y * y));
+    }
+
+    inline vec2 &operator= (vec2 v) {
+        x = v.x;
+        y = v.y;
+        return *this;
+    }
+
+    inline vec2 &operator += (vec2 v) {
+        x += v.x;
+        y += v.y;
+        return *this;
+    }
+
+    inline vec2 &operator -= (vec2 v) {
+        x -= v.x;
+        y -= v.y;
+        return *this;
+    }
+
+    inline vec2 &operator *= (vec2 v) {
+        x *= v.x;
+        y *= v.y;
+        return *this;
+    }
+
+    inline vec2 &operator /= (vec2 v) {
+        x /= v.x;
+        y /= v.y;
+        return *this;
+    }
+
+    inline vec2 &operator *= (T v) {
+        x *= v;
+        y *= v;
+        return *this;
+    }
+
+    inline vec2 &operator /= (T v) {
+        x /= v;
+        y /= v;
+        return *this;
+    }
+
+    type_register(vec2);
+};
 
 template <typename T>
 struct vec4 {

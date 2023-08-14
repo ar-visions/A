@@ -54,6 +54,8 @@ struct vec2 {
 
     vec2() : x(0), y(0) { }
 
+    vec2(const vec2 &v) : x(v.x), y(v.y) { }
+ 
     vec2(T x) : x(x), y(x) { }
 
     vec2(T x, T y) : x(x), y(y) { }
@@ -75,7 +77,7 @@ struct vec2 {
             x = T(v[0].real_value<real>());
             y = x;
         }
-        else if (len == 4) {
+        else if (len == 2) {
             x = T(v[0].real_value<real>());
             y = T(v[1].real_value<real>());
         } else {
@@ -91,6 +93,30 @@ struct vec2 {
         x = v.x;
         y = v.y;
         return *this;
+    }
+
+    inline vec2 operator+ (const vec2 &b) const {
+        return { x + b.x, y + b.y };
+    }
+
+    inline vec2 operator- (const vec2 &b) const {
+        return { x - b.x, y - b.y };
+    }
+
+    inline vec2 operator* (const vec2 &b) const {
+        return { x * b.x, y * b.y };
+    }
+
+    inline vec2 operator/ (const vec2 &b) const {
+        return { x / b.x, y / b.y };
+    }
+
+    inline vec2 operator* (const T v) const {
+        return { x * v, y * v };
+    }
+
+    inline vec2 operator/ (const T v) const {
+        return { x / v, y / v };
     }
 
     inline vec2 &operator += (vec2 v) {

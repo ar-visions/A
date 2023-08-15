@@ -336,6 +336,7 @@ typename std::enable_if<std::is_same<T, double>::value
 template <typename T>
 typename std::enable_if<std::is_same<T, double>::value
                      || std::is_same<T, float>::value
+                     || std::is_same<T, bool>::value
                      || std::is_same<T, i64>::value
                      || std::is_same<T, u64>::value
                      || std::is_same<T, i32>::value
@@ -343,7 +344,13 @@ typename std::enable_if<std::is_same<T, double>::value
                      || std::is_same<T, i16>::value
                      || std::is_same<T, u16>::value,
                      T>::type* _from_string(T* type, cstr data) {
-    if constexpr (std::is_floating_point<T>::value)
+    if constexpr (std::is_same_v<T, bool>) {
+        std::string s = std::string(data);
+        std::transform(s.begin(), s.end(), s.begin(),
+            [](unsigned char c){ return std::tolower(c); });
+        return new bool(s == "true" || s == "1" || s == "tru" || s == "yes");
+    }
+    else if constexpr (std::is_floating_point<T>::value)
         return new T(T(std::stod(data)));
     else
         return new T(T(std::stoi(data)));

@@ -2896,7 +2896,7 @@ struct str:mx {
     }
 
     /// mid = substr; also used with array so i thought it would be useful to see them as same
-    str mid(int start, int len = -1) const {
+    str mid(num start, num len = -1) const {
         int ilen = int(count());
         assert(abs(start) <= ilen);
         if (start < 0) start = ilen + start;
@@ -3076,7 +3076,7 @@ E ex::initialize(C *p, E v, symbol names, type_t ty) {
     i64        next = 0;
 
     for (int i = 0; i < c; i++) {
-        int idx = sp.index_of("=");
+        num idx = sp.index_of("=");
         if (idx >= 0) {
             str val = sp[i].mid(idx + 1);
             mem_symbol(sp[i].data, ty, val.integer_value());

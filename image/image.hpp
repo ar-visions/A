@@ -250,10 +250,10 @@ struct rgba {
             b = T(ib);
             a = T(ia);
         } else {
-            r = T(math::round(T(ir) / T(255.0)));
-            g = T(math::round(T(ig) / T(255.0)));
-            b = T(math::round(T(ib) / T(255.0)));
-            a = T(math::round(T(ia) / T(255.0)));
+            r = T(ir) / T(255.0);
+            g = T(ig) / T(255.0);
+            b = T(ib) / T(255.0);
+            a = T(ia) / T(255.0);
         }
     }
 

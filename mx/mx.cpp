@@ -319,14 +319,27 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
                 }
             }
         } else if (!primitive) {
-            for (size_t i = 0; i < type->schema->bind_count; i++) {
-                context_bind &bind = type->schema->composition[i];
-                u8 *dst  = &((u8*)mem->origin)[bind.offset];
-                if (bind.data && !(bind.data->traits & traits::primitive))
-                    for (size_t ii = 0; ii < count; ii++) {
-                        bind.data->functions->construct(raw_t(0), &dst[ii * type_sz]);
-                    }
+            if (!type->schema) {
+                /// restrict to structs with no initialization needed and simple bit copies suffice
+                size_t type_sz = type->base_sz;
+                u8 *dst = &((u8*)mem->origin)[0];
+                if (v_src) {
+                    u8 *src = &((u8*)v_src)[0];
+                    memcpy(dst, src, count * type_sz);
+                } else {
+                    memset(dst, 0, count * type_sz);
+                }
+            } else {
+                for (size_t i = 0; i < type->schema->bind_count; i++) {
+                    context_bind &bind = type->schema->composition[i];
+                    u8 *dst  = &((u8*)mem->origin)[bind.offset];
+                    if (bind.data && !(bind.data->traits & traits::primitive))
+                        for (size_t ii = 0; ii < count; ii++) {
+                            bind.data->functions->construct(raw_t(0), &dst[ii * type_sz]);
+                        }
+                }
             }
+
         }
     }
     return mem;

@@ -1,3 +1,5 @@
-cpp(17)
 dep(prefix:ci)
-cflags(+-Wno-write-strings)
+
+if (NOT MSVC)
+    cflags(+-Wno-write-strings)
+endif()

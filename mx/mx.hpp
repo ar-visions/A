@@ -2905,7 +2905,7 @@ struct str:mx {
         return str(&data[start], cp_count);
     }
 
-    str mid(size_t start, int len = -1) const { return mid(int(start), len); }
+    str mid(size_t start, int len = -1) const { return mid(num(start), num(len)); }
 
     ///
     template <typename L>

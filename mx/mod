@@ -1,5 +1,6 @@
 dep(prefix:ci)
 
 if (NOT MSVC)
-    cflags(+-Wno-write-strings)
+    cflags(+-Wno-writable-strings)
 endif()
+

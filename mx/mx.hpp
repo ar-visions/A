@@ -3267,49 +3267,8 @@ struct map:mx {
 template <typename T> struct is_array<array<T>> : true_type  {};
 template <typename T> struct is_map  <map  <T>> : true_type  {};
 
-template <typename T>
-map<T> args(int argc, cstr *argv, map<mx> &def) {
-    map iargs = map<T>();
-
-    for (int ai = 0; ai < argc; ai++) {
-        cstr ps = argv[ai];
-        ///
-        if (ps[0] == '-') {
-            bool   is_single = ps[1] != '-';
-            mx key {
-                cstr(&ps[is_single ? 1 : 2]), typeof(char)
-            };
-
-            field<mx>* found;
-            if (is_single) {
-                for (field<T> &df: def) {
-                    symbol s = symbol(df.key);
-                    if (ps[1] == s[0]) {
-                        found = &df;
-                        break;
-                    }
-                }
-            } else found = def->lookup(key);
-            
-            if (found) {
-                str     aval = str(argv[ai + 1]);
-                type_t  type = found->value.type();
-                iargs[key]   = type->functions->from_string(raw_t(0), (cstr)aval.mem->origin);
-            } else {
-                printf("arg not found: %s\n", str(key.mem).data);
-                return null;
-            }
-        }
-    }
-    ///
-    /// return results in order of defaults, with default value given
-    map res = map<T>();
-    for(field<T> &df:def.data->fields) {
-        field<mx> *ov = iargs.lookup(df.key);
-        res.data->fields += { df.key, T(ov ? ov->value : df.value) };
-    }
-    return res;
-}
+int defaults(map<mx> &def);
+map<mx> args(int argc, cstr *argv, map<mx> &def);
 
 template <typename T>
 struct assigner {
@@ -4036,6 +3995,14 @@ protected:
     }
 
     public:
+
+    mx *get(str key) {
+        if (mem->type != typeof(map<mx>))
+            return null;
+        map<mx>   &m = *(map<mx>*)mem->origin;
+        field<mx> *f = m->lookup(key);
+        return f ? &f->value : null;
+    }
 
     /// called from path::read<var>()
     static var parse(cstr js) {

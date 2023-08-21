@@ -1,4 +1,10 @@
-dep(mx:mx glm:glm_static libpng:libpng16_staticd zlib:zlibstaticd)
+dep(mx:mx glm:glm_static)
+
+if(WIN32)
+    dep(libpng:libpng16_staticd zlib:zlibstaticd)
+else()
+    dep(libpng:png zlib:z)
+endif()
 
 # those 2 could be different on mac and linux for static case; remain static
 # dont compile anything else to read png or jpeg; better design-wise to trim down

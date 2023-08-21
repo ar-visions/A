@@ -1,2 +1,6 @@
-dep(mx:mx glm:glm_static libpng:png zlib:z)
+dep(mx:mx glm:glm_static libpng:libpng16_staticd zlib:zlibstaticd)
+
+# those 2 could be different on mac and linux for static case; remain static
+# dont compile anything else to read png or jpeg; better design-wise to trim down
+
 cpp(17)

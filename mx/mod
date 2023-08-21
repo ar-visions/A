@@ -1,6 +1,10 @@
 dep(prefix:ci)
 
-if (NOT MSVC)
+if (MSVC)
+    # when a third party lib, on windows has linker issues best to switch the build to shared
+    # will have an easier go at this in that process rather than trying to get it and everyone else it uses to MT/d, MD/d
+    cflags(/MT)
+else()
     cflags(+-Wno-writable-strings)
 endif()
 

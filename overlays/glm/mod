@@ -10,5 +10,10 @@ foreach(d ${dirs})
 endforeach()
 
 ## install libraries (glm_static)
-file(GLOB LIB_FILES "${CMAKE_SOURCE_DIR}/ion-build/glm/libglm_static.a" "${CMAKE_SOURCE_DIR}/ion-build/glm/*.a" "${CMAKE_SOURCE_DIR}/ion-build/glm/*.lib")
+if(WIN32)
+    file(GLOB LIB_FILES "${CMAKE_SOURCE_DIR}/ion-build/glm/Debug/glm_static.lib" "${CMAKE_SOURCE_DIR}/ion-build/glm/Release/glm_static.lib")
+else()
+    file(GLOB LIB_FILES "${CMAKE_SOURCE_DIR}/ion-build/glm/libglm_static.a")
+endif()
+
 install(FILES   ${LIB_FILES} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)

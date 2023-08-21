@@ -8,7 +8,7 @@
             "commit":   "bf71a83",
             "url":      "https://github.com/g-truc/glm",
             "cmake": {
-                "args": ["-DBUILD_STATIC_LIBS=Yes"]
+                "args": ["-DBUILD_STATIC_LIBS=1"]
             }
         },
         {
@@ -21,7 +21,10 @@
             "name":     "libpng",
             "version":  "1.6.39",
             "commit":   "07b8803",
-            "url":      "https://github.com/glennrp/libpng"
+            "url":      "https://github.com/glennrp/libpng",
+            "cmake": {
+                "args": ["-DPNG_STATIC=1"]
+            }
         }
     ]
 }

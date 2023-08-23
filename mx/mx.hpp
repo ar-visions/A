@@ -4275,7 +4275,6 @@ idata *ident::for_type() {
             type->name    = parse_fn(__PRETTY_FUNCTION__);
 
             if constexpr (registered<T>() || is_external<T>::value) {
-                printf("registering function table: T = %s\n", type->name);
                 type->functions = (ops<void>*)ftable<T>();
             }
 

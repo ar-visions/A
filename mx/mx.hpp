@@ -199,10 +199,17 @@ constexpr int num_occurances(const char* cs, char c) {
         C(int        t)           :ex(initialize(this, (enum etype)t, S, typeof(C)), this), value(ref<enum etype>()) { }\
         C(str raw):C(ex::convert(raw, S, (C*)null)) { }\
         C(mx  raw):C(ex::convert(raw, S, (C*)null)) { }\
+        C(ion::symbol sym):C(ex::convert(raw, S, (C*)null)) { }\
         C(memory* mem):C(mx(raw)) { }\
         inline  operator etype() { return value; }\
         C&      operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
         bool    operator== (enum etype v) { return value == v; }\
+        bool    operator== (ion::symbol v) {\
+            if (!mem && !v)\
+                return true;\
+            memory *m = lookup(v);\
+            return (int)m->id == (int)value;\
+        }\
         bool    operator!= (enum etype v) { return value != v; }\
         bool    operator>  (C &b)       { return value >  b.value; }\
         bool    operator<  (C &b)       { return value <  b.value; }\
@@ -1696,6 +1703,10 @@ struct mx {
         mx::alloc((DP*)null);
         *dptr = (DP*)mem->origin;
     }
+
+    operator std::string() {
+        return std::string((symbol)mem->origin);
+    }
     
     ///
     inline mx(std::string s) : mem(memory:: string(s)) { }
@@ -1940,7 +1951,7 @@ struct mx {
     explicit operator  r32()      { return mem->ref<r32>(); }
     explicit operator  r64()      { return mem->ref<r64>(); }
     explicit operator  memory*()  { return mem->grab(); } /// trace its uses
-    explicit operator  symbol()   { assert(mem->attrs & memory::constant); return mem->ref<symbol>(); }
+    explicit operator  symbol()   { return (ion::symbol)mem->origin; }
 
     type_register(mx);
 };
@@ -2640,7 +2651,7 @@ struct str:mx {
     str(std::string s) : str(cstr(s.c_str()), s.length()) { }
     str(const str &s)  : str(s.mem->grab()) { }
 
-    inline cstr cs() { return cstr(data); }
+    inline cstr cs() const { return cstr(data); }
 
     /// tested.
     str expr(lambda<str(str)> fn) const {
@@ -3222,6 +3233,58 @@ struct map:mx {
 
         operator bool() { return ((hash_map && hash_map->len() > 0) || (fields->len() > 0)); }
     };
+
+    static int defaults(map<V> &def) {
+        for (field<V> &f: def) {
+            str name  = f.key;
+            str value = f.value.mem->type->functions->to_string(f.value.mem->origin);
+            printf("%s: default (%s)", name.cs(), value.cs());
+        }
+        return 1;
+    }
+
+    static map<V> parse(int argc, cstr *argv, map<V> &def) {
+        map<V> iargs = map<V>();
+        ///
+        for (int ai = 0; ai < argc; ai++) {
+            cstr ps = argv[ai];
+            ///
+            if (ps[0] == '-') {
+                bool   is_single = ps[1] != '-';
+                mx key {
+                    cstr(&ps[is_single ? 1 : 2]), typeof(char)
+                };
+                field<mx>* found;
+                if (is_single) {
+                    for (field<mx> &df: def) {
+                        symbol s = symbol(df.key);
+                        if (ps[1] == s[0]) {
+                            found = &df;
+                            break;
+                        }
+                    }
+                } else found = def->lookup(key);
+                ///
+                if (found) {
+                    str     aval = str(argv[ai + 1]);
+                    type_t  type = found->value.type();
+                    mx mstr = type->functions->from_string(raw_t(0), (cstr)aval.mem->origin);
+                    iargs[key] = mstr;
+                } else {
+                    printf("arg not found: %s\n", str(key.mem).data);
+                    return {};
+                }
+            }
+        }
+        ///
+        /// return results in order of defaults, with default value given
+        map<V> res = map<V>();
+        for(field<V> &df:def.data->fields) {
+            field<V> *ov = iargs->lookup(df.key);
+            res.data->fields += { df.key, ov ? ov->value : df.value };
+        }
+        return res;
+    }
     
     void print();
 
@@ -3264,11 +3327,10 @@ struct map:mx {
     inline V &operator[](K k) { return (*data)[k]; }
 };
 
+using args = map<mx>;
+
 template <typename T> struct is_array<array<T>> : true_type  {};
 template <typename T> struct is_map  <map  <T>> : true_type  {};
-
-int defaults(map<mx> &def);
-map<mx> args(int argc, cstr *argv, map<mx> &def);
 
 template <typename T>
 struct assigner {

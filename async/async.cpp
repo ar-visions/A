@@ -4,6 +4,11 @@
 namespace ion {
 async::async() { }
 
+async &async::operator=(const async &b) {
+    d.proc = b.d.proc;
+    return *this;
+}
+
 ///
 async::async(size_t count, FnProcess fn) : async() {
     ///

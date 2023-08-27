@@ -229,6 +229,8 @@ struct async {
     /// singleton process
     async(FnProcess);
 
+    async& operator=(const async &c);
+
     array<mx> sync();
 
     /// await all async processes to complete

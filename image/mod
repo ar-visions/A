@@ -1,4 +1,4 @@
-dep(mx:mx glm:glm_static)
+dep(mx:mx mx:math)
 
 if(WIN32)
     dep(libpng:libpng16_static zlib:zlibstatic)

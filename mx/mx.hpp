@@ -1747,7 +1747,10 @@ struct mx {
     ///
     inline memory *grab() const { return mem->grab(); }
     inline size  *shape() const { return mem->shape;  }
-    inline void    drop() const { if (mem) mem->drop(); }
+    inline void    drop() const {
+        if (mem)
+            mem->drop();
+    }
 
 
     inline attachment *find_attachment(symbol id) {

@@ -238,6 +238,8 @@ struct async {
 
     /// return future for this async
     operator future();
+
+    type_register(async);
 };
 
 /// sync just performs sync on construction

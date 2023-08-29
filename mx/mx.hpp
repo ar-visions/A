@@ -193,7 +193,7 @@ constexpr int num_occurances(const char* cs, char c) {
             return (char*)mem->origin;\
         }\
         str name() { return (char*)symbol(); }\
-        struct memory *to_string() { return mem_symbol(symbol(), typeof(C)); }\
+        struct memory *to_string() { return typeof(C)->lookup(u64(value)); }\
         C(enum etype t = etype::D):ex(initialize(this,             t, S, typeof(C)), this), value(ref<enum etype>()) { }\
         C(size_t     t)           :ex(initialize(this, (enum etype)t, S, typeof(C)), this), value(ref<enum etype>()) { }\
         C(int        t)           :ex(initialize(this, (enum etype)t, S, typeof(C)), this), value(ref<enum etype>()) { }\
@@ -1843,41 +1843,7 @@ struct mx {
     size_t count() const { return mem ? mem->count : 0;    }
     type_t  type() const { return mem ? mem->type  : null; }
 
-    memory  *to_string() const {
-
-        if      (mem->type == typeof(i8) ) return memory::string(std::to_string(*(i8*)  mem->origin));
-        else if (mem->type == typeof(i16)) return memory::string(std::to_string(*(i16*) mem->origin));
-        else if (mem->type == typeof(i32)) return memory::string(std::to_string(*(i32*) mem->origin));
-        else if (mem->type == typeof(i64)) return memory::string(std::to_string(*(i64*) mem->origin));
-        else if (mem->type == typeof(u8) ) return memory::string(std::to_string(*(u8*)  mem->origin));
-        else if (mem->type == typeof(u16)) return memory::string(std::to_string(*(u16*) mem->origin));
-        else if (mem->type == typeof(u32)) return memory::string(std::to_string(*(u32*) mem->origin));
-        else if (mem->type == typeof(u64)) return memory::string(std::to_string(*(u64*) mem->origin));
-        else if (mem->type == typeof(r32)) return memory::string(std::to_string(*(r32*) mem->origin));
-        else if (mem->type == typeof(r64)) return memory::string(std::to_string(*(r64*) mem->origin));
-        else if (mem->type == typeof(bool))return memory::string(std::to_string(*(bool*)mem->origin));
-        // this is reserved for enumerables; the symbol is stored in memory uniformly.  enum values are always stored with a prior symbol lookup.  the memory* in effect is symbolized
-        else if  ((mem->type->traits & traits::enum_primitive) && mem->type->ref) { 
-            return mem->grab();
-        }
-        else if   (mem->type->functions->to_string)
-            return mem->type->functions->to_string(mem->origin); /// call to_string() on context class
-        
-        else   if (mem->type->schema &&
-                   mem->type->schema->bind->data->functions &&
-                   mem->type->schema->bind->data->functions->to_string)
-            return mem->type->schema->bind->data->functions->to_string(mem->origin); /// or data...
-        
-        else if (mem->type == typeof(char))
-            return mem->grab();
-        
-        else {
-            type_t id = mem->type;
-            static char buf[128];
-            const int l = snprintf(buf, sizeof(buf), "%s/%p", id->name, (void*)mem);
-            return memory::stringify(cstr(buf), l);
-        }
-    }
+    memory  *to_string() const;
 
     inline bool operator==(mx &b) const {
         if (mem == b.mem)
@@ -1963,8 +1929,6 @@ template <typename T>
 constexpr bool is_mx() {
     return identical<T, mx>();
 }
-
-//struct mutex:mx { mx_declare(mutex, mx, std::shared_mutex); };
 
 template <typename T>
 struct lambda;
@@ -2192,6 +2156,8 @@ public:
             T &element = (T &)v;
             push(element);
         }
+        int test = 0;
+        test++;
     }
 
     inline void set_size(size sz) {
@@ -2632,7 +2598,8 @@ struct str:mx {
     }
 
     str(memory        *mem) : mx(mem->type == typeof(null_t) ? alloc<char>(null, 0, 16) : mem), data(&mx::ref<char>()) { }
-    str(mx               m) : str(m.grab())                      { }
+    //str(mx               m) : str(m.type() == typeof(char) ? m.grab() :
+    //    m.mem->type->functions->to_string(m.mem->origin)) { }
     str(null_t = null) : str(alloc<char>(null, 0, 16))      { }
     str(char            ch) : str(alloc<char>(null, 1, 2))       { *data = ch; }
     str(size_t          sz) : str(alloc<char>(null, 0, sz + 1))  { }
@@ -3239,7 +3206,7 @@ struct map:mx {
 
     static int defaults(map<V> &def) {
         for (field<V> &f: def) {
-            str name  = f.key;
+            str name  = f.key.grab();
             str value = f.value.mem->type->functions->to_string(f.value.mem->origin);
             printf("%s: default (%s)", name.cs(), value.cs());
         }
@@ -3461,11 +3428,7 @@ struct dir {
 };
 
 static void brexit() {
-    #ifndef NDEBUG
-    breakp();
-    #else
     exit(1);
-    #endif
 }
 
 /// console interface for printing, it could get input as well

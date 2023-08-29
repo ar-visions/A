@@ -424,4 +424,41 @@ memory *get_string(type_t type, raw_t data, str &name) {
     return  m;
 }
 
+memory  *mx::to_string() const {
+    if      (mem->type == typeof(i8) ) return memory::string(std::to_string(*(i8*)  mem->origin));
+    else if (mem->type == typeof(i16)) return memory::string(std::to_string(*(i16*) mem->origin));
+    else if (mem->type == typeof(i32)) return memory::string(std::to_string(*(i32*) mem->origin));
+    else if (mem->type == typeof(i64)) return memory::string(std::to_string(*(i64*) mem->origin));
+    else if (mem->type == typeof(u8) ) return memory::string(std::to_string(*(u8*)  mem->origin));
+    else if (mem->type == typeof(u16)) return memory::string(std::to_string(*(u16*) mem->origin));
+    else if (mem->type == typeof(u32)) return memory::string(std::to_string(*(u32*) mem->origin));
+    else if (mem->type == typeof(u64)) return memory::string(std::to_string(*(u64*) mem->origin));
+    else if (mem->type == typeof(r32)) return memory::string(std::to_string(*(r32*) mem->origin));
+    else if (mem->type == typeof(r64)) return memory::string(std::to_string(*(r64*) mem->origin));
+    else if (mem->type == typeof(bool))return memory::string(std::to_string(*(bool*)mem->origin));
+
+    else if  ((mem->type->traits & traits::enum_primitive) && mem->type->ref) {
+        int iraw = *(int*)mem->origin;
+        memory *res = mem->type->ref->lookup(u64(iraw));
+        return res;
+    }
+    else if   (mem->type->functions->to_string)
+        return mem->type->functions->to_string(mem->origin); /// call to_string() on context class
+    
+    else   if (mem->type->schema &&
+                mem->type->schema->bind->data->functions &&
+                mem->type->schema->bind->data->functions->to_string)
+        return mem->type->schema->bind->data->functions->to_string(mem->origin); /// or data...
+    
+    else if (mem->type == typeof(char))
+        return mem->grab();
+    
+    else {
+        type_t id = mem->type;
+        static char buf[128];
+        const int l = snprintf(buf, sizeof(buf), "%s/%p", id->name, (void*)mem);
+        return memory::stringify(cstr(buf), l);
+    }
+}
+
 }

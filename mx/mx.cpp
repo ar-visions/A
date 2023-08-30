@@ -251,8 +251,7 @@ memory *memory::raw_alloc(type_t type, size_t sz, size_t count, size_t res) {
 }
 
 #ifdef WIN32
-void usleep(__int64 usec) 
-{ 
+void usleep(__int64 usec) {
     HANDLE timer; 
     LARGE_INTEGER ft; 
 

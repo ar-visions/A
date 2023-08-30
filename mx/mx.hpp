@@ -14,12 +14,12 @@
 #define NOMINMAX
 #endif
 #define WIN32_LEAN_AND_MEAN
+#include <winsock2.h> /// must do this if you include windows
 #include <windows.h>
 #else
 #include <sched.h>
 #endif
 
-/// wall of shame
 #include <functional>
 #include <atomic>
 #include <filesystem>

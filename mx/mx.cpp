@@ -1,4 +1,7 @@
 #include <mx/mx.hpp>
+#include <sys/stat.h>
+#include <stdio.h>
+#include <time.h>
 
 namespace ion {
 
@@ -90,12 +93,11 @@ int snprintf(cstr str, size_t size, const char *format, ...) {
 }
 
 str path::mime_type() {
-    /// prefix builds have their own resources gathered throughout.
-    /// depend on a module and we copy (res/*) -> binary_dir/
-    mx e = ext().symbolize();
+    mx e = ext().mid(1).symbolize();
     static path  data = "data/mime-type.json";
     static map<mx> js =  data.read<var>();
-    return js->count(e) ? ((memory*)js[e])->grab() : ((memory*)js["default"])->grab();
+    field<mx> *find = js->lookup(e);
+    return find ? find->value.grab() : ((memory*)js["default"])->grab();
 }
 
 i64 integer_value(memory *mem) {
@@ -283,6 +285,33 @@ void memory::drop() {
         }
         free(this);
     }
+}
+
+bool path::get_modified_date(struct tm *res) {
+    const char* filename = cs();
+    struct stat file_stat;
+
+    if (stat(filename, &file_stat) == -1) {
+        perror("stat");
+        return false;
+    }
+    static mutex mx;
+    mx.lock();
+    *res = *gmtime(&file_stat.st_mtime);
+    mx.unlock();
+    return true;
+}
+
+str path::get_modified_string() {
+    str result(size_t(128));
+    struct tm gm_time;
+    ///
+    if (get_modified_date(&gm_time)) {
+        // RFC 1123 format (used with http)
+        if (strftime(result.data, result.reserve(), "%a, %d %b %Y %H:%M:%S GMT", &gm_time) == 0)
+            fprintf(stderr, "strftime failed\n");
+    }
+    return result;
 }
 
 memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {

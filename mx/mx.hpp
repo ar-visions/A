@@ -1863,7 +1863,7 @@ struct mx {
     inline bool operator!=(mx &b)    const { return !operator==(b); }
     
     inline bool operator==(symbol b) const {
-        if (mem) {
+        if (mem && mem->type == typeof(char)) {
             if (mem->attrs & memory::attr::constant) {
                 return mem == mem_symbol(b);
             } else {
@@ -2886,8 +2886,6 @@ struct str:mx {
         return str(&data[start], cp_count);
     }
 
-    str mid(size_t start, int len = -1) const { return mid(num(start), num(len)); }
-
     ///
     template <typename L>
     array<str> split(L delim) const {
@@ -3148,7 +3146,6 @@ struct map:mx {
                 }
                 return res;
             } else {
-                /// cstring symbol identity not working atm, i think they are not registered in all cases in mx
                 size_t res = 0;
                 for (field<V> &f:fields)
                     if (f.key.mem == b)
@@ -3531,6 +3528,39 @@ struct path:mx {
 
     template <typename T> T     read() const;
     template <typename T> bool write(T input) const;
+
+    bool get_modified_date(struct tm *res);
+    str  get_modified_string();
+
+    /// utility for knowing if you are trying to go up beyond a relative dir
+    /// without any dir analysis is more reduced
+    static bool backwards(cstr cs) {
+        int i = 0;
+        cstr v = cs;
+        if (v[0] == '/') v++;
+        double b = 0;
+        ///
+        for (; v[0];) {
+            if (v[0] == '.' && v[1] == '.') {
+                if (v[2] != 0 && v[2] != '/')
+                    return true; /// this is backwards enough
+                v++;
+                b--;
+            } else if (v[0] != '/') {
+                // double slash is same dir, we 'ignore' that
+                b++;
+                do {
+                    v++;
+                } while (v[0] && v[0] != '/');
+
+                if (v[0] == '/')
+                    v++;
+            }
+            if (v[0])
+                v++;
+        }
+        return b < 0;
+    }
 
     str        mime_type();
     str             stem() const { return !data->empty() ? str(data->stem().string()) : str(null);    }
@@ -4027,7 +4057,7 @@ protected:
     mx *get(str key) {
         if (mem->type != typeof(map<mx>))
             return null;
-        map<mx>   &m = *(map<mx>*)mem->origin;
+        map<mx>::mdata *m = (map<mx>::mdata*)mem->origin;
         field<mx> *f = m->lookup(key);
         return f ? &f->value : null;
     }
@@ -4038,6 +4068,52 @@ protected:
     }
 
     str stringify() const {
+
+        auto encode_str = [](memory *m) -> str {
+            str res(m->count * 2);
+            char *s = (char*)m->origin;
+            while (*s) {
+                if ((*s & 0b10000000) == 0) {
+                    if      (*s == '\r') res += "\\r";
+                    else if (*s == '\n') res += "\\n";
+                    else if (*s == '\"') res += "\\\"";
+                    else if (*s ==    8) res += "\\b";
+                    else if (*s ==    9) res += "\\t";
+                    else if (*s == 0x0C) res += "\\f";
+                    else res += *s;
+                    s++;
+                } else {
+                    bool i4 = (*s & 0b1111100) == 0b1111000;
+                    bool i3 = (*s & 0b1111000) == 0b1110000;
+                    bool i2 = (*s & 0b1110000) == 0b1100000;
+                    int code = 0;
+                    if (i4) {
+                        assert(s[1] && s[2] && s[3]);
+                        code = int(0b00000111 & s[0]) << 18 |
+                               int(0b00111111 & s[1]) << 12 |
+                               int(0b00111111 & s[2]) <<  6 |
+                               int(0b00111111 & s[3]) <<  0;
+                        s += 4;
+                    } else if (i3) {
+                        assert(s[1] && s[2]);
+                        code = int(0b00001111 & s[0]) << 12 |
+                               int(0b00111111 & s[1]) <<  6 |
+                               int(0b00111111 & s[2]) <<  0;
+                        s += 3;
+                    } else if (i2) {
+                        assert(s[1]);
+                        code = int(0b00011111 & s[0]) <<  6 |
+                               int(0b00111111 & s[1]) <<  0;
+                        s += 2;
+                    }
+                    char buf[32];
+                    snprintf(buf, sizeof(buf), "%04x", code);
+                    res += buf;
+                }
+            }
+            return res;
+        };
+
         /// main recursion function
         lambda<str(const mx&)> fn;
         fn = [&](const mx &i) -> str {
@@ -4049,14 +4125,11 @@ protected:
                 str     res(size_t(1024));
                 assert (smem);
 
-                if (n_fields > 0)
-                    res += ",";
-                
                 if (!e.mem || vt == typeof(null_t))
                     res += "null";
-                else if (vt == typeof(char)) {
+                else if (vt == typeof(char) || vt == typeof(const char)) {
                     res += "\"";
-                    res += str(smem);
+                    res += encode_str(smem);
                     res += "\"";
                 } else if (vt == typeof(int))
                     res += smem;
@@ -4075,6 +4148,8 @@ protected:
                 size_t n_fields = 0;
                 for (field<mx> &fx: m) {
                     str skey = str(fx.key.mem->grab());
+                    if (n_fields)
+                        ar += ",";
                     ar += "\"";
                     ar += skey;
                     ar += "\"";
@@ -4087,6 +4162,8 @@ protected:
                 ar += "[";
                 for (size_t ii = 0; ii < i.count(); ii++) {
                     mx &e = mx_p[ii];
+                    if (ii)
+                        ar += ",";
                     ar += format_v(e, ii);
                 }
                 ar += "]";
@@ -4114,7 +4191,7 @@ protected:
         type_t kt        = typeof(KT);
         type_t data_type = type();
 
-        if (kt == typeof(char)) {
+        if (kt == typeof(char) || kt == typeof(const char *)) {
             /// if key is something else just pass the mx to map
             map<mx>::mdata &dref = mx::mem->ref<map<mx>::mdata>();
             assert(&dref);

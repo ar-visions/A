@@ -2,10 +2,51 @@
 #include <sys/stat.h>
 #include <stdio.h>
 #include <time.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 namespace ion {
 
 logger console;
+
+void free64(void* ptr) {
+#if defined(WIN32)
+    _aligned_free(ptr);
+#else
+    free(ptr);
+#endif
+}
+
+void* calloc64(size_t count, size_t size) {
+    // Calculate total bytes
+    size_t total_bytes = count * size;
+
+    // We'll use aligned_alloc on platforms that support it
+#if defined(WIN32)
+    void* ptr = _aligned_malloc(total_bytes, 64);
+    if (!ptr) {
+        return NULL;
+    }
+    memset(ptr, 0, total_bytes);
+    return ptr;
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+    void* ptr = aligned_alloc(64, total_bytes);
+    if (!ptr) {
+        return NULL;
+    }
+    memset(ptr, 0, total_bytes);
+    return ptr;
+#else
+    // For platforms that don't support C11's aligned_alloc
+    void* ptr = NULL;
+    // posix_memalign allocates aligned memory
+    if (posix_memalign(&ptr, 64, total_bytes) != 0) {
+        return NULL;  // posix_memalign will return nonzero on failure
+    }
+    memset(ptr, 0, total_bytes);
+    return ptr;
+#endif
+}
 
 raw_t memory::typed_data(type_t dtype, size_t index) const {
     size_t mxc = math::max(reserve, count);
@@ -177,7 +218,7 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
             }
         }
     }
-    free(origin);
+    free64(origin);
     origin  = raw_t(dst);
     reserve = alloc_reserve;
     return origin;
@@ -248,7 +289,7 @@ memory *memory::raw_alloc(type_t type, size_t sz, size_t count, size_t res) {
     mem->reserve    = math::max(res, count);
     mem->refs       = 1;
     mem->type       = type;
-    mem->origin     = calloc(sz, mem->reserve); /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
+    mem->origin     = sz ? calloc(sz, mem->reserve) : null; /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
     return mem;
 }
 
@@ -278,12 +319,12 @@ void memory::drop() {
             atts = null;
         }
         if (managed)
-            free(origin);
+            free64(origin);
         if (shape) {
             delete shape;
             shape = null;
         }
-        free(this);
+        free64(this);
     }
 }
 

@@ -87,7 +87,8 @@ struct memory;
 using raw_t = void*;
 using type_t = idata *;
 
-/// need to forward these
+void*     calloc64(size_t count, size_t size);
+void        free64(void* ptr);
 memory*       grab(memory *mem);
 memory*       drop(memory *mem);
 memory* mem_symbol(symbol cs, type_t ty, i64 id);
@@ -936,13 +937,13 @@ struct hmap {
         /// i'll give you a million quid, or, This Bucket.
         bucket &operator[](u64 k) {
             if (!h_pairs)
-                 h_pairs = (bucket*)calloc(sz, sizeof(bucket));
+                 h_pairs = (bucket*)calloc64(sz, sizeof(bucket));
             return h_pairs[k];
         }
         
         ~hmdata() {
             for (size_t  i = 0; i < sz; i++) h_pairs[i]. ~ bucket(); // data destructs but does not construct and thats safe to do
-            free(h_pairs);
+            free64(h_pairs);
         }
     };
 
@@ -1480,10 +1481,10 @@ size_t schema_info(alloc_schema *schema, int depth, B *top, T *p, idata *ctx_typ
 /// scan schema info from struct from design-time info, then populate and sum up the total bytes along with the primary binding
 template <typename T>
 void schema_populate(idata *type, T *p) {
-    type->schema         = (alloc_schema*)calloc(1, sizeof(alloc_schema));
+    type->schema         = (alloc_schema*)calloc64(1, sizeof(alloc_schema));
     alloc_schema &schema = *type->schema;
     schema.bind_count    = schema_info(&schema, 0, (T*)null, (T*)null, type);
-    schema.composition   = (context_bind*)calloc(schema.bind_count, sizeof(context_bind));
+    schema.composition   = (context_bind*)calloc64(schema.bind_count, sizeof(context_bind));
     schema_info(&schema, 0, (T*)null, (T*)null, type);
     size_t offset = 0;
     for (size_t i = 0; i < schema.bind_count; i++) {
@@ -1678,7 +1679,7 @@ struct mx {
 
     template <typename T>
     static inline memory *wrap(void *m, size_t count = 1, T *placeholder = (T*)null) {
-        memory*     mem = (memory*)calloc(1, sizeof(memory));
+        memory*     mem = (memory*)calloc64(1, sizeof(memory));
         mem->count      = count;
         mem->reserve    = 0;
         mem->refs       = 1;
@@ -1727,13 +1728,13 @@ struct mx {
     /// must move lambda code away from lambda table, and into constructor code gen
     template <typename T>
     memory *copy(T *src, size_t count, size_t reserve) {
-        memory*     mem = (memory*)calloc(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
+        memory*     mem = (memory*)calloc64(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
         mem->count      = count;
         mem->reserve    = math::max(count, reserve);
         mem->refs       = 1;
         mem->type       = typeof(T); /// design-time should already know this is opaque if its indeed setup that way in declaration; use ptr_decl_opaque() or something
         mem->managed    = true;
-        mem->origin     = (T*)calloc(mem->reserve, sizeof(T));
+        mem->origin     = (T*)calloc64(mem->reserve, sizeof(T));
         ///
         if constexpr (is_primitive<T>()) {
             memcpy(mem->origin, src, sizeof(T) * count);
@@ -2222,7 +2223,7 @@ public:
     array<T> sort(func<int(T &a, T &b)> cmp) {
         /// create reference list of identical size as given, pointing to the respective index
         size_t sz = len();
-        mx **refs = (mx **)calloc(len(), sizeof(mx*));
+        mx **refs = (mx **)calloc64(len(), sizeof(mx*));
         for (size_t i = 0; i < sz; i++)
             refs[i] = &data[i];
 

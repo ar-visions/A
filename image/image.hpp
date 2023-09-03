@@ -192,7 +192,7 @@ struct rect {
     inline rect(vec2 p0, vec2 p1) : x(p0.x), y(p0.y), w(p1.x - p0.x), h(p1.y - p0.y) { }
 
     inline rect  offset(T a)                const { return { x - a, y - a, w + (a * 2), h + (a * 2) }; }
-    inline vec2  size()                     const { return { w, h }; }
+    inline vec2  sz()                       const { return { w, h }; }
     inline vec2  xy()                       const { return { x, y }; }
     inline vec2  center()                   const { return { x + w / 2.0, y + h / 2.0 }; }
     inline bool  contains(vec2 p)           const { return p.x >= x && p.x <= (x + w) && p.y >= y && p.y <= (y + h); }
@@ -395,7 +395,7 @@ struct image:array<rgba8> {
     size_t      height() const { return (mem && mem->shape) ? (*mem->shape)[0] : 0; }
     size_t      stride() const { return (mem && mem->shape) ? (*mem->shape)[1] : 0; }
     recti         rect() const { return { 0, 0, int(width()), int(height()) }; }
-    vec2i         size() const { return { int(width()), int(height()) }; }
+    vec2i           sz() const { return { int(width()), int(height()) }; }
     ///
     rgba8 &operator[](ion::size pos) const {
         size_t index = mem->shape->index_value(pos);

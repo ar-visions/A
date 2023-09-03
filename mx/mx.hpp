@@ -2880,7 +2880,7 @@ struct str:mx {
     /// mid = substr; also used with array so i thought it would be useful to see them as same
     str mid(num start, num len = -1) const {
         int ilen = int(count());
-        assert(abs(start) <= ilen);
+        assert(std::abs(start) <= ilen);
         if (start < 0) start = ilen + start;
         int cp_count = len <= 0 ? (ilen - start) : len;
         assert(start + cp_count <= ilen);

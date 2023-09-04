@@ -337,7 +337,10 @@ struct Rounded:Rect<T> {
     operator bool() { return data->l_tl <= 0; }
 
     /// set og rect (rectd) and compute the bezier
-    Rounded(rect &r, T rx, T ry) : Rounded(rdata(r, rx, ry)) { *Rect<T>::data = r; }
+    Rounded(rect &r, T rx, T ry) : Rounded() {
+        *Rect<T>::data = r;
+        *data = rdata { r, rx, ry };
+    }
 };
 
 struct Arc:mx {

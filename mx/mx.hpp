@@ -470,9 +470,16 @@ typename std::enable_if<std::is_same<T, double>::value
     }\
     template <typename _T>\
     void _copy(C *dst0, _T *dst, _T *src) { \
-        if constexpr (std::is_assignable_v<_T&, const _T&>)\
+        if constexpr (std::is_same_v<_T, std::filesystem::path>) {\
+            *dst = src->string();\
+        }\
+        else if constexpr (std::is_assignable_v<_T&, const _T&>)\
             *dst = *src;\
-        else assert(false);\
+        else\
+        {\
+            printf("cannnot assign in _copy() generic with type: %s\n", typeof(_T)->name);\
+            exit(1);\
+        }\
     }\
 
 template<typename T, typename = void>
@@ -570,6 +577,9 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
 /// the following is delegated to movable(C): (array<T> blows up for good reason)
 ///     inline C(intern    ref) : B(mx::alloc<C>(&ref)), data(mx::data<D>()) { }
 
+// should not expose the intern through a constructor on mx_object
+// C(intern   memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
+
 #define mx_object(C, B, D) \
     using parent_class   = B;\
     using context_class  = C;\
@@ -578,8 +588,8 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     static const inline type_t intern_t  = typeof(D);\
     intern*    data;\
     C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
-    C(intern   memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
     C(intern*  data) : C(mx::wrap <C>(raw_t(data), 1)) { }\
+    C(intern&  memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
     C(mx          o) : C(o.mem->grab()) { }\
     C()              : C(mx::alloc<C>()) { }\
     intern    &operator *() { return *data; }\
@@ -3414,15 +3424,16 @@ struct states:mx {
 
 // just a mere lexical user of cwd
 struct dir {
-    static fs::path cwd() {
-        fs::path p = fs::current_path();
-        assert(p != "/");
-        return p;
+    static str cwd() {
+        static char buf[1024];
+        int  len;
+        getcwd(buf, sizeof(buf));
+        return str(buf);
     }
-    fs::path prev;
+    str prev;
      ///
-     dir(fs::path p) : prev(cwd()) { chdir(p   .string().c_str()); }
-    ~dir()						   { chdir(prev.string().c_str()); }
+     dir(str p) : prev(cwd()) { chdir(p.cs()); }
+    ~dir()					  { chdir(prev.cs()); }
 };
 
 static void brexit() {
@@ -3487,7 +3498,54 @@ struct basic_string {
 };
 
 external(std::nullptr_t);
-external(std::filesystem::path);
+//external(std::filesystem::path);
+
+
+template <> struct is_external<std::filesystem::path> : true_type { };\
+    template <typename _T>\
+    _T *_new(std::filesystem::path *ph, _T *type) {\
+        if constexpr (!is_opaque<_T>()) return new _T(); else return null;\
+    }\
+    template <typename _T>\
+    void _del(std::filesystem::path *ph, _T *instance) {\
+        if constexpr (!is_opaque<_T>()) delete instance;\
+    }\
+    template <typename _T>\
+    void _construct(std::filesystem::path *dst0, _T *dst) {\
+        if constexpr (!is_opaque<_T>()) new (dst) _T();\
+    }\
+    template <typename _T>\
+    void _assign(std::filesystem::path *dst0, _T *dst, _T *src) {\
+        if constexpr (!is_opaque<_T>() && std::is_copy_constructible<_T>()) {\
+            dst -> ~_T();\
+            new (dst) _T(*src);\
+        }\
+    }\
+    template <typename _T>\
+    bool _boolean(std::filesystem::path *dst0, _T *src) {\
+        if constexpr (has_bool<_T>) \
+            return bool(*src); \
+        else \
+            return false; \
+    }\
+    template <typename _T>\
+    void _destruct(std::filesystem::path *dst0, _T *dst) {\
+        if constexpr (!is_opaque<_T>()) dst -> ~_T();\
+    }\
+    template <typename _T>\
+    void _copy(std::filesystem::path *dst0, _T *dst, _T *src) { \
+        if constexpr (std::is_same_v<_T, std::filesystem::path>) {\
+            *dst = src->string();\
+        }\
+        else if constexpr (std::is_assignable_v<_T&, const _T&>)\
+            *dst = *src;\
+        else\
+        {\
+            printf("cannnot assign in _copy() generic with type: %s\n", typeof(_T)->name);\
+            exit(1);\
+        }\
+    }\
+
 external(char);
 external(bool);
 external(i8);
@@ -3506,7 +3564,7 @@ struct path:mx {
     inline static std::error_code ec;
 
     using Fn = lambda<void(path)>;
-    
+
     enums(option, recursion,
         "recursion, no-sym-links, no-hidden, use-git-ignores",
          recursion, no_sym_links, no_hidden, use_git_ignores);
@@ -3516,9 +3574,7 @@ struct path:mx {
          none, deleted, modified, created);
 
     static path cwd() {
-        static std::string st;
-        st = fs::current_path().string();
-        return str(st);
+        return dir::cwd();
     }
     ///
     mx_object(path, mx, fs::path);
@@ -3573,10 +3629,10 @@ struct path:mx {
     bool        make_dir() const { std::error_code ec;          return !data->empty() ? fs::create_directories(*data, ec) : false; }
     path remove_filename()       {
         fs::path p = data->remove_filename();
-        return path(p);
+        return path(p.c_str());
     }
     bool    has_filename() const {                              return data->has_filename(); }
-    path            link() const {                              return fs::is_symlink(*data) ? path(*data) : path(); }
+    path            link() const {                              return fs::is_symlink(*data) ? path(data->c_str()) : path(); }
     bool         is_file() const {                              return !fs::is_directory(*data) && fs::is_regular_file(*data); }
     char             *cs() const {
         static std::string static_thing;
@@ -3588,7 +3644,7 @@ struct path:mx {
     }
     str         ext () const { return str(data->extension().string()); }
     str         ext4() const { return data->extension().string(); }
-    path        file() const { return fs::is_regular_file(*data) ? path(*data) : path(); }
+    path        file() const { return fs::is_regular_file(*data) ? path(data->c_str()) : path(); }
     bool copy(path to) const {
         assert(!data->empty());
         assert(exists());
@@ -3622,12 +3678,12 @@ struct path:mx {
         return data->string().length() > 0;
     }
     operator         str()         const { return str(data->string()); }
-    path          parent()         const { return  data->parent_path(); }
+    path          parent()         const { return  data->parent_path().c_str(); }
     
-    path operator / (path       s) const { return path(*data / *s); }
-    path operator / (symbol     s) const { return path(*data /  s); }
-    path operator / (const str& s) const { return path(*data / fs::path(s.data)); }
-    path relative   (path    from) const { return path(fs::relative(*data, *from)); }
+    path operator / (path       s) const { return path((*data / *s).c_str()); }
+    path operator / (symbol     s) const { return path((*data /  s).c_str()); }
+    path operator / (const str& s) const { return path((*data / fs::path(s.data)).c_str()); }
+    path relative   (path    from) const { return path(fs::relative(*data, *from).c_str()); }
     
     bool  operator==(path&      b) const { return  *data == *b; }
     bool  operator!=(path&      b) const { return !(operator==(b)); }
@@ -3641,7 +3697,7 @@ struct path:mx {
         fs::path p { };
         do { p = fs::path(str::fill(6, rand)); }
         while (fs::exists(*b / p));
-        return  p;
+        return  p.c_str();
     }
 
     static path  format(str t, array<mx> args) {
@@ -3694,15 +3750,15 @@ struct path:mx {
         bool use_gitignore	= states[ option::use_git_ignores ];
         bool recursive		= states[ option::recursion       ];
         bool no_hidden		= states[ option::no_hidden       ];
-        array<str> ignore   = states[ option::use_git_ignores ] ? path(*data / ".gitignore").read<str>().split("\n") : array<str>();
+        array<str> ignore   = states[ option::use_git_ignores ] ? path((*data / ".gitignore").c_str()).read<str>().split("\n") : array<str>();
         lambda<void(path)> res;
         map<mx>    fetched_dir;  /// this is temp and map needs a hash lambdas pronto
         fs::path   parent   = *data; /// parent relative to the git-ignore index; there may be multiple of these things.
         fs::path&  fsp		= *data;
-        
+
         ///
         res = [&](path a) {
-            auto fn_filter = [&](path p) -> bool {
+            auto fn_filter = [&](ion::path p) -> bool {
                 str      ext = p.ext4();
                 bool proceed = false;
                 /// proceed if the extension is matching one, or no extensions are given
@@ -3716,7 +3772,7 @@ struct path:mx {
                 /// or the file passes the git ignore collection of patterns
                 
                 if (proceed && use_gitignore) {
-                    path    pp = path(parent);
+                    path    pp = path(parent.c_str());
                     path   rel = pp.relative(p); // original parent, not resource parent
                     str   srel = rel;
                     ///
@@ -3739,7 +3795,7 @@ struct path:mx {
             if (a.is_dir()) {
                 if (!no_hidden || !a.is_hidden())
                     for (fs::directory_entry e: fs::directory_iterator(*a)) {
-                        path p  = e.path();
+                        path p  = e.path().c_str();
                         path li = p.link();
                         //if (li)
                         //    continue;
@@ -3758,8 +3814,8 @@ struct path:mx {
             else if (a.exists())
                 fn_filter(a);
         };
-        path rpath = *data;
-        return res(rpath);
+        
+        return res(data->c_str());
     }
 
     array<path> matching(array<str> exts) {

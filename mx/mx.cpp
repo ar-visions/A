@@ -469,12 +469,14 @@ void types::hash_type(type_t type) {
 }
 
 u8* get_member_address(type_t type, raw_t data, str &name, prop *&rprop) {
-    memory *sym = name.symbolize();
-    prop  **p   = type->meta_map->lookup((symbol)sym->origin);
-    if (p) {
-        rprop       = *p;
-        u8 *p_value = &(((u8*)data)[(*p)->offset]);
-        return p_value;
+    if (type->meta && type->meta_map) {
+        memory *sym = name.symbolize();
+        prop  **p   = type->meta_map->lookup((symbol)sym->origin);
+        if (p) {
+            rprop       = *p;
+            u8 *p_value = &(((u8*)data)[(*p)->offset]);
+            return p_value;
+        }
     }
     return null;
 }

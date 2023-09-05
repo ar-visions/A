@@ -481,6 +481,27 @@ u8* get_member_address(type_t type, raw_t data, str &name, prop *&rprop) {
     return null;
 }
 
+/// find schema-bound meta property from memory and field
+u8* property_find(memory *mem, str &name, prop *&rprop) {
+    u8  *pos = (u8*)mem->origin;
+    type_t t =      mem->type;
+
+    if (t->schema)
+        for (int i = 0; i < t->schema->bind_count; i++) {
+            context_bind &c = t->schema->composition[i];
+            prop*    member = null;
+            u8*      addr   = get_member_address(c.data, pos, name, member);
+            if (addr) {
+                rprop = member;
+                return addr;
+            }
+            pos += c.data->base_sz;
+        }
+    rprop = null;
+    return null;
+}
+
+
 bool get_bool(type_t type, raw_t data, str &name) {
     prop  *p;
     u8    *p_value = get_member_address(type, data, name, p);
@@ -491,6 +512,8 @@ bool get_bool(type_t type, raw_t data, str &name) {
 memory *get_string(type_t type, raw_t data, str &name) {
     prop   *p;
     u8     *p_value = get_member_address(type, data, name, p);
+    if (!p_value)
+        return null;
     memory *m       = p->member_type->functions->to_string(p_value);
     return  m;
 }

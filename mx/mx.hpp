@@ -51,7 +51,9 @@
 #include <typeinfo>
 
 #ifndef _WIN32
-#   include <unistd.h>
+#include <unistd.h>
+#else
+#include <direct.h>
 #endif
 
 #include <assert.h>
@@ -3427,7 +3429,11 @@ struct dir {
     static str cwd() {
         static char buf[1024];
         int  len;
+        #ifdef WIN32
+        _getcwd(buf, sizeof(buf));
+        #else
         getcwd(buf, sizeof(buf));
+        #endif
         return str(buf);
     }
     str prev;
@@ -3814,8 +3820,9 @@ struct path:mx {
             else if (a.exists())
                 fn_filter(a);
         };
-        
-        return res(data->c_str());
+        static std::string str = data->string();
+        symbol sym = str.c_str();
+        return res(sym);
     }
 
     array<path> matching(array<str> exts) {

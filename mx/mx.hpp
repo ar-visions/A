@@ -3504,54 +3504,7 @@ struct basic_string {
 };
 
 external(std::nullptr_t);
-//external(std::filesystem::path);
-
-
-template <> struct is_external<std::filesystem::path> : true_type { };\
-    template <typename _T>\
-    _T *_new(std::filesystem::path *ph, _T *type) {\
-        if constexpr (!is_opaque<_T>()) return new _T(); else return null;\
-    }\
-    template <typename _T>\
-    void _del(std::filesystem::path *ph, _T *instance) {\
-        if constexpr (!is_opaque<_T>()) delete instance;\
-    }\
-    template <typename _T>\
-    void _construct(std::filesystem::path *dst0, _T *dst) {\
-        if constexpr (!is_opaque<_T>()) new (dst) _T();\
-    }\
-    template <typename _T>\
-    void _assign(std::filesystem::path *dst0, _T *dst, _T *src) {\
-        if constexpr (!is_opaque<_T>() && std::is_copy_constructible<_T>()) {\
-            dst -> ~_T();\
-            new (dst) _T(*src);\
-        }\
-    }\
-    template <typename _T>\
-    bool _boolean(std::filesystem::path *dst0, _T *src) {\
-        if constexpr (has_bool<_T>) \
-            return bool(*src); \
-        else \
-            return false; \
-    }\
-    template <typename _T>\
-    void _destruct(std::filesystem::path *dst0, _T *dst) {\
-        if constexpr (!is_opaque<_T>()) dst -> ~_T();\
-    }\
-    template <typename _T>\
-    void _copy(std::filesystem::path *dst0, _T *dst, _T *src) { \
-        if constexpr (std::is_same_v<_T, std::filesystem::path>) {\
-            *dst = src->string();\
-        }\
-        else if constexpr (std::is_assignable_v<_T&, const _T&>)\
-            *dst = *src;\
-        else\
-        {\
-            printf("cannnot assign in _copy() generic with type: %s\n", typeof(_T)->name);\
-            exit(1);\
-        }\
-    }\
-
+external(std::filesystem::path);
 external(char);
 external(bool);
 external(i8);
@@ -3670,7 +3623,7 @@ struct path:mx {
 
     /// create an alias; if successful return its location
     path link(path alias) const {
-        fs::path &ap = *data;
+    fs::path &ap = *data;
         fs::path &bp = *alias;
         if (ap.empty() || bp.empty())
             return {};
@@ -3684,7 +3637,10 @@ struct path:mx {
         return data->string().length() > 0;
     }
     operator         str()         const { return str(data->string()); }
-    path          parent()         const { return  data->parent_path().c_str(); }
+    path          parent()         const {
+        std::string s = data->parent_path().string();
+        return  s.c_str();
+    }
     
     path operator / (path       s) const { return path((*data / *s).c_str()); }
     path operator / (symbol     s) const { return path((*data /  s).c_str()); }
@@ -3801,7 +3757,8 @@ struct path:mx {
             if (a.is_dir()) {
                 if (!no_hidden || !a.is_hidden())
                     for (fs::directory_entry e: fs::directory_iterator(*a)) {
-                        path p  = e.path().c_str();
+                        std::string str = e.path().string();
+                        path p  = str.c_str();
                         path li = p.link();
                         //if (li)
                         //    continue;

@@ -184,7 +184,7 @@ attachment *memory::find_attachment(ion::symbol id) {
 
 void *memory::realloc(size_t alloc_reserve, bool fill_default) {
     size_t          type_sz   = type->size(); /// size of actual data consumed -- we dont use functions that are emitted from array<T> we use T in vector form (which they are already)
-    u8             *dst       = (u8*)calloc(alloc_reserve, type_sz);
+    u8             *dst       = (u8*)calloc64(alloc_reserve, type_sz);
     u8             *src       = (u8*)origin;
     size_t          mn        = math::min(alloc_reserve, count);
     const bool      prim      = (type->traits & traits::primitive) != 0;
@@ -284,12 +284,12 @@ memory *memory::symbol (ion::symbol s, type_t ty, i64 id) {
 
 memory *memory::raw_alloc(type_t type, size_t sz, size_t count, size_t res) {
     size_t elements = math::max(count, res);
-    memory*     mem = (memory*)calloc(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
+    memory*     mem = (memory*)calloc64(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
     mem->count      = count;
     mem->reserve    = math::max(res, count);
     mem->refs       = 1;
     mem->type       = type;
-    mem->origin     = sz ? calloc(sz, mem->reserve) : null; /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
+    mem->origin     = sz ? calloc64(sz, mem->reserve) : null; /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
     return mem;
 }
 

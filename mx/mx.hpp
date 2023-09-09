@@ -2011,7 +2011,7 @@ template <typename T> struct is_lambda<lambda<T>> : true_type  { };
 template <typename R, typename... Args>
 template <typename F>
 lambda<R(Args...)>::lambda(F&& fn) : mx() {
-    if constexpr (is_lambda<std::remove_reference_t<F>>::value) {
+    if constexpr (inherits<mx, F>() || is_lambda<std::remove_reference_t<F>>::value) {
         mx::mem = fn.mem->grab();
         data    = (container*)mem->origin;
     } else {

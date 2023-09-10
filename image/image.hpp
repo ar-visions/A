@@ -419,6 +419,8 @@ struct yuv420:array<u8> {
         return !mem || !mem->count;
     }
 
+    yuv420() : array<u8>() { }
+
     yuv420(image img) : 
             array<u8>(size_t(img.width() * img.height() +
                              img.width() * img.height() / 4 +

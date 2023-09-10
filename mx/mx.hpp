@@ -614,34 +614,19 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     }\
     type_register(C)\
 
+/// these objects dont contain a data member for access
 #define mx_object_0(C, B, D) \
     using parent_class   = B;\
     using context_class  = C;\
     using intern         = D;\
     static const inline type_t intern_t = typeof(D);\
-    intern*    data;\
-    C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
-    C(intern   memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
-    C(intern*  data) : C(mx::wrap <C>(raw_t(data), 1)) { }\
+    C(memory*   mem) : B(mem) { }\
     C(mx          o) : C(o.mem->grab()) { }\
     C()              : C(mx::alloc<C>(null, 0, 1)) { }\
-    intern    &operator *() { return *data; }\
-    intern    *operator->() { return  data; }\
-    explicit operator intern *() { return  data; }\
-    operator     intern &() { return *data; }\
     C      &operator=(const C b) {\
         mx::drop();\
         mx::mem = b.mem->grab();\
-        data = (intern*)mx::mem->data<intern>(0);\
         return *this;\
-    }\
-    intern *operator=(const intern *b) {\
-        if (data != b) {\
-            mx::drop();\
-            mx::mem = mx::wrap<C>(raw_t(b), 1);\
-            data = (intern*)mx::mem->origin;\
-        }\
-        return data;\
     }\
     type_register(C)\
 

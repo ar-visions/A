@@ -384,12 +384,12 @@ struct Vec2:mx {
 
 /// always have a beginning, middle and end -- modules && classes && functions
 struct image:array<rgba8> {
-    image(size sz) : array<rgba8>(sz) { }
     mx_object_0(image, array, rgba8);
 
+    image(size  sz) : array<rgba8>(sz) { }
     image(null_t n) : image() { }
-    image(path p);
-    image(cstr s):image(path(s)) { }
+    image(path   p);
+    image(cstr   s) : image(path(s)) { }
     image(ion::size sz, rgba8 *px, int scanline = 0);
     ///
     bool    save(path p) const;

@@ -448,13 +448,12 @@ struct yuv420:array<u8> {
                 rgba8 &c10 = img.data[(iy + 0) * w + (ix + 1)];
                 rgba8 &c01 = img.data[(iy + 1) * w + (ix + 0)];
                 rgba8 &c11 = img.data[(iy + 1) * w + (ix + 1)];
-                
                 ///
                 *yy00 = (77*c00.r + 150*c00.g + 29*c00.b) >> 8;
                 *yy10 = (77*c10.r + 150*c10.g + 29*c10.b) >> 8;
                 *yy01 = (77*c01.r + 150*c01.g + 29*c01.b) >> 8;
                 *yy11 = (77*c11.r + 150*c11.g + 29*c11.b) >> 8;
-
+                
                 yy00 += 2;
                 yy10 += 2;
                 yy01 += 2;

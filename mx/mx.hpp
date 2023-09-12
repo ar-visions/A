@@ -4629,7 +4629,7 @@ T path::read() const {
         }
     }
 }
-u8*     property_find(memory *mem, str &name, prop *&rprop);
+u8*     property_find(void *origin, type_t type, str &name, prop *&rprop);
 u8*     get_member_address(type_t type, raw_t data, str &name, prop *&rprop);
 bool    get_bool(type_t type, raw_t data, str &name);
 memory *get_string(type_t type, raw_t data, str &name);

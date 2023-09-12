@@ -482,9 +482,9 @@ u8* get_member_address(type_t type, raw_t data, str &name, prop *&rprop) {
 }
 
 /// find schema-bound meta property from memory and field
-u8* property_find(memory *mem, str &name, prop *&rprop) {
-    u8  *pos = (u8*)mem->origin;
-    type_t t =      mem->type;
+u8* property_find(void *origin, type_t type, str &name, prop *&rprop) {
+    u8  *pos = (u8*)origin;
+    type_t t =      type;
 
     if (t->schema)
         for (int i = 0; i < t->schema->bind_count; i++) {

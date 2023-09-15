@@ -172,6 +172,9 @@ constexpr bool  is_apple() {
 #endif
 };
 
+/// useful single statement error and print with fprintf stderr formatting, auto new-line?
+#define errorf(TXT, ...) do { fprintf(stderr, TXT "\n", __VA_ARGS__); exit(1); } while (0);
+
 constexpr int num_occurances(const char* cs, char c) {
     return cs[0] ? (cs[0] == c) + num_occurances(cs + 1, c) : 0; 
 }

@@ -1696,11 +1696,14 @@ struct mx {
         return memory::alloc(typeof(T), 1, 1, raw_t(cp));
     }
 
+    /// wtf is this.
     template <typename DP>
     inline mx(DP **dptr) {
         mx::alloc((DP*)null);
         *dptr = (DP*)mem->origin;
     }
+
+    mx(u8 *bytes, size_t len) : mem(memory::alloc(typeof(u8), len, len, (void*)bytes)) { }
 
     operator std::string() {
         return std::string((symbol)mem->origin);
@@ -1888,12 +1891,21 @@ struct mx {
             type_t ty = mem->type;
 
             if (is_string())
-                return mem->origin && *(char*)mem->origin != 0;
-            
+                return mem->origin && (*(char*)mem->origin != 0 || mem->count > 1);
+                /// satisfies use case
+                /// uint8_t and int8_t types are merging at the moment
+                /// the above is true for a non null first char or the count > 2 (h264 packets are Never Never 1 byte)
+                /// however it may step on toes in different string management regimes
+
+            /// typeof null_t is false, even if it has 1 of them [?]
             if (ty == typeof(null_t))
                 return false;
             
-            /// use boolean operator on the data
+            /// primitive array boolean
+            if (ty->traits & traits::primitive)
+                return mem->count > 0;
+            
+            /// use boolean operator on the data by calling the generated function table
             if (ty->schema && ty->schema->bind->data->functions->boolean) {
                 BooleanFn<void> data = ty->schema->bind->data->functions->boolean;
                 return data(raw_t(0), (void*)mem->origin);

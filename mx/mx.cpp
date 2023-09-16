@@ -159,9 +159,45 @@ memory *grab(memory *mem) {
     return mem;
 }
 
+#ifdef _WIN32
+
+struct timeval {
+    long tv_sec;
+    long tv_usec;
+};
+
+int gettimeofday(struct timeval* tp, struct timezone* tzp) {
+    // Note: Some broken versions only have 8 trailing zero's, the correct epoch has 9 trailing zero's
+    // This magic number is the number of 100 nanosecond intervals since January 1, 1601 (UTC)
+    // until 00:00:00 January 1, 1970 
+    static const uint64_t EPOCH = ((uint64_t)116444736000000000ULL);
+
+    SYSTEMTIME system_time;
+    FILETIME file_time;
+    uint64_t time;
+
+    GetSystemTime(&system_time);
+    SystemTimeToFileTime(&system_time, &file_time);
+    time  = ((uint64_t)file_time.dwLowDateTime);
+    time += ((uint64_t)file_time.dwHighDateTime) << 32;
+
+    tp->tv_sec = (long)((time - EPOCH) / 10000000L);
+    tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
+    return 0;
+}
+
+#endif
+
 i64 millis() {
-    return i64(std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count());
+    struct timeval time;
+	gettimeofday(&time, NULL);
+	return uint64_t(time.tv_sec) * 1000 + (time.tv_usec / 1000);
+}
+
+u64 microseconds() {
+	struct timeval time;
+	gettimeofday(&time, NULL);
+	return uint64_t(time.tv_sec) * 1000 * 1000 + time.tv_usec;
 }
 
 /// attach arbs to memory (uses a pointer)

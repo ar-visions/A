@@ -2169,8 +2169,6 @@ public:
             T &element = (T &)v;
             push(element);
         }
-        int test = 0;
-        test++;
     }
 
     inline void set_size(size sz) {
@@ -3794,6 +3792,7 @@ struct path:mx {
 using path_t = path;
 
 i64 millis();
+u64 microseconds();
 
 struct base64 {
     static umap<size_t, size_t> &enc_map() {
@@ -4356,7 +4355,7 @@ idata *ident::for_type() {
         num              ln = cn.find(en, p) - p;
         std::string      nm = cn.substr(p, ln);
         auto             sp = nm.find(' ');
-        std::string  s_name = (sp != std::string::npos) ? nm.substr(sp + 1) : nm;
+        std::string  s_name = nm;//(sp != std::string::npos) ? nm.substr(sp + 1) : nm;
         num ns = s_name.find("::");
         if (ns >= 0 && s_name.substr(0, ns) != "std")
             s_name = s_name.substr(ns + 2);
@@ -4399,7 +4398,6 @@ idata *ident::for_type() {
                             (is_obj             ? traits::mx_obj    : 0);
             type->base_sz = sizeof(T);
             type->name    = parse_fn(__PRETTY_FUNCTION__);
-
             if constexpr (registered<T>() || is_external<T>::value) {
                 type->functions = (ops<void>*)ftable<T>();
             }

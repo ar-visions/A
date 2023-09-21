@@ -29,6 +29,12 @@ cmake_minimum_required(VERSION 3.1)
 cmake_policy(VERSION 3.1)
 
 project(libpng C ASM)
+
+if (MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    add_compile_options(/MT)
+endif()
+
 enable_testing()
 
 set(PNGLIB_MAJOR 1)
@@ -611,6 +617,9 @@ if(PNG_STATIC)
   # does not work without changing name
   set(PNG_LIB_NAME_STATIC png_static)
   add_library(png_static STATIC ${libpng_sources})
+  if(MSVC)
+    target_compile_options(png_static PRIVATE /MT)
+  endif()
   add_dependencies(png_static genfiles)
   # MSVC doesn't use a different file extension for shared vs. static
   # libs. We are able to change OUTPUT_NAME to remove the _static
@@ -1034,13 +1043,4 @@ if(NOT SKIP_INSTALL_EXPORT AND NOT SKIP_INSTALL_ALL)
   install(EXPORT libpng
           DESTINATION lib/libpng
           FILE lib${PNG_LIB_NAME}.cmake)
-endif()
-
-# TODO: Create MSVC import lib for MinGW-compiled shared lib.
-# pexports libpng.dll > libpng.def
-# lib /def:libpng.def /machine:x86
-
-if (MSVC)
-    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-    add_compile_options(/MT)
 endif()

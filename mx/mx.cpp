@@ -4,7 +4,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
-#if defined(__linux__)
+#if defined(__linux__) || defined(__APPLE__)
 #include <sys/time.h>
 #endif
 

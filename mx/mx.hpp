@@ -49,6 +49,7 @@
 #include <string.h>
 #include <stdarg.h>
 #include <typeinfo>
+#include <inttypes.h>
 
 #ifndef _WIN32
 #include <unistd.h>

@@ -1677,6 +1677,8 @@ struct mx {
     using context_class = none;
     using intern        = none;
 
+    virtual void debug() { } /// implement on your functions to override; so you can debug generics and check your higher defined memory
+
     void *realloc(size_t reserve, bool fill_default);
 
     template <typename T>
@@ -2518,11 +2520,11 @@ struct ex:mx {
             if (!psym) {
                 /// if lookup fails, compare by the number of chars given
                 for (memory *mem: type->symbols->list) {
-                    if (mem->count != raw.mem->count)
+                    if (raw.mem->count > mem->count)
                         continue;
                     if (matches((symbol)mem->origin, (symbol)d, raw.mem->count) == 0)
                         return (typename C::etype)mem->id;
-                    }
+                }
             }
         } else if (raw.type() == typeof(int)) {
             i64   id = i64(raw.ref<int>());

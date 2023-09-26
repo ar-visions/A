@@ -530,7 +530,7 @@ u8* get_member_address(type_t type, raw_t data, str &name, prop *&rprop) {
 u8* property_find(void *origin, type_t type, str &name, prop *&rprop) {
     u8  *pos = (u8*)origin;
     type_t t =      type;
-
+    assert(name.len() > 0);
     if (t->schema)
         for (int i = 0; i < t->schema->bind_count; i++) {
             context_bind &c = t->schema->composition[i];

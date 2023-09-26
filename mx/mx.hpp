@@ -184,7 +184,7 @@ constexpr int num_occurances(const char* cs, char c) {
 #define str_args(...) (str(#__VA_ARGS__))
 
 /// deprecate the 'S' after this works; too quirky.
-#define enums(C,D,S,...)\
+#define enums(C,D,...)\
     struct C:ex {\
         enum etype { __VA_ARGS__ };\
         enum etype&    value;\
@@ -201,12 +201,12 @@ constexpr int num_occurances(const char* cs, char c) {
         }\
         str name() { return (char*)symbol(); }\
         struct memory *to_string() { return typeof(C)->lookup(u64(value)); }\
-        C(enum etype t = etype::D):ex(initialize(this,             t, S, typeof(C)), this), value(ref<enum etype>()) { }\
-        C(size_t     t)           :ex(initialize(this, (enum etype)t, S, typeof(C)), this), value(ref<enum etype>()) { }\
-        C(int        t)           :ex(initialize(this, (enum etype)t, S, typeof(C)), this), value(ref<enum etype>()) { }\
-        C(str raw):C(ex::convert(raw, S, (C*)null)) { }\
-        C(mx  raw):C(ex::convert(raw, S, (C*)null)) { }\
-        C(ion::symbol sym):C(ex::convert(raw, S, (C*)null)) { }\
+        C(enum etype t = etype::D):ex(initialize(this,             t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
+        C(size_t     t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
+        C(int        t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
+        C(str sraw):C(ex::convert(sraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
+        C(mx  mraw):C(ex::convert(mraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
+        C(ion::symbol sym):C(ex::convert(sym, (ion::symbol)C::raw.cs(), (C*)null)) { }\
         C(memory* mem):C(mx(raw)) { }\
         inline  operator etype() { return value; }\
         C&      operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
@@ -224,10 +224,12 @@ constexpr int num_occurances(const char* cs, char c) {
         bool    operator<= (C &b)       { return value <= b.value; }\
         explicit operator int()         { return int(value); }\
         explicit operator u64()         { return u64(value); }\
+        operator str()         { return symbol(); }\
         type_register(C);\
     };\
 
-#define enums_declare(C,D,W,S,...)\
+
+#define enums_declare(C,D,W,...)\
     struct ::W;\
     struct C:ex {\
         enum etype { __VA_ARGS__ };\
@@ -237,7 +239,6 @@ constexpr int num_occurances(const char* cs, char c) {
         static doubly<memory*> &symbols();\
         inline static const int count = num_args(__VA_ARGS__);\
         inline static const str raw   = str_args(__VA_ARGS__);\
-        inline static const symbol raw_cstr = S;\
         ion::symbol symbol();\
         str name();\
         C(enum etype t = etype::D);\
@@ -267,8 +268,8 @@ constexpr int num_occurances(const char* cs, char c) {
     }\
     str       C::name() { return (char*)symbol(); }\
     C::C(enum etype t) :ex(ex::initialize(this, t, (symbol)C::raw.origin, typeof(C)), this), value(ref<enum etype>()) { }\
-    C::C(str    raw):C(C::convert(raw, (C*)null)) { }\
-    C::C(mx     raw):C(C::convert(raw, (C*)null)) { }\
+    C::C(str    raw):C(C::convert(raw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
+    C::C(mx     raw):C(C::convert(raw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
     C::C(const W &r):C((enum etype)(int)r) { }\
     C::operator etype() { return value; }\
     C&       C::operator=  (const C b)    { return (C&)assign_mx(*this, b); }\
@@ -1974,39 +1975,6 @@ struct lambda<R(Args...)>:mx {
     }
 };
 
-template <typename T>
-struct lambda_traits;
-
-// function pointer
-template <typename R, typename... Args>
-struct lambda_traits<R(*)(Args...)> : public lambda_traits<R(Args...)> {};
-
-// member function pointer
-template <typename C, typename R, typename... Args>
-struct lambda_traits<R(C::*)(Args...)> : public lambda_traits<R(Args...)> {};
-
-// const member function pointer
-template <typename C, typename R, typename... Args>
-struct lambda_traits<R(C::*)(Args...) const> : public lambda_traits<R(Args...)> {};
-
-// member object pointer
-template <typename C, typename R>
-struct lambda_traits<R(C::*)> : public lambda_traits<R()> {};
-
-// functor / lambda function
-template <typename F>
-struct lambda_traits {
-private:
-    using call_type = lambda_traits<decltype(&F::operator())>;
-public:
-    using args_tuple = typename call_type::args_tuple;
-};
-
-template <typename R, typename... Args>
-struct lambda_traits<R(Args...)> {
-    using args_tuple = std::tuple<Args...>;
-};
-
 template <typename T> struct is_lambda<lambda<T>> : true_type  { };
 
 template <typename R, typename... Args>
@@ -2347,7 +2315,7 @@ public:
     /// not-equals
     bool operator!=(array b) const { return !(operator==(b)); }
     
-    inline T &operator[](size index) {
+    inline T &operator[](size index) const {
         if (index.count == 1)
             return (T &)data[size_t(index.values[0])];
         else {
@@ -2395,6 +2363,47 @@ public:
     
     type_register(array);
 };
+
+
+template<typename T>
+struct lambda_traits : lambda_traits<decltype(&T::operator())> {};
+
+template<typename C, typename R, typename... Args>
+struct lambda_traits<R(C::*)(Args...) const> {
+    using return_type = R;
+    using arg_types = std::tuple<Args...>;
+};
+
+template <typename T>
+T convert_str(const str& s) {
+    return T(s);
+}
+
+// this can be converted to mx
+template <>
+str convert_str<str>(const str& s);
+
+template <typename Lambda, std::size_t... Is>
+auto invokeImpl(
+        const Lambda& lambda,
+        const std::index_sequence<Is...>&,
+        const array<str>& args)
+{
+    using traits = lambda_traits<Lambda>;
+    return lambda(convert_str<std::tuple_element_t<Is, typename traits::arg_types>>(args[Is])...);
+}
+
+template <typename Lambda>
+auto invoke(const Lambda& lambda, const array<str>& args) {
+    using traits = lambda_traits<Lambda>;
+    constexpr size_t numArgs = std::tuple_size_v<typename traits::arg_types>;
+
+    if (args.len() != numArgs) {
+        throw std::runtime_error("Incorrect number of arguments.");
+    }
+    /// 
+    return invokeImpl(lambda, std::make_index_sequence<numArgs>{}, args);
+}
 
 using arg = pair<mx, mx>;
 using ax  = array<arg>;
@@ -2477,6 +2486,18 @@ struct compact:mx {
 
 ///
 struct ex:mx {
+
+    static bool matches(symbol a, symbol b, int len) {
+        for (int i = 0; i < len; i++) {
+            if (!a[i] || !b[i])
+                return false;
+            if (a[i] == b[i] || (a[i] == '-' && b[i] == '_') ||
+                                (b[i] == '-' && a[i] == '_'))
+                continue;
+            return false;
+        }
+        return true;
+    }
     ///
     template <typename C>
     ex(memory *m, C *inst) : mx(m) {
@@ -2496,9 +2517,12 @@ struct ex:mx {
 
             if (!psym) {
                 /// if lookup fails, compare by the number of chars given
-                for (memory *mem: type->symbols->list) 
-                    if (strncmp((symbol)mem->origin, (symbol)d, raw.mem->count) == 0)
+                for (memory *mem: type->symbols->list) {
+                    if (mem->count != raw.mem->count)
+                        continue;
+                    if (matches((symbol)mem->origin, (symbol)d, raw.mem->count) == 0)
                         return (typename C::etype)mem->id;
+                    }
             }
         } else if (raw.type() == typeof(int)) {
             i64   id = i64(raw.ref<int>());
@@ -3079,7 +3103,6 @@ E ex::initialize(C *p, E v, symbol names, type_t ty) {
 }
 
 enums(split_signal, none,
-    "none, discard, retain",
      none, discard, retain)
 
 struct fmt:str {
@@ -3524,11 +3547,9 @@ struct path:mx {
     using Fn = lambda<void(path)>;
 
     enums(option, recursion,
-        "recursion, no-sym-links, no-hidden, use-git-ignores",
          recursion, no_sym_links, no_hidden, use_git_ignores);
 
     enums(op, none,
-        "none, deleted, modified, created",
          none, deleted, modified, created);
 
     static path cwd() {

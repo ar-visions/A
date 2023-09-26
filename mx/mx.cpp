@@ -10,6 +10,12 @@
 
 namespace ion {
 
+
+template <>
+str convert_str<str>(const str& s) {
+    return s;
+}
+
 logger console;
 
 void free64(void* ptr) {

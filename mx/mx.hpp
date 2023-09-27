@@ -3681,7 +3681,8 @@ struct path:mx {
         fs::path p { };
         do { p = fs::path(str::fill(6, rand)); }
         while (fs::exists(*b / p));
-        return  p.c_str();
+        std::string s = p.string();
+        return  s.c_str();
     }
 
     static path  format(str t, array<mx> args) {

@@ -379,7 +379,7 @@ struct Bezier:mx {
 
 template <typename T>
 struct Vec2:mx {
-    mx_object(Vec2<T>, mx, vec2<T>);
+    mx_object(Vec2, mx, vec2<T>);
 };
 
 /// always have a beginning, middle and end -- modules && classes && functions

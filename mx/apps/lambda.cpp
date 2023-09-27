@@ -19,6 +19,11 @@ int main(int argc, char *argv[]) {
     use case for introspective lambda:
         using x and y args together in css
 
+    using _ or - as same char now
+
+    lambdas embedded in service tree make sense
+
     */
+
     return 0;
 }

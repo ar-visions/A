@@ -11,9 +11,9 @@ endforeach()
 
 ## install libraries (glm_static)
 if(WIN32)
-    file(GLOB LIB_FILES "${CMAKE_BINARY_DIR}/glm/Debug/glm_static.lib" "${CMAKE_BINARY_DIR}/glm/Release/glm_static.lib")
+    set(LIB_FILES "${CMAKE_BINARY_DIR}/glm/${CMAKE_BUILD_TYPE}/glm_static.lib")
 else()
-    file(GLOB LIB_FILES "${CMAKE_BINARY_DIR}/glm/libglm_static.a")
+    set(LIB_FILES "${CMAKE_BINARY_DIR}/glm/libglm_static.a")
 endif()
 
-install(FILES   ${LIB_FILES} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
+install(FILES ${LIB_FILES} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)

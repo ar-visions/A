@@ -1258,6 +1258,11 @@ struct ops {
 
 struct symbol_data;
 
+template<typename T>
+struct array;
+struct str;
+
+using GenericLambda = std::function<mx(void*, array<str>&)>;
 ///
 struct idata {
     void            *src;     /// the source.
@@ -1274,7 +1279,7 @@ struct idata {
     idata           *ref; /// if you are given a primitive enum, you can find the schema and symbols on ref (see: to_string)
     idata           *parent; 
     bool             secondary_init; /// used by enums but flag can be used elsewhere.  could use 'flags' too
-
+    GenericLambda   *generic_lambda;
 
     size_t size();
     memory *lookup(symbol sym);
@@ -1504,7 +1509,7 @@ u64 hash_value(T &key) {
         return u64(key);
     } else if constexpr (identical<T, cstr>() || identical<T, symbol>()) {
         return djb2(cstr(key));
-    } else if constexpr (is_convertible<hash, T>()) {
+    } else if constexpr (is_convertible<T, hash>()) {
         return hash(key);
     } else if constexpr (inherits<mx, T>() || is_mx<T>()) {
         return key.mx::mem->type->functions->hash(key.mem->origin, key.mem->count);
@@ -1950,6 +1955,8 @@ constexpr bool is_mx() {
 template <typename T>
 struct lambda;
 
+/// lambda needs to be based on a LGeneric or something?
+
 template <typename R, typename... Args>
 struct lambda<R(Args...)>:mx {
     using fdata = std::function<R(Args...)>;
@@ -1957,6 +1964,7 @@ struct lambda<R(Args...)>:mx {
     /// just so we can set it in construction
     struct container {
         fdata *fn;
+        type_t rtype;
         type_register(container);
         ~container() {
             delete fn;
@@ -1989,9 +1997,10 @@ lambda<R(Args...)>::lambda(F&& fn) : mx() {
         if constexpr (std::is_invocable_r_v<R, F, Args...>) {
             mx::mem  = mx::alloc<lambda>();
             data     = (container*)mem->origin;
+            data->rtype = typeof(R);
             data->fn = new fdata(std::forward<F>(fn));
         } else {
-            static_assert("args conversion not supported");
+            static_assert("F type is not a functor");
         }
     }
 }
@@ -3471,20 +3480,27 @@ static void brexit() {
 }
 
 /// console interface for printing, it could get input as well
+/// print has no topic, so one must be able to redirect all logging.  no reason not to have a global here
 struct logger {
     enum option {
         err,
         append
     };
 
+    inline static lambda<void(mx)> service;
+    inline static FILE* io_device = stdout;
+
     protected:
     static void _print(const str &st, const array<mx> &ar, const states<option> opts) {
         static std::mutex mtx;
         mtx.lock();
         str msg = st.format(ar);
-        std::cout << msg.data << std::endl;
+        if (service)
+            service(msg);
+
+        fputs(msg.data, io_device);
+
         mtx.unlock();
-     ///auto pipe = opts[err] ? stderr : stdout; -- odd thing but stderr/stdout doesnt seem to be where it should be in modules
     }
 
 
@@ -4368,6 +4384,20 @@ struct types {
     static void hash_type(type_t);
 };
 
+template<typename T>
+struct is_allowed_type {
+    static constexpr bool value = 
+        !std::is_pointer_v  <T> && 
+        !std::is_reference_v<T> &&
+        (is_primitive<T> || inherits<mx, T>());
+
+};
+
+template<typename... Ts>
+struct allowed_types {
+    static constexpr bool value = (... && is_allowed_type<Ts>::value);
+};
+
 template <typename T>
 idata *ident::for_type() {
     static idata *type;
@@ -4440,6 +4470,66 @@ idata *ident::for_type() {
                 type->parent = typeof(typename T::parent_class);
             }
 
+            /// make a lambda caller lambda.
+            /// the types we convert with our runtime for different arg counts
+            /// it should probably complain if you make 8 arg lambdas
+            if constexpr (is_lambda<T>()) {
+                type->generic_lambda = new GenericLambda([type=type](void* ldata, array<str> &args) -> mx {
+                    using lcontainer = typename T::container;
+                    using traits     = lambda_traits<T>;
+                    using args_t     = typename traits::arg_types;
+                    using rtype      = typename traits::return_type;
+                    ///
+                    lcontainer *data = (lcontainer*)ldata;
+
+                    constexpr size_t n_args = std::tuple_size_v<args_t>;
+                    if (args.len() != n_args)
+                        throw std::runtime_error("arg count mismatch");
+
+                    mx result;
+                    if constexpr (allowed_types<args_t>::value && (identical<void, rtype>() || is_convertible<rtype, mx>())) {
+                        #define decl_arg(N) \
+                            using   T ## N = std::remove_const_t<std::remove_reference_t<std::tuple_element_t<N, args_t>>>;\
+                            type_t  t ## N = typeof(T ## N);\
+                            T ## N* a ## N = (T ## N *)(t ## N)->functions->from_string((void*)null, args[N].cs());
+                        if constexpr (n_args == 0) {
+                            if constexpr (identical<void, rtype>())
+                                (*data->fn)();
+                            else
+                                result = (*data->fn)();
+                        } else if constexpr (n_args == 1) {
+                            decl_arg(0)
+                            if constexpr (identical<void, rtype>())
+                                (*data->fn)(*a0);
+                            else
+                                result = (*data->fn)(*a0);
+                            delete a0;
+                        } else if constexpr (n_args == 2) {
+                            decl_arg(0)
+                            decl_arg(1)
+                            if constexpr (identical<void, rtype>())
+                                (*data->fn)(*a0, *a1);
+                            else
+                                result = (*data->fn)(*a0, *a1);
+                            delete a0;
+                            delete a1;
+                        } else if constexpr (n_args == 3) {
+                            decl_arg(0)
+                            decl_arg(1)
+                            decl_arg(2)
+                            if constexpr (identical<void, rtype>())
+                                (*data->fn)(*a0, *a1, *a2);
+                            else
+                                result = (*data->fn)(*a0, *a1, *a2);
+                            delete a0;
+                            delete a1;
+                            delete a2;
+                        }
+                        #undef decl_arg
+                    }
+                    return result;
+                });
+            }
             if constexpr (is_lambda<T>() || is_primitive<T>() || inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value) {
                 schema_populate(type, (T*)null);
             }

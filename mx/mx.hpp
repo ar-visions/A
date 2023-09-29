@@ -2003,7 +2003,7 @@ lambda<R(Args...)>::lambda(F&& fn) : mx() {
     }
 }
 
-mx invoke(mx lambda, array<str> args);
+mx call(mx lambda, array<str> args);
 
 template <typename T>
 inline void vset(T *data, u8 bv, size_t c) {

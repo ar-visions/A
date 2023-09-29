@@ -15,8 +15,12 @@ str convert_str<str>(const str& s) {
     return s;
 }
 
-mx invoke(mx lambda, array<str> args) {
+mx call(mx lambda, array<str> args) {
     type_t lt = lambda.type();
+    /// there are things that disallow generic lambda production and thats the use of pointers and references
+    /// with these functions the return type can be void or it can be convertible to mx
+    /// if the return type falls outside of that, no generic lambda can be called
+    /// at the moment it still creates it but that should change
     assert(lt->generic_lambda);
     mx result = (*lt->generic_lambda)(lambda.mem->origin, args);
     return result;

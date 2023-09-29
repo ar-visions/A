@@ -1964,7 +1964,6 @@ struct lambda<R(Args...)>:mx {
     /// just so we can set it in construction
     struct container {
         fdata *fn;
-        type_t rtype;
         type_register(container);
         ~container() {
             delete fn;
@@ -1997,13 +1996,14 @@ lambda<R(Args...)>::lambda(F&& fn) : mx() {
         if constexpr (std::is_invocable_r_v<R, F, Args...>) {
             mx::mem  = mx::alloc<lambda>();
             data     = (container*)mem->origin;
-            data->rtype = typeof(R);
             data->fn = new fdata(std::forward<F>(fn));
         } else {
             static_assert("F type is not a functor");
         }
     }
 }
+
+mx invoke(mx lambda, array<str> args);
 
 template <typename T>
 inline void vset(T *data, u8 bv, size_t c) {

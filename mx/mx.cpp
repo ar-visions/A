@@ -10,10 +10,16 @@
 
 namespace ion {
 
-
 template <>
 str convert_str<str>(const str& s) {
     return s;
+}
+
+mx invoke(mx lambda, array<str> args) {
+    type_t lt = lambda.type();
+    assert(lt->generic_lambda);
+    mx result = (*lt->generic_lambda)(lambda.mem->origin, args);
+    return result;
 }
 
 logger console;

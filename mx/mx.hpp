@@ -1952,6 +1952,15 @@ constexpr bool is_mx() {
     return identical<T, mx>();
 }
 
+template<typename T>
+struct lambda_traits : lambda_traits<decltype(&T::operator())> {};
+
+template<typename C, typename R, typename... Args>
+struct lambda_traits<R(C::*)(Args...) const> {
+    using return_type = R;
+    using arg_types = std::tuple<Args...>;
+};
+
 template <typename T>
 struct lambda;
 
@@ -1974,7 +1983,10 @@ struct lambda<R(Args...)>:mx {
     
     template <typename F>
     lambda(F&& fn);
-    
+
+    template <typename CL, typename F>
+    lambda(CL* cl, F fn);
+
     R operator()(Args... args) const {
         return (*data->fn)(std::forward<Args>(args)...);
     }
@@ -1999,6 +2011,22 @@ lambda<R(Args...)>::lambda(F&& fn) : mx() {
             data->fn = new fdata(std::forward<F>(fn));
         } else {
             static_assert("F type is not a functor");
+        }
+    }
+}
+
+template <typename R, typename... Args>
+template <typename CL, typename F>
+lambda<R(Args...)>::lambda(CL* cl, F fn) {
+    if constexpr (std::is_invocable_r_v<R, F, Args...>) {
+        mx::mem  = mx::alloc<lambda>();
+        data     = (container*)mem->origin;
+
+        using traits     = lambda_traits<lambda>;
+        using args_t     = typename traits::arg_types;
+        constexpr size_t n_args = std::tuple_size_v<args_t>;
+        if constexpr (n_args == 1) {
+            data->fn = new fdata(std::bind(cl, fn, std::placeholders::_1));
         }
     }
 }
@@ -2373,16 +2401,6 @@ public:
     }
     
     type_register(array);
-};
-
-
-template<typename T>
-struct lambda_traits : lambda_traits<decltype(&T::operator())> {};
-
-template<typename C, typename R, typename... Args>
-struct lambda_traits<R(C::*)(Args...) const> {
-    using return_type = R;
-    using arg_types = std::tuple<Args...>;
 };
 
 template <typename T>
@@ -4470,65 +4488,71 @@ idata *ident::for_type() {
                 type->parent = typeof(typename T::parent_class);
             }
 
-            /// make a lambda caller lambda.
-            /// the types we convert with our runtime for different arg counts
-            /// it should probably complain if you make 8 arg lambdas
+            /// make a lambda calling lambda that utilizes runtime type conversion for debug shell, possible css users
             if constexpr (is_lambda<T>()) {
-                type->generic_lambda = new GenericLambda([type=type](void* ldata, array<str> &args) -> mx {
-                    using lcontainer = typename T::container;
-                    using traits     = lambda_traits<T>;
-                    using args_t     = typename traits::arg_types;
-                    using rtype      = typename traits::return_type;
-                    ///
-                    lcontainer *data = (lcontainer*)ldata;
+                using lcontainer = typename T::container;
+                using traits     = lambda_traits<T>;
+                using args_t     = typename traits::arg_types;
+                using rtype      = typename traits::return_type;
 
-                    constexpr size_t n_args = std::tuple_size_v<args_t>;
-                    if (args.len() != n_args)
-                        throw std::runtime_error("arg count mismatch");
+                /// will only set the function if we have a convertible return type (or void) and args that dont use pointers/refs
+                /// refs ARE possible.  pointers have far too many snags in this case though.
+                /// for simplicity sake just none of either
+                /// when you dont have this set on the type, the test for it failed; thus your lambda cannot be invoked through introspection
+                if constexpr (allowed_types<args_t>::value && (identical<void, rtype>() || is_convertible<rtype, mx>())) {
+                    type->generic_lambda = new GenericLambda([type=type](void* ldata, array<str> &args) -> mx {
+                        ///
+                        lcontainer *data = (lcontainer*)ldata;
 
-                    mx result;
-                    if constexpr (allowed_types<args_t>::value && (identical<void, rtype>() || is_convertible<rtype, mx>())) {
-                        #define decl_arg(N) \
+                        constexpr size_t n_args = std::tuple_size_v<args_t>;
+                        if (args.len() != n_args)
+                            throw std::runtime_error("arg count mismatch");
+
+                        mx result;
+                        #define ARG(N) \
                             using   T ## N = std::remove_const_t<std::remove_reference_t<std::tuple_element_t<N, args_t>>>;\
                             type_t  t ## N = typeof(T ## N);\
                             T ## N* a ## N = (T ## N *)(t ## N)->functions->from_string((void*)null, args[N].cs());
                         if constexpr (n_args == 0) {
-                            if constexpr (identical<void, rtype>())
+                            if constexpr (identical<void, rtype>()) 
                                 (*data->fn)();
                             else
                                 result = (*data->fn)();
                         } else if constexpr (n_args == 1) {
-                            decl_arg(0)
+                            ARG(0)
                             if constexpr (identical<void, rtype>())
                                 (*data->fn)(*a0);
                             else
                                 result = (*data->fn)(*a0);
                             delete a0;
                         } else if constexpr (n_args == 2) {
-                            decl_arg(0)
-                            decl_arg(1)
+                            ARG(0) ARG(1)
                             if constexpr (identical<void, rtype>())
                                 (*data->fn)(*a0, *a1);
                             else
                                 result = (*data->fn)(*a0, *a1);
-                            delete a0;
-                            delete a1;
+                            delete a0; delete a1;
                         } else if constexpr (n_args == 3) {
-                            decl_arg(0)
-                            decl_arg(1)
-                            decl_arg(2)
+                            ARG(0) ARG(1) ARG(2)
                             if constexpr (identical<void, rtype>())
                                 (*data->fn)(*a0, *a1, *a2);
                             else
                                 result = (*data->fn)(*a0, *a1, *a2);
-                            delete a0;
-                            delete a1;
-                            delete a2;
+                            delete a0; delete a1; delete a2;
+                        } else if constexpr (n_args == 4) {
+                            ARG(0) ARG(1) ARG(2) ARG(3)
+                            if constexpr (identical<void, rtype>())
+                                (*data->fn)(*a0, *a1, *a2, *a3);
+                            else
+                                result = (*data->fn)(*a0, *a1, *a2, *a3);
+                            delete a0; delete a1; delete a2; delete a3;
                         }
-                        #undef decl_arg
-                    }
-                    return result;
-                });
+                        #undef ARG
+                        return result;
+                    });
+                } else {
+                    printf("generic lambda not set\n");
+                }
             }
             if constexpr (is_lambda<T>() || is_primitive<T>() || inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value) {
                 schema_populate(type, (T*)null);

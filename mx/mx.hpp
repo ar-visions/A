@@ -4499,7 +4499,7 @@ idata *ident::for_type() {
                 /// refs ARE possible.  pointers have far too many snags in this case though.
                 /// for simplicity sake just none of either
                 /// when you dont have this set on the type, the test for it failed; thus your lambda cannot be invoked through introspection
-                if constexpr (allowed_types<args_t>::value && (identical<void, rtype>() || is_convertible<rtype, mx>())) {
+                if constexpr (allowed_types<args_t>::value && (identical<void, rtype>() || is_convertible<rtype, mx>()))
                     type->generic_lambda = new GenericLambda([type=type](void* ldata, array<str> &args) -> mx {
                         ///
                         lcontainer *data = (lcontainer*)ldata;
@@ -4550,9 +4550,6 @@ idata *ident::for_type() {
                         #undef ARG
                         return result;
                     });
-                } else {
-                    printf("generic lambda not set\n");
-                }
             }
             if constexpr (is_lambda<T>() || is_primitive<T>() || inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value) {
                 schema_populate(type, (T*)null);

@@ -5,6 +5,8 @@ if (MSVC)
     # will have an easier go at this in that process rather than trying to get it and everyone else it uses to MT/d, MD/d
     cflags(/MT)
 else()
-    cflags(+-Wno-writable-strings)
+    cflags(+-Wno-writable-strings
+           +-Wno-pointer-bool-conversion
+           +-Wno-ambiguous-reversed-operator)
 endif()
 

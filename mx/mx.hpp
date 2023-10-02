@@ -4407,7 +4407,7 @@ struct is_allowed_type {
     static constexpr bool value = 
         !std::is_pointer_v  <T> && 
         !std::is_reference_v<T> &&
-        (is_primitive<T> || inherits<mx, T>());
+        (is_primitive<T>() || inherits<mx, T>());
 
 };
 

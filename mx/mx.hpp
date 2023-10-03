@@ -2018,16 +2018,15 @@ lambda<R(Args...)>::lambda(F&& fn) : mx() {
 template <typename R, typename... Args>
 template <typename CL, typename F>
 lambda<R(Args...)>::lambda(CL* cl, F fn) {
-    if constexpr (std::is_invocable_r_v<R, F, Args...>) {
-        mx::mem  = mx::alloc<lambda>();
-        data     = (container*)mem->origin;
+    mx::mem  = mx::alloc<lambda>();
+    data     = (container*)mem->origin;
 
-        using traits     = lambda_traits<lambda>;
-        using args_t     = typename traits::arg_types;
-        constexpr size_t n_args = std::tuple_size_v<args_t>;
-        if constexpr (n_args == 1) {
-            data->fn = new fdata(std::bind(cl, fn, std::placeholders::_1));
-        }
+    using traits     = lambda_traits<lambda>;
+    using args_t     = typename traits::arg_types;
+    constexpr size_t n_args = std::tuple_size_v<args_t>;
+    if constexpr (n_args == 1) {
+        //data->fn = new fdata(std::bind(cl, fn, std::placeholders::_1));
+        data->fn = new fdata([=](Args... args) { return (cl->*fn)(std::forward<Args>(args)...); });
     }
 }
 
@@ -2549,7 +2548,7 @@ struct ex:mx {
                 for (memory *mem: type->symbols->list) {
                     if (raw.mem->count > mem->count)
                         continue;
-                    if (matches((symbol)mem->origin, (symbol)d, raw.mem->count) == 0)
+                    if (matches((symbol)mem->origin, (symbol)d, raw.mem->count))
                         return (typename C::etype)mem->id;
                 }
             }
@@ -2674,7 +2673,55 @@ struct str:mx {
         mem->count = mem->reserve - 1;
         in.read((char*)data, mem->count);
     }
-                                  
+
+    static void code_to_utf8(int code, char *output) {
+        if (code > 128) {
+            // If codePage is greater than 128, convert it to UTF-8
+            // For simplicity, this example handles only characters up to 0x7FF.
+            if (code <= 0x7FF) {
+                output[0] = 0xC0 | (code >> 6);
+                output[1] = 0x80 | (code & 0x3F);
+                output[2] = '\0';
+            }  else if (code <= 0x7FF) {
+                // Handle 2-byte UTF-8 encoding
+                output[0] = 0xC0 | ((code >> 6) & 0x1F);
+                output[1] = 0x80 | (code & 0x3F);
+                output[2] = '\0';
+            } else if (code <= 0xFFFF) {
+                // Handle 3-byte UTF-8 encoding
+                output[0] = 0xE0 | ((code >> 12) & 0x0F);
+                output[1] = 0x80 | ((code >> 6) & 0x3F);
+                output[2] = 0x80 | (code & 0x3F);
+                output[3] = '\0';
+            } else if (code <= 0x10FFFF) {
+                // Handle 4-byte UTF-8 encoding
+                output[0] = 0xF0 | ((code >> 18) & 0x07);
+                output[1] = 0x80 | ((code >> 12) & 0x3F);
+                output[2] = 0x80 | ((code >> 6) & 0x3F);
+                output[3] = 0x80 | (code & 0x3F);
+                output[4] = '\0';
+            } else {
+                // Code point is not a valid Unicode code point
+                fprintf(stderr, "Invalid code point U+%X\n", code);
+                output[0] = '\0';
+            }
+        } else {
+            output[0] = code;
+            output[1] = 0;
+        }
+    }
+
+    static str from_code(int code) {
+        str s { size_t(32) };
+        if (code < 128)
+            s[0] = code;
+        else {
+            code_to_utf8(code, s.data);
+        }
+        s.mem->count = strlen(s.data);
+        return s;
+    }
+
     static str from_integer(i64 i) { return str(memory::string(std::to_string(i))); }
 
     str(float          f32, int n = 6) : str(memory::string(string_from_real(f32, n))) { }

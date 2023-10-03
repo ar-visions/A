@@ -3506,7 +3506,6 @@ struct logger {
     };
 
     inline static lambda<void(mx)> service;
-    inline static FILE* io_device = stdout;
 
     protected:
     static void _print(const str &st, const array<mx> &ar, const states<option> opts) {
@@ -3515,9 +3514,8 @@ struct logger {
         str msg = st.format(ar);
         if (service)
             service(msg);
-
-        fputs(msg.data, io_device);
-
+        fputs(msg.data, stdout);
+        fflush(stdout);
         mtx.unlock();
     }
 

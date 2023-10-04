@@ -859,7 +859,7 @@ struct doubly {
                 i = new item<T> { null, ilast, data };
                 ilast->next = i;
                 ilast = i;
-                if (icount == 1)
+                if (icount == 0)
                     ifirst = i;
             } else {
                 item<T> *s = get(before);

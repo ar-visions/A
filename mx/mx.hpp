@@ -3023,7 +3023,7 @@ struct str:mx {
         int ilen = int(count());
         assert(std::abs(start) <= ilen);
         if (start < 0) start = ilen + start;
-        int cp_count = len <= 0 ? (ilen - start) : len;
+        int cp_count = len < 0 ? (ilen - start) : len;
         assert(start + cp_count <= ilen);
         return str(&data[start], cp_count);
     }
@@ -3036,11 +3036,12 @@ struct str:mx {
         size_t end   = 0;
         cstr   pc    = (cstr)data;
         ///
-        if constexpr (inherits<str, L>()) {
-            int  delim_len = int(delim.byte_len());
+        if constexpr (inherits<str, L>() || identical<symbol, L>() || identical<cstr, L>()) {
+            str s_delim = delim;
+            int  delim_len = int(s_delim.byte_len());
             ///
             if (len() > 0) {
-                while ((end = index_of(delim, int(start))) != -1) {
+                while ((end = index_of(s_delim, int(start))) != -1) {
                     str  mm = mid(start, int(end - start));
                     result += mm;
                     start   = end + delim_len;

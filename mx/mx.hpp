@@ -833,6 +833,10 @@ struct doubly {
 
         /// 
         item<T> *get(num index) const {
+            if (index == icount)
+                return ilast;
+            else if (index == 0)
+                return ifirst;
             item<T> *i;
             if (index < 0) { /// if i is negative, its from the end.
                 i = ilast;
@@ -845,6 +849,29 @@ struct doubly {
                     i = i->next;
                 assert(index == -1); // (positive-count) length mismatch
             }
+            return i;
+        }
+
+        /// no need for insert before AND after when you can give it the count of the list
+        item<T> *insert(num before, T &data) {
+            item<T> *i;
+            if (before == icount) {
+                i = new item<T> { null, ilast, data };
+                ilast->next = i;
+                ilast = i;
+                if (icount == 1)
+                    ifirst = i;
+            } else {
+                item<T> *s = get(before);
+                i = new item<T> { s, s->prev, data };
+                if (s->prev) {
+                    s->prev->next = i;
+                } else {
+                    ifirst = i;
+                }
+                s->prev = i;
+            }
+            icount++;
             return i;
         }
 
@@ -2388,7 +2415,10 @@ public:
 
     /// clearing a list reallocates to 1, destructing previous
     void clear() {
-        data = (T*)mem->realloc(1, false);
+        for (int i = 0; i < mem->count; i++) {
+            data[i] . ~T();
+        }
+        mem->count = 0;
     }
 
     /// destructing a list means it keeps the size

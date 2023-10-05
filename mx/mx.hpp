@@ -776,19 +776,17 @@ struct iter {
 */
 
 template <typename T>
-struct iter : public std::iterator<std::random_access_iterator_tag, T> {
+struct iter {
     T*      start;
     size_t  index;
 
     iter(T* s, size_t i) : start(s), index(i) {}  // Added constructor for initialization
 
-    iter& operator++() { index++; return *this; }
-    iter operator++(int) { iter tmp = *this; ++(*this); return tmp; }  // Post-increment
-
-    iter& operator--() { index--; return *this; }
-    iter operator--(int) { iter tmp = *this; --(*this); return tmp; }  // Post-decrement
-
-    T& operator*() const { return start[index]; }
+    iter& operator++()       { index++; return *this; }
+    iter  operator++(int)    { iter tmp = *this; ++(*this); return tmp; }  // Post-increment
+    iter& operator--()       { index--; return *this; }
+    iter  operator--(int)    { iter tmp = *this; --(*this); return tmp; }  // Post-decrement
+    T&    operator* () const { return start[index]; }
 
     bool operator==(const iter& other) const { return start == other.start && index == other.index; } // made 'other' const
     bool operator!=(const iter& other) const { return !(*this == other); } // simplified
@@ -1611,6 +1609,8 @@ struct memory {
     raw_t               origin;
 
     static memory *raw_alloc(type_t type, size_t sz, size_t count, size_t res);
+    static int raw_alloc_count();
+
     static memory *    alloc(type_t type, size_t count, size_t reserve, raw_t src);
            void   *  realloc(size_t res,  bool fill_default);
 
@@ -2697,7 +2697,7 @@ struct str:mx {
         ///
         size_t    ac = sa.count();
         size_t    bc = sb.count();
-        str       sc = sa.copy(ac + bc + 1);
+        str       sc = sa.copy(((ac + bc) + 64) * 2);
         cstr      cp = (cstr)sc.data;
         ///
         memcpy(&cp[ac], bp, bc);
@@ -2901,7 +2901,16 @@ struct str:mx {
         return *this;
     }
 
-    str &operator+= (const char b) { return operator+=(str((char) b)); }
+    str &operator+= (const char b) {
+        if (mem->reserve >= (mem->count + 1) + 1) {
+            memcpy(&data[mem->count], &b, 1); /// when you think of data size changes, think of updating the count. [/mops-away]
+            data[++mem->count] = 0;
+        } else {
+            *this = combine(*this, str(b));
+        }
+        return *this;
+    }
+
     str &operator+= (symbol b) { return operator+=(str((cstr )b)); } /// not utilizing cchar_t yet.  not the full power.
 
     /// add some compatibility with those iostream things.
@@ -4125,6 +4134,12 @@ protected:
     }
 
     static mx parse_value(cstr *start) {
+
+        static cstr last;
+        
+        assert(last < *start);
+        last = *start;
+
         char first_chr = **start;
 		bool numeric   =   first_chr == '-' || isdigit(first_chr);
 
@@ -4386,7 +4401,7 @@ protected:
         type_t kt        = typeof(KT);
         type_t data_type = type();
 
-        if (kt == typeof(char) || kt == typeof(const char *)) {
+        if constexpr (identical<KT, char*>() || identical<KT, const char*>() || identical<KT, str>()) {
             /// if key is something else just pass the mx to map
             map<mx>::mdata &dref = mx::mem->ref<map<mx>::mdata>();
             assert(&dref);
@@ -4397,15 +4412,21 @@ protected:
             mx *dref = mx::mem->data<mx>(0);
             assert(dref);
             size_t ix;
-                 if (kt == typeof(i32)) ix = size_t(key);
-            else if (kt == typeof(u32)) ix = size_t(key);
-            else if (kt == typeof(i64)) ix = size_t(key);
-            else if (kt == typeof(u64)) ix = size_t(key);
+                 if (kt == typeof(i32)) ix = size_t(int(key));
+            else if (kt == typeof(u32)) ix = size_t(int(key));
+            else if (kt == typeof(i64)) ix = size_t(int(key));
+            else if (kt == typeof(u64)) ix = size_t(int(key));
             else {
                 console.fault("weird integral type given for indexing var: {0}\n", array<mx> { mx((symbol)kt->name) });
                 ix = 0;
             }
             return *(var*)&dref[ix];
+        } else if (kt == typeof(mx)) {
+            /// not able to pass a integer via mx
+            map<mx>::mdata &dref = mx::mem->ref<map<mx>::mdata>();
+            assert(&dref);
+            mx skey = mx(key);
+            return *(var*)&dref[skey];
         }
         console.fault("incorrect indexing type provided to var");
         return *this;

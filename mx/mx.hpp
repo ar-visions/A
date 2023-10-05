@@ -761,6 +761,7 @@ struct liter {
 
 
 /// iterator
+/*
 template <typename T>
 struct iter {
     T      *start;
@@ -772,6 +773,27 @@ struct iter {
     bool operator==(iter &b) const { return start == b.start && index == b.index; }
     bool operator!=(iter &b) const { return start != b.start || index != b.index; }
 };
+*/
+
+template <typename T>
+struct iter : public std::iterator<std::random_access_iterator_tag, T> {
+    T*      start;
+    size_t  index;
+
+    iter(T* s, size_t i) : start(s), index(i) {}  // Added constructor for initialization
+
+    iter& operator++() { index++; return *this; }
+    iter operator++(int) { iter tmp = *this; ++(*this); return tmp; }  // Post-increment
+
+    iter& operator--() { index--; return *this; }
+    iter operator--(int) { iter tmp = *this; --(*this); return tmp; }  // Post-decrement
+
+    T& operator*() const { return start[index]; }
+
+    bool operator==(const iter& other) const { return start == other.start && index == other.index; } // made 'other' const
+    bool operator!=(const iter& other) const { return !(*this == other); } // simplified
+};
+
 
 template <typename K, typename V>
 struct pair {
@@ -4209,6 +4231,12 @@ protected:
 
     public:
 
+    operator std::string() {
+        if(mem->type == typeof(char))
+            return std::string((symbol)mem->origin, mem->count);
+        return "";
+    }
+
     mx *get(str key) {
         if (mem->type != typeof(map<mx>))
             return null;
@@ -4329,6 +4357,18 @@ protected:
         };
 
         return fn(*this);
+    }
+
+    map<mx> items() {
+        if (mem->type->traits & traits::map)
+            return mem->grab();
+        return map<mx>();
+    }
+
+    array<mx> list() {
+        if (mem->type->traits & traits::array)
+            return mem->grab();
+        return array<mx>();
     }
 
     /// default constructor constructs map

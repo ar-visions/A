@@ -2227,7 +2227,7 @@ public:
         }
     }
 
-    inline void set_size(size sz) {
+    inline void reserve_size(size sz) {
         if (mem->reserve < sz)
             data = (T*)mem->realloc(sz, true);
     }
@@ -2280,11 +2280,6 @@ public:
         return res;
     }
 
-    array(size_t count, T value) : array(count) {
-        for (size_t i = 0; i < count; i++)
-            push(value);
-    }
-
     /// quick-sort
     array<T> sort(func<int(T &a, T &b)> cmp) {
         /// create reference list of identical size as given, pointing to the respective index
@@ -2326,18 +2321,11 @@ public:
     inline size_t  length() const { return mem->count; }
     inline size_t reserve() const { return mem->reserve; }
 
-    array(T* d, size_t sz, size_t al = 0) : array(talloc<T>(0, sz)) {
-        for (size_t i = 0; i < sz; i++)
-            new (&data[i]) T(d[i]);
-    }
-
-    array(size al, size sz = size(0), lambda<T(size_t)> fn = lambda<T(size_t)>()) : 
-            array(talloc<T>(sz, al)) {
+    /// check use-cases; lambda init isnt the best idea in the world
+    array(size al, size sz = size(0)) : 
+            array(talloc<T>(0, al)) {
         if (al.count > 1)
             mem->shape = new size(al); /// allocate a shape if there are more than 1 dims
-        if (fn)
-            for (size_t i = 0; i < size_t(sz); i++)
-                data[i] = T(fn(i));
     }
 
     /// constructor for allocating with a space to fill (and construct; this allocation does not run the constructor (if non-primitive) until append)

@@ -203,7 +203,7 @@ public:
         data->fn = fn;
         if (count) {
             data->count   = count;
-            data->results = array<mx> { count, count };
+            data->results = array<mx>(count);
         }
     }
     inline bool joining() const { return data->join; }

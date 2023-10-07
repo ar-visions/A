@@ -2234,6 +2234,10 @@ public:
             data = (T*)mem->realloc(sz, true);
     }
 
+    void set_size(size_t sz) {
+        mem->count = sz;
+    }
+
     ///
     size_t count(T v) {
         size_t c = 0;
@@ -4882,7 +4886,9 @@ T path::read() const {
     if constexpr (identical<T, array<u8>>()) {
         std::ifstream input(*data, std::ios::binary);
         std::vector<char> buffer(std::istreambuf_iterator<char>(input), { });
-        return array<u8>((u8*)buffer.data(), buffer.size());
+        array<u8> res(buffer.size());
+        memcpy(res.data, (u8*)buffer.data(), buffer.size());
+        res.set_size(buffer.size());
     } else {
         std::ifstream fs;
         fs.open(*data);

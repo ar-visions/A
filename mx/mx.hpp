@@ -376,6 +376,8 @@ typename std::enable_if<std::is_same<T, double>::value
 /// i honestly would prefer latter but i prefer not to over optimize for now
 /// another possibility is to have a _delete in the table
 /// transitionable at runtime = add & scale ops
+#define register(C) type_register(C)
+
 #define type_register(C)\
     template <typename _T>\
     static _T* _mix(_T *a, _T *b, double v) {\
@@ -3612,6 +3614,7 @@ struct logger {
         if (service)
             service(msg);
         fputs(msg.data, stdout);
+        fputs("\n", stdout);
         fflush(stdout);
         mtx.unlock();
     }

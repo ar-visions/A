@@ -2042,7 +2042,7 @@ struct lambda<R(Args...)>:mx {
         return (*data->fn)(std::forward<Args>(args)...);
     }
     
-    operator bool() {
+    operator bool() const {
         return data && data->fn && *data->fn;
     }
 };
@@ -2130,6 +2130,26 @@ public:
     array(memory*   mem) : mx(mem), data(mx::data<T>()) { }\
     array(mx          o) : array(o.mem->grab()) { }\
     array()              : array(mx::alloc<array>(null, 0, 1)) { }
+
+    array<T> every(lambda<bool(T&)> fn) const {
+        array<T> res;
+        for (T &v: *this) {
+            if (fn(v))
+                res.push(v);
+        }
+        return res;
+    }
+
+    array<T> some(lambda<bool(T&)> fn) const {
+        bool res = false;
+        for (T &v: *this) {
+            if (fn(v)) {
+                res = true;
+                break;
+            }
+        }
+        return res;
+    }
 
     //intern    *operator &() { return  data; } -- dont ever do these!
     //operator     intern *() { return  data; }
@@ -2647,6 +2667,16 @@ struct str:mx {
 
     memory * symbolize() { return mem_symbol(data, typeof(char)); } 
 
+    str escape(str chars, char esc = '\\') {
+        str res { len() * 2 };
+        for (int i = 0; i < len(); i++) {
+            char x = data[i];
+            if (chars.index_of(x) > 0) {
+
+            }
+        }
+    }
+
     /// \\ = \ ... \x = \x
     static str parse_quoted(cstr *cursor, size_t max_len = 0) {
         ///
@@ -3128,9 +3158,28 @@ struct str:mx {
         reverse
     };
 
+    int index_of(char b, int from = 0) const {
+        if (!mem || mem->count == 0) return -1;
+        
+        cstr   ap =   data;
+        int    ac = int(mem->count);
+
+        if (from < 0) {
+            for (int index = ac - 1 + from + 1; index >= 0; index--) {
+                if (ap[index] == b)
+                    return index;
+            }
+        } else {
+            for (int index = from; index <= ac - 1; index++)
+                if (ap[index] == b)
+                    return index;
+        }
+        return -1;
+    }
+
     /// if from is negative, search is backwards from + 1 (last char not skipped but number used to denote direction and then offset by unit)
     int index_of(str b, int from = 0) const {
-        if (!b.mem || b.mem->count == 0) return  0; /// a base string is found at base index.. none of this empty string permiates crap.  thats stupid.   ooooo there are 0-true differences everywhere!
+        if (!b.mem || b.mem->count == 0) return  0;
         if (!  mem ||   mem->count == 0) return -1;
 
         cstr   ap =   data;

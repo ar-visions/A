@@ -344,7 +344,7 @@ memory *memory::raw_alloc(type_t type, size_t sz, size_t count, size_t res) {
     memory*     mem = (memory*)calloc64(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
     mem->count      = count;
     mem->reserve    = math::max(res, count);
-    mem->refs       = 1;
+    mem->refs       = 0; /// inc on construction for memory*
     mem->type       = type;
     mem->origin     = sz ? calloc64(sz, mem->reserve) : null; /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
     _raw_alloc_count++;
@@ -483,7 +483,7 @@ memory *memory::copy(size_t reserve) {
 }
 
 memory *memory::grab() {
-    refs++;
+    if (this) refs++; // this is basically fine to do and by basically i mean probably and by probably i mean dont show this to forum people
     return this;
 }
 

@@ -1268,7 +1268,7 @@ struct ident {
     template <typename T>
     static idata* for_type();
 
-    ident(memory* mem) : mem(mem) { }
+    ident(memory* mem) : mem(grab(mem)) { }
 };
 
 /// these should be vectorized but its not worth it for now
@@ -1602,6 +1602,7 @@ struct memory {
     enum attr { constant = 1 };
     size_t              refs;
     u64                 attrs;
+    type_t              com; /// if not null, this is the com type
     type_t              type;
     size_t              count, reserve;
     size               *shape; // if null, then, its just 1 dim, of count.  otherwise this is the 'shape' of the data and strides through according
@@ -1846,7 +1847,7 @@ struct mx {
     
     /// interop with shared; needs just base type functionality for lambda
     inline mx(null_t = null): mem(alloc<null_t>()) { }
-    inline mx(memory *mem)    : mem(mem) { }
+    inline mx(memory *mem)    : mem(mem->grab()) { }
     inline mx(symbol ccs, type_t type = typeof(char)) : mx(mem_symbol(ccs, type)) { }
     
     mx(  cstr  cs, type_t type = typeof(char)) : mx(memory::stringify(cs, memory::autolen, 0, false, type)) { }
@@ -2650,6 +2651,111 @@ struct ex:mx {
 /// useful for constructors that deal with ifstream
 size_t length(std::ifstream& in);
 
+
+using wstr = unsigned short*;
+
+struct utf16:mx {
+	using char_t = unsigned short; /// this is so at design time we can know what code to use using constexpr
+
+	mx_object(utf16, mx, char_t);
+
+	utf16(size_t sz)   : utf16(mx::alloc<char_t>(null, sz, sz)) { }
+
+	utf16(char *input) : utf16(strlen(input) * 2) {
+		char *i = input;
+		num cursor = 0;
+		while (*i) {
+			data[cursor++] = *i;
+			i++;
+		}
+	}
+
+    utf16(wstr input, size_t len) : utf16(len) {
+        memcpy(data, input, len * sizeof(char_t));
+    }
+
+	char_t &operator[](num index) const {
+		if (index < 0)
+			return data[mem->count + index];
+		return data[index];
+	}
+
+    int index_of(wchar_t find) const {
+        int result = -1;
+        for (int i = 0, ln = len(); i < ln; i++) {
+            if (data[i] == find) {
+                result = i;
+                break;
+            }
+        }
+        return result;
+    }
+
+    utf16 escape(utf16 chars, char esc = '\\') const { // probably not the greatest
+        size_t n = 0;
+        for (int i = 0; i < len(); i++) {
+            char x = data[i];
+            if (chars.index_of(x) > 0)
+                n += 2;
+            else
+                n += 1;
+        }
+        if (!n)
+            return utf16();
+        utf16 res { n };
+        for (int i = 0; i < len(); i++) {
+            char_t x = data[i];
+            if (chars.index_of(char(x)) > 0)
+                res[i] = wchar_t(esc);
+            res[i] = x;
+        }
+        return res;
+    }
+
+	utf16 mid(num start, num length = -1) const {
+		char_t *s  = start  >= 0 ? data + start  : &data[mem->count + start ];
+		char_t *e  = length >= 0 ? data + length : &data[mem->count + length];
+		if (e > s)
+			return utf16();
+		size_t sz = std::distance(s, e);
+		utf16  res { sz };
+		///
+		memcpy(res.data, s, sz * sizeof(char_t));
+		return res;
+	}
+
+	size_t len() const {
+		return mem ? mem->count : 0;
+	}
+
+	utf16 join(array<utf16> &src, utf16 j) const {
+		size_t sz = 0;
+		num cursor = 0;
+		for (utf16 &s: src) {
+			sz += s.mem->count;
+			if (cursor < src.len() - 1)
+				sz += j.len();
+			cursor++;
+		}
+
+		utf16 res { sz };
+		num   pos = 0;
+		cursor = 0;
+		for (utf16 &s: src) {
+			memcpy(&res.data[pos], s.data, s.len());
+			pos += s.len();
+			if (cursor < src.len() - 1) {
+				memcpy(&res.data[pos], s.data, j.len());
+				pos += j.len();
+			}
+			cursor++;
+		}
+		return res;
+	}
+};
+
+using wchar = unsigned short;
+
 struct str:mx {
     enum MatchType {
         Alpha,
@@ -2660,6 +2766,7 @@ struct str:mx {
         CIString
     };
     using intern = char;
+    using char_t = unsigned short;
 
     cstr data;
 
@@ -2671,10 +2778,11 @@ struct str:mx {
         str res { len() * 2 };
         for (int i = 0; i < len(); i++) {
             char x = data[i];
-            if (chars.index_of(x) > 0) {
-
-            }
+            if (chars.index_of(x) > 0)
+                res += '\\';
+            res += x;
         }
+        return res;
     }
 
     /// \\ = \ ... \x = \x
@@ -2709,6 +2817,11 @@ struct str:mx {
             result += start[i];
         ///
         return result;
+    }
+
+    str(utf16 d) : str(d.len()) { /// utf8 is a doable object but a table must be lazy loaded at best
+        for (int i = 0; i < d.len(); i++)
+            data[i] = d[i] <= 255 ? d[i] : '?';
     }
 
     /// static methods

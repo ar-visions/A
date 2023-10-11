@@ -598,7 +598,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     intern*    data;\
     C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
     C(intern*  data) : C(mx::wrap <C>(raw_t(data), 1)) { }\
-    C(intern&  memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
+    C(intern&&  memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
     C(mx          o) : C(o.mem->grab()) { }\
     C()              : C(mx::alloc<C>()) { }\
     intern    &operator *() { return *data; }\
@@ -826,6 +826,24 @@ struct doubly {
 
         operator  bool() const { return ifirst != null; }
         bool operator!() const { return ifirst == null; }
+
+        T shift() {
+            assert(ilast);
+            ///
+            item<T>    *i = ifirst;
+            bool set_last = ilast == ifirst;
+            ifirst        = ifirst->next;
+            ///
+            if (!ifirst) {
+                ilast = null;
+            } else
+                ifirst->prev = 0;
+            ///
+            icount--;
+            T data = i->data;
+            delete i;
+            return data;
+        }
 
         /// push by value, return its new instance
         T &push(T v) {
@@ -2418,9 +2436,13 @@ public:
     bool operator!=(array b) const { return !(operator==(b)); }
     
     inline T &operator[](size index) const {
-        if (index.count == 1)
-            return (T &)data[size_t(index.values[0])];
-        else {
+        if (index.count == 1) {
+            size_t i = size_t(index.values[0]);
+            assert(i >= 0 && i < mem->count);
+            /// make sure this is within valid count range
+            /// want to make sure all arrays even with primitive values do this
+            return (T &)data[i];
+        } else {
             assert(mem->shape);
             mem->shape->assert_index(index);
             size_t i = mem->shape->index_value(index);
@@ -3373,6 +3395,8 @@ struct str:mx {
     size_t reserve() const { return mx::mem->reserve; }
     type_register(str);
 };
+
+using astr = array<str>;
 
 template <typename C, typename E>
 E ex::initialize(C *p, E v, symbol names, type_t ty) {

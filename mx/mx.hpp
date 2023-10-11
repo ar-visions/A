@@ -1079,12 +1079,13 @@ struct traits {
         integral  = 2,
         realistic = 4,
         singleton = 8,
-        array     = 16,
-        map       = 32,
-        mx        = 64,
-        mx_obj    = 128,
-        enum_primitive = 256,
-        opaque         = 512 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
+        lambda    = 16,
+        array     = 32,
+        map       = 64,
+        mx        = 128,
+        mx_obj    = 256,
+        enum_primitive = 512,
+        opaque         = 1024 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
     };
 };
 
@@ -4785,6 +4786,7 @@ idata *ident::for_type() {
                             (is_realistic<T> () ? traits::realistic : 0) | // if references radioshack catalog
                             (is_singleton<T> () ? traits::singleton : 0) |
                             (is_array    <T> () ? traits::array     : 0) |
+                            (is_lambda   <T> () ? traits::lambda    : 0) |
                             (is_map      <T> () ? traits::map       : 0) |
                             (is_mx              ? traits::mx        : 0) |
                             (is_obj             ? traits::mx_obj    : 0);

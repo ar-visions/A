@@ -9,6 +9,7 @@
 #pragma warning(disable:4996) /// strncpy warning
 #pragma warning(disable:4267) /// size_t to int warnings (minimp3)
 
+
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX

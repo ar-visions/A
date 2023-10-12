@@ -600,6 +600,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
     C(intern*  data) : C(mx::wrap <C>(raw_t(data), 1)) { }\
     C(intern&&  memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
+    C(intern&   memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
     C(mx          o) : C(o.mem->grab()) { }\
     C()              : C(mx::alloc<C>()) { }\
     intern    &operator *() { return *data; }\
@@ -2334,7 +2335,7 @@ public:
     }
 
     /// quick-sort
-    array<T> sort(func<int(T &a, T &b)> cmp) {
+    array<T> sort(lambda<int(T &a, T &b)> cmp) {
         /// create reference list of identical size as given, pointing to the respective index
         size_t sz = len();
         mx **refs = (mx **)calloc64(len(), sizeof(mx*));
@@ -2342,7 +2343,7 @@ public:
             refs[i] = &data[i];
 
         /// recursion lambda
-        func<void(int, int)> qk;
+        lambda<void(int, int)> qk;
         qk = [&](int s, int e) {
             if (s >= e)
                 return;
@@ -3967,11 +3968,11 @@ struct path:mx {
     bool        make_dir() const { std::error_code ec;          return !data->empty() ? fs::create_directories(*data, ec) : false; }
     path remove_filename()       {
         fs::path p = data->remove_filename();
-        return path(p.c_str());
+        return path(p.string().c_str());
     }
-    bool    has_filename() const {                              return data->has_filename(); }
-    path            link() const {                              return fs::is_symlink(*data) ? path(data->c_str()) : path(); }
-    bool         is_file() const {                              return !fs::is_directory(*data) && fs::is_regular_file(*data); }
+    bool    has_filename() const { return data->has_filename(); }
+    path            link() const { return fs::is_symlink(*data) ? path(data->string().c_str()) : path(); }
+    bool         is_file() const { return !fs::is_directory(*data) && fs::is_regular_file(*data); }
     char             *cs() const {
         static std::string static_thing;
         static_thing = data->string();
@@ -3980,9 +3981,10 @@ struct path:mx {
     operator cstr() const {
         return cstr(cs());
     }
+
     str         ext () const { return str(data->extension().string()); }
     str         ext4() const { return data->extension().string(); }
-    path        file() const { return fs::is_regular_file(*data) ? path(data->c_str()) : path(); }
+    path        file() const { return fs::is_regular_file(*data) ? path(cs()) : path(); }
     bool copy(path to) const {
         assert(!data->empty());
         assert(exists());
@@ -4013,18 +4015,18 @@ struct path:mx {
 
     /// operators
     operator        bool()         const {
-        return data->string().length() > 0;
+        return cs()[0];
     }
-    operator         str()         const { return str(data->string()); }
+    operator         str()         const { return str(cs()); }
     path          parent()         const {
         std::string s = data->parent_path().string();
         return  s.c_str();
     }
     
-    path operator / (path       s) const { return path((*data / *s).c_str()); }
-    path operator / (symbol     s) const { return path((*data /  s).c_str()); }
-    path operator / (const str& s) const { return path((*data / fs::path(s.data)).c_str()); }
-    path relative   (path    from) const { return path(fs::relative(*data, *from).c_str()); }
+    path operator / (path       s) const { return path((*data / *s).string().c_str()); }
+    path operator / (symbol     s) const { return path((*data /  s).string().c_str()); }
+    path operator / (const str& s) const { return path((*data / fs::path(s.data)).string().c_str()); }
+    path relative   (path    from) const { return path(fs::relative(*data, *from).string().c_str()); }
     
     bool  operator==(path&      b) const { return  *data == *b; }
     bool  operator!=(path&      b) const { return !(operator==(b)); }
@@ -4092,7 +4094,7 @@ struct path:mx {
         bool use_gitignore	= states[ option::use_git_ignores ];
         bool recursive		= states[ option::recursion       ];
         bool no_hidden		= states[ option::no_hidden       ];
-        array<str> ignore   = states[ option::use_git_ignores ] ? path((*data / ".gitignore").c_str()).read<str>().split("\n") : array<str>();
+        array<str> ignore   = states[ option::use_git_ignores ] ? path((*data / ".gitignore").string().c_str()).read<str>().split("\n") : array<str>();
         lambda<void(path)> res;
         map<mx>    fetched_dir;  /// this is temp and map needs a hash lambdas pronto
         fs::path   parent   = *data; /// parent relative to the git-ignore index; there may be multiple of these things.
@@ -4114,7 +4116,7 @@ struct path:mx {
                 /// or the file passes the git ignore collection of patterns
                 
                 if (proceed && use_gitignore) {
-                    path    pp = path(parent.c_str());
+                    path    pp = path(parent.string().c_str());
                     path   rel = pp.relative(p); // original parent, not resource parent
                     str   srel = rel;
                     ///

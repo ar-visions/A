@@ -622,6 +622,8 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     }\
     type_register(C)\
 
+#define mx_basic(C) mx_object(C, mx, members)
+
 /// these objects dont contain a data member for access
 #define mx_object_0(C, B, D) \
     using parent_class   = B;\
@@ -2300,6 +2302,10 @@ public:
         return -1;
     }
 
+    bool has(T v) const {
+        return index_of(v) >= 0;
+    }
+
     ///
     template <typename R>
     R select_first(lambda<R(T&)> qf) const {
@@ -3540,6 +3546,21 @@ struct map:mx {
             return f ? remove(*f) : false;
         }
 
+        template <typename K>
+        array<K> keys() {
+            array<K> res { fields->len() };
+            for (field<V> &f:fields)
+                res.push(K(f.key.grab()));
+            return res;
+        }
+
+        array<V> values() {
+            array<V> res { fields->len() };
+            for (field<V> &f:fields)
+                res.push(f.value);
+            return res;
+        }
+
         field<V> &fetch(mx &k) {
             field<V> *f = lookup(k);
             if (f) return *f;
@@ -3606,6 +3627,15 @@ struct map:mx {
             res.data->fields += { df.key, ov ? ov->value : df.value };
         }
         return res;
+    }
+
+    template <typename K>
+    array<K> keys() {
+        return data->keys();
+    }
+
+    array<V> values() {
+        return data->values();
     }
     
     void print();
@@ -3748,6 +3778,9 @@ struct states:mx {
         if constexpr (identical<ET, initial<T>>()) {
             for (auto &v:varg)
                 f |= to_flag(u64(v));
+        } else if constexpr (identical<ET, symbol>()) { /// support states["enum-name"] = true;  this reduces code
+            T v = T(varg);
+            f = to_flag(u64(v.value));
         } else
             f = to_flag(u64(varg));
         

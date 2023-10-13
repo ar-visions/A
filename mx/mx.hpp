@@ -2154,10 +2154,19 @@ public:
     array(mx          o) : array(o.mem->grab()) { }\
     array()              : array(mx::alloc<array>(null, 0, 1)) { }
 
+    /// immutable 
+    array<T> shift() const {
+        if (mem->count <= 1)
+            return {};
+        array<T> res { mem->count - 1 };
+        for (size_t i = 1; i < mem->count; i++)
+            res += data[i];
+        return res;
+    }
     /// likely need to do a constexpr to check if its able to concat
     /// in the condition its not it would be best to return default
     /// and not implement by other means
-    T join(T s) {
+    T join(T s) const {
         T v = data[0];
         for (size_t i = 1; i < mem->count; i++)
             v += data[i];
@@ -2873,6 +2882,38 @@ struct str:mx {
             result += start[i];
         ///
         return result;
+    }
+
+    str(i64 value, u8 base, int width) : str(size_t(256)) {
+        if (base < 2 || base > 36)
+            fprintf(stderr, "str: base should be between 2 and 36\n");
+        
+        char  buffer[8 * sizeof(int) + 1];
+        char* ptr = &buffer[sizeof(buffer) - 1];
+        *ptr = '\0';
+
+        do {
+            int digit = value % base;
+            value /= base;
+            *--ptr = "0123456789abcdefghijklmnopqrstuvwxyz"[abs(digit)];
+        } while (value != 0);
+
+        if (value < 0) {
+            *--ptr = '-';
+        }
+
+        int length = strlen(ptr);
+        if (width) {
+            int padding = width - length;
+            if (padding > 0) {
+                memmove(ptr + padding, ptr, length + 1);  // Include null terminator
+                memset(ptr, '0', padding);
+                length += padding;
+            }
+        }
+        
+        strcpy(data, ptr);
+        mem->count = length;
     }
 
     str(utf16 d) : str(d.len()) { /// utf8 is a doable object but a table must be lazy loaded at best

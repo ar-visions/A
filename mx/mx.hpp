@@ -184,24 +184,23 @@ constexpr int num_occurances(const char* cs, char c) {
 #define num_args(...) (ion::num_occurances(#__VA_ARGS__, ',') + 1)
 #define str_args(...) (str(#__VA_ARGS__))
 
-/// deprecate the 'S' after this works; too quirky.
 #define enums(C,D,...)\
     struct C:ex {\
         enum etype { __VA_ARGS__ };\
         enum etype&    value;\
         static memory* lookup(symbol sym) { return typeof(C)->lookup(sym); }\
-        static memory* lookup(u64    id)  { return typeof(C)->lookup(id);  }\
+        static memory* lookup(i64     id) { return typeof(C)->lookup(id);  }\
         static doubly<memory*> &symbols() { return typeof(C)->symbols->list; }\
         inline static const int count = num_args(__VA_ARGS__);\
         inline static const str raw   = str_args(__VA_ARGS__);\
         ion::symbol symbol() {\
-            memory *mem = typeof(C)->lookup(u64(value));\
+            memory *mem = typeof(C)->lookup(i64(value));\
             if (!mem) printf("symbol: mem is null for value %d\n", (int)value);\
             assert(mem);\
             return (char*)mem->origin;\
         }\
         str name() { return (char*)symbol(); }\
-        struct memory *to_string() { return typeof(C)->lookup(u64(value)); }\
+        struct memory *to_string() { return typeof(C)->lookup(i64(value)); }\
         C(enum etype t = etype::D):ex(initialize(this,             t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
         C(size_t     t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
         C(int        t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
@@ -224,7 +223,7 @@ constexpr int num_occurances(const char* cs, char c) {
         bool    operator>= (C &b)       { return value >= b.value; }\
         bool    operator<= (C &b)       { return value <= b.value; }\
         explicit operator int()         { return int(value); }\
-        explicit operator u64()         { return u64(value); }\
+        explicit operator i64()         { return i64(value); }\
         operator str()         { return symbol(); }\
         type_register(C);\
     };\
@@ -236,7 +235,7 @@ constexpr int num_occurances(const char* cs, char c) {
         enum etype { __VA_ARGS__ };\
         enum etype&    value;\
         static memory* lookup(symbol sym);\
-        static memory* lookup(u64    id);\
+        static memory* lookup(i64    id);\
         static doubly<memory*> &symbols();\
         inline static const int count = num_args(__VA_ARGS__);\
         inline static const str raw   = str_args(__VA_ARGS__);\
@@ -255,15 +254,15 @@ constexpr int num_occurances(const char* cs, char c) {
         bool    operator>= (C &b);\
         bool    operator<= (C &b);\
         explicit operator int();\
-        explicit operator u64();\
+        explicit operator i64();\
     };\
 
 #define enums_define(C,W)\
     doubly<memory*> &C::symbols()          { return typeof(C)->symbols->list; }\
     memory*     C::lookup(ion::symbol sym) { return typeof(C)->lookup(sym); }\
-    memory*     C::lookup(u64    id)       { return typeof(C)->lookup(id);  }\
+    memory*     C::lookup(i64    id)       { return typeof(C)->lookup(id);  }\
     ion::symbol C::symbol() {\
-        memory *mem = typeof(C)->lookup(u64(value));\
+        memory *mem = typeof(C)->lookup(i64(value));\
         assert(mem);\
         return (char*)mem->origin;\
     }\
@@ -281,7 +280,7 @@ constexpr int num_occurances(const char* cs, char c) {
     bool     C::operator>= (C &b)         { return value >= b.value; }\
     bool     C::operator<= (C &b)         { return value <= b.value; }\
              C::operator int()            { return int(value); }\
-             C::operator u64()            { return u64(value); }\
+             C::operator i64()            { return i64(value); }\
 };\
 
 #ifdef WIN32
@@ -2155,6 +2154,32 @@ public:
     array(mx          o) : array(o.mem->grab()) { }\
     array()              : array(mx::alloc<array>(null, 0, 1)) { }
 
+    /// likely need to do a constexpr to check if its able to concat
+    /// in the condition its not it would be best to return default
+    /// and not implement by other means
+    T join(T s) {
+        T v = data[0];
+        for (size_t i = 1; i < mem->count; i++)
+            v += data[i];
+    }
+
+    array<T> reverse() const {
+        array<T> res;
+        for (size_t i = 0; i < mem->count; i++)
+            res += data[mem->count - 1 - i];
+        return res;
+    }
+
+    array<T> slice(size_t start, size_t end) const {
+        size_t count = end - start;
+        assert(count <= mem->count);
+        array<T> res;
+        for (size_t i = start; i < start + count; i++) {
+            res += data[i];
+        }
+        return res;
+    }
+
     array<T> every(lambda<bool(T&)> fn) const {
         array<T> res;
         for (T &v: *this) {
@@ -3726,14 +3751,16 @@ struct states:mx {
     };
 
     /// get the bitmask (1 << value); 0 = 1bit set
-    inline static u64 to_flag(u64 v) { return u64(1) << v; }
+    inline static u64 to_flag(i64 v) {
+        return (v < 0) ? ((1 << 63) >> u64(-v)) : (u64(1) << u64(v));
+    }
 
     mx_object(states, mx, fdata);
     
     /// initial states with initial list of values
     inline states(initial<T> args) : states() {
         for (auto  v:args) {
-            u64 ord = u64(v); /// from an enum type
+            i64 ord = i64(v); /// from an enum type (best to support sign)
             u64 fla = to_flag(ord);
             data->bits |= fla;
         }
@@ -3862,13 +3889,11 @@ struct logger {
         #endif
     }
 
-    template <typename T>
-    static T input() {
+    static str input() {
         str      s  = str(size_t(1024)); /// strip integer conversions from constructors here in favor of converting to reserve alone.  that is simple.
-        sscanf(s.data, "%s", s.reserve());
-        type_t   ty = typeof(T);
-        mx       rs = ty->functions->from_string(raw_t(0), (cstr)s.mem->origin);
-        return T(rs);
+        fgets(s.data, 1024, stdin);
+        s.mem->count = strlen(s.data);
+        return s;
     }
 
     inline void fault(mx m, array<mx> ar = array<mx> { }) { str s = m.to_string(); _print(s, ar, { err }); brexit(); }

@@ -394,6 +394,12 @@ typename std::enable_if<std::is_same<T, double>::value
             }\
     }\
     template <typename _T>\
+    static void _init(_T *src) {\
+        if constexpr (has_init<_T>::value) {\
+            src->init();\
+        }\
+    }\
+    template <typename _T>\
     static struct memory *_to_string(_T *src) {\
         if constexpr (registered_instance_to_string<_T>())\
             return src ? src->to_string() : null;\
@@ -1086,8 +1092,9 @@ struct traits {
         map       = 64,
         mx        = 128,
         mx_obj    = 256,
-        enum_primitive = 512,
-        opaque         = 1024 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
+        init      = 512,
+        enum_primitive = 1024,
+        opaque         = 2048 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
     };
 };
 
@@ -1290,7 +1297,7 @@ struct ident {
     template <typename T>
     static idata* for_type();
 
-    ident(memory* mem) : mem(grab(mem)) { }
+    ident(memory* mem) : mem(mem) { }
 };
 
 /// these should be vectorized but its not worth it for now
@@ -1303,6 +1310,7 @@ template <typename T> using  FromStringFn =            T*(*)(T*, cstr);    /// p
 template <typename T> using        CopyFn =          void(*)(T*, T*, T*);  /// dst, src (realloc case)
 template <typename T> using    DestructFn =          void(*)(T*, T*);      /// src
 template <typename T> using   ConstructFn =          void(*)(T*, T*);      /// src
+template <typename T> using        InitFn =          void(*)(T*);          /// src
 template <typename T> using         NewFn =            T*(*)(T*, T*);      /// placeholder, placeholder2
 template <typename T> using         DelFn =          void(*)(T*, T*);      /// placeholder, instance
 template <typename T> using      AssignFn =          void(*)(T*, T*, T*);  /// dst, src
@@ -1320,6 +1328,7 @@ struct ops {
          CopyFn<T> copy;
      DestructFn<T> destruct;
     ConstructFn<T> construct;
+         InitFn<T> init;
           NewFn<T> alloc_new;
           DelFn<T> del;
        AssignFn<T> assign;
@@ -1611,6 +1620,14 @@ inline bool vequals(T* b, size_t c, T v) {
             return false;
     return true;
 }
+
+template <typename T>
+struct has_init {
+    template <typename U, void (U::*)()> struct SFINAE {};
+    template <typename U> static char test(SFINAE<U, &U::init>*);
+    template <typename U> static int test(...);
+    static constexpr bool value = sizeof(test<T>(nullptr)) == sizeof(char);
+};
 
 struct attachment {
     const char    *id;
@@ -2343,11 +2360,11 @@ public:
 
     ///
     template <typename R>
-    R select_first(lambda<R(T&)> qf) const {
+    T select_first(lambda<R(T&)> qf) const {
         for (size_t i = 0; i < mem->count; i++) {
             R r = qf(data[i]);
             if (r)
-                return r;
+                return data[i];
         }
         if constexpr (is_numeric<R>()) /// constexpr implicit when valid?
             return R(0);
@@ -3793,7 +3810,7 @@ struct states:mx {
 
     /// get the bitmask (1 << value); 0 = 1bit set
     inline static u64 to_flag(i64 v) {
-        return (v < 0) ? ((1 << 63) >> u64(-v)) : (u64(1) << u64(v));
+        return (v < 0) ? ((u64(1) << u64(63)) >> u64(-v)) : (u64(1) << u64(v));
     }
 
     mx_object(states, mx, fdata);
@@ -4895,6 +4912,8 @@ idata *ident::for_type() {
             type->name    = parse_fn(__PRETTY_FUNCTION__);
             if constexpr (registered<T>() || is_external<T>::value) {
                 type->functions = (ops<void>*)ftable<T>();
+                if (type->functions->init)
+                    type->traits |= traits::init; // only functionally registered types get these
             }
 
             /// if the type contains enum, we want to link the enum back to its parent type
@@ -5043,6 +5062,9 @@ ops<T> *ftable() {
         gen.assign     = AssignFn   <T>(T::_assign); // assign is copy, deprecate (used in mx_object assign)
         gen.to_string  = ToStringFn <T>(T::_to_string);
 
+        if constexpr (has_init<T>::value)
+            gen.init = InitFn<T>(T::_init);
+        
         if constexpr (registered_compare<T>())
             gen.compare = CompareFn<T>(T::_compare);
         

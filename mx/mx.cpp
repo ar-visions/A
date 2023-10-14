@@ -344,7 +344,7 @@ memory *memory::raw_alloc(type_t type, size_t sz, size_t count, size_t res) {
     memory*     mem = (memory*)calloc64(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
     mem->count      = count;
     mem->reserve    = math::max(res, count);
-    mem->refs       = 0; /// inc on construction for memory*
+    mem->refs       = 1; /// inc on construction for memory*
     mem->type       = type;
     mem->origin     = sz ? calloc64(sz, mem->reserve) : null; /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
     _raw_alloc_count++;
@@ -428,6 +428,7 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
     if (type->traits & traits::singleton)
         type->singleton = mem;
     bool primitive = (type->traits & traits::primitive);
+    bool has_init  = (type->traits & traits::init);
 
     /// if allocating a schema-based object (mx being first user of this)
     if (count > 0) {
@@ -464,13 +465,19 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
                 for (size_t i = 0; i < type->schema->bind_count; i++) {
                     context_bind &bind = type->schema->composition[i];
                     u8 *dst  = &((u8*)mem->origin)[bind.offset];
-                    if (bind.data && !(bind.data->traits & traits::primitive))
+                    if (bind.data && !(bind.data->traits & traits::primitive)) {
                         for (size_t ii = 0; ii < count; ii++) {
                             bind.data->functions->construct(raw_t(0), &dst[ii * type_sz]);
+                            
+                            /// allow for trivial construction and subsequent init; this alllows one to use .fields and others,
+                            /// and still have an init.
+                            if (bind.data->traits & traits::init)
+                                bind.data->functions->init(&dst[ii * type_sz]); 
+                                /// this may need to be called in the case where the context type has one too
                         }
+                    }
                 }
             }
-
         }
     }
     return mem;

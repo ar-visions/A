@@ -2171,6 +2171,15 @@ public:
     array(mx          o) : array(o.mem->grab()) { }\
     array()              : array(mx::alloc<array>(null, 0, 1)) { }
 
+    /// immutable
+    array<T> unshift(T &v) const {
+        array<T> res { mem->count + 1 };
+        res += v;
+        for (size_t i = 0; i < mem->count; i++)
+            res += data[i];
+        return res;
+    }
+
     /// immutable 
     array<T> shift() const {
         if (mem->count <= 1)
@@ -2183,7 +2192,7 @@ public:
     /// likely need to do a constexpr to check if its able to concat
     /// in the condition its not it would be best to return default
     /// and not implement by other means
-    T join(T s) const {
+    T join(T s = T()) const {
         T v = data[0];
         for (size_t i = 1; i < mem->count; i++)
             v += data[i];
@@ -2360,16 +2369,27 @@ public:
 
     ///
     template <typename R>
-    T select_first(lambda<R(T&)> qf) const {
+    R select_first(lambda<R(T&)> qf) const {
         for (size_t i = 0; i < mem->count; i++) {
             R r = qf(data[i]);
             if (r)
-                return data[i];
+                return r;
         }
-        if constexpr (is_numeric<R>()) /// constexpr implicit when valid?
+        if constexpr (is_numeric<R>())
             return R(0);
         else
             return R();
+    }
+
+    template <typename R>
+    R map(lambda<R(T&)> qf) const {
+        array<R> res(mem->count);
+        ///
+        for (size_t i = 0; i < mem->count; i++) {
+            R r = qf(data[i]);
+            res += r;
+        }
+        return res;
     }
 
     ///
@@ -2743,7 +2763,7 @@ struct utf16:mx {
 
 	utf16(size_t sz)   : utf16(mx::alloc<char_t>(null, sz, sz)) { }
 
-	utf16(char *input) : utf16(strlen(input) * 2) {
+	utf16(char *input) : utf16(strlen(input)) {
 		char *i = input;
 		num cursor = 0;
 		while (*i) {
@@ -2810,7 +2830,7 @@ struct utf16:mx {
 		return mem ? mem->count : 0;
 	}
 
-	utf16 join(array<utf16> &src, utf16 j) const {
+	static utf16 join(array<utf16> &src, utf16 j) {
 		size_t sz = 0;
 		num cursor = 0;
 		for (utf16 &s: src) {
@@ -3577,6 +3597,14 @@ struct map:mx {
         field<V> &first()  { return fields->first(); }
         field<V> & last()  { return fields-> last(); }
         size_t    count()  { return fields->len();   }
+
+        template <typename R>
+        array<R> map(lambda<R(field<V>&)> fn) {
+            array<R> r { fields->len() };
+            for (field<V> &f:fields)
+                r += fn(f);
+            return r;
+        }
 
         size_t    count(mx k) {
             type_t tk = k.type();

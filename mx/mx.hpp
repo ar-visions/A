@@ -2788,6 +2788,15 @@ struct utf16:mx {
         memcpy(data, input, len * sizeof(char_t));
     }
 
+    utf16 operator+(symbol s) {
+        size_t ln = strlen(s);
+        utf16  r { mem->count + ln };
+        memcpy( r.data, data, mem->count * 2 );
+        memcpy(&r.data[mem->count], s, ln );
+        return r;
+    }
+
+
 	char_t &operator[](num index) const {
 		if (index < 0)
 			return data[mem->count + index];

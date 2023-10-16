@@ -2115,10 +2115,10 @@ lambda<R(Args...)>::lambda(CL* cl, F fn) {
     using traits     = lambda_traits<lambda>;
     using args_t     = typename traits::arg_types;
     constexpr size_t n_args = std::tuple_size_v<args_t>;
-    if constexpr (n_args == 1) {
+    //if constexpr (n_args == 1) { /// remove test.
         //data->fn = new fdata(std::bind(cl, fn, std::placeholders::_1));
-        data->fn = new fdata([=](Args... args) { return (cl->*fn)(std::forward<Args>(args)...); });
-    }
+    data->fn = new fdata([=](Args... args) { return (cl->*fn)(std::forward<Args>(args)...); });
+    //}
 }
 
 mx call(mx lambda, array<str> args);
@@ -2382,12 +2382,24 @@ public:
     }
 
     template <typename R>
-    R map(lambda<R(T&)> qf) const {
+    array<R> map(lambda<R(T&)> qf) const {
         array<R> res(mem->count);
         ///
         for (size_t i = 0; i < mem->count; i++) {
             R r = qf(data[i]);
             res += r;
+        }
+        return res;
+    }
+
+    template <typename R>
+    array<R> flat_map(lambda<R(T&)> qf) const {
+        array<R> res(mem->count);
+        ///
+        for (size_t i = 0; i < mem->count; i++) {
+            array<R> r = qf(data[i]);
+            for (R &ri: r)
+                res += ri;
         }
         return res;
     }

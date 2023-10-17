@@ -3868,7 +3868,7 @@ struct states:mx {
     }
 
     mx_object(states, mx, fdata);
-    
+
     /// initial states with initial list of values
     inline states(initial<T> args) : states() {
         for (auto  v:args) {

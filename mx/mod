@@ -7,6 +7,7 @@ if (MSVC)
 else()
     cflags(+-Wno-writable-strings
            +-Wno-pointer-bool-conversion
-           +-Wno-ambiguous-reversed-operator)
+           +-Wno-ambiguous-reversed-operator
+           +-Wno-deprecated-volatile)
 endif()
 

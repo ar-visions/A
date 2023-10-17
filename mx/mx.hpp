@@ -3668,6 +3668,11 @@ struct map:mx {
             return null;
         }
 
+        V* get(mx key) const {
+            field<V> *f = lookup(key);
+            return f ? &f->value : null;
+        }
+
         bool remove(field<V> &f) {
             item<field<V>> *i = item<field<V>>::container(f); // the container on field<V> is item<field<V>>, a negative offset
             fields->remove(i);

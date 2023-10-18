@@ -490,7 +490,7 @@ memory *memory::copy(size_t reserve) {
 }
 
 memory *memory::grab() {
-    if (this) refs++; // this is basically fine to do and by basically i mean probably and by probably i mean dont show this to forum people
+    if ((bool)(void*)this) refs++; // this is basically fine to do and by basically i mean probably and by probably i mean dont show this to forum people
     return this;
 }
 

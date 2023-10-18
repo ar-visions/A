@@ -2196,6 +2196,7 @@ public:
         T v = data[0];
         for (size_t i = 1; i < mem->count; i++)
             v += data[i];
+        return v;
     }
 
     array<T> reverse() const {
@@ -2421,7 +2422,7 @@ public:
     array<T> sort(lambda<int(T &a, T &b)> cmp) {
         /// create reference list of identical size as given, pointing to the respective index
         size_t sz = len();
-        mx **refs = (mx **)calloc64(len(), sizeof(mx*));
+        T **refs = (T **)calloc64(len(), sizeof(T*));
         for (size_t i = 0; i < sz; i++)
             refs[i] = &data[i];
 
@@ -2432,9 +2433,9 @@ public:
                 return;
             int i  = s, j = e, pv = s;
             while (i < j) {
-                while (cmp(refs[i]->ref<T>(), refs[pv]->ref<T>()) <= 0 && i < e)
+                while (cmp(*refs[i], *refs[pv]) <= 0 && i < e)
                     i++;
-                while (cmp(refs[j]->ref<T>(), refs[pv]->ref<T>()) > 0)
+                while (cmp(*refs[j], *refs[pv]) > 0)
                     j--;
                 if (i < j)
                     std::swap(refs[i], refs[j]);
@@ -2448,7 +2449,14 @@ public:
         qk(0, len() - 1);
 
         /// create final result array from references
-        array<T> result = { size(), [&](size_t i) { return *refs[i]; }};
+
+        size_t ln = len();
+        array<T> result { ln };
+        for (size_t i = 0; i < ln; i++) {
+            T &r = *refs[i];
+            result.push(r);
+        }
+
         //free(refs);
         return result;
     }
@@ -3685,10 +3693,12 @@ struct map:mx {
         }
 
         template <typename K>
-        array<K> keys() {
+        array<K> keys(K *t = null) {
             array<K> res { fields->len() };
-            for (field<V> &f:fields)
-                res.push(K(f.key.grab()));
+            for (field<V> &f:fields) {
+                K k = K(f.key.grab());
+                res.push(k);
+            }
             return res;
         }
 
@@ -3769,7 +3779,7 @@ struct map:mx {
 
     template <typename K>
     array<K> keys() {
-        return data->keys();
+        return data->keys((K*)null); /// cannot pass K without a phony default arg.
     }
 
     array<V> values() {

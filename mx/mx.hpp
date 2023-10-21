@@ -2751,7 +2751,11 @@ struct ex:mx {
             i64   id = raw.ref<typename C::etype>();
             psym     = type->symbols->ids.lookup(id);
         }
-        if (!psym) throw C();
+        if (!psym) {
+            usleep(10000);
+            printf("symbol: %s, raw: %s\n", S, (char*)raw.mem->origin);
+            throw C();
+        }
         return (typename C::etype)((*psym)->id);
     }
 
@@ -2779,9 +2783,9 @@ using wstr = unsigned short*;
 struct utf16:mx {
 	using char_t = unsigned short; /// this is so at design time we can know what code to use using constexpr
 
-	mx_object(utf16, mx, char_t);
+	mx_object(utf16, mx, u16);
 
-	utf16(size_t sz)   : utf16(mx::alloc<char_t>(null, sz, sz)) { }
+	utf16(size_t sz)   : utf16(mx::alloc<u16>(null, sz, sz)) { }
 
 	utf16(char *input) : utf16(strlen(input)) {
 		char *i = input;
@@ -2791,6 +2795,8 @@ struct utf16:mx {
 			i++;
 		}
 	}
+
+    utf16(symbol s) : utf16((char*)s) { }
 
     utf16(wstr input, size_t len) : utf16(len) {
         memcpy(data, input, len * sizeof(char_t));
@@ -3417,7 +3423,7 @@ struct str:mx {
             if (is_ws) {
                 if (chars) {
                     result += chars.copy();
-                    chars.clear();
+                    chars = str(mem->count + 1);
                 }
             } else
                 chars += c;

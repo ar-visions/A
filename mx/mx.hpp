@@ -1364,6 +1364,10 @@ struct idata {
     size_t size();
     memory *lookup(symbol sym);
     memory *lookup(i64 id);
+
+    idata *meta_lookup() {
+        return meta ? this : (schema ? schema->bind->data : null);
+    }
 };
 
 #undef min
@@ -4501,7 +4505,7 @@ protected:
         assert(*cur == '{');
         ws(&(++cur));
 
-        type_t p_type = type;
+        type_t p_type = type ? type->meta_lookup() : null;
 
         /// read this object level, parse_values work recursively with 'cur' updated
         while (*cur != '}') {
@@ -4514,12 +4518,14 @@ protected:
             assert(*cur == ':');
             ws(&(++cur));
 
+
+            type_t f_type = null;
             prop** p = null;
-            assert(!p_type || (p_type->meta_map && (p = p_type->meta_map->lookup((symbol)field.mem->origin, null, null))));
+            
+            //assert(!p_type || (p_type->meta_map && (p = p_type->meta_map->lookup((symbol)field.mem->origin, null, null))));
+
             if (p_type) {
-                prop* pr = *p;
-                assert(pr && pr->member_type);
-                type = pr->member_type;
+                p = p_type->meta_map->lookup((symbol)field.mem->origin, null, null);
             }
 
             /// parse value at newly listed mx value in field, upon requesting it
@@ -4594,7 +4600,8 @@ protected:
 
         if (first_chr == '{') {
             /// type must have meta info
-            assert(!type || type->meta);
+            /// issue is how to automatically prefer context, but still fall back to data
+            assert(!type || type->meta_lookup());
             return parse_obj(start, type);
         } else if (first_chr == '[') {
             /// simple runtime check for array

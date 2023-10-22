@@ -1413,6 +1413,8 @@ struct prop {
     template <typename M>
     M &member_ref(void *m) { return *(M *)handle_t(&cstr(m)[offset]); }
 
+    void *member_pointer(void *m) { return (void *)handle_t(&cstr(m)[offset]); }
+
     symbol name() const {
         return symbol(mem_origin(key));
     }
@@ -1665,6 +1667,12 @@ struct memory {
     
     static inline const size_t autolen = UINT64_MAX;
 
+    static inline memory *wrap(type_t type, void *origin, size_t count = 1) {
+        memory*     mem = raw_alloc(type, sizeof(idata), count, count);
+        mem->origin     = origin;
+        return mem;
+    }
+
     static memory *stringify(cstr cs, size_t len = autolen, size_t rsv = 0, bool constant = false, type_t ctype = typeof(char), i64 id = 0);
     static memory *string   (std::string s);
     static memory *cstring  (cstr        s);
@@ -1870,16 +1878,64 @@ struct mx {
     
     bool is_const() const { return mem->attrs & memory::constant; }
 
-    prop *lookup(cstr cs) { return lookup(mx(mem_symbol(cs))); }
+    prop *lookup(cstr cs) const { return lookup(mx(mem_symbol(cs))); }
 
     prop *lookup(mx key) const {
-        if (key.is_const() && mem->type->schema) {
+        /*if (key.is_const() && mem->type->schema) {
             doubly<prop> *meta = (doubly<prop> *)mem->type->meta;
+            for (prop &p: *meta)
+                if (key.mem == p.key) 
+                    return &p;
+        }*/
+        if (key.is_const() && mem->type->schema) {
+            doubly<prop> *meta = (doubly<prop> *)mem->type->schema->bind->data->meta;
             for (prop &p: *meta)
                 if (key.mem == p.key) 
                     return &p;
         }
         return null;
+    }
+
+    template <typename T>
+    inline T *get(size_t index) const { return mem->data<T>(index); }
+
+    /// gets a wrapped mx value; supports primitive/struct/context
+    mx get_meta(cstr cs) const { return get_meta(mx(mem_symbol(cs))); }
+    mx get_meta(mx  key) const {
+        prop *p = lookup(key);
+        assert(p);
+        
+        void *src = p->member_pointer(mem->origin);
+        assert(src);
+
+        void *dst = p->member_type->functions->alloc_new(null, null);
+        bool is_mx = p->member_type->traits & traits::mx_obj;
+        if (!is_mx)
+            p->member_type->functions->assign(null, dst, src); /// copy primitives and structs
+        else
+            p->member_type->functions->set_memory(dst, ((mx*)src)->mem); /// quick assignment for mx
+
+        return memory::wrap(p->member_type, dst, 1);
+    }
+
+    void set_meta(cstr cs, mx value) { set_meta(mx(mem_symbol(cs)), value); }
+    void set_meta(mx key,  mx value) {
+        prop *p = lookup(key);
+        assert(p);
+
+        /// this one shouldnt perform any type conversion yet
+        assert( p->member_type == value.type() || 
+               (p->member_type->schema && p->member_type->schema->bind->data == value.type()));
+        
+        /// property must exist
+        void *src = p->member_pointer(mem->origin);
+        assert(src);
+
+        bool is_mx = p->member_type->traits & traits::mx_obj;
+        if (!is_mx)
+            p->member_type->functions->assign(null, src, value.mem->origin); /// copy primitives and structs
+        else
+            p->member_type->functions->set_memory(src, value.mem); /// quick assignment for mx
     }
 
     inline ~mx() { if (mem) mem->drop(); }
@@ -1899,8 +1955,7 @@ struct mx {
     template <typename T> inline T *data() const { return  mem->data<T>(0); }
     template <typename T> inline T &ref () const { return *mem->data<T>(0); }
     
-    template <typename T>
-    inline T *get(size_t index) const { return mem->data<T>(index); }
+
 
     inline mx(bool   v) : mem(copy(&v, 1, 1)) { }
     inline mx(u8     v) : mem(copy(&v, 1, 1)) { }
@@ -2752,7 +2807,6 @@ struct ex:mx {
             psym     = type->symbols->ids.lookup(id);
         }
         if (!psym) {
-            usleep(10000);
             printf("symbol: %s, raw: %s\n", S, (char*)raw.mem->origin);
             throw C();
         }
@@ -4431,18 +4485,28 @@ protected:
     void push(mx v) {        array<mx>((mx*)this).push(v); }
     mx  &last()     { return array<mx>((mx*)this).last();  }
 
-    static mx parse_obj(cstr *start) {
-        /// {} is a null state on map<mx>
-        map<mx> m_result = map<mx>();
+    static mx parse_obj(cstr *start, type_t type) {
+        /// supports primitive, meta-bound structs and mx objects with data type
+        bool       is_map = !type;
+        mx      mx_result;
+        map<mx>  m_result;
+
+        if (!is_map) {
+            mx_result = memory::wrap(type, type->functions->alloc_new(null, null), 1);
+        }
+
+        /// if type is not mx-based, lets say its an int type, we must wrap this parse result
 
         cstr cur = *start;
         assert(*cur == '{');
         ws(&(++cur));
 
+        type_t p_type = type;
+
         /// read this object level, parse_values work recursively with 'cur' updated
         while (*cur != '}') {
             /// parse next field name
-            mx field = parse_quoted(&cur).symbolize();
+            mx field = mem_symbol((symbol)parse_quoted(&cur, null).mem->origin);
 
             /// assert field length, skip over the ':'
             ws(&cur);
@@ -4450,10 +4514,22 @@ protected:
             assert(*cur == ':');
             ws(&(++cur));
 
-            /// parse value at newly listed mx value in field, upon requesting it
-            *start = cur;
-            m_result[field] = parse_value(start);
+            prop** p = null;
+            assert(!p_type || (p_type->meta_map && (p = p_type->meta_map->lookup((symbol)field.mem->origin, null, null))));
+            if (p_type) {
+                prop* pr = *p;
+                assert(pr && pr->member_type);
+                type = pr->member_type;
+            }
 
+            /// parse value at newly listed mx value in field, upon requesting it
+            *start   = cur;
+            mx value = parse_value(start, p ? (*p)->member_type : null);
+            if (is_map)
+                m_result[field] = value;
+            else
+                mx_result.set_meta(field, value);
+            
             cur = *start;
             /// skip ws, continue past ',' if there is another
             if (ws(&cur) == ',')
@@ -4465,11 +4541,13 @@ protected:
         ws(&(++cur));
 
         *start = cur;
-        return m_result;
+        if (is_map)
+            mx_result = m_result.grab();
+        return mx_result;
     }
 
     /// no longer will store compacted data
-    static mx parse_arr(cstr *start) {
+    static mx parse_arr(cstr *start, type_t e_type) {
         array<mx> a_result = array<mx>();
         cstr cur = *start;
         assert(*cur == '[');
@@ -4479,7 +4557,7 @@ protected:
         else {
             for (;;) {
                 *start = cur;
-                a_result += parse_value(start);
+                a_result += parse_value(start, e_type);
                 cur = *start;
                 ws(&cur);
                 if (*cur == ',') {
@@ -4504,7 +4582,7 @@ protected:
         *start = cur;
     }
 
-    static mx parse_value(cstr *start) {
+    static mx parse_value(cstr *start, type_t type) {
 
         static cstr last;
         
@@ -4515,15 +4593,23 @@ protected:
 		bool numeric   =   first_chr == '-' || isdigit(first_chr);
 
         if (first_chr == '{') {
-            return parse_obj(start);
+            /// type must have meta info
+            assert(!type || type->meta);
+            return parse_obj(start, type);
         } else if (first_chr == '[') {
-            return parse_arr(start);
+            /// simple runtime check for array
+            assert(!type || type->traits & traits::array);
+            /// convert type to its element type
+            type_t e_type = type ? type->schema->bind->data : null;
+            return parse_arr(start, e_type);
         } else if (first_chr == 't' || first_chr == 'f') {
+            assert(!type || type == typeof(bool));
             bool   v = first_chr == 't';
             skip_alpha(start);
             return mx(mx::alloc(&v));
         } else if (first_chr == '"') {
-            return parse_quoted(start); /// this updates the start cursor
+            assert(!type || (type == typeof(str) || type->functions->from_string));
+            return parse_quoted(start, type); /// this updates the start cursor
         } else if (numeric) {
             bool floaty;
             str value = parse_numeric(start, floaty);
@@ -4569,39 +4655,51 @@ protected:
     }
 
     /// \\ = \ ... \x = \x
-    static str parse_quoted(cstr *cursor) {
+    static mx parse_quoted(cstr *cursor, type_t type) {
         symbol first = *cursor;
-        if (*first != '"')
-            return "";
-        ///
-        char         ch = 0;
-        bool last_slash = false;
-        cstr      start = ++(*cursor);
-        str      result { size_t(256) };
-        size_t     read = 0;
-        ///
-        
-        for (; (ch = start[read]) != 0; read++) {
-            if (ch == '\\')
-                last_slash = !last_slash;
-            else if (last_slash) {
-                switch (ch) {
-                    case 'n': ch = '\n'; break;
-                    case 'r': ch = '\r'; break;
-                    case 't': ch = '\t'; break;
-                    ///
-                    default:  ch = ' ';  break;
-                }
-                last_slash = false;
-            } else if (ch == '"') {
-                read++; /// make sure cursor goes where it should, after quote, after this parse
-                break;
-            }
+        str    result { size_t(256) };
+
+        if (*first == '"') {
+            ///
+            char         ch = 0;
+            bool last_slash = false;
+            cstr      start = ++(*cursor);
             
-            if (!last_slash)
-                result += ch;
+            size_t     read = 0;
+            ///
+            
+            for (; (ch = start[read]) != 0; read++) {
+                if (ch == '\\')
+                    last_slash = !last_slash;
+                else if (last_slash) {
+                    switch (ch) {
+                        case 'n': ch = '\n'; break;
+                        case 'r': ch = '\r'; break;
+                        case 't': ch = '\t'; break;
+                        ///
+                        default:  ch = ' ';  break;
+                    }
+                    last_slash = false;
+                } else if (ch == '"') {
+                    read++; /// make sure cursor goes where it should, after quote, after this parse
+                    break;
+                }
+                
+                if (!last_slash)
+                    result += ch;
+            }
+            *cursor = &start[read];
         }
-        *cursor = &start[read];
+        
+        if (type) {
+            /// must contain a cstr or symbol constructor
+            assert(type->functions->from_string);
+            void *v_result = type->functions->from_string(null, result.cs());
+            if (type->traits & traits::mx_obj) {
+                return ((mx*)v_result)->grab();
+            }
+            return memory::wrap(type, v_result);
+        }
         return result;
     }
 
@@ -4632,8 +4730,8 @@ protected:
     }
 
     /// called from path::read<var>()
-    static var parse(cstr js) {
-        return var(parse_value(&js));
+    static mx parse(cstr js, type_t type) {
+        return parse_value(&js, type);
     }
 
     str stringify() const {
@@ -4803,7 +4901,7 @@ protected:
         return *this;
     }
 
-    static var json(mx i) {
+    static mx json(mx i, type_t type) {
         type_t ty = i.type();
         cstr   cs = null;
         if (ty == typeof(u8))
@@ -4816,7 +4914,7 @@ protected:
             console.fault("unsupported type: {0}", { str(ty->name) });
             return null;
         }
-        return parse(cs);
+        return parse(cs, type);
     }
 
     memory *string() {
@@ -5282,7 +5380,10 @@ T path::read() const {
         if constexpr (identical<T, str>()) {
             return str((cstr )st.c_str(), int(st.length()));
         } else if constexpr (inherits<var, T>()) {
-            return var::parse(cstr(st.c_str()));
+            return var::parse(cstr(st.c_str()), null);
+        } else if constexpr (inherits<mx, T>()) {
+            /// if its a user-class, we can use var's schema option
+            return var::parse(cstr(st.c_str()), typeof(T));
         } else {
             console.fault("not implemented");
             if constexpr (nullable)

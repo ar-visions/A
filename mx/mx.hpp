@@ -1316,6 +1316,9 @@ template <typename T> using         DelFn =          void(*)(T*, T*);      /// p
 template <typename T> using      AssignFn =          void(*)(T*, T*, T*);  /// dst, src
 template <typename T> using        HashFn =        size_t(*)(T*, size_t);  /// src
 
+using PushFn = void(*)(void*, void*); /// array<T>* dst, T* src
+
+
 template <typename T>
 struct ops {
         //FreeFn<T> free;
@@ -1333,6 +1336,7 @@ struct ops {
           DelFn<T> del;
        AssignFn<T> assign;
          HashFn<T> hash;
+         PushFn    push; /// only for array<T>; we needed a way to allocate array<T> and at runtime push with pointers
          void     *meta;
 };
 
@@ -2193,6 +2197,13 @@ inline void vset(T *data, T v, size_t c) {
         data[i] = v;
 }
 
+template<typename, typename = void>
+struct has_push : std::false_type {};
+
+template<typename T>
+struct has_push<T, std::void_t<decltype(T::pushv(std::declval<T*>(), std::declval<memory*>()))>> : std::true_type {};
+
+
 template <typename T>
 struct array:mx {
 protected:
@@ -2211,6 +2222,14 @@ public:
     using context_class  = array;\
     using intern         = T;\
     T*    data;\
+
+    /// an init for type would be useful; then we could fill out more on the type
+    static void pushv(array<T> *a, memory *m_item) {
+        if constexpr (is_convertible<memory*, T>()) {
+            T item(m_item->grab());
+            a->push(item);
+        }
+    }
 
     static array<T> read_file(symbol filename) {
         std::ifstream file(filename, std::ios::ate | std::ios::binary);
@@ -4553,8 +4572,16 @@ protected:
     }
 
     /// no longer will store compacted data
-    static mx parse_arr(cstr *start, type_t e_type) {
-        array<mx> a_result = array<mx>();
+    static mx parse_arr(cstr *start, type_t type) {
+        type_t   e_type = type ? type->schema->bind->data : null;
+        void *container = null;
+        array<mx> a_result;
+
+        if (type) {
+            container = type->functions->alloc_new(null, null);
+        } else
+            a_result = array<mx>();
+
         cstr cur = *start;
         assert(*cur == '[');
         ws(&(++cur));
@@ -4563,7 +4590,11 @@ protected:
         else {
             for (;;) {
                 *start = cur;
-                a_result += parse_value(start, e_type);
+                mx  pv = parse_value(start, e_type);
+                if (container)
+                    type->functions->push(container, pv.mem);
+                else
+                    a_result += pv;
                 cur = *start;
                 ws(&cur);
                 if (*cur == ',') {
@@ -4578,7 +4609,7 @@ protected:
             }
         }
         *start = cur;
-        return a_result;
+        return container ? mx(memory::wrap(type, container)) : a_result;
     }
 
     static void skip_alpha(cstr *start) {
@@ -4606,9 +4637,7 @@ protected:
         } else if (first_chr == '[') {
             /// simple runtime check for array
             assert(!type || type->traits & traits::array);
-            /// convert type to its element type
-            type_t e_type = type ? type->schema->bind->data : null;
-            return parse_arr(start, e_type);
+            return parse_arr(start, type); /// needs to pass in array<Test3> not Test3, unless we can get the type back
         } else if (first_chr == 't' || first_chr == 'f') {
             assert(!type || type == typeof(bool));
             bool   v = first_chr == 't';
@@ -4623,9 +4652,29 @@ protected:
             assert(value != "");
             if (floaty) {
                 real v = value.real_value<real>();
+                if (type) {
+                    assert(type == typeof(float) || type == typeof(double));
+                    if (type == typeof(float)) {
+                        float v32 = (float)v;
+                        return mx::alloc(&v32);
+                    }
+                    return mx::alloc(&v);
+                }
                 return mx::alloc(&v);
             }
             i64 v = value.integer_value();
+            if (type) {
+                if (type == typeof(char)) { char vc  = (char)v; return mx::alloc(&vc);   }
+                if (type == typeof(i8))   { i8  vi8  = (i8)v;   return mx::alloc(&vi8);  }
+                if (type == typeof(u8))   { u8  vu8  = (u8)v;   return mx::alloc(&vu8);  }
+                if (type == typeof(i16))  { i16 vi16 = (i16)v;  return mx::alloc(&vi16); }
+                if (type == typeof(u16))  { u16 vu16 = (u16)v;  return mx::alloc(&vu16); }
+                if (type == typeof(i32))  { i32 vi32 = (i32)v;  return mx::alloc(&vi32); }
+                if (type == typeof(u32))  { u32 vu32 = (u32)v;  return mx::alloc(&vu32); }
+                if (type == typeof(i64))  { i64 vi64 = (i64)v;  return mx::alloc(&vi64); }
+                if (type == typeof(u64))  { u64 vu64 = (u64)v;  return mx::alloc(&vu64); }
+                assert(false);
+            }
             return mx::alloc(&v);
         } 
 
@@ -5248,6 +5297,9 @@ ops<T> *ftable() {
 
         if constexpr (registered_hash<T>())
             gen.hash = HashFn<T>(T::hash);
+
+        if constexpr (has_push<T>())
+            gen.push = PushFn(T::pushv);
         ///
     } else if constexpr (is_external<T>::value) { /// primitives, std::filesystem, and other foreign objects
         gen.alloc_new   = NewFn        <T>(_new);

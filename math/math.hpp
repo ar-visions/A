@@ -16,7 +16,6 @@ template <typename T> using m44  = glm::tmat4x4<T>;
 template <typename T> using m33  = glm::tmat3x3<T>;
 template <typename T> using m22  = glm::tmat2x2<T>;
 
-
 template <typename T>
 struct vec2 {
     T x, y;
@@ -175,6 +174,10 @@ struct vec4 {
     type_register(vec4);
 };
 
+template <> struct is_opaque<glm::vec2> : true_type { };
+template <> struct is_opaque<glm::vec3> : true_type { };
+//template <> struct is_opaque<glm::vec4> : true_type { };
+//template <> struct is_opaque<glm::mat4> : true_type { };
 
 /// vkg must use doubles!
 using m44d    = m44 <r64>;

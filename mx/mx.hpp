@@ -2405,7 +2405,7 @@ public:
     
     static array<T> empty() { return array<T>(size_t(1)); }
 
-    array(initial<T> args) : array() {
+    array(initial<T> args) : array( size_t(args.size()) ) {
         for (auto &v:args) {
             T &element = (T &)v;
             push(element);

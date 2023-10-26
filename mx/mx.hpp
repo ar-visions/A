@@ -5286,14 +5286,17 @@ idata *ident::for_type() {
                     p.parent_type = type; /// we need to store what type it comes from, as we dont always have this context
 
                     /// this use-case is needed for user interfaces without css defaults
-                    p.init_value = p.member_type->functions->alloc_new(null, null);
+                    p.init_value = p.member_type->functions ?
+                        p.member_type->functions->alloc_new(null, null) : calloc64(1, p.member_type->base_sz);
 
-                    u8 *prop_dest = &(((u8*)def)[p.offset]);
-                    if (p.member_type->traits & traits::mx_obj) {
-                        mx *mx_data = (mx*)prop_dest;
-                        p.member_type->functions->set_memory(p.init_value, mx_data->mem);
-                    } else {
-                        p.member_type->functions->assign(null, p.init_value, prop_dest);
+                    if (p.member_type->functions) {
+                        u8 *prop_dest = &(((u8*)def)[p.offset]);
+                        if (p.member_type->traits & traits::mx_obj) {
+                            mx *mx_data = (mx*)prop_dest;
+                            p.member_type->functions->set_memory(p.init_value, mx_data->mem);
+                        } else {
+                            p.member_type->functions->assign(null, p.init_value, prop_dest);
+                        }
                     }
                 }
                 delete def;

@@ -1,9 +1,9 @@
 #include <mx/mx.hpp>
 
 struct Test3:mx {
-    struct members {
+    struct M {
         int t3_int;
-        register(members)
+        register(M)
         doubly<prop> meta() {
             return {
                 prop { "t3_int", t3_int }
@@ -14,10 +14,10 @@ struct Test3:mx {
 };
 
 struct Test2:mx {
-    struct members {
+    struct M {
         int test2_int;
         array<Test3> test3_values;
-        register(members)
+        register(M)
         doubly<prop> meta() {
             return {
                 prop { "test2_int",    test2_int    },
@@ -29,13 +29,13 @@ struct Test2:mx {
 };
 
 struct Test1:mx {
-    struct members {
+    struct M {
         str   str_value;
         int   int_value;
         short short_value;
         bool  bool_value;
         Test2 test2_value;
-        register(members)
+        register(M)
         doubly<prop> meta() {
             return {
                 prop { "str_value",   str_value   },

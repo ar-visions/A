@@ -13,13 +13,13 @@
 namespace ion {
 ///
 struct path_op:mx {
-    struct members {
+    struct M {
         ion::path path;
         size_t    path_index;
         path::op  op;
-        type_register(members);
+        type_register(M);
     };
-    mx_object(path_op, mx, members);
+    mx_object(path_op, mx, M);
     inline bool operator==(path::op op) { return op == data->op; }
 };
 

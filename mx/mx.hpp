@@ -628,7 +628,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     }\
     type_register(C)\
 
-#define mx_basic(C) mx_object(C, mx, members)
+#define mx_basic(C) mx_object(C, mx, M)
 
 /// these objects dont contain a data member for access
 #define mx_object_0(C, B, D) \
@@ -2186,6 +2186,49 @@ lambda<R(Args...)>::lambda(CL* cl, F fn) {
 
 mx call(mx lambda, array<str> args);
 
+
+/// stream accept types going out, and accept types going in
+/// we just put them in a list of accepted.  its good to declare that for something as robust as streaming
+
+struct io:mx {
+    struct Source {
+        type_t           type; /// types are the stream identifier
+        lambda<mx(mx)>   fn;   /// 'sink' of sort
+    };
+
+    struct M {
+        array<Source> sources;
+        array<type_t> types_out;
+        lambda<void()> shutdown;
+        ~M() {
+            /// stream shutdown
+            if (shutdown)
+                shutdown();
+        }
+    };
+    
+    mx_basic(io)
+
+    io(array<type_t> types_in, array<type_t> types_out, lambda<void()> shutdown) : io() {
+        data->types_in  = types_in;
+        data->types_out = types_out;
+        data->shutdown  = shutdown;
+    }
+    
+    bool attach(Source &src) {
+        bool valid = data->types_out.index_of([&](Source &a) -> bool {
+            return a.type == src.type;
+        }) >= 0;
+        assert(valid);
+        data->sources += src;
+        return valid;
+    }
+
+    bool operator+=(Source src) {
+        return attach(src);
+    }
+};
+
 template <typename T>
 inline void vset(T *data, u8 bv, size_t c) {
     memset((void*)data, int(bv), sizeof(T) * c);
@@ -2202,7 +2245,6 @@ struct has_push : std::false_type {};
 
 template<typename T>
 struct has_push<T, std::void_t<decltype(T::pushv(std::declval<T*>(), std::declval<memory*>()))>> : std::true_type {};
-
 
 template <typename T>
 struct array:mx {
@@ -2437,6 +2479,14 @@ public:
     int index_of(T v) const {
         for (size_t i = 0; i < mem->count; i++) {
             if (data[i] == v)
+                return int(i);
+        }
+        return -1;
+    }
+
+    int index_of(lambda<bool(T&)> v) const {
+        for (size_t i = 0; i < mem->count; i++) {
+            if (v(data[i]))
                 return int(i);
         }
         return -1;

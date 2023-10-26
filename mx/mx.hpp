@@ -2186,49 +2186,6 @@ lambda<R(Args...)>::lambda(CL* cl, F fn) {
 
 mx call(mx lambda, array<str> args);
 
-
-/// stream accept types going out, and accept types going in
-/// we just put them in a list of accepted.  its good to declare that for something as robust as streaming
-
-struct io:mx {
-    struct Source {
-        type_t           type; /// types are the stream identifier
-        lambda<mx(mx)>   fn;   /// 'sink' of sort
-    };
-
-    struct M {
-        array<Source> sources;
-        array<type_t> types_out;
-        lambda<void()> shutdown;
-        ~M() {
-            /// stream shutdown
-            if (shutdown)
-                shutdown();
-        }
-    };
-    
-    mx_basic(io)
-
-    io(array<type_t> types_in, array<type_t> types_out, lambda<void()> shutdown) : io() {
-        data->types_in  = types_in;
-        data->types_out = types_out;
-        data->shutdown  = shutdown;
-    }
-    
-    bool attach(Source &src) {
-        bool valid = data->types_out.index_of([&](Source &a) -> bool {
-            return a.type == src.type;
-        }) >= 0;
-        assert(valid);
-        data->sources += src;
-        return valid;
-    }
-
-    bool operator+=(Source src) {
-        return attach(src);
-    }
-};
-
 template <typename T>
 inline void vset(T *data, u8 bv, size_t c) {
     memset((void*)data, int(bv), sizeof(T) * c);
@@ -2749,6 +2706,56 @@ auto invoke(const Lambda& lambda, const array<str>& args) {
     /// 
     return invokeImpl(lambda, std::make_index_sequence<numArgs>{}, args);
 }
+
+
+/// stream accept types going out, and accept types going in
+/// we just put them in a list of accepted.  its good to declare that for something as robust as streaming
+
+struct io:mx {
+    struct Source {
+        type_t           type; /// types are the stream identifier
+        lambda<void(mx)> fn;   /// 'sink' of sort
+    };
+
+    struct M {
+        array<Source> sources;
+        array<type_t> types_out;
+        lambda<void()> shutdown;
+        ~M() {
+            /// stream shutdown
+            if (shutdown)
+                shutdown();
+        }
+
+        void emit(mx data) {
+            type_t type = data.type();
+            for (Source &src: sources) {
+                if (src.type == type)
+                    src.fn(data);
+            }
+        }
+        
+        bool attach(Source &src) {
+            bool valid = types_out.index_of([&](Source &a) -> bool {
+                return a.type == src.type;
+            }) >= 0;
+            assert(valid);
+            sources += src;
+            return valid;
+        }
+    };
+    
+    mx_basic(io)
+
+    io(array<type_t> types_out, lambda<void()> shutdown) : io() {
+        data->types_out = types_out;
+        data->shutdown  = shutdown;
+    }
+
+    bool operator+=(Source src) {
+        return data->attach(src);
+    }
+};
 
 using arg = pair<mx, mx>;
 using ax  = array<arg>;
@@ -3586,7 +3593,6 @@ struct str:mx {
         return -1;
     }
 
-    /// if from is negative, search is backwards from + 1 (last char not skipped but number used to denote direction and then offset by unit)
     int index_of(str b, int from = 0) const {
         if (!b.mem || b.mem->count == 0) return  0;
         if (!  mem ||   mem->count == 0) return -1;
@@ -3683,7 +3689,7 @@ E ex::initialize(C *p, E v, symbol names, type_t ty) {
     i64        next = 0;
 
     for (int i = 0; i < c; i++) {
-        num idx = sp.index_of("=");
+        num idx = sp.index_of(str("="));
         if (idx >= 0) {
             str val = sp[i].mid(idx + 1);
             mem_symbol(sp[i].data, ty, val.integer_value());

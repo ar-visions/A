@@ -2327,8 +2327,7 @@ public:
     T &push(T &v) {
         size_t csz = mem->count;
         if (csz >= alloc_size())
-            data = (T*)mem->realloc(csz + 1, false); /// when you realloc you must have a pointer. 
-        ///
+            data = (T*)mem->realloc(csz + 1, false);
         new (&data[csz]) T(v);
         mem->count++;
         return data[csz];
@@ -2338,7 +2337,6 @@ public:
         size_t csz = mem->count;
         if (csz >= alloc_size())
             data = (T*)mem->realloc(csz + 1, false);
-
         new (&data[csz]) T();
         mem->count++;
         return data[csz];
@@ -2404,7 +2402,7 @@ public:
     
     static array<T> empty() { return array<T>(size_t(1)); }
 
-    array(initial<T> args) : array( size_t(args.size()) ) {
+    array(initial<T> args) : array() { //  size_t(args.size()) -- doesnt work with the pre-alloc; find out why.
         for (auto &v:args) {
             T &element = (T &)v;
             push(element);
@@ -2551,9 +2549,8 @@ public:
     inline size_t  length() const { return mem->count; }
     inline size_t reserve() const { return mem->reserve; }
 
-    /// check use-cases; lambda init isnt the best idea in the world
     array(size al, size sz = size(0)) : 
-            array(talloc<T>(0, al)) {
+            array(talloc<T>(sz, al)) {
         if (al.count > 1)
             mem->shape = new size(al); /// allocate a shape if there are more than 1 dims
     }
@@ -4386,16 +4383,28 @@ struct path:mx {
         fs::path   parent   = *data; /// parent relative to the git-ignore index; there may be multiple of these things.
         fs::path&  fsp		= *data;
 
+        for (size_t i = 0; i < exts.len(); i++) {
+            const str &e = (const str &)exts[i];
+            if (e == str("test1")) {
+                break;
+            }
+        }
+
         ///
         res = [&](path a) {
             auto fn_filter = [&](ion::path p) -> bool {
                 str      ext = p.ext4();
                 bool proceed = false;
                 /// proceed if the extension is matching one, or no extensions are given
-                for (size_t i = 0; i < exts.len(); i++)
-                    if (!exts || ext == (const str)exts[i]) {
-                        proceed = !no_hidden || !is_hidden();
-                        break;
+                if (!exts) {
+                    proceed = !no_hidden || !is_hidden();
+                } else
+                    for (size_t i = 0; i < exts.len(); i++) {
+                        const str &e = (const str &)exts[i];
+                        if (ext == e) {
+                            proceed = !no_hidden || !is_hidden();
+                            break;
+                        }
                     }
 
                 /// proceed if proceeding, and either not using git ignore,

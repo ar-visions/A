@@ -4938,7 +4938,7 @@ protected:
                         type_t  mt   = smem ? smem->type : null;
                         if (!smem || smem->type == typeof(null_t))
                             res += "null";
-                        else if (vt == typeof(int))
+                        else if (vt->traits & (traits::integral | traits::realistic))
                             res += smem; /// string of the number, no quotes!
                         else if (mt == typeof(char) || mt == typeof(const char)) {
                             res += "\"";

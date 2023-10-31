@@ -639,11 +639,6 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C(memory*   mem) : B(mem) { }\
     C(mx          o) : C(o.mem->grab()) { }\
     C()              : C(mx::alloc<C>(null, 0, 1)) { }\
-    C      &operator=(const C b) {\
-        mx::drop();\
-        mx::mem = b.mem->grab();\
-        return *this;\
-    }\
     type_register(C)\
 
 //#define movable(C)\
@@ -3042,6 +3037,13 @@ struct str:mx {
 
     memory * symbolize() { return mem_symbol(data, typeof(char)); } 
 
+    static str rand(size_t sz, char from, char to) {
+        str res(sz);
+        for (int i = 0; i < sz; i++)
+            res += rand::uniform(from, to);
+        return res;
+    }
+
     str escape(str chars, char esc = '\\') {
         str res { len() * 2 };
         for (int i = 0; i < len(); i++) {
@@ -4909,6 +4911,8 @@ protected:
             /// used to output specific mx value -- can be any, may call upper recursion
             auto format_v = [&](const mx &e, size_t n_fields) {
                 type_t  vt   = e.type();
+
+                /// get props, and values for each
                 memory *smem = e.to_string();
                 str     res(size_t(1024));
                 assert (smem);
@@ -5445,9 +5449,6 @@ V* hmap<K,V>::lookup(K input, u64 *pk, bucket **pbucket) const {
 
 template <typename T>
 bool path::write(T input) const {
-    if (!fs::is_regular_file(*data))
-        return false;
-
     if constexpr (is_array<T>()) {
         std::ofstream f(*data, std::ios::out | std::ios::binary);
         if (input.len() > 0)

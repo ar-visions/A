@@ -609,8 +609,8 @@ memory  *mx::to_string() const {
         return mem->type->functions->to_string(mem->origin); /// call to_string() on context class
     
     else   if (mem->type->schema &&
-                mem->type->schema->bind->data->functions &&
-                mem->type->schema->bind->data->functions->to_string)
+               mem->type->schema->bind->data->functions &&
+               mem->type->schema->bind->data->functions->to_string)
         return mem->type->schema->bind->data->functions->to_string(mem->origin); /// or data...
     
     else if (mem->type == typeof(char))

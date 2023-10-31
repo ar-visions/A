@@ -1,9 +1,0 @@
-dep(mx:mx mx:math)
-
-if(WIN32)
-    dep(libpng:libpng16_static zlib:zlibstatic)
-else()
-    dep(libpng:png zlib:z)
-endif()
-
-cpp(17)

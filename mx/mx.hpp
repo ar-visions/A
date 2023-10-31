@@ -371,11 +371,6 @@ typename std::enable_if<std::is_same<T, double>::value
         return new T(T(std::stoi(data)));
 }
 
-/// the first arg is not needed as its needed for externals because these are embedded on the struct
-/// to fix _from_string we would need a central allocator, removal of new or flagging of what type of allocation it was
-/// i honestly would prefer latter but i prefer not to over optimize for now
-/// another possibility is to have a _delete in the table
-/// transitionable at runtime = add & scale ops
 #define register(C) type_register(C)
 
 #define type_register(C)\
@@ -1101,8 +1096,6 @@ template <typename T> using func    = std::function<T>;
 
 template <typename K, typename V> using umap = std::unordered_map<K,V>;
 namespace fs  = std::filesystem;
-
-//template <> struct is_opaque<fs::path> : true_type { }; /// destructor seems broken on that one (we need to not use this type)
 
 template <typename T, typename B>
                       T mix(T a, T b, B f) { return a * (B(1.0) - f) + b * f; }
@@ -4200,12 +4193,26 @@ struct path:mx {
     static path cwd() {
         return dir::cwd();
     }
-    ///
-    mx_object(path, mx, fs::path);
-    //movable(path);
 
-    inline path(str      s) : path(new fs::path(symbol(s.cs()))) { }
-    inline path(symbol  cs) : path(new fs::path(cs)) { }
+    struct M {
+        fs::path p;
+        memory* to_string() {
+            static std::string str;
+            str = p.string();
+            return memory::string(str);
+        }
+        register(M);
+    };
+
+    mx_basic(path);
+
+    path(str      s) : path() {
+        data->p = fs::path((symbol)s.cs());
+    }
+
+    path(symbol  cs) : path() {
+        data->p = fs::path(cs);
+    }
 
     template <typename T> T     read() const;
     template <typename T> bool write(T input) const;
@@ -4243,59 +4250,64 @@ struct path:mx {
         return b < 0;
     }
 
+    fs::path *pdata() const {
+        return &data->p;
+    }
+
     str        mime_type();
-    str             stem() const { return !data->empty() ? str(data->stem().string()) : str(null);    }
-    bool      remove_all() const { std::error_code ec;          return fs::remove_all(*data, ec); }
-    bool          remove() const { std::error_code ec;          return fs::remove(*data, ec); }
-    bool       is_hidden() const { auto st = data->stem().string(); return st.length() > 0 && st[0] == '.'; }
-    bool          exists() const {                              return fs::exists(*data); }
-    bool          is_dir() const {                              return fs::is_directory(*data); }
-    bool        make_dir() const { std::error_code ec;          return !data->empty() ? fs::create_directories(*data, ec) : false; }
+    str             stem() const { return !pdata()->empty() ? str(pdata()->stem().string()) : str(null);    }
+    bool      remove_all() const { std::error_code ec;          return fs::remove_all(*pdata(), ec); }
+    bool          remove() const { std::error_code ec;          return fs::remove(*pdata(), ec); }
+    bool       is_hidden() const { auto st = pdata()->stem().string(); return st.length() > 0 && st[0] == '.'; }
+    bool          exists() const {                              return fs::exists(*pdata()); }
+    bool          is_dir() const {                              return fs::is_directory(*pdata()); }
+    bool        make_dir() const { std::error_code ec;          return !pdata()->empty() ? fs::create_directories(*pdata(), ec) : false; }
     path remove_filename()       {
-        fs::path p = data->remove_filename();
+        fs::path p = pdata()->remove_filename();
         return path(p.string().c_str());
     }
-    bool    has_filename() const { return data->has_filename(); }
-    path            link() const { return fs::is_symlink(*data) ? path(data->string().c_str()) : path(); }
-    bool         is_file() const { return !fs::is_directory(*data) && fs::is_regular_file(*data); }
+    bool    has_filename() const { return pdata()->has_filename(); }
+    path            link() const { return fs::is_symlink(*pdata()) ? path(pdata()->string().c_str()) : path(); }
+    bool         is_file() const { return !fs::is_directory(*pdata()) && fs::is_regular_file(*pdata()); }
     char             *cs() const {
         static std::string static_thing;
-        static_thing = data->string();
+        static_thing = pdata()->string();
         return (char*)static_thing.c_str();
     }
     operator cstr() const {
         return cstr(cs());
     }
 
-    str         ext () const { return str(data->extension().string()); }
-    str         ext4() const { return data->extension().string(); }
-    path        file() const { return fs::is_regular_file(*data) ? path(cs()) : path(); }
+    str         ext () const { return str(pdata()->extension().string()); }
+    str         ext4() const { return pdata()->extension().string(); }
+    path        file() const { return fs::is_regular_file(*pdata()) ? path(cs()) : path(); }
     bool copy(path to) const {
-        assert(!data->empty());
+        assert(!pdata()->empty());
         assert(exists());
         if (!to.exists())
             (to.has_filename() ?
                 to.remove_filename() : to).make_dir();
 
         std::error_code ec;
-        fs::copy(*data, *(to.is_dir() ? to / path(str(data->filename().string())) : to), ec);
+        path p = to.is_dir() ? to / path(str(pdata()->filename().string())) : to;
+        fs::copy(*pdata(), *p.pdata(), ec);
         return ec.value() == 0;
     }
     
     path &assert_file() {
-        assert(fs::is_regular_file(*data) && exists());
+        assert(fs::is_regular_file(*pdata()) && exists());
         return *this;
     }
 
     /// create an alias; if successful return its location
     path link(path alias) const {
-    fs::path &ap = *data;
-        fs::path &bp = *alias;
+        fs::path &ap = *pdata();
+        fs::path &bp = *alias.pdata();
         if (ap.empty() || bp.empty())
             return {};
         std::error_code ec;
         is_dir() ? fs::create_directory_symlink(ap, bp) : fs::create_symlink(ap, bp, ec);
-        return alias.exists() ? alias : path();
+        return fs::exists(bp) ? alias : path();
     }
 
     /// operators
@@ -4304,19 +4316,19 @@ struct path:mx {
     }
     operator         str()         const { return str(cs()); }
     path          parent()         const {
-        std::string s = data->parent_path().string();
+        std::string s = pdata()->parent_path().string();
         return  s.c_str();
     }
     
-    path operator / (path       s) const { return path((*data / *s).string().c_str()); }
-    path operator / (symbol     s) const { return path((*data /  s).string().c_str()); }
-    path operator / (const str& s) const { return path((*data / fs::path(s.data)).string().c_str()); }
-    path relative   (path    from) const { return path(fs::relative(*data, *from).string().c_str()); }
+    path operator / (path       s) const { return path((*pdata() / *s.pdata()).string().c_str()); }
+    path operator / (symbol     s) const { return path((*pdata() /  s).string().c_str()); }
+    path operator / (const str& s) const { return path((*pdata() / fs::path(s.data)).string().c_str()); }
+    path relative   (path    from) const { return path(fs::relative(*pdata(), *from.pdata()).string().c_str()); }
     
-    bool  operator==(path&      b) const { return  *data == *b; }
+    bool  operator==(path&      b) const { return  *pdata() == *b.pdata(); }
     bool  operator!=(path&      b) const { return !(operator==(b)); }
     
-    bool  operator==(symbol     b) const { return *data == b; }
+    bool  operator==(symbol     b) const { return *pdata() == b; }
     bool  operator!=(symbol     b) const { return !(operator==(b)); }
 
     ///
@@ -4324,7 +4336,7 @@ struct path:mx {
         auto rand = [](num i) -> str { return rand::uniform('a', 'z'); };
         fs::path p { };
         do { p = fs::path(str::fill(6, rand)); }
-        while (fs::exists(*b / p));
+        while (fs::exists(*b.pdata() / p));
         std::string s = p.string();
         return  s.c_str();
     }
@@ -4335,62 +4347,59 @@ struct path:mx {
 
     int64_t modified_at() const {
         using namespace std::chrono_literals;
-        std::string ps = data->string();
-        auto        wt = fs::last_write_time(*data);
+        std::string ps = pdata()->string();
+        auto        wt = fs::last_write_time(*pdata());
         const auto  ms = wt.time_since_epoch().count(); // offset needed atm
         return int64_t(ms);
     }
 
     bool read(size_t bs, lambda<void(symbol, size_t)> fn) {
         cstr  buf = new char[bs];
+        fs::path *pdata = this->pdata();
         try {
             std::error_code ec;
-            size_t rsize = fs::file_size(*data, ec);
+            size_t rsize = fs::file_size(*pdata, ec);
             /// dont throw in the towel. no-exceptions.
             if (!ec)
                 return false;
-            std::ifstream f(*data);
+            std::ifstream f(*pdata);
             for (num i = 0, n = (rsize / bs) + (rsize % bs != 0); i < n; i++) {
                 size_t sz = i == (n - 1) ? rsize - (rsize / bs * bs) : bs;
                 fn((symbol)buf, sz);
             }
         } catch (std::ofstream::failure e) {
-            std::cerr << "read failure: " << data->string();
+            std::cerr << "read failure: " << pdata->string();
         }
         delete[] buf;
         return true;
     }
 
     bool append(array<uint8_t> bytes) {
+        fs::path *pdata = this->pdata();
         try {
             size_t sz = bytes.len();
-            std::ofstream f(*data, std::ios::out | std::ios::binary | std::ios::app);
+            std::ofstream f(*pdata, std::ios::out | std::ios::binary | std::ios::app);
             if (sz)
                 f.write((symbol)bytes.data, sz);
         } catch (std::ofstream::failure e) {
-            std::cerr << "read failure on resource: " << data->string() << std::endl;
+            std::cerr << "read failure on resource: " << pdata->string() << std::endl;
         }
         return true;
     }
 
-    bool same_as  (path b) const { std::error_code ec; return fs::equivalent(*data, *b, ec); }
+    /// visual studio code should use this
+    bool same_as  (path b) const { std::error_code ec; return fs::equivalent(*pdata(), *b.pdata(), ec); }
 
     void resources(array<str> exts, states<option> states, Fn fn) {
+        fs::path *pdata     = this->pdata();
         bool use_gitignore	= states[ option::use_git_ignores ];
         bool recursive		= states[ option::recursion       ];
         bool no_hidden		= states[ option::no_hidden       ];
-        array<str> ignore   = states[ option::use_git_ignores ] ? path((*data / ".gitignore").string().c_str()).read<str>().split("\n") : array<str>();
+        array<str> ignore   = states[ option::use_git_ignores ] ? path((*pdata / ".gitignore").string().c_str()).read<str>().split("\n") : array<str>();
         lambda<void(path)> res;
         map<mx>    fetched_dir;  /// this is temp and map needs a hash lambdas pronto
-        fs::path   parent   = *data; /// parent relative to the git-ignore index; there may be multiple of these things.
-        fs::path&  fsp		= *data;
-
-        for (size_t i = 0; i < exts.len(); i++) {
-            const str &e = (const str &)exts[i];
-            if (e == str("test1")) {
-                break;
-            }
-        }
+        fs::path   parent   = *pdata; /// parent relative to the git-ignore index; there may be multiple of these things.
+        fs::path&  fsp		= *pdata;
 
         ///
         res = [&](path a) {
@@ -4435,7 +4444,7 @@ struct path:mx {
             /// directory of resources
             if (a.is_dir()) {
                 if (!no_hidden || !a.is_hidden())
-                    for (fs::directory_entry e: fs::directory_iterator(*a)) {
+                    for (fs::directory_entry e: fs::directory_iterator(*a.pdata())) {
                         std::string str = e.path().string();
                         path p  = str.c_str();
                         path li = p.link();
@@ -4456,7 +4465,7 @@ struct path:mx {
             else if (a.exists())
                 fn_filter(a);
         };
-        static std::string str = data->string();
+        static std::string str = pdata->string();
         symbol sym = str.c_str();
         return res(sym);
     }
@@ -4909,32 +4918,66 @@ protected:
         fn = [&](const mx &i) -> str {
 
             /// used to output specific mx value -- can be any, may call upper recursion
-            auto format_v = [&](const mx &e, size_t n_fields) {
-                type_t  vt   = e.type();
+            auto format_v = [&](const mx &e) {
+                type_t  t = e.type();
+                type_t vt = t->schema ? t->schema->bind->data : t;
 
-                /// get props, and values for each
-                memory *smem = e.to_string();
-                str     res(size_t(1024));
-                assert (smem);
-
+                /// check if this is an object with meta data; then we can describe with the above
+                doubly<prop> *meta = vt->meta;
+                if (meta && *meta)
+                    return fn(e);
+                
+                str res(size_t(1024));
                 if (!e.mem || vt == typeof(null_t))
                     res += "null";
-                else if (vt == typeof(char) || vt == typeof(const char)) {
-                    res += "\"";
-                    res += encode_str(smem);
-                    res += "\"";
-                } else if (vt == typeof(int))
-                    res += smem;
-                else if (vt == typeof(mx) || vt == typeof(map<mx>))
-                    res += fn(e);
-                else
-                    assert(false);
-                
+                else {
+                    if (vt == typeof(mx) || vt == typeof(map<mx>))
+                        res += fn(e);
+                    else {
+                        memory *smem = e.to_string();
+                        type_t  mt   = smem ? smem->type : null;
+                        if (!smem || smem->type == typeof(null_t))
+                            res += "null";
+                        else if (vt == typeof(int))
+                            res += smem; /// string of the number, no quotes!
+                        else if (mt == typeof(char) || mt == typeof(const char)) {
+                            res += "\"";
+                            res += encode_str(smem);
+                            res += "\"";
+                        }
+                        else
+                            assert(false);
+                    }
+                }
                 return res;
             };
             ///
             str ar(size_t(1024));
-            if (i.type() ==  typeof(map<mx>)) {
+            type_t t = i.type();
+
+            /// top level fields output for meta-enabled object
+            doubly<prop> *meta = t->schema ? t->schema->bind->data->meta : null;
+            if (meta && *meta) {
+                if (i) {
+                    ar += "{";
+                    size_t n_fields = 0;
+                    for (prop &p: *meta) {
+                        str &skey = *p.s_key;
+                        mx  value = i.get_meta(skey.grab());
+                        if (n_fields)
+                            ar += ",";
+                        ar += "\"";
+                        ar += skey;
+                        ar += "\"";
+                        ar += ":";
+                        ar += format_v(value);
+                        n_fields++;
+                    }
+                    ar += "}";
+                } else {
+                    ar += "null";
+                }
+            } else if (t == typeof(map<mx>)) {
                 map<mx> m = map<mx>(i);
                 ar += "{";
                 size_t n_fields = 0;
@@ -4946,21 +4989,22 @@ protected:
                     ar += skey;
                     ar += "\"";
                     ar += ":";
-                    ar += format_v(fx.value, n_fields++);
+                    ar += format_v(fx.value);
+                    n_fields++;
                 }
-                ar += "}";
-            } else if (i.type() == typeof(mx)) {
+                ar += "}"; /// needs array output if below doesnt cover
+            } else if (t == typeof(mx)) {
                 mx *mx_p = i.mem->data<mx>(0);
                 ar += "[";
                 for (size_t ii = 0; ii < i.count(); ii++) {
                     mx &e = mx_p[ii];
                     if (ii)
                         ar += ",";
-                    ar += format_v(e, ii);
+                    ar += format_v(e);
                 }
                 ar += "]";
             } else
-                ar += format_v(i, 0);
+                ar += format_v(i);
 
             return ar;
         };
@@ -5449,17 +5493,18 @@ V* hmap<K,V>::lookup(K input, u64 *pk, bucket **pbucket) const {
 
 template <typename T>
 bool path::write(T input) const {
+    fs::path *pdata = this->pdata();
     if constexpr (is_array<T>()) {
-        std::ofstream f(*data, std::ios::out | std::ios::binary);
+        std::ofstream f(*pdata, std::ios::out | std::ios::binary);
         if (input.len() > 0)
             f.write((symbol)input.data, input.data_type()->base_sz * input.len());
     } else if constexpr (identical<T, var>()) {
         str    v  = input.stringify(); /// needs to escape strings
-        std::ofstream f(*data, std::ios::out | std::ios::binary);
+        std::ofstream f(*pdata, std::ios::out | std::ios::binary);
         if (v.len() > 0)
             f.write((symbol)v.data, v.len());
     } else if constexpr (identical<T,str>()) {
-        std::ofstream f(*data, std::ios::out | std::ios::binary);
+        std::ofstream f(*pdata, std::ios::out | std::ios::binary);
         if (input.len() > 0)
             f.write((symbol)input.cs(), input.len());
     } else {
@@ -5482,7 +5527,7 @@ T path::read() const {
     const bool nullable = std::is_constructible<T, std::nullptr_t>::value;
     const bool integral = !has_int_conversion<T>::value || std::is_integral<T>::value;
     
-    if (!fs::is_regular_file(*data)) {
+    if (!fs::is_regular_file(*pdata())) {
         if constexpr (nullable)
             return null;
         else if constexpr (integral)
@@ -5499,7 +5544,7 @@ T path::read() const {
         res.set_size(buffer.size());
     } else {
         std::ifstream fs;
-        fs.open(*data);
+        fs.open(*pdata());
         std::ostringstream sstr;
         sstr << fs.rdbuf();
         fs.close();

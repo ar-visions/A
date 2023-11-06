@@ -207,7 +207,7 @@ constexpr int num_occurances(const char* cs, char c) {
         C(str sraw):C(ex::convert(sraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
         C(mx  mraw):C(ex::convert(mraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
         C(ion::symbol sym):C(ex::convert(sym, (ion::symbol)C::raw.cs(), (C*)null)) { }\
-        C(memory* mem):C(mx(raw)) { }\
+        C(memory* mem):C(mx(mem ? mem->grab() : null)) { }\
         inline  operator etype() { return value; }\
         C&      operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
         bool    operator== (enum etype v) { return value == v; }\
@@ -4545,13 +4545,12 @@ struct base64 {
         return encoded;
     }
 
-    static array<u8> decode(symbol b64, size_t b64_len, size_t *alloc_sz) {
+    static array<u8> decode(symbol b64, size_t b64_len) {
         assert(b64_len % 4 == 0);
         /// --------------------------------------
         umap<size_t, size_t> &dec = dec_map();
-        *alloc_sz = b64_len / 4 * 3;
-
-        array<u8> out(size_t(*alloc_sz + 1));
+        size_t alloc_sz = b64_len / 4 * 3;
+        array<u8> out(size_t(alloc_sz + 1));
         u8     *o = out.data;
         size_t  n = 0;
         size_t  e = 0;
@@ -4573,7 +4572,7 @@ struct base64 {
             if (e <= 1) o[n++] = b1;
             if (e <= 0) o[n++] = b2;
         }
-        assert(n + e == *alloc_sz);
+        assert(n + e == alloc_sz);
         o[n] = 0;
         return out;
     }
@@ -4826,11 +4825,23 @@ protected:
         if (type) {
             /// must contain a cstr or symbol constructor
             assert(type->functions->from_string);
-            void *v_result = type->functions->from_string(null, result.cs());
-            if (type->traits & traits::mx_obj) {
-                return ((mx*)v_result)->grab();
+            
+            //data:application/octet-stream;base64,
+            symbol prefix = "data:application/octet-stream;base64,";
+            size_t plen = strlen(prefix);
+            cstr cs_result = result.cs();
+            if (strncmp(cs_result, prefix, plen) == 0) {
+                assert(type->schema && type->schema->bind->data == typeof(u8));
+                array<u8> buffer = base64::decode(&cs_result[plen], result.len() - plen);
+                return buffer;
+            } else {
+                void *v_result = type->functions->from_string(null, result.cs());
+                if (type->traits & traits::mx_obj) {
+                    return ((mx*)v_result)->grab();
+                }
+                return memory::wrap(type, v_result);
             }
-            return memory::wrap(type, v_result);
+
         }
         return result;
     }

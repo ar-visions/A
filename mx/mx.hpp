@@ -207,7 +207,7 @@ constexpr int num_occurances(const char* cs, char c) {
         C(str sraw):C(ex::convert(sraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
         C(mx  mraw):C(ex::convert(mraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
         C(ion::symbol sym):C(ex::convert(sym, (ion::symbol)C::raw.cs(), (C*)null)) { }\
-        C(memory* mem):C(mx(mem ? mem->grab() : null)) { }\
+        C(memory* mem):C(mx(mem)) { }\
         inline  operator etype() { return value; }\
         C&      operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
         bool    operator== (enum etype v) { return value == v; }\
@@ -1083,8 +1083,9 @@ struct traits {
         mx        = 128,
         mx_obj    = 256,
         init      = 512,
-        enum_primitive = 1024,
-        opaque         = 2048 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
+        mx_enum   = 1024,
+        enum_primitive = 2048,
+        opaque         = 4096 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
     };
 };
 
@@ -1304,8 +1305,10 @@ template <typename T> using         DelFn =          void(*)(T*, T*);      /// p
 template <typename T> using      AssignFn =          void(*)(T*, T*, T*);  /// dst, src
 template <typename T> using        HashFn =        size_t(*)(T*, size_t);  /// src
 
-using PushFn = void(*)(void*, void*); /// array<T>* dst, T* src
+template <typename T> using    SetValueFn =          void(*)(T*, memory*, memory*);  /// dst, src
 
+using PushFn = void(*)(void*, void*); /// array<T>* dst, T* src
+//using SetValueFn = void(*)(void*, memory*, memory*); /// map origin, key, value
 
 template <typename T>
 struct ops {
@@ -1325,6 +1328,7 @@ struct ops {
        AssignFn<T> assign;
          HashFn<T> hash;
          PushFn    push; /// only for array<T>; we needed a way to allocate array<T> and at runtime push with pointers
+         SetValueFn<T> set_value;
          void     *meta;
 };
 
@@ -1877,17 +1881,12 @@ struct mx {
     prop *lookup(cstr cs) const { return lookup(mx(mem_symbol(cs))); }
 
     prop *lookup(mx key) const {
-        /*if (key.is_const() && mem->type->schema) {
-            doubly<prop> *meta = (doubly<prop> *)mem->type->meta;
-            for (prop &p: *meta)
-                if (key.mem == p.key) 
-                    return &p;
-        }*/
         if (key.is_const() && mem->type->schema) {
             doubly<prop> *meta = (doubly<prop> *)mem->type->schema->bind->data->meta;
-            for (prop &p: *meta)
-                if (key.mem == p.key) 
-                    return &p;
+            if (meta)
+                for (prop &p: *meta)
+                    if (key.mem == p.key) 
+                        return &p;
         }
         return null;
     }
@@ -1920,11 +1919,11 @@ struct mx {
         assert(p);
 
         /// this one shouldnt perform any type conversion yet
-        assert( p->member_type == value.type() || 
+        assert((p->member_type == value.type() || (p->member_type->traits & traits::mx_enum)) || 
                (p->member_type->schema && p->member_type->schema->bind->data == value.type()));
         
         /// property must exist
-        void *src = p->member_pointer(mem->origin);
+        void *src = p->member_pointer(mem->origin); //
         assert(src);
 
         bool is_mx = p->member_type->traits & traits::mx_obj;
@@ -2420,10 +2419,19 @@ public:
 
     ///
     int index_of(T v) const {
-        for (size_t i = 0; i < mem->count; i++) {
-            if (data[i] == v)
-                return int(i);
+        if constexpr (std::is_same_v<T, str>) {
+            size_t l = v.len();
+            for (size_t i = 0; i < mem->count; i++) {
+                if (strncmp((ion::symbol)&data[i], (ion::symbol)v.data, l))
+                    return int(i);
+            }
+        } else {
+            for (size_t i = 0; i < mem->count; i++) {
+                if (data[i] == v)
+                    return int(i);
+            }
         }
+
         return -1;
     }
 
@@ -2801,29 +2809,8 @@ struct utf {
     }
 };
 
-/// something to take in array of T and it creates contiguous internal data
-/// you dont need to compact 
-template <typename T>
-struct compact:mx {
-	compact(array<T> &a) : mx(memory::alloc(typeof(T::intern), a.len(), 0, null)) {
-		typename T::intern *d = (typename T::intern *)mx::mem->origin;
-		size_t i = 0;
-		for (T &e: a) {
-			d[i] = e.data[i];
-			i++;
-		}
-	}
-    
-    size_t len() { return mem->count; }
-    
-    typename T::intern *data() {
-        return (typename T::intern *)mx::mem->origin;
-    }
-};
-
 ///
 struct ex:mx {
-
     static bool matches(symbol a, symbol b, int len) {
         for (int i = 0; i < len; i++) {
             if (!a[i] || !b[i])
@@ -2849,9 +2836,16 @@ struct ex:mx {
         memory **psym = null;
         if (raw.type() == typeof(char)) {
             char  *d = &raw.ref<char>();
-            u64 hash = djb2(d);
-            psym     = type->symbols->djb2.lookup(hash);
-
+            /// in json, the enum can sometimes be given in "23124" form; no enum begins with a numeric so we can handle this
+            if (d[0] == '-' || isdigit(*d)) {
+                str sval = d;
+                psym = type->symbols->ids.lookup(sval.integer_value());
+                int test = type->symbols->ids.len();
+                test++;
+            } else {
+                u64 hash = djb2(d);
+                psym     = type->symbols->djb2.lookup(hash);
+            }
             if (!psym) {
                 /// if lookup fails, compare by the number of chars given
                 for (memory *mem: type->symbols->list) {
@@ -2904,110 +2898,19 @@ struct utf16:mx {
 
 	mx_object(utf16, mx, u16);
 
-	utf16(size_t sz)   : utf16(mx::alloc<u16>(null, sz, sz)) { }
+	utf16(size_t sz);
+	utf16(char *input);
 
-	utf16(char *input) : utf16(strlen(input)) {
-		char *i = input;
-		num cursor = 0;
-		while (*i) {
-			data[cursor++] = *i;
-			i++;
-		}
-	}
+    utf16(symbol s);
+    utf16(wstr input, size_t len);
 
-    utf16(symbol s) : utf16((char*)s) { }
-
-    utf16(wstr input, size_t len) : utf16(len) {
-        memcpy(data, input, len * sizeof(char_t));
-    }
-
-    utf16 operator+(symbol s) {
-        size_t ln = strlen(s);
-        utf16  r { mem->count + ln };
-        memcpy( r.data, data, mem->count * 2 );
-        memcpy(&r.data[mem->count], s, ln );
-        return r;
-    }
-
-
-	char_t &operator[](num index) const {
-		if (index < 0)
-			return data[mem->count + index];
-		return data[index];
-	}
-
-    int index_of(wchar_t find) const {
-        int result = -1;
-        for (int i = 0, ln = len(); i < ln; i++) {
-            if (data[i] == find) {
-                result = i;
-                break;
-            }
-        }
-        return result;
-    }
-
-    utf16 escape(utf16 chars, char esc = '\\') const { // probably not the greatest
-        size_t n = 0;
-        for (int i = 0; i < len(); i++) {
-            char x = data[i];
-            if (chars.index_of(x) > 0)
-                n += 2;
-            else
-                n += 1;
-        }
-        if (!n)
-            return utf16();
-        utf16 res { n };
-        for (int i = 0; i < len(); i++) {
-            char_t x = data[i];
-            if (chars.index_of(char(x)) > 0)
-                res[i] = wchar_t(esc);
-            res[i] = x;
-        }
-        return res;
-    }
-
-	utf16 mid(num start, num length = -1) const {
-		char_t *s  = start  >= 0 ? data + start  : &data[mem->count + start ];
-		char_t *e  = length >= 0 ? data + length : &data[mem->count + length];
-		if (e > s)
-			return utf16();
-		size_t sz = std::distance(s, e);
-		utf16  res { sz };
-		///
-		memcpy(res.data, s, sz * sizeof(char_t));
-		return res;
-	}
-
-	size_t len() const {
-		return mem ? mem->count : 0;
-	}
-
-	static utf16 join(array<utf16> &src, utf16 j) {
-		size_t sz = 0;
-		num cursor = 0;
-		for (utf16 &s: src) {
-			sz += s.mem->count;
-			if (cursor < src.len() - 1)
-				sz += j.len();
-			cursor++;
-		}
-
-		utf16 res { sz };
-		num   pos = 0;
-		cursor = 0;
-		for (utf16 &s: src) {
-			memcpy(&res.data[pos], s.data, s.len());
-			pos += s.len();
-			if (cursor < src.len() - 1) {
-				memcpy(&res.data[pos], s.data, j.len());
-				pos += j.len();
-			}
-			cursor++;
-		}
-		return res;
-	}
+    utf16 operator+(symbol s);
+	char_t &operator[](num index) const;
+    int index_of(wchar_t find) const;
+    utf16 escape(utf16 chars, char esc = '\\') const;
+	utf16 mid(num start, num length = -1) const;
+	size_t len() const;
+	static utf16 join(array<utf16> &src, utf16 j);
 };
 
 using wchar = unsigned short;
@@ -3026,331 +2929,97 @@ struct str:mx {
 
     cstr data;
 
-    operator std::string() { return std::string(data); }
+    operator std::string();
 
-    memory * symbolize() { return mem_symbol(data, typeof(char)); } 
+    memory * symbolize();
 
-    static str rand(size_t sz, char from, char to) {
-        str res(sz);
-        for (int i = 0; i < sz; i++)
-            res += rand::uniform(from, to);
-        return res;
-    }
+    static str rand(size_t sz, char from, char to);
 
-    str escape(str chars, char esc = '\\') {
-        str res { len() * 2 };
-        for (int i = 0; i < len(); i++) {
-            char x = data[i];
-            if (chars.index_of(x) > 0)
-                res += '\\';
-            res += x;
-        }
-        return res;
-    }
+    str escape(str chars, char esc = '\\');
 
     /// \\ = \ ... \x = \x
-    static str parse_quoted(cstr *cursor, size_t max_len = 0) {
-        ///
-        cstr first = *cursor;
-        if (*first != '"')
-            return "";
-        ///
-        bool last_slash = false;
-        cstr start     = ++(*cursor);
-        cstr s         = start;
-        ///
-        for (; *s != 0; ++s) {
-            if (*s == '\\')
-                last_slash = true;
-            else if (*s == '"' && !last_slash)
-                break;
-            else
-                last_slash = false;
-        }
-        if (*s == 0)
-            return "";
-        ///
-        size_t len = (size_t)(s - start);
-        if (max_len > 0 && len > max_len)
-            return "";
-        ///
-        *cursor = &s[1];
-        str result = "";
-        for (int i = 0; i < int(len); i++)
-            result += start[i];
-        ///
-        return result;
-    }
+    static str parse_quoted(cstr *cursor, size_t max_len = 0);
 
-    str(i64 value, u8 base, int width) : str(size_t(256)) {
-        if (base < 2 || base > 36)
-            fprintf(stderr, "str: base should be between 2 and 36\n");
-        
-        char  buffer[8 * sizeof(int) + 1];
-        char* ptr = &buffer[sizeof(buffer) - 1];
-        *ptr = '\0';
+    str(i64 value, u8 base, int width);
 
-        do {
-            int digit = value % base;
-            value /= base;
-            *--ptr = "0123456789abcdefghijklmnopqrstuvwxyz"[abs(digit)];
-        } while (value != 0);
-
-        if (value < 0) {
-            *--ptr = '-';
-        }
-
-        int length = strlen(ptr);
-        if (width) {
-            int padding = width - length;
-            if (padding > 0) {
-                memmove(ptr + padding, ptr, length + 1);  // Include null terminator
-                memset(ptr, '0', padding);
-                length += padding;
-            }
-        }
-        
-        strcpy(data, ptr);
-        mem->count = length;
-    }
-
-    str(utf16 d) : str(d.len()) { /// utf8 is a doable object but a table must be lazy loaded at best
-        for (int i = 0; i < d.len(); i++)
-            data[i] = d[i] <= 255 ? d[i] : '?';
-    }
+    str(utf16 d);
 
     /// static methods
-    static str combine(const str sa, const str sb) {
-        cstr       ap = (cstr)sa.data;
-        cstr       bp = (cstr)sb.data;
-        ///
-        if (!ap) return sb.copy();
-        if (!bp) return sa.copy();
-        ///
-        size_t    ac = sa.count();
-        size_t    bc = sb.count();
-        str       sc = sa.copy(((ac + bc) + 64) * 2);
-        cstr      cp = (cstr)sc.data;
-        ///
-        memcpy(&cp[ac], bp, bc);
-        sc.mem->count = ac + bc;
-        return sc;
-    }
+    static str combine(const str sa, const str sb);
 
-    /// skip to next non-whitespace, this could be 
-    static char &non_wspace(cstr cs) {
-        cstr sc = cs;
-        while (isspace(*sc))
-            sc++;
-        return *sc;
-    }
+    /// skip to next non-whitespace
+    static char &non_wspace(cstr cs);
 
-    str(memory        *mem) : mx(mem->type == typeof(null_t) ? alloc<char>(null, 0, 16) : mem), data(&mx::ref<char>()) { }
-    //str(mx               m) : str(m.type() == typeof(char) ? m.grab() :
-    //    m.mem->type->functions->to_string(m.mem->origin)) { }
-    str(null_t = null) : str(alloc<char>(null, 0, 16))      { }
-    str(char            ch) : str(alloc<char>(null, 1, 2))       { *data = ch; }
-    str(size_t          sz) : str(alloc<char>(null, 0, sz + 1))  { }
+    str(memory        *mem);
+    str(null_t = null);
+    str(char            ch);
+    str(size_t          sz);
     
     //str(std::ifstream  &in) : str((memory*)null) { }
-    str(std::ifstream &in) : str(alloc<char>(null, 0, ion::length(in) + 1)) {
-        mem->count = mem->reserve - 1;
-        in.read((char*)data, mem->count);
-    }
+    str(std::ifstream &in);
 
-    static void code_to_utf8(int code, char *output) {
-        if (code > 128) {
-            // If codePage is greater than 128, convert it to UTF-8
-            // For simplicity, this example handles only characters up to 0x7FF.
-            if (code <= 0x7FF) {
-                output[0] = 0xC0 | (code >> 6);
-                output[1] = 0x80 | (code & 0x3F);
-                output[2] = '\0';
-            }  else if (code <= 0x7FF) {
-                // Handle 2-byte UTF-8 encoding
-                output[0] = 0xC0 | ((code >> 6) & 0x1F);
-                output[1] = 0x80 | (code & 0x3F);
-                output[2] = '\0';
-            } else if (code <= 0xFFFF) {
-                // Handle 3-byte UTF-8 encoding
-                output[0] = 0xE0 | ((code >> 12) & 0x0F);
-                output[1] = 0x80 | ((code >> 6) & 0x3F);
-                output[2] = 0x80 | (code & 0x3F);
-                output[3] = '\0';
-            } else if (code <= 0x10FFFF) {
-                // Handle 4-byte UTF-8 encoding
-                output[0] = 0xF0 | ((code >> 18) & 0x07);
-                output[1] = 0x80 | ((code >> 12) & 0x3F);
-                output[2] = 0x80 | ((code >> 6) & 0x3F);
-                output[3] = 0x80 | (code & 0x3F);
-                output[4] = '\0';
-            } else {
-                // Code point is not a valid Unicode code point
-                fprintf(stderr, "Invalid code point U+%X\n", code);
-                output[0] = '\0';
-            }
-        } else {
-            output[0] = code;
-            output[1] = 0;
-        }
-    }
+    static void code_to_utf8(int code, char *output);
 
-    static str from_code(int code) {
-        str s { size_t(32) };
-        if (code < 128)
-            s[0] = code;
-        else {
-            code_to_utf8(code, s.data);
-        }
-        s.mem->count = strlen(s.data);
-        return s;
-    }
+    static str from_code(int code);
 
-    static str from_integer(i64 i) { return str(memory::string(std::to_string(i))); }
+    static str from_integer(i64 i);
 
-    str(float          f32, int n = 6) : str(memory::string(string_from_real(f32, n))) { }
-    str(double         f64, int n = 6) : str(memory::string(string_from_real(f64, n))) { }
+    str(float          f32, int n = 6);
+    str(double         f64, int n = 6);
 
     /// no more symbol usage in str. thats garbage
-    str(symbol cs, size_t len = memory::autolen, size_t rs = 0) : str(cstring((cstr)cs, len, rs)) { }
-    str(cstr   cs, size_t len = memory::autolen, size_t rs = 0) : str(cstring(      cs, len, rs)) { }
-    str(std::string s) : str(cstr(s.c_str()), s.length()) { }
-    str(const str &s)  : str(s.mem->grab()) { }
+    str(symbol cs, size_t len = memory::autolen, size_t rs = 0);
+    str(cstr   cs, size_t len = memory::autolen, size_t rs = 0);
+    str(std::string s);
+    str(const str &s);
 
-    inline cstr cs() const { return cstr(data); }
+    inline cstr cs() const;
 
     /// tested.
-    str expr(lambda<str(str)> fn) const {
-        cstr   pa = data;
-        auto   be = [&](int i) -> bool { return pa[i] == '{' && pa[i + 1] != '{'; };
-        auto   en = [&](int i) -> bool { return pa[i] == '}'; };
-        bool   in = be(0);
-        int    fr = 0;
-        size_t ln = byte_len();
-        static size_t static_m = 4;
-        for (;;) {
-            bool exploding = false;
-            size_t sz      = math::max(size_t(1024), ln * static_m);
-            str    rs      = str(sz);
-            for (int i = 0; i <= int(ln); i++) {
-                if (i == ln || be(i) || en(i)) {
-                    bool is_b = be(i);
-                    bool is_e = en(i);
-                    int  cr = int(i - fr);
-                    if (cr > 0) {
-                        if (in) {
-                            str exp_in = str(&pa[fr], cr);
-                            str out = fn(exp_in);
-                            if ((rs.byte_len() + out.byte_len()) > sz) {
-                                exploding = true;
-                                break;
-                            }
-                            rs += out;
-                        } else {
-                            str out = str(&pa[fr], cr);
-                            if ((rs.byte_len() + out.byte_len()) > sz) {
-                                exploding = true;
-                                break;
-                            }
-                            rs += out;
-                        }
-                    }
-                    fr = i + 1;
-                    in = be(i);
-                }
-            }
-            if (exploding) {
-                static_m *= 2;
-                continue;
-            }
-            return rs;
-
-        }
-        return null;
-    }
+    str expr(lambda<str(str)> fn) const;
 
     /// format is a user of expr
-    str format(array<mx> args) const {
-        return expr([&](str e) -> str {
-            size_t index = size_t(e.integer_value());
-            if (index >= 0 && index < args.len()) {
-                mx     &a    = args[index];
-                memory *smem = a.to_string();
-                return  smem;
-            }
-            return null;
-        });
-    }
+    str format(array<mx> args) const;
 
     /// just using cs here, for how i typically use it you could cache the strings
-    static str format(symbol cs, array<mx> args) {
-        return str(cs).format(args);
-    }
+    static str format(symbol cs, array<mx> args);
 
-    operator fs::path() const { return fs::path(std::string(data));  }
+    operator fs::path() const;
     
-    void        clear() const {
-        if (mem) {
-            if (mem->refs == 1)
-                mem->count = *data = 0;
-        }
-    }
+    void        clear() const;
 
-    bool        contains   (array<str>   a) const { return index_of_first(a, null) >= 0; }
-    str         operator+  (symbol       s) const { return combine(*this, (cstr )s);     }
-    bool        operator<  (const str    b) const { return strcmp(data, b.data) <  0;    }
-    bool        operator>  (const str    b) const { return strcmp(data, b.data) >  0;    }
-    bool        operator<  (symbol       b) const { return strcmp(data, b)      <  0;    }
-    bool        operator>  (symbol       b) const { return strcmp(data, b)	     >  0;   }
-    bool        operator<= (const str    b) const { return strcmp(data, b.data) <= 0;    }
-    bool        operator>= (const str    b) const { return strcmp(data, b.data) >= 0;    }
-    bool        operator<= (symbol       b) const { return strcmp(data, b)      <= 0;    }
-    bool        operator>= (symbol       b) const { return strcmp(data, b)      >= 0;    }
-  //bool        operator== (std::string  b) const { return strcmp(data, b.c_str()) == 0;  }
-  //bool        operator!= (std::string  b) const { return strcmp(data, b.c_str()) != 0;  }
-    bool        operator== (str          b) const { return strcmp(data, b.data)  == 0;  }
-    bool        operator== (symbol       b) const { return strcmp(data, b)       == 0;  }
-    bool        operator!= (symbol       b) const { return strcmp(data, b)       != 0;  }
-    char&		operator[] (size_t       i) const { return (char&)data[i];               }
-    int         operator[] (str          b) const { return index_of(b);                  }
-                operator             bool() const { return count() > 0;                  }
-    bool        operator!()                 const { return !(operator bool());           }
-    inline str  operator+    (const str sb) const { return combine(*this, sb);           }
-    inline str &operator+=   (str        b) {
-        if (mem->reserve >= (mem->count + b.mem->count) + 1) {
-            cstr    ap =   data;
-            cstr    bp = b.data;
-            size_t  bc = b.mem->count;
-            size_t  ac =   mem->count;
-            memcpy(&ap[ac], bp, bc); /// when you think of data size changes, think of updating the count. [/mops-away]
-            ac        += bc;
-            ap[ac]     = 0;
-            mem->count = ac;
-        } else {
-            *this = combine(*this, b);
-        }
-        
-        return *this;
-    }
+    bool        contains   (array<str>   a) const;
+    str         operator+  (symbol       s) const;
+    bool        operator<  (const str    b) const;
+    bool        operator>  (const str    b) const;
+    bool        operator<  (symbol       b) const;
+    bool        operator>  (symbol       b) const;
+    bool        operator<= (const str    b) const;
+    bool        operator>= (const str    b) const;
+    bool        operator<= (symbol       b) const;
+    bool        operator>= (symbol       b) const;
+  //bool        operator== (std::string  b) const;
+  //bool        operator!= (std::string  b) const;
+    bool        operator== (str          b) const;
+    bool        operator== (symbol       b) const;
+    bool        operator!= (symbol       b) const;
+    char&		operator[] (size_t       i) const;
+    int         operator[] (str          b) const;
+                operator             bool() const;
+    bool        operator!()                 const;
+    str         operator+    (const str sb) const;
+    str        &operator+=   (str        b);
 
-    str &operator+= (const char b) {
-        if (mem->reserve >= (mem->count + 1) + 1) {
-            memcpy(&data[mem->count], &b, 1); /// when you think of data size changes, think of updating the count. [/mops-away]
-            data[++mem->count] = 0;
-        } else {
-            *this = combine(*this, str(b));
-        }
-        return *this;
-    }
+    str &operator+= (const char b);
 
-    str &operator+= (symbol b) { return operator+=(str((cstr )b)); } /// not utilizing cchar_t yet.  not the full power.
+    str &operator+= (symbol b);
 
     /// add some compatibility with those iostream things.
     friend std::ostream &operator<< (std::ostream& os, str const& s) {
         return os << std::string(cstr(s.data));
     }
 
-    bool iequals(str b) const { return len() == b.len() && lcase() == b.lcase(); }
+    bool iequals(str b) const;
 
     template <typename F>
     static str fill(size_t n, F fn) {
@@ -3360,136 +3029,33 @@ struct str:mx {
         return ret;
     }
     
-    int index_of_first(array<str> elements, int *str_index) const {
-        int  less  = -1;
-        int  index = -1;
-        for (iter<str> it = elements.begin(), e = elements.end(); it != e; ++it) {
-            ///
-            str &find = (str &)it;
-            ///
-            //for (str &find:elements) {
-            ++index;
-            int i = index_of(find);
-            if (i >= 0 && (less == -1 || i < less)) {
-                less = i;
-                if (str_index)
-                    *str_index = index;
-            }
-            //}
-        }
-        if (less == -1 && str_index) *str_index = -1;
-        return less;
-    }
+    int index_of_first(array<str> elements, int *str_index) const;
 
-    bool starts_with(symbol s) const {
-        size_t l0 = strlen(s);
-        size_t l1 = len();
-        if (l1 < l0)
-            return false;
-        return memcmp(s, data, l0) == 0;
-    }
+    bool starts_with(symbol s) const;
 
-    size_t len() const {
-        return count();
-    }
+    size_t len() const;
 
-    size_t utf_len() const {
-        int ilen = utf::len((uint8_t*)data);
-        return size_t(ilen >= 0 ? ilen : 0);
-    }
+    size_t utf_len() const;
 
-    bool ends_with(symbol s) const {
-        size_t l0 = strlen(s);
-        size_t l1 = len();
-        if (l1 < l0) return false;
-        cstr e = &data[l1 - l0];
-        return memcmp(s, e, l0) == 0;
-    }
+    bool ends_with(symbol s) const;
 
-    static str read_file(fs::path path) {
-        std::ifstream in(path);
-        return str(in);
-    }
+    static str read_file(fs::path path);
                                   
-    static str read_file(std::ifstream& in) {
-        return str(in);
-    }
+    static str read_file(std::ifstream& in);
                                   
-    str recase(bool lower = true) const {
-        str     b  = copy();
-        cstr    rp = b.data;
-        num     rc = b.byte_len();
-        int     iA = lower ? 'A' : 'a';
-        int     iZ = lower ? 'Z' : 'z';
-        int   base = lower ? 'a' : 'A';
-        for (num i = 0; i < rc; i++) {
-            char c = rp[i];
-            rp[i]  = (c >= iA && c <= iZ) ? (base + (c - iA)) : c;
-        }
-        return b;
-    }
+    str recase(bool lower = true) const;
 
-    str ucase() const { return recase(false); }
-    str lcase() const { return recase(true);  } 
+    str ucase() const;
+    str lcase() const;
 
-    static int nib_value(char c) {
-        return (c >= '0' && c <= '9') ? (     c - '0') :
-               (c >= 'a' && c <= 'f') ? (10 + c - 'a') :
-               (c >= 'A' && c <= 'F') ? (10 + c - 'A') : -1;
-    }
+    static int nib_value(char c);
 
-    static char char_from_nibs(char c1, char c2) {
-        int nv0 = nib_value(c1);
-        int nv1 = nib_value(c2);
-        return (nv0 == -1 || nv1 == -1) ? ' ' : ((nv0 * 16) + nv1);
-    }
+    static char char_from_nibs(char c1, char c2);
 
-    str replace(str fr, str to, bool all = true) const {
-        str&   sc   = (str&)*this;
-        cstr   sc_p = sc.data;
-        cstr   fr_p = fr.data;
-        cstr   to_p = to.data;
-        size_t sc_c = math::max(size_t(0), sc.byte_len() - 1);
-        size_t fr_c = math::max(size_t(0), fr.byte_len() - 1);
-        size_t to_c = math::max(size_t(0), to.byte_len() - 1);
-        size_t diff = to_c > fr_c ? math::max(size_t(0), to_c - fr_c) : 0;
-        str    res  = str(sc_c + diff * (sc_c / fr_c + 1));
-        cstr   rp   = res.data;
-        size_t w    = 0;
-        bool   once = true;
-
-        /// iterate over string, check strncmp() at each index
-        for (size_t i = 0; i < sc_c; ) {
-            if ((all || once) && strncmp(&sc_p[i], fr_p, fr_c) == 0) {
-                /// write the 'to' string, incrementing count to to_c
-                memcpy (&rp[w], to_p, to_c);
-                i   += to_c;
-                w   += to_c;
-                once = false;
-            } else {
-                /// write single char
-                rp[w++] = sc_p[i++];
-            }
-        }
-
-        /// end string, set count (count includes null char in our data)
-        rp[w++] = 0;
-        res.mem->count = w;
-
-        /// validate allocation and write
-        assert(w <= res.mem->reserve);
-        return res;
-    }
+    str replace(str fr, str to, bool all = true) const;
 
     /// mid = substr; also used with array so i thought it would be useful to see them as same
-    str mid(num start, num len = -1) const {
-        int ilen = int(count());
-        assert(std::abs(start) <= ilen);
-        if (start < 0) start = ilen + start;
-        int cp_count = len < 0 ? (ilen - start) : len;
-        assert(start + cp_count <= ilen);
-        return str(&data[start], cp_count);
-    }
+    str mid(num start, num len = -1) const;
 
     ///
     template <typename L>
@@ -3533,138 +3099,35 @@ struct str:mx {
         return result;
     }
 
-    iter<char> begin() { return { data, 0 }; }
-    iter<char>   end() { return { data, size_t(byte_len()) }; }
+    iter<char> begin();
+    iter<char>   end();
 
-    array<str> split(symbol s) const { return split(str(s)); }
-    array<str> split() { /// common split, if "abc, and 123", result is "abc", "and", "123"}
-        array<str> result;
-        str        chars(mem->count + 1);
-        ///
-        cstr pc = data;
-        for (;;) {
-            char &c = *pc++;
-            if  (!c) break;
-            bool is_ws = isspace(c) || c == ',';
-            if (is_ws) {
-                if (chars) {
-                    result += chars.copy();
-                    chars = str(mem->count + 1);
-                }
-            } else
-                chars += c;
-        }
-        ///
-        if (chars || !result)
-            result += chars;
-        ///
-        return result;
-    }
+    array<str> split(symbol s) const;
+    array<str> split();
 
     enum index_base {
         forward,
         reverse
     };
 
-    int index_of(char b, int from = 0) const {
-        if (!mem || mem->count == 0) return -1;
-        
-        cstr   ap =   data;
-        int    ac = int(mem->count);
+    int index_of(char b, int from = 0) const;
 
-        if (from < 0) {
-            for (int index = ac - 1 + from + 1; index >= 0; index--) {
-                if (ap[index] == b)
-                    return index;
-            }
-        } else {
-            for (int index = from; index <= ac - 1; index++)
-                if (ap[index] == b)
-                    return index;
-        }
-        return -1;
-    }
-
-    int index_of(str b, int from = 0) const {
-        if (!b.mem || b.mem->count == 0) return  0;
-        if (!  mem ||   mem->count == 0) return -1;
-
-        cstr   ap =   data;
-        cstr   bp = b.data;
-        int    ac = int(  mem->count);
-        int    bc = int(b.mem->count);
-        
-        /// dont even try if b is larger
-        if (bc > ac) return -1;
-
-        /// search for b, reverse or forward dir
-        if (from < 0) {
-            for (int index = ac - bc + from + 1; index >= 0; index--) {
-                if (strncmp(&ap[index], bp, bc) == 0)
-                    return index;
-            }
-        } else {
-            for (int index = from; index <= ac - bc; index++)
-                if (strncmp(&ap[index], bp, bc) == 0)
-                    return index;
-        }
-        
-        /// we aint found ****. [/combs]
-        return -1;
-    }
+    int index_of(str b, int from = 0) const;
 
     int index_of(MatchType ct, symbol mp = null) const;
 
-    i64 integer_value() const {
-        return ion::integer_value(mx::mem);
-    }
+    i64 integer_value() const;
 
     template <typename T>
     T real_value() const {
         return T(ion::real_value<T>(mx::mem));
     }
 
-    bool has_prefix(str i) const {
-        char    *s = data;
-        size_t isz = i.byte_len();
-        size_t  sz =   byte_len();
-        return  sz >= isz ? strncmp(s, i.data, isz) == 0 : false;
-    }
-
-    bool numeric() const {
-        return byte_len() && (data[0] == '-' || isdigit(*data));
-    }
-
-    bool matches(str input) const {
-        lambda<bool(cstr, cstr)> fn;
-        str&  a = (str &)*this;
-        str&  b = input;
-             fn = [&](cstr s, cstr p) -> bool {
-                return (p &&  *p == '*') ? ((*s && fn(&s[1], &p[0])) || fn(&s[0], &p[1])) :
-                      (!p || (*p == *s && fn(&s[1],   &p[1])));
-        };
-        for (cstr ap = a.data, bp = b.data; *ap != 0; ap++)
-            if (fn(ap, bp))
-                return true;
-        return false;
-    }
-
-    str trim() const {
-        cstr  s = data;
-        int   c = int(byte_len());
-        int   h = 0;
-        int   t = 0;
-
-        while (isspace(s[h]))
-            h++;
-
-        while (isspace(s[c - 1 - t]) && (c - t) > h)
-            t++;
-
-        return str(&s[h], c - (h + t));
-    }
-
-    size_t reserve() const { return mx::mem->reserve; }
+    bool has_prefix(str i) const;
+    bool numeric() const;
+    bool matches(str input) const;
+    str trim() const;
+    size_t reserve() const;
     type_register(str);
 };
 
@@ -3681,12 +3144,14 @@ E ex::initialize(C *p, E v, symbol names, type_t ty) {
     i64        next = 0;
 
     for (int i = 0; i < c; i++) {
-        num idx = sp.index_of(str("="));
+        num idx = sp[i].index_of(str("="));
         if (idx >= 0) {
-            str val = sp[i].mid(idx + 1);
-            mem_symbol(sp[i].data, ty, val.integer_value());
-        } else
+            str sym = sp[i].mid(0, idx).trim();
+            str val = sp[i].mid(idx + 1).trim();
+            mem_symbol(sym.data, ty, val.integer_value());
+        } else {
             mem_symbol(sp[i].data, ty, i64(next));
+        }
         next = i + 1;
     };
     return v;
@@ -3855,6 +3320,22 @@ struct map:mx {
 
         operator bool() { return ((hash_map && hash_map->len() > 0) || (fields->len() > 0)); }
     };
+
+    /// an init for type would be useful; then we could fill out more on the type
+    static void set_value(map<V> *m, memory *key, memory *m_item) {
+        if constexpr (is_convertible<memory*, V>()) {
+            mx mkey = key->grab();
+            assert(m_item->type == typeof(V));
+
+            if constexpr (inherits<mx, V>()) {
+                /// grab memory
+                (*m)->fetch(mkey).value = m_item->grab();
+            } else {
+                /// copy V, a non-mx value
+                (*m)->fetch(mkey).value = *(V*)m_item->origin;
+            }
+        }
+    }
 
     static int defaults(map<V> &def) {
         for (field<V> &f: def) {
@@ -4574,471 +4055,51 @@ struct base64 {
         }
         assert(n + e == alloc_sz);
         o[n] = 0;
+        out.set_size(n);
         return out;
     }
 };
 
 struct var:mx {
 protected:
-    void push(mx v) {        array<mx>((mx*)this).push(v); }
-    mx  &last()     { return array<mx>((mx*)this).last();  }
+    void push(mx v);
+    mx  &last();
 
-    static mx parse_obj(cstr *start, type_t type) {
-        /// supports primitive, meta-bound structs and mx objects with data type
-        bool       is_map = !type;
-        mx      mx_result;
-        map<mx>  m_result;
-
-        if (!is_map) {
-            mx_result = memory::wrap(type, type->functions->alloc_new(null, null), 1);
-        }
-
-        /// if type is not mx-based, lets say its an int type, we must wrap this parse result
-
-        cstr cur = *start;
-        assert(*cur == '{');
-        ws(&(++cur));
-
-        type_t p_type = type ? type->meta_lookup() : null;
-
-        /// read this object level, parse_values work recursively with 'cur' updated
-        while (*cur != '}') {
-            /// parse next field name
-            mx field = mem_symbol((symbol)parse_quoted(&cur, null).mem->origin);
-
-            /// assert field length, skip over the ':'
-            ws(&cur);
-            assert(field);
-            assert(*cur == ':');
-            ws(&(++cur));
-
-
-            type_t f_type = null;
-            prop** p = null;
-            
-            //assert(!p_type || (p_type->meta_map && (p = p_type->meta_map->lookup((symbol)field.mem->origin, null, null))));
-
-            if (p_type) {
-                p = p_type->meta_map->lookup((symbol)field.mem->origin, null, null);
-            }
-
-            /// parse value at newly listed mx value in field, upon requesting it
-            *start   = cur;
-            mx value = parse_value(start, p ? (*p)->member_type : null);
-            if (is_map)
-                m_result[field] = value;
-            else
-                mx_result.set_meta(field, value);
-            
-            cur = *start;
-            /// skip ws, continue past ',' if there is another
-            if (ws(&cur) == ',')
-                ws(&(++cur));
-        }
-
-        /// assert we arrived at end of block
-        assert(*cur == '}');
-        ws(&(++cur));
-
-        *start = cur;
-        if (is_map)
-            mx_result = m_result.grab();
-        return mx_result;
-    }
+    static mx parse_obj(cstr *start, type_t type);
 
     /// no longer will store compacted data
-    static mx parse_arr(cstr *start, type_t type) {
-        type_t   e_type = type ? type->schema->bind->data : null;
-        void *container = null;
-        array<mx> a_result;
+    static mx parse_arr(cstr *start, type_t type);
 
-        if (type) {
-            container = type->functions->alloc_new(null, null);
-        } else
-            a_result = array<mx>();
+    static void skip_alpha(cstr *start);
 
-        cstr cur = *start;
-        assert(*cur == '[');
-        ws(&(++cur));
-        if (*cur == ']')
-            ws(&(++cur));
-        else {
-            for (;;) {
-                *start = cur;
-                mx  pv = parse_value(start, e_type);
-                if (container)
-                    type->functions->push(container, pv.mem);
-                else
-                    a_result += pv;
-                cur = *start;
-                ws(&cur);
-                if (*cur == ',') {
-                    ws(&(++cur));
-                    continue;
-                }
-                else if (*cur == ']') {
-                    ws(&(++cur));
-                    break;
-                }
-                assert(false);
-            }
-        }
-        *start = cur;
-        return container ? mx(memory::wrap(type, container)) : a_result;
-    }
+    static mx parse_value(cstr *start, type_t type);
 
-    static void skip_alpha(cstr *start) {
-        cstr cur = *start;
-        while (*cur && isalpha(*cur))
-            cur++;
-        *start = cur;
-    }
-
-    static mx parse_value(cstr *start, type_t type) {
-
-        static cstr last;
-        
-        assert(last < *start);
-        last = *start;
-
-        char first_chr = **start;
-		bool numeric   =   first_chr == '-' || isdigit(first_chr);
-
-        if (first_chr == '{') {
-            /// type must have meta info
-            /// issue is how to automatically prefer context, but still fall back to data
-            assert(!type || type->meta_lookup());
-            return parse_obj(start, type);
-        } else if (first_chr == '[') {
-            /// simple runtime check for array
-            assert(!type || type->traits & traits::array);
-            return parse_arr(start, type); /// needs to pass in array<Test3> not Test3, unless we can get the type back
-        } else if (first_chr == 't' || first_chr == 'f') {
-            assert(!type || type == typeof(bool));
-            bool   v = first_chr == 't';
-            skip_alpha(start);
-            return mx(mx::alloc(&v));
-        } else if (first_chr == '"') {
-            assert(!type || (type == typeof(str) || type->functions->from_string));
-            return parse_quoted(start, type); /// this updates the start cursor
-        } else if (numeric) {
-            bool floaty;
-            str value = parse_numeric(start, floaty);
-            assert(value != "");
-            if (floaty) {
-                real v = value.real_value<real>();
-                if (type) {
-                    assert(type == typeof(float) || type == typeof(double));
-                    if (type == typeof(float)) {
-                        float v32 = (float)v;
-                        return mx::alloc(&v32);
-                    }
-                    return mx::alloc(&v);
-                }
-                return mx::alloc(&v);
-            }
-            i64 v = value.integer_value();
-            if (type) {
-                if (type == typeof(char)) { char vc  = (char)v; return mx::alloc(&vc);   }
-                if (type == typeof(i8))   { i8  vi8  = (i8)v;   return mx::alloc(&vi8);  }
-                if (type == typeof(u8))   { u8  vu8  = (u8)v;   return mx::alloc(&vu8);  }
-                if (type == typeof(i16))  { i16 vi16 = (i16)v;  return mx::alloc(&vi16); }
-                if (type == typeof(u16))  { u16 vu16 = (u16)v;  return mx::alloc(&vu16); }
-                if (type == typeof(i32))  { i32 vi32 = (i32)v;  return mx::alloc(&vi32); }
-                if (type == typeof(u32))  { u32 vu32 = (u32)v;  return mx::alloc(&vu32); }
-                if (type == typeof(i64))  { i64 vi64 = (i64)v;  return mx::alloc(&vi64); }
-                if (type == typeof(u64))  { u64 vu64 = (u64)v;  return mx::alloc(&vu64); }
-                assert(false);
-            }
-            return mx::alloc(&v);
-        } 
-
-        /// symbol can be undefined or null.  stored as instance of null_t
-        skip_alpha(start);
-        return memory::alloc(typeof(null_t), 1, 1, null);
-    }
-
-    static str parse_numeric(cstr * cursor, bool &floaty) {
-        cstr  s = *cursor;
-        floaty  = false;
-        if (*s != '-' && !isdigit(*s))
-            return "";
-        ///
-        const int max_sane_number = 128;
-        cstr      number_start = s;
-        ///
-        for (++s; ; ++s) {
-            if (*s == '.' || *s == 'e' || *s == '-') {
-                floaty = true;
-                continue;
-            }
-            if (!isdigit(*s))
-                break;
-        }
-        ///
-        size_t number_len = s - number_start;
-        if (number_len == 0 || number_len > max_sane_number)
-            return null;
-        
-        /// 
-        *cursor = &number_start[number_len];
-        return str(number_start, int(number_len));
-    }
+    static str parse_numeric(cstr * cursor, bool &floaty);
 
     /// \\ = \ ... \x = \x
-    static mx parse_quoted(cstr *cursor, type_t type) {
-        symbol first = *cursor;
-        str    result { size_t(256) };
+    static mx parse_quoted(cstr *cursor, type_t type);
 
-        if (*first == '"') {
-            ///
-            char         ch = 0;
-            bool last_slash = false;
-            cstr      start = ++(*cursor);
-            
-            size_t     read = 0;
-            ///
-            
-            for (; (ch = start[read]) != 0; read++) {
-                if (ch == '\\')
-                    last_slash = !last_slash;
-                else if (last_slash) {
-                    switch (ch) {
-                        case 'n': ch = '\n'; break;
-                        case 'r': ch = '\r'; break;
-                        case 't': ch = '\t'; break;
-                        ///
-                        default:  ch = ' ';  break;
-                    }
-                    last_slash = false;
-                } else if (ch == '"') {
-                    read++; /// make sure cursor goes where it should, after quote, after this parse
-                    break;
-                }
-                
-                if (!last_slash)
-                    result += ch;
-            }
-            *cursor = &start[read];
-        }
-        
-        if (type) {
-            /// must contain a cstr or symbol constructor
-            assert(type->functions->from_string);
-            
-            //data:application/octet-stream;base64,
-            symbol prefix = "data:application/octet-stream;base64,";
-            size_t plen = strlen(prefix);
-            cstr cs_result = result.cs();
-            if (strncmp(cs_result, prefix, plen) == 0) {
-                assert(type->schema && type->schema->bind->data == typeof(u8));
-                array<u8> buffer = base64::decode(&cs_result[plen], result.len() - plen);
-                return buffer;
-            } else {
-                void *v_result = type->functions->from_string(null, result.cs());
-                if (type->traits & traits::mx_obj) {
-                    return ((mx*)v_result)->grab();
-                }
-                return memory::wrap(type, v_result);
-            }
-
-        }
-        return result;
-    }
-
-    static char ws(cstr *cursor) {
-        cstr s = *cursor;
-        while (isspace(*s))
-            s++;
-        *cursor = s;
-        if (*s == 0)
-            return 0;
-        return *s;
-    }
+    static char ws(cstr *cursor);
 
     public:
 
-    operator std::string() {
-        if(mem->type == typeof(char))
-            return std::string((symbol)mem->origin, mem->count);
-        return "";
-    }
+    operator std::string();
 
-    mx *get(str key) {
-        if (mem->type != typeof(map<mx>))
-            return null;
-        map<mx>::mdata *m = (map<mx>::mdata*)mem->origin;
-        field<mx> *f = m->lookup(key);
-        return f ? &f->value : null;
-    }
+    mx *get(str key);
 
     /// called from path::read<var>()
-    static mx parse(cstr js, type_t type) {
-        return parse_value(&js, type);
-    }
+    static mx parse(cstr js, type_t type);
 
-    str stringify() const {
+    str stringify() const;
 
-        auto encode_str = [](memory *m) -> str {
-            str res(m->count * 2);
-            char *s = (char*)m->origin;
-            while (*s) {
-                if ((*s & 0b10000000) == 0) {
-                    if      (*s == '\r') res += "\\r";
-                    else if (*s == '\n') res += "\\n";
-                    else if (*s == '\"') res += "\\\"";
-                    else if (*s ==    8) res += "\\b";
-                    else if (*s ==    9) res += "\\t";
-                    else if (*s == 0x0C) res += "\\f";
-                    else res += *s;
-                    s++;
-                } else {
-                    bool i4 = (*s & 0b1111100) == 0b1111000;
-                    bool i3 = (*s & 0b1111000) == 0b1110000;
-                    bool i2 = (*s & 0b1110000) == 0b1100000;
-                    int code = 0;
-                    if (i4) {
-                        assert(s[1] && s[2] && s[3]);
-                        code = int(0b00000111 & s[0]) << 18 |
-                               int(0b00111111 & s[1]) << 12 |
-                               int(0b00111111 & s[2]) <<  6 |
-                               int(0b00111111 & s[3]) <<  0;
-                        s += 4;
-                    } else if (i3) {
-                        assert(s[1] && s[2]);
-                        code = int(0b00001111 & s[0]) << 12 |
-                               int(0b00111111 & s[1]) <<  6 |
-                               int(0b00111111 & s[2]) <<  0;
-                        s += 3;
-                    } else if (i2) {
-                        assert(s[1]);
-                        code = int(0b00011111 & s[0]) <<  6 |
-                               int(0b00111111 & s[1]) <<  0;
-                        s += 2;
-                    }
-                    char buf[32];
-                    snprintf(buf, sizeof(buf), "%04x", code);
-                    res += buf;
-                }
-            }
-            return res;
-        };
+    map<mx> items();
 
-        /// main recursion function
-        lambda<str(const mx&)> fn;
-        fn = [&](const mx &i) -> str {
-
-            /// used to output specific mx value -- can be any, may call upper recursion
-            auto format_v = [&](const mx &e) {
-                type_t  t = e.type();
-                type_t vt = t->schema ? t->schema->bind->data : t;
-
-                /// check if this is an object with meta data; then we can describe with the above
-                doubly<prop> *meta = vt->meta;
-                if (meta && *meta)
-                    return fn(e);
-                
-                str res(size_t(1024));
-                if (!e.mem || vt == typeof(null_t))
-                    res += "null";
-                else {
-                    if (vt == typeof(mx) || vt == typeof(map<mx>))
-                        res += fn(e);
-                    else {
-                        memory *smem = e.to_string();
-                        type_t  mt   = smem ? smem->type : null;
-                        if (!smem || smem->type == typeof(null_t))
-                            res += "null";
-                        else if (vt->traits & (traits::integral | traits::realistic))
-                            res += smem; /// string of the number, no quotes!
-                        else if (mt == typeof(char) || mt == typeof(const char)) {
-                            res += "\"";
-                            res += encode_str(smem);
-                            res += "\"";
-                        }
-                        else
-                            assert(false);
-                    }
-                }
-                return res;
-            };
-            ///
-            str ar(size_t(1024));
-            type_t t = i.type();
-
-            /// top level fields output for meta-enabled object
-            doubly<prop> *meta = t->schema ? t->schema->bind->data->meta : null;
-            if (meta && *meta) {
-                if (i) {
-                    ar += "{";
-                    size_t n_fields = 0;
-                    for (prop &p: *meta) {
-                        str &skey = *p.s_key;
-                        mx  value = i.get_meta(skey.grab());
-                        if (n_fields)
-                            ar += ",";
-                        ar += "\"";
-                        ar += skey;
-                        ar += "\"";
-                        ar += ":";
-                        ar += format_v(value);
-                        n_fields++;
-                    }
-                    ar += "}";
-                } else {
-                    ar += "null";
-                }
-            } else if (t == typeof(map<mx>)) {
-                map<mx> m = map<mx>(i);
-                ar += "{";
-                size_t n_fields = 0;
-                for (field<mx> &fx: m) {
-                    str skey = str(fx.key.mem->grab());
-                    if (n_fields)
-                        ar += ",";
-                    ar += "\"";
-                    ar += skey;
-                    ar += "\"";
-                    ar += ":";
-                    ar += format_v(fx.value);
-                    n_fields++;
-                }
-                ar += "}"; /// needs array output if below doesnt cover
-            } else if (t == typeof(mx)) {
-                mx *mx_p = i.mem->data<mx>(0);
-                ar += "[";
-                for (size_t ii = 0; ii < i.count(); ii++) {
-                    mx &e = mx_p[ii];
-                    if (ii)
-                        ar += ",";
-                    ar += format_v(e);
-                }
-                ar += "]";
-            } else
-                ar += format_v(i);
-
-            return ar;
-        };
-
-        return fn(*this);
-    }
-
-    map<mx> items() {
-        if (mem->type->traits & traits::map)
-            return mem->grab();
-        return map<mx>();
-    }
-
-    array<mx> list() {
-        if (mem->type->traits & traits::array)
-            return mem->grab();
-        return array<mx>();
-    }
+    array<mx> list();
 
     /// default constructor constructs map
-    var()          : mx(mx::alloc<map<mx>>()) { } /// var poses as different classes.
-    var(mx b)      : mx(b.mem->grab()) { }
-    var(map<mx> m) : mx(m.mem->grab()) { }
+    var();
+    var(mx b);
+    var(map<mx> m);
 
     template <typename T>
     var(const T b) : mx(alloc(&b)) { }
@@ -5057,7 +4118,7 @@ protected:
             mx skey = mx(key);
             return *(var*)&dref[skey];
         } else if (kt->traits & traits::integral) {    
-            assert(data_type == typeof(mx)); // array<mx> or mx
+            assert(data_type == typeof(array<mx>) || data_type == typeof(mx)); // array<mx> or mx
             mx *dref = mx::mem->data<mx>(0);
             assert(dref);
             size_t ix;
@@ -5081,86 +4142,22 @@ protected:
         return *this;
     }
 
-    static mx json(mx i, type_t type) {
-        type_t ty = i.type();
-        cstr   cs = null;
-        if (ty == typeof(u8))
-            cs = cstr(i.data<u8>());
-        else if (ty == typeof(i8))
-            cs = cstr(i.data<i8>());
-        else if (ty == typeof(char))
-            cs = cstr(i.data<char>());
-        else {
-            console.fault("unsupported type: {0}", { str(ty->name) });
-            return null;
-        }
-        return parse(cs, type);
-    }
+    static mx json(mx i, type_t type);
 
-    memory *string() {
-        return stringify().grab(); /// output should be ref count of 1.
-    }
+    memory *string();
 
-    operator str() {
-        assert(type() == typeof(char));
-        return is_string() ? str(mx::mem->grab()) : str(stringify());
-    }
+    operator str();
 
-    explicit operator cstr() {
-        assert(is_string()); /// this operator should not allocate data
-        return mem->data<char>(0);
-    }
+    explicit operator cstr();
 
-    operator i64() {
-        type_t t = type();
-        if (t == typeof(char)) {
-            return str(mx::mem->grab()).integer_value();
-        } else if (t == typeof(real)) {
-            i64 v = i64(ref<real>());
-            return v;
-        } else if (t == typeof(i64)) {
-            i64 v = ref<i64>();
-            return v;
-        } else if (t == typeof(null_t)) {
-            return 0;
-        }
-        assert(false);
-        return 0;
-    }
+    operator i64();
 
-    operator real() {
-        type_t t = type();
-        if (t == typeof(char)) {
-            return str(mx::mem->grab()).real_value<real>();
-        } else if (t == typeof(real)) {
-            real v = ref<real>();
-            return v;
-        } else if (t == typeof(i64)) {
-            real v = real(ref<i64>());
-            return v;
-        } else if (t == typeof(null_t)) {
-            return 0;
-        }
-        assert(false);
-        return 0;
-    }
+    operator real();
 
-    operator bool() {
-        type_t t = type();
-        if (t == typeof(char)) {
-            return mx::mem->count > 0;
-        } else if (t == typeof(real)) {
-            real v = ref<real>();
-            return v > 0;
-        } else if (t == typeof(i64)) {
-            real v = real(ref<i64>());
-            return v > 0;
-        }
-        return false;
-    }
+    operator bool();
 
-    inline liter<field<var>> begin() const { return map<var>(mx::mem->grab())->fields.begin(); }
-    inline liter<field<var>>   end() const { return map<var>(mx::mem->grab())->fields.end();   }
+    liter<field<var>> begin() const;
+    liter<field<var>>   end() const;
 };
 
 using FnFuture = lambda<void(mx)>;
@@ -5255,6 +4252,7 @@ idata *ident::for_type() {
                             (is_lambda   <T> () ? traits::lambda    : 0) |
                             (is_map      <T> () ? traits::map       : 0) |
                             (is_mx              ? traits::mx        : 0) |
+                            (has_etype<T>::value ? traits::mx_enum  : 0) |
                             (is_obj             ? traits::mx_obj    : 0);
             type->base_sz = sizeof(T);
             type->name    = parse_fn(__PRETTY_FUNCTION__);
@@ -5270,6 +4268,7 @@ idata *ident::for_type() {
                 type_t etype = typeof(typename T::etype);
                 etype->ref = type; ///
                 etype->traits |= traits::enum_primitive;
+                //type->ref = etype; // they reference each other
             }
             
             /// all mx classes have a parent_class; we use this to know the polymorphic chain
@@ -5427,6 +4426,10 @@ ops<T> *ftable() {
 
         if constexpr (has_push<T>())
             gen.push = PushFn(T::pushv);
+
+        //if constexpr (is_map<T>())
+        //    gen.set_value = SetValueFn<T>(T::set_value);
+        
         ///
     } else if constexpr (is_external<T>::value) { /// primitives, std::filesystem, and other foreign objects
         gen.alloc_new   = NewFn        <T>(_new);
@@ -5437,7 +4440,7 @@ ops<T> *ftable() {
         gen.boolean     = BooleanFn    <T>(_boolean);
         gen.assign      = AssignFn     <T>(_assign);
 
-        //if constexpr (external_compare       <T>()) gen.compare     = CompareFn    <T>(_compare);
+        //if constexpr (external_compare<T>()) gen.compare = CompareFn<T>(_compare);
         if constexpr (external_to_string<T>())
             gen.to_string   = ToStringFn<T>(_to_string);
 

@@ -401,6 +401,11 @@ typename std::enable_if<std::is_same<T, double>::value
         return null;\
     }\
     template <typename _T>\
+    static void _process(_T *src, struct memory *mem) {\
+        if constexpr (has_process<_T>())\
+            src->process(src, mem);\
+    }\
+    template <typename _T>\
     static _T *_from_string(_T *placeholder, cstr src) {\
         if constexpr (identical<_T, mx>()) {\
             return new _T(src, typeof(char));\
@@ -413,6 +418,10 @@ typename std::enable_if<std::is_same<T, double>::value
     template <typename _T>\
     static _T *_new(C *ph, _T *type) {\
         return new _T();\
+    }\
+    template <typename _T>\
+    static _T *_valloc(C *ph, _T *type, size_t count) {\
+        return (_T*)calloc(sizeof(_T), count);\
     }\
     template <typename _T>\
     static void _del(C *ph, _T *instance) {\
@@ -1300,11 +1309,12 @@ template <typename T> using        CopyFn =          void(*)(T*, T*, T*);  /// d
 template <typename T> using    DestructFn =          void(*)(T*, T*);      /// src
 template <typename T> using   ConstructFn =          void(*)(T*, T*);      /// src
 template <typename T> using        InitFn =          void(*)(T*);          /// src
-template <typename T> using         NewFn =            T*(*)(T*, T*);      /// placeholder, placeholder2
+template <typename T> using         NewFn =            T*(*)(T*, T*);  /// placeholder, placeholder2, count
+template <typename T> using      VAllocFn =            T*(*)(T*, T*, size_t); /// simply 'free' this one.  made for basic structs
 template <typename T> using         DelFn =          void(*)(T*, T*);      /// placeholder, instance
 template <typename T> using      AssignFn =          void(*)(T*, T*, T*);  /// dst, src
 template <typename T> using        HashFn =        size_t(*)(T*, size_t);  /// src
-
+template <typename T> using     ProcessFn =          void(*)(T*, memory*); /// dst, src
 template <typename T> using    SetValueFn =          void(*)(T*, memory*, memory*);  /// dst, src
 
 using PushFn = void(*)(void*, void*); /// array<T>* dst, T* src
@@ -1323,12 +1333,15 @@ struct ops {
      DestructFn<T> destruct;
     ConstructFn<T> construct;
          InitFn<T> init;
+       VAllocFn<T> valloc;
           NewFn<T> alloc_new;
           DelFn<T> del;
        AssignFn<T> assign;
          HashFn<T> hash;
          PushFn    push; /// only for array<T>; we needed a way to allocate array<T> and at runtime push with pointers
          SetValueFn<T> set_value;
+         ProcessFn<T> process;
+
          void     *meta;
 };
 
@@ -1667,10 +1680,15 @@ struct memory {
     
     static inline const size_t autolen = UINT64_MAX;
 
-    static inline memory *wrap(type_t type, void *origin, size_t count = 1) {
+    static inline memory *wrap(type_t type, void *origin, size_t count = 1, bool managed = true) {
         memory*     mem = raw_alloc(type, sizeof(idata), count, count);
         mem->origin     = origin;
+        mem->managed    = managed;
         return mem;
+    }
+
+    static inline memory *window(type_t type, void *origin, size_t count = 1) {
+        return wrap(type, origin, count, false);
     }
 
     static memory *stringify(cstr cs, size_t len = autolen, size_t rsv = 0, bool constant = false, type_t ctype = typeof(char), i64 id = 0);
@@ -2189,6 +2207,15 @@ struct has_push : std::false_type {};
 
 template<typename T>
 struct has_push<T, std::void_t<decltype(T::pushv(std::declval<T*>(), std::declval<memory*>()))>> : std::true_type {};
+
+
+/// memory will be converted to the proper mx type
+/// so you can process any form of memory here, the conversion can happen at the Arg scope; need not have explicit memory*
+template<typename, typename = void>
+struct has_process : std::false_type {};
+
+template<typename T>
+struct has_process<T, std::void_t<decltype(std::declval<T>().process(std::declval<memory*>()))>> : std::true_type {};
 
 template <typename T>
 struct array:mx {
@@ -2932,6 +2959,10 @@ struct str:mx {
     operator std::string();
 
     memory * symbolize();
+
+    explicit operator symbol() {
+        return (symbol)symbolize()->origin;
+    }
 
     static str rand(size_t sz, char from, char to);
 
@@ -4399,7 +4430,12 @@ ops<T> *ftable() {
     if constexpr (registered<T>()) { // if the type is registered as a data class with its own methods declared inside
         if constexpr (inherits<mx, T>())
             gen.set_memory = SetMemoryFn<T>(T::_set_memory);
+        
         gen.alloc_new  = NewFn      <T>(T::_new);
+        
+        if constexpr (!inherits<mx, T>())
+            gen.valloc = VAllocFn<T>(T::_valloc);
+
         gen.del        = DelFn      <T>(T::_del);
 
         if constexpr (has_mix<T>::value)
@@ -4426,6 +4462,9 @@ ops<T> *ftable() {
 
         if constexpr (has_push<T>())
             gen.push = PushFn(T::pushv);
+
+        if constexpr (has_process<T>())
+            gen.process = ProcessFn(T::process);
 
         //if constexpr (is_map<T>())
         //    gen.set_value = SetValueFn<T>(T::set_value);

@@ -403,7 +403,7 @@ typename std::enable_if<std::is_same<T, double>::value
     template <typename _T>\
     static void _process(_T *src, struct memory *mem) {\
         if constexpr (has_process<_T>())\
-            src->process(src, mem);\
+            src->process(mem);\
     }\
     template <typename _T>\
     static _T *_from_string(_T *placeholder, cstr src) {\
@@ -2240,6 +2240,9 @@ public:
     static void pushv(array<T> *a, memory *m_item) {
         if constexpr (is_convertible<memory*, T>()) {
             T item(m_item->grab());
+            a->push(item);
+        } else {
+            T &item = *(T*)m_item->origin;
             a->push(item);
         }
     }
@@ -4464,7 +4467,7 @@ ops<T> *ftable() {
             gen.push = PushFn(T::pushv);
 
         if constexpr (has_process<T>())
-            gen.process = ProcessFn(T::process);
+            gen.process = ProcessFn<T>(T::_process);
 
         //if constexpr (is_map<T>())
         //    gen.set_value = SetValueFn<T>(T::set_value);

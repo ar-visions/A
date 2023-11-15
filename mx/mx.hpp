@@ -1433,7 +1433,9 @@ struct prop {
     }
 };
 
-template <typename T> using MetaFn = doubly<prop>(*)(T*);
+using properties = doubly<prop>;
+
+template <typename T> using MetaFn = properties(*)(T*);
 
 /// must cache by cstr, and id; ideally support any sort of id range
 /// symbols 
@@ -4278,6 +4280,7 @@ idata *ident::for_type() {
             bool is_obj   = !is_mx && inherits<mx, T>(); /// used in composer for assignment; will merge in is_mx when possible
             memory *mem   = memory::raw_alloc(null, sizeof(idata), 1, 1);
             type          = (idata*)mem_origin(mem);
+            type->base_sz = sizeof(T);
             type->traits  = (is_primitive<T> () ? traits::primitive : 0) |
                             (is_integral <T> () ? traits::integral  : 0) |
                             (is_realistic<T> () ? traits::realistic : 0) | // if references radioshack catalog
@@ -4288,8 +4291,9 @@ idata *ident::for_type() {
                             (is_mx              ? traits::mx        : 0) |
                             (has_etype<T>::value ? traits::mx_enum  : 0) |
                             (is_obj             ? traits::mx_obj    : 0);
-            type->base_sz = sizeof(T);
+
             type->name    = parse_fn(__PRETTY_FUNCTION__);
+
             if constexpr (registered<T>() || is_external<T>::value) {
                 type->functions = (ops<void>*)ftable<T>();
                 if (type->functions->init)

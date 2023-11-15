@@ -215,7 +215,7 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
     u8             *dst       = (u8*)calloc64(alloc_reserve, type_sz);
     u8             *src       = (u8*)origin;
     size_t          mn        = math::min(alloc_reserve, count);
-    const bool      prim      = (type->traits & (traits::primitive | traits::opaque)) != 0;
+    const bool      prim      = !type->schema || (type->traits & (traits::primitive | traits::opaque)) != 0;
 
     /// if single primitive, it can be mem copied.  otherwise this is interleaved vector
     if (prim) {
@@ -224,7 +224,7 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
         for (size_t i = 0; i < type->schema->bind_count; i++) {
             context_bind &c  = type->schema->composition[i];
             for (size_t ii = 0; ii < mn; ii++) {
-                const bool data_prim = (c.data->traits & (traits::primitive | traits::opaque)) != 0;
+                const bool data_prim = !c.data->schema || (c.data->traits & (traits::primitive | traits::opaque)) != 0;
                 if (data_prim) {
                     memcpy(&dst[c.offset + ii * type_sz], &src[c.offset + ii * type_sz], type_sz);
                 } else {
@@ -984,7 +984,7 @@ str var::stringify() const {
             type_t vt = t->schema ? t->schema->bind->data : t;
 
             /// check if this is an object with meta data; then we can describe with the above
-            doubly<prop> *meta = vt->meta;
+            properties *meta = vt->meta;
             if (meta && *meta)
                 return fn(e);
             

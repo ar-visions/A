@@ -4,7 +4,7 @@ struct Test3:mx {
     struct M {
         int t3_int;
         register(M)
-        doubly<prop> meta() {
+        properties meta() {
             return {
                 prop { "t3_int", t3_int }
             };
@@ -18,7 +18,7 @@ struct Test2:mx {
         int test2_int;
         array<Test3> test3_values;
         register(M)
-        doubly<prop> meta() {
+        properties meta() {
             return {
                 prop { "test2_int",    test2_int    },
                 prop { "test3_values", test3_values }
@@ -36,7 +36,7 @@ struct Test1:mx {
         bool  bool_value;
         Test2 test2_value;
         register(M)
-        doubly<prop> meta() {
+        properties meta() {
             return {
                 prop { "str_value",   str_value   },
                 prop { "int_value",   int_value   },

@@ -102,8 +102,8 @@ struct runtime {
     int                        done      = 0; /// 
     bool                       failure   = false;
     bool                       join      = false;
+    bool                       stop      = false; /// up to the user to implement this effectively.  any given service isnt going to stop without first checking
     type_register(runtime);
-    ///
 };
 
 struct process:mx {
@@ -231,7 +231,7 @@ struct async {
 
     async& operator=(const async &c);
 
-    array<mx> sync();
+    array<mx> sync(bool force_stop = false);
 
     /// await all async processes to complete
     static int await_all();

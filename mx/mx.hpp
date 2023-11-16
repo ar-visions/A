@@ -2943,6 +2943,14 @@ struct utf16:mx {
 	utf16 mid(num start, num length = -1) const;
 	size_t len() const;
 	static utf16 join(array<utf16> &src, utf16 j);
+
+    cstr to_utf8() {
+        int   sz = WideCharToMultiByte(CP_UTF8, 0, (LPCWCH)mem->origin, -1, NULL, 0, NULL, NULL);
+        cstr res = (cstr)calloc(1, sz + 1);
+        WideCharToMultiByte(CP_UTF8, 0, (LPCWCH)mem->origin, -1, res, sz, NULL, NULL);
+        res[sz] = 0;
+        return res;
+    }
 };
 
 using wchar = unsigned short;

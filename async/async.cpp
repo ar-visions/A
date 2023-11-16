@@ -9,9 +9,7 @@ async &async::operator=(const async &b) {
     return *this;
 }
 
-///
 async::async(size_t count, FnProcess fn) : async() {
-    ///
     std::unique_lock<std::mutex> lock(process::mtx_list);
     
     /// create empty results [dynamic] vector [we need to couple the count into process, or perhaps bring it into async]
@@ -24,7 +22,7 @@ async::async(size_t count, FnProcess fn) : async() {
     ps->threads->reserve(count);
     for (size_t i = 0; i < count; i++)
         ps->threads->emplace_back(std::thread(process::run, ps, int(i)));
-    ///
+    
     process::procs->push(ps);
 }
 
@@ -43,10 +41,11 @@ async::async(exec command) : async(1, [&](runtime *proc, int i) -> mx {
 
 async::async(lambda<mx(runtime *, int)> fn) : async(1, fn) {}
 
-array<mx> async::sync() {
+array<mx> async::sync(bool force_stop) {
     /// wait for join to complete, set results internal and return
     for (;;) {
         d.mtx.lock();
+        d.proc->stop = force_stop;
         if (d.proc.joining()) {
             d.mtx.unlock();
             break;

@@ -81,6 +81,7 @@ typedef const char         cchar_t;
 // typedef i64             ssize_t; // ssize_t is typically predefined in sys/types.h
 typedef i64                num;
 typedef void*              handle_t;
+typedef size_t             sz_t;
 
 struct none { };
 
@@ -2735,7 +2736,8 @@ auto invoke(const Lambda& lambda, const array<str>& args) {
 
 /// stream accept types going out, and accept types going in
 /// we just put them in a list of accepted.  its good to declare that for something as robust as streaming
-
+/// Streamers will use an array of these; I dont believe its a good idea to 'name' each stream though; type identity is fine
+/// 
 struct io:mx {
     struct Source {
         type_t           type; /// types are the stream identifier
@@ -4006,6 +4008,7 @@ struct path:mx {
 
 using path_t = path;
 
+/// these are utc epoch-based
 i64 millis();
 u64 microseconds();
 

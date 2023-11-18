@@ -20,7 +20,7 @@ struct path_op:mx {
         type_register(M);
     };
     mx_object(path_op, mx, M);
-    inline bool operator==(path::op op) { return op == data->op; }
+    bool operator==(path::op op) const { return op == data->op; }
 };
 
 struct path_state:mx {

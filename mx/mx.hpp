@@ -766,8 +766,8 @@ struct liter {
     T& operator *  ()                  const { return cur->data;     }
        operator T& ()                  const { return cur->data;     }
 
-    inline bool operator==  (liter& b) const { return cur == b.cur; }
-    inline bool operator!=  (liter& b) const { return cur != b.cur; }
+    inline bool operator==  (const liter& b) const { return cur == b.cur; }
+    inline bool operator!=  (const liter& b) const { return cur != b.cur; }
 };
 
 
@@ -1796,6 +1796,14 @@ struct rand {
 
 struct size;
 
+/// memory will be converted to the proper mx type
+/// so you can process any form of memory here, the conversion can happen at the Arg scope; need not have explicit memory*
+template<typename, typename = void>
+struct has_process : std::false_type {};
+
+template<typename T>
+struct has_process<T, std::void_t<decltype(std::declval<T>().process(std::declval<memory*>()))>> : std::true_type {};
+
 struct mx {
     memory *mem = null; ///type_t  ctx = null; // ctx == mem->type for contextual classes, with schema populated
     using parent_class  = none;
@@ -2210,15 +2218,6 @@ struct has_push : std::false_type {};
 
 template<typename T>
 struct has_push<T, std::void_t<decltype(T::pushv(std::declval<T*>(), std::declval<memory*>()))>> : std::true_type {};
-
-
-/// memory will be converted to the proper mx type
-/// so you can process any form of memory here, the conversion can happen at the Arg scope; need not have explicit memory*
-template<typename, typename = void>
-struct has_process : std::false_type {};
-
-template<typename T>
-struct has_process<T, std::void_t<decltype(std::declval<T>().process(std::declval<memory*>()))>> : std::true_type {};
 
 template <typename T>
 struct array:mx {
@@ -2872,10 +2871,9 @@ struct ex:mx {
             char  *d = &raw.ref<char>();
             /// in json, the enum can sometimes be given in "23124" form; no enum begins with a numeric so we can handle this
             if (d[0] == '-' || isdigit(*d)) {
-                str sval = d;
-                psym = type->symbols->ids.lookup(sval.integer_value());
-                int test = type->symbols->ids.len();
-                test++;
+                std::string str = (symbol)d;
+                int num = std::stoi(str);
+                psym = type->symbols->ids.lookup((i64)num);
             } else {
                 u64 hash = djb2(d);
                 psym     = type->symbols->djb2.lookup(hash);
@@ -2947,9 +2945,14 @@ struct utf16:mx {
 	static utf16 join(array<utf16> &src, utf16 j);
 
     cstr to_utf8() {
-        int   sz = WideCharToMultiByte(CP_UTF8, 0, (LPCWCH)mem->origin, -1, NULL, 0, NULL, NULL);
+        int   sz = mem->count;
         cstr res = (cstr)calloc(1, sz + 1);
+        #ifdef _WIN32
         WideCharToMultiByte(CP_UTF8, 0, (LPCWCH)mem->origin, -1, res, sz, NULL, NULL);
+        #else
+        for (int i = 0; i < sz; i++)
+            res[i] = (char)((char_t*)(mem->origin))[i];
+        #endif
         res[sz] = 0;
         return res;
     }
@@ -3019,7 +3022,7 @@ struct str:mx {
     str(std::string s);
     str(const str &s);
 
-    inline cstr cs() const;
+    cstr cs() const;
 
     /// tested.
     str expr(lambda<str(str)> fn) const;
@@ -4608,7 +4611,7 @@ T path::read() const {
     }
 
     if constexpr (identical<T, array<u8>>()) {
-        std::ifstream input(*data, std::ios::binary);
+        std::ifstream input(data->p, std::ios::binary);
         std::vector<char> buffer(std::istreambuf_iterator<char>(input), { });
         array<u8> res(buffer.size());
         memcpy(res.data, (u8*)buffer.data(), buffer.size());

@@ -3,9 +3,9 @@ dep(prefix:ci)
 if (MSVC)
     # when a third party lib, on windows has linker issues best to switch the build to shared
     # will have an easier go at this in that process rather than trying to get it and everyone else it uses to MT/d, MD/d
-    cflags(/MT)
+    cxxflags(/MT)
 else()
-    cflags(+-Wno-writable-strings
+    cxxflags(+-Wno-writable-strings
            +-Wno-pointer-bool-conversion
            +-Wno-ambiguous-reversed-operator
            +-Wno-deprecated-volatile)

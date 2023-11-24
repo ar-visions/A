@@ -4261,7 +4261,7 @@ idata *ident::for_type() {
         num              ln = cn.find(en, p) - p;
         std::string      nm = cn.substr(p, ln);
         auto             sp = nm.find(' ');
-        std::string  s_name = nm;//(sp != std::string::npos) ? nm.substr(sp + 1) : nm;
+        std::string  s_name = (sp != std::string::npos) ? nm.substr(sp + 1) : nm;
         num ns = s_name.find("::");
         if (ns >= 0 && s_name.substr(0, ns) != "std")
             s_name = s_name.substr(ns + 2);

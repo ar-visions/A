@@ -551,7 +551,7 @@ u8* property_find(void *origin, type_t type, str &name, prop *&rprop) {
 bool get_bool(type_t type, raw_t data, str &name) {
     prop  *p;
     u8    *p_value = get_member_address(type, data, name, p);
-    bool   result  = p->member_type->functions->boolean(null, p_value);
+    bool   result  = p->type->functions->boolean(null, p_value);
     return result;
 }
 
@@ -560,7 +560,7 @@ memory *get_string(type_t type, raw_t data, str &name) {
     u8     *p_value = get_member_address(type, data, name, p);
     if (!p_value)
         return null;
-    memory *m       = p->member_type->functions->to_string(p_value);
+    memory *m       = p->type->functions->to_string(p_value);
     return  m;
 }
 
@@ -650,7 +650,7 @@ mx var::parse_obj(cstr *start, type_t type) {
         type_t chosen_t = null;
         if (p_type) {
             p = p_type->meta_map->lookup((symbol)field.mem->origin, null, null);
-            chosen_t = (*p)->member_type;
+            chosen_t = (*p)->type;
         }
 
         /// parse value at newly listed mx value in field, upon requesting it

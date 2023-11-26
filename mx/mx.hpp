@@ -1414,15 +1414,15 @@ struct prop {
     memory *key;
     size_t  member_addr;
     size_t  offset; /// this is set by once-per-type meta fetcher
-    type_t  member_type;
+    type_t  type;
     type_t  parent_type;
     raw_t   init_value; /// value obtained after constructed on the parent type
     str    *s_key;
     
-    prop() : key(null), member_addr(0), offset(0), member_type(null) { }
+    prop() : key(null), member_addr(0), offset(0), type(null) { }
 
     template <typename M>
-    prop(symbol name, M &member) : key(mem_symbol(name)), member_addr((size_t)&member), member_type(typeof(M)) { }
+    prop(symbol name, M &member) : key(mem_symbol(name)), member_addr((size_t)&member), type(typeof(M)) { }
 
     template <typename M>
     M &member_ref(void *m) { return *(M *)handle_t(&cstr(m)[offset]); }
@@ -1932,14 +1932,14 @@ struct mx {
         void *src = p->member_pointer(mem->origin);
         assert(src);
 
-        void *dst = p->member_type->functions->alloc_new(null, null);
-        bool is_mx = p->member_type->traits & traits::mx_obj;
+        void *dst = p->type->functions->alloc_new(null, null);
+        bool is_mx = p->type->traits & traits::mx_obj;
         if (!is_mx)
-            p->member_type->functions->assign(null, dst, src); /// copy primitives and structs
+            p->type->functions->assign(null, dst, src); /// copy primitives and structs
         else
-            p->member_type->functions->set_memory(dst, ((mx*)src)->mem); /// quick assignment for mx
+            p->type->functions->set_memory(dst, ((mx*)src)->mem); /// quick assignment for mx
 
-        return memory::wrap(p->member_type, dst, 1);
+        return memory::wrap(p->type, dst, 1);
     }
 
     void set_meta(cstr cs, mx value) { set_meta(mx(mem_symbol(cs)), value); }
@@ -1948,18 +1948,18 @@ struct mx {
         assert(p);
 
         /// this one shouldnt perform any type conversion yet
-        assert((p->member_type == value.type() || (p->member_type->traits & traits::mx_enum)) || 
-               (p->member_type->schema && p->member_type->schema->bind->data == value.type()));
+        assert((p->type == value.type() || (p->type->traits & traits::mx_enum)) || 
+               (p->type->schema && p->type->schema->bind->data == value.type()));
         
         /// property must exist
         void *src = p->member_pointer(mem->origin); //
         assert(src);
 
-        bool is_mx = p->member_type->traits & traits::mx_obj;
+        bool is_mx = p->type->traits & traits::mx_obj;
         if (!is_mx)
-            p->member_type->functions->assign(null, src, value.mem->origin); /// copy primitives and structs
+            p->type->functions->assign(null, src, value.mem->origin); /// copy primitives and structs
         else
-            p->member_type->functions->set_memory(src, value.mem); /// quick assignment for mx
+            p->type->functions->set_memory(src, value.mem); /// quick assignment for mx
     }
 
     inline ~mx() { if (mem) mem->drop(); }
@@ -4405,16 +4405,16 @@ idata *ident::for_type() {
                     p.parent_type = type; /// we need to store what type it comes from, as we dont always have this context
 
                     /// this use-case is needed for user interfaces without css defaults
-                    p.init_value = p.member_type->functions ?
-                        p.member_type->functions->alloc_new(null, null) : calloc64(1, p.member_type->base_sz);
+                    p.init_value = p.type->functions ?
+                        p.type->functions->alloc_new(null, null) : calloc64(1, p.type->base_sz);
 
-                    if (p.member_type->functions) {
+                    if (p.type->functions) {
                         u8 *prop_dest = &(((u8*)def)[p.offset]);
-                        if (p.member_type->traits & traits::mx_obj) {
+                        if (p.type->traits & traits::mx_obj) {
                             mx *mx_data = (mx*)prop_dest;
-                            p.member_type->functions->set_memory(p.init_value, mx_data->mem);
+                            p.type->functions->set_memory(p.init_value, mx_data->mem);
                         } else {
-                            p.member_type->functions->assign(null, p.init_value, prop_dest);
+                            p.type->functions->assign(null, p.init_value, prop_dest);
                         }
                     }
                 }

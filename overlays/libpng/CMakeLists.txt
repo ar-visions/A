@@ -69,7 +69,7 @@ else()
 endif()
 
 # Public CMake configuration variables.
-option(PNG_SHARED "Build shared lib" ON)
+option(PNG_SHARED "Build shared lib" OFF)
 option(PNG_STATIC "Build static lib" ON)
 option(PNG_EXECUTABLES "Build libpng executables" ON)
 option(PNG_TESTS "Build libpng tests" ON)
@@ -615,30 +615,30 @@ endif()
 
 if(PNG_STATIC)
   # does not work without changing name
-  set(PNG_LIB_NAME_STATIC png_static)
-  add_library(png_static STATIC ${libpng_sources})
+  set(PNG_LIB_NAME_STATIC png)
+  add_library(png STATIC ${libpng_sources})
   if(MSVC)
-    target_compile_options(png_static PRIVATE /MT)
+    target_compile_options(png PRIVATE /MT)
   endif()
-  add_dependencies(png_static genfiles)
+  add_dependencies(png genfiles)
   # MSVC doesn't use a different file extension for shared vs. static
   # libs. We are able to change OUTPUT_NAME to remove the _static
   # for all other platforms.
   if(NOT MSVC)
-    set_target_properties(png_static PROPERTIES
+    set_target_properties(png PROPERTIES
                           OUTPUT_NAME "${PNG_LIB_NAME}"
                           CLEAN_DIRECT_OUTPUT 1)
   else()
-    set_target_properties(png_static PROPERTIES
+    set_target_properties(png PROPERTIES
                           OUTPUT_NAME "${PNG_LIB_NAME}_static"
                           CLEAN_DIRECT_OUTPUT 1)
   endif()
-  list(APPEND PNG_LIB_TARGETS png_static)
+  list(APPEND PNG_LIB_TARGETS png)
   if(MSVC)
     # MSVC does not append 'lib'. Do it here, to have consistent name.
-    set_target_properties(png_static PROPERTIES PREFIX "lib")
+    set_target_properties(png PROPERTIES PREFIX "lib")
   endif()
-  target_link_libraries(png_static ${ZLIB_LIBRARIES} ${M_LIBRARY})
+  target_link_libraries(png ${ZLIB_LIBRARIES} ${M_LIBRARY})
 endif()
 
 if(PNG_FRAMEWORK)
@@ -992,8 +992,8 @@ if(NOT SKIP_INSTALL_LIBRARIES AND NOT SKIP_INSTALL_ALL)
 
   if(PNG_STATIC)
     if(NOT WIN32 OR CYGWIN OR MINGW)
-      create_symlink(libpng${CMAKE_STATIC_LIBRARY_SUFFIX} TARGET png_static)
-      install(FILES $<TARGET_LINKER_FILE_DIR:png_static>/libpng${CMAKE_STATIC_LIBRARY_SUFFIX}
+      create_symlink(libpng${CMAKE_STATIC_LIBRARY_SUFFIX} TARGET png)
+      install(FILES $<TARGET_LINKER_FILE_DIR:png>/libpng${CMAKE_STATIC_LIBRARY_SUFFIX}
               DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)
     endif()
   endif()

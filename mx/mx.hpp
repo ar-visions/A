@@ -2899,6 +2899,7 @@ struct ex:mx {
         }
         if (!psym) {
             printf("symbol: %s, raw: %s\n", S, (char*)raw.mem->origin);
+            fflush(stdout);
             throw C();
         }
         return (typename C::etype)((*psym)->id);

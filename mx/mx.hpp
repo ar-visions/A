@@ -1814,6 +1814,7 @@ struct mx {
 
     void *realloc(size_t reserve, bool fill_default);
 
+    sz_t reserve() { return math::max(mem->reserve, mem->count); }
     template <typename T>
     static inline memory *wrap(void *m, size_t count = 1, T *placeholder = (T*)null) {
         memory*     mem = (memory*)calloc64(1, sizeof(memory));
@@ -1922,6 +1923,14 @@ struct mx {
 
     template <typename T>
     inline T *get(size_t index) const { return mem->data<T>(index); }
+
+    template <typename T>
+    inline T *origin() const { return (T*)mem->origin; }
+
+    void set_size(sz_t sz) {
+        assert(mem->reserve >= sz);
+        mem->count = sz;
+    }
 
     /// gets a wrapped mx value; supports primitive/struct/context
     mx get_meta(cstr cs) const { return get_meta(mx(mem_symbol(cs))); }

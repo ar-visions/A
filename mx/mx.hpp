@@ -2099,7 +2099,7 @@ struct mx {
             /// use boolean operator on the data by calling the generated function table
             if (ty->schema && ty->schema->bind->data->functions->boolean) {
                 BooleanFn<void> data = ty->schema->bind->data->functions->boolean;
-                return data(raw_t(0), (void*)mem->origin);
+                return mem->origin && data(raw_t(0), (void*)mem->origin);
             }
             
             return mem->count > 0;

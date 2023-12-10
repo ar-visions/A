@@ -1814,6 +1814,10 @@ struct mx {
 
     void *realloc(size_t reserve, bool fill_default);
 
+    sz_t total_size() {
+        return count() * mem->type->base_sz;
+    }
+    
     sz_t reserve() { return math::max(mem->reserve, mem->count); }
     template <typename T>
     static inline memory *wrap(void *m, size_t count = 1, T *placeholder = (T*)null) {

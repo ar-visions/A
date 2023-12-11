@@ -2244,14 +2244,12 @@ protected:
 public:
     static inline type_t element_type() { return typeof(T); }
 
-    /// revise some of the constructors in here by removing.  we need to just add them by specialty!
     //mx_object(array, mx, T);
-    using parent_class   = mx;\
-    using context_class  = array;\
-    using intern         = T;\
-    T*    data;\
+    using parent_class   = mx;
+    using context_class  = array;
+    using intern         = T;
+    T*    data;
 
-    /// an init for type would be useful; then we could fill out more on the type
     static void pushv(array<T> *a, memory *m_item) {
         if constexpr (is_convertible<memory*, T>()) {
             T item(m_item->grab());
@@ -2276,8 +2274,8 @@ public:
         return result;
     }
 
-    array(memory*   mem) : mx(mem), data(mx::data<T>()) { }\
-    array(mx          o) : array(o.mem->grab()) { }\
+    array(memory*   mem) : mx(mem), data(mx::data<T>()) { }
+    array(mx          o) : array(o.mem->grab()) { }
     array()              : array(mx::alloc<array>(null, 0, 1)) { }
 
     /// immutable

@@ -951,8 +951,8 @@ struct doubly {
         void          pop(T *prev = null) { assert(icount); if (prev) *prev = last();  remove(-1);     }
         void        shift(T *prev = null) { assert(icount); if (prev) *prev = first(); remove(int(0)); }
         ///
-        T                  pop_v()       { assert(icount); T cp =  last(); remove(-1); return cp; }
-        T                shift_v()       { assert(icount); T cp = first(); remove( 0); return cp; }
+        T                  pop_v()       { assert(icount); T cp =  last(); remove((num)-1); return cp; }
+        T                shift_v()       { assert(icount); T cp = first(); remove((num) 0); return cp; }
         T   &operator[]   (num ix) const { assert(ix >= 0 && ix < num(icount)); return get(ix)->data; }
         liter<T>           begin() const { return { ifirst }; }
         liter<T>             end() const { return { null  }; }

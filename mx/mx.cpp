@@ -180,6 +180,20 @@ int gettimeofday(struct timeval* tp, struct timezone* tzp) {
 
 #endif
 
+
+
+void wait_until(u64 to) {
+    for (i64 t = microseconds(); t < to; t = microseconds()) {
+        usleep(10);
+    }
+}
+
+void wait_until(i64 to) {
+    for (i64 t = millis(); t < to; t = millis()) {
+        usleep(1000);
+    }
+}
+
 i64 millis() {
     struct timeval time;
 	gettimeofday(&time, NULL);

@@ -4024,6 +4024,8 @@ struct path:mx {
 using path_t = path;
 
 /// these are utc epoch-based
+void wait_until(u64 to);
+void wait_until(i64 to);
 i64 millis();
 u64 microseconds();
 

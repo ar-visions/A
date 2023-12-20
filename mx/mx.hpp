@@ -1841,7 +1841,6 @@ struct mx {
         return memory::alloc(typeof(T), 1, 1, raw_t(cp));
     }
 
-    /// wtf is this.
     template <typename DP>
     inline mx(DP **dptr) {
         mx::alloc((DP*)null);
@@ -1857,14 +1856,9 @@ struct mx {
     ///
     inline mx(std::string s) : mem(memory:: string(s)) { }
 
-    // the null_t messes this case up.  should migrate away from those if possible.
-    //mx(cstr s) : mem(memory::cstring(s)) { }
-
-    /// instance is fine here
-    /// should be agnostic to vector; meaning the embedded types should not repeat across schema; reduce and simplify!
     template <typename T>
     static memory *import(T *addr, size_t count, size_t reserve, bool managed) {
-        memory*     mem = alloc<T>(count, reserve); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
+        memory*     mem = alloc<T>(count, reserve);
         mem->managed    = managed;
         mem->origin     = addr;
         return mem;
@@ -1873,11 +1867,11 @@ struct mx {
     /// must move lambda code away from lambda table, and into constructor code gen
     template <typename T>
     memory *copy(T *src, size_t count, size_t reserve) {
-        memory*     mem = (memory*)calloc64(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
+        memory*     mem = (memory*)calloc64(1, sizeof(memory));
         mem->count      = count;
         mem->reserve    = math::max(count, reserve);
         mem->refs       = 1;
-        mem->type       = typeof(T); /// design-time should already know this is opaque if its indeed setup that way in declaration; use ptr_decl_opaque() or something
+        mem->type       = typeof(T);
         mem->managed    = true;
         mem->origin     = (T*)calloc64(mem->reserve, sizeof(T));
         ///
@@ -1907,9 +1901,6 @@ struct mx {
         return mem->attach(id, data, release);
     }
 
-    // dont need it here
-    //doubly<prop> meta() { return { }; }
-    
     bool is_const() const { return mem->attrs & memory::constant; }
 
     prop *lookup(cstr cs) const { return lookup(mx(mem_symbol(cs))); }
@@ -4284,6 +4275,11 @@ idata *ident::for_type() {
     };
 
     if (!type) {
+        if constexpr (has_intern<T>()) {
+            type_t itype = typeof(typename T::intern);
+            int test = 0;
+            test++;
+        }
         /// this check was to hide lambdas to prevent lambdas being generated on lambdas
         if constexpr (std::is_function_v<T>) { /// i dont believe we need this case now.
             memory         *mem = memory::raw_alloc(null, sizeof(idata), 1, 1);

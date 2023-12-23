@@ -906,7 +906,8 @@ struct doubly {
             item<T> *i;
             if (before == icount) {
                 i = new item<T> { null, ilast, data };
-                ilast->next = i;
+                if (ilast)
+                    ilast->next = i;
                 ilast = i;
                 if (icount == 0)
                     ifirst = i;

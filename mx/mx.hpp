@@ -3274,6 +3274,7 @@ struct map:mx {
         field<V> &first()  { return fields->first(); }
         field<V> & last()  { return fields-> last(); }
         size_t    count()  { return fields->len();   }
+        size_t      len()  { return fields->len();   }
 
         template <typename R>
         array<R> map(lambda<R(field<V>&)> fn) {
@@ -3449,6 +3450,8 @@ struct map:mx {
     array<V> values() {
         return data->values();
     }
+
+    size_t len() { return data->fields->len(); }
     
     void print();
 

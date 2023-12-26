@@ -4264,6 +4264,10 @@ idata *ident::for_type() {
 
     /// get string name of class (works on win, mac and linux)
     static auto    parse_fn = [&](std::string cn) -> cstr {
+        if (strstr(cn.c_str(), "iVideo")) {
+            int test = 0;
+            test++;
+        }
         std::string      st = is_win() ? "<"  : "T =";
         std::string      en = is_win() ? ">(" : "]";
         num		         p  = cn.find(st) + st.length();
@@ -4280,7 +4284,7 @@ idata *ident::for_type() {
 
     if (!type) {
         if constexpr (has_intern<T>()) {
-            type_t itype = typeof(typename T::intern);
+            type_t itype = typeof(typename T::intern); /// iVideo not loading?
             int test = 0;
             test++;
         }
@@ -4322,6 +4326,10 @@ idata *ident::for_type() {
 
             type->name    = parse_fn(__PRETTY_FUNCTION__);
 
+            if (strstr(type->name, "iVideo")) {
+                int test = 0;
+                test++;
+            }
             if constexpr (registered<T>() || is_external<T>::value) {
                 type->functions = (ops<void>*)ftable<T>();
                 if (type->functions->init)

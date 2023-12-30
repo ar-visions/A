@@ -78,7 +78,7 @@ raw_t memory::typed_data(type_t dtype, size_t index) const {
             if (c.data == dtype)
                 return (raw_t)&cstr(origin)[c.offset * mxc + c.data->base_sz * index];
         }
-        console.fault("type not found in schema: {0}", { str(dtype->name) });
+        //console.fault("type not found in schema: {0}", { str(dtype->name) });
         return (raw_t)null;
     } else
         return (raw_t)(cstr(origin) + dtype->base_sz * index);
@@ -130,7 +130,7 @@ str path::mime_type() {
     static path  data = "data/mime-type.json";
     static map<mx> js =  data.read<var>();
     field<mx> *find = js->lookup(e);
-    return find ? find->value.grab() : ((memory*)js["default"])->grab();
+    return find ? find->value.hold() : ((memory*)js["default"])->hold();
 }
 
 i64 integer_value(memory *mem) {
@@ -146,8 +146,8 @@ memory *drop(memory *mem) {
     return mem;
 }
 
-memory *grab(memory *mem) {
-    if (mem) mem->grab();
+memory *hold(memory *mem) {
+    if (mem) mem->hold();
     return mem;
 }
 
@@ -309,7 +309,7 @@ memory *memory::stringify(cstr cs, size_t len, size_t rsv, bool constant, type_t
             //ctype->symbol_djb2[h_sym] = m; 'redundant due to the setting of the memory*& (which [] operator always inserts item)
             ctype->symbols->list->push(m);
         }
-        return m->grab();
+        return m->hold();
     } else {
         size_t     ln = (len == memory::autolen) ? strlen(sym) : len;
         size_t     al = (rsv >= (ln + 1)) ? rsv : (ln + 1);
@@ -412,7 +412,7 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
     size_t  type_sz = type->size(); /// this is the 'data size', should name the function just that; if the type has no schema the data size is its own size
 
     if (type->singleton)
-        return type->singleton->grab();
+        return type->singleton->hold();
     
     memory *mem = memory::raw_alloc(type, type_sz, count, reserve);
 
@@ -480,7 +480,7 @@ memory *memory::copy(size_t reserve) {
     return  res;
 }
 
-memory *memory::grab() {
+memory *memory::hold() {
     if ((bool)(void*)this) refs++; // this is basically fine to do and by basically i mean probably and by probably i mean dont show this to forum people
     return this;
 }
@@ -561,6 +561,11 @@ u8* property_find(void *origin, type_t type, str &name, prop *&rprop) {
     return null;
 }
 
+raw_t mx::find_prop_value(str name, prop *&rprop) {
+    return property_find(mem->origin, mem->type, name, rprop);
+}
+
+
 
 bool get_bool(type_t type, raw_t data, str &name) {
     prop  *p;
@@ -608,7 +613,7 @@ memory  *mx::to_string() const {
         return type->schema->bind->data->functions->to_string(mem->origin); /// or data...
     
     else if (type == typeof(char))
-        return mem->grab();
+        return mem->hold();
     
     else {
         static char buf[128];
@@ -632,7 +637,7 @@ mx var::parse_obj(cstr *start, type_t type) {
         void *alloc = type->functions->alloc_new(null, null);
         /// if its an mx-based object, we need to get its memory
         if (type->traits & traits::mx_obj) {
-            memory *mem = ((mx*)alloc)->mem->grab();
+            memory *mem = ((mx*)alloc)->mem->hold();
             mx_result = mx(mem);
             type->functions->del(null, alloc);
         } else
@@ -687,7 +692,7 @@ mx var::parse_obj(cstr *start, type_t type) {
 
     *start = cur;
     if (is_map)
-        mx_result = m_result.grab();
+        mx_result = m_result.hold();
     return mx_result;
 }
 
@@ -730,7 +735,7 @@ mx var::parse_arr(cstr *start, type_t type) {
     }
     *start = cur;
     if (container) {
-        memory *mem = ((mx*)container)->mem->grab();
+        memory *mem = ((mx*)container)->mem->hold();
         type->functions->del(null, container);
         return mx(mem);
     }
@@ -792,7 +797,7 @@ mx var::parse_value(cstr *start, type_t type) {
             return mx::alloc(&v);
         } else if (type && (type->traits & traits::mx_enum)) {
             void *temp = type->functions->from_string(null, value.cs());
-            memory *mem = ((mx*)temp)->grab();
+            memory *mem = ((mx*)temp)->hold();
             type->functions->del(null, temp);
             return mem;
         }
@@ -904,7 +909,7 @@ mx var::parse_quoted(cstr *cursor, type_t type) {
             assert(type->functions->from_string);
             void *v_result = type->functions->from_string(null, result.cs());
             if (type->traits & traits::mx_obj) {
-                return ((mx*)v_result)->grab();
+                return ((mx*)v_result)->hold();
             }
             return memory::wrap(type, v_result);
         }
@@ -1038,7 +1043,7 @@ str var::stringify() const {
                 size_t n_fields = 0;
                 for (prop &p: *meta) {
                     str &skey = *p.s_key;
-                    mx  value = i.get_meta(skey.grab());
+                    mx  value = i.get_meta(skey.hold());
                     if (n_fields)
                         ar += ",";
                     ar += "\"";
@@ -1057,7 +1062,7 @@ str var::stringify() const {
             ar += "{";
             size_t n_fields = 0;
             for (field<mx> &fx: m) {
-                str skey = str(fx.key.mem->grab());
+                str skey = str(fx.key.mem->hold());
                 if (n_fields)
                     ar += ",";
                 ar += "\"";
@@ -1089,20 +1094,20 @@ str var::stringify() const {
 
 map<mx> var::items() {
     if (mem->type->traits & traits::map)
-        return mem->grab();
+        return mem->hold();
     return map<mx>();
 }
 
 array<mx> var::list() {
     if (mem->type->traits & traits::array)
-        return mem->grab();
+        return mem->hold();
     return array<mx>();
 }
 
 /// default constructor constructs map
 var::var()          : mx(mx::alloc<map<mx>>()) { } /// var poses as different classes.
-var::var(mx b)      : mx(b.mem->grab()) { }
-var::var(map<mx> m) : mx(m.mem->grab()) { }
+var::var(mx b)      : mx(b.mem->hold()) { }
+var::var(map<mx> m) : mx(m.mem->hold()) { }
 
 mx var::json(mx i, type_t type) {
     type_t ty = i.type();
@@ -1121,12 +1126,12 @@ mx var::json(mx i, type_t type) {
 }
 
 memory *var::string() {
-    return stringify().grab(); /// output should be ref count of 1.
+    return stringify().hold(); /// output should be ref count of 1.
 }
 
 var::operator str() {
     assert(type() == typeof(char));
-    return is_string() ? str(mx::mem->grab()) : str(stringify());
+    return is_string() ? str(mx::mem->hold()) : str(stringify());
 }
 
 var::operator cstr() {
@@ -1137,7 +1142,7 @@ var::operator cstr() {
 var::operator i64() {
     type_t t = type();
     if (t == typeof(char)) {
-        return str(mx::mem->grab()).integer_value();
+        return str(mx::mem->hold()).integer_value();
     } else if (t == typeof(real)) {
         i64 v = i64(ref<real>());
         return v;
@@ -1154,7 +1159,7 @@ var::operator i64() {
 var::operator real() {
     type_t t = type();
     if (t == typeof(char)) {
-        return str(mx::mem->grab()).real_value<real>();
+        return str(mx::mem->hold()).real_value<real>();
     } else if (t == typeof(real)) {
         real v = ref<real>();
         return v;
@@ -1182,8 +1187,8 @@ var::operator bool() {
     return false;
 }
 
-liter<field<var>> var::begin() const { return map<var>(mx::mem->grab())->fields.begin(); }
-liter<field<var>> var::end()   const { return map<var>(mx::mem->grab())->fields.end();   }
+liter<field<var>> var::begin() const { return map<var>(mx::mem->hold())->fields.begin(); }
+liter<field<var>> var::end()   const { return map<var>(mx::mem->hold())->fields.end();   }
 
 
 
@@ -1376,7 +1381,7 @@ liter<field<var>> var::end()   const { return map<var>(mx::mem->grab())->fields.
     str::str(symbol cs, size_t len, size_t rs) : str(cstring((cstr)cs, len, rs)) { }
     str::str(cstr   cs, size_t len, size_t rs) : str(cstring(      cs, len, rs)) { }
     str::str(std::string s) : str(cstr(s.c_str()), s.length()) { }
-    str::str(const str &s)  : str(s.mem->grab()) { }
+    str::str(const str &s)  : str(s.mem->hold()) { }
 
     cstr str::cs() const { return cstr(data); }
 

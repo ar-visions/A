@@ -15,7 +15,7 @@ async::async(size_t count, FnProcess fn) : async() {
     /// create empty results [dynamic] vector [we need to couple the count into process, or perhaps bring it into async]
     d.proc       = process { count, fn };
     runtime  *ps = d.proc.data;
-    ps->handle   = d.proc.mem->grab();
+    ps->handle   = d.proc.mem->hold();
     
     /// measure d.proc.rt address here
     ps->threads = new std::vector<std::thread>();

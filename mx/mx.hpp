@@ -94,7 +94,7 @@ using type_t = idata *;
 
 void*     calloc64(size_t count, size_t size);
 void        free64(void* ptr);
-memory*       grab(memory *mem);
+memory*       hold(memory *mem);
 memory*       drop(memory *mem);
 memory* mem_symbol(symbol cs, type_t ty, i64 id);
 void*   mem_origin(memory *mem);
@@ -386,7 +386,7 @@ typename std::enable_if<std::is_same<T, double>::value
         if constexpr (inherits<mx, _T>())\
             if (dst->mem != mem) {\
                 dst -> ~_T();\
-                new (dst) _T(mem ? ion::grab(mem) : (ion::memory*)null);\
+                new (dst) _T(mem ? ion::hold(mem) : (ion::memory*)null);\
             }\
     }\
     template <typename _T>\
@@ -534,7 +534,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
 
 #define implement(C, B, T, F) \
     C::C(memory*   mem) : B(mem), data(mdata<intern>(mem, 0)) { }\
-    C::C(mx          o) : C(o.mem->grab()) { }\
+    C::C(mx          o) : C(o.mem->hold()) { }\
     C::C()              : C(mx::alloc<C>()) { }\
     C::C(intern  *data) : C(mx::wrap<intern>(data, 1)) { }\
     C::C(intern  &data) : C(mx::alloc<C>(&data)) { }\
@@ -576,7 +576,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
 
 #define mx_implement(C, B) \
     C::C(memory*   mem) : B(mem), data(mdata<intern>(mem, 0)) { }\
-    C::C(mx          o) : C(o.mem->grab()) { }\
+    C::C(mx          o) : C(o.mem->hold()) { }\
     C::C()              : C(mx::alloc<C>()) { }\
     C::C(intern  *data) : C(mx::wrap<intern>(data, 1)) { }\
     C::C(intern  &data) : C(mx::alloc<C>(&data)) { }\
@@ -611,7 +611,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C(intern*  data) : C(mx::wrap <C>(raw_t(data), 1)) { }\
     C(intern&&  memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
     C(intern&   memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
-    C(mx          o) : C(o.mem->grab()) { }\
+    C(mx          o) : C(o.mem->hold()) { }\
     C()              : C(mx::alloc<C>()) { }\
     intern    &operator *() { return *data; }\
     intern    *operator->() { return  data; }\
@@ -619,7 +619,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     operator     intern &() { return *data; }\
     C      &operator=(const C b) {\
         mx::drop();\
-        mx::mem = b.mem->grab();\
+        mx::mem = b.mem->hold();\
         data = (intern*)mx::mem->data<intern>(0);\
         return *this;\
     }\
@@ -642,7 +642,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     using intern         = D;\
     static const inline type_t intern_t = typeof(D);\
     C(memory*   mem) : B(mem) { }\
-    C(mx          o) : C(o.mem->grab()) { }\
+    C(mx          o) : C(o.mem->hold()) { }\
     C()              : C(mx::alloc<C>(null, 0, 1)) { }\
     type_register(C)\
 
@@ -1710,7 +1710,7 @@ struct memory {
     }
 
     memory *copy(size_t reserve = 0);
-    memory *grab();
+    memory *hold();
     
     /// now it has a schema with types to each data structure, their offset in allocation, and the total allocation bytes
     /// also supports the primative store, non-mx
@@ -1815,6 +1815,8 @@ struct mx {
 
     void *realloc(size_t reserve, bool fill_default);
 
+    raw_t find_prop_value(str name, prop *&rprop);
+
     sz_t total_size() {
         return count() * mem->type->base_sz;
     }
@@ -1885,8 +1887,13 @@ struct mx {
         return mem;
     }
 
-    ///
-    inline memory *grab() const { return mem->grab(); }
+    inline memory *hold() const { return mem->hold(); }
+
+    template <typename T>
+    inline T use() const {
+        return T(mem->hold());
+    }
+
     inline size  *shape() const { return mem->shape;  }
     inline void    drop() const {
         if (mem)
@@ -1971,12 +1978,12 @@ struct mx {
     
     /// interop with shared; needs just base type functionality for lambda
     inline mx(null_t = null): mem(alloc<null_t>()) { }
-    inline mx(memory *mem)    : mem(mem->grab()) { }
+    inline mx(memory *mem)    : mem(mem->hold()) { }
     inline mx(symbol ccs, type_t type = typeof(char)) : mx(mem_symbol(ccs, type)) { }
     
     mx(  cstr  cs, type_t type = typeof(char)) : mx(memory::stringify(cs, memory::autolen, 0, false, type)) { }
     
-    inline mx(const mx     & b) :  mx( b.mem ?  b.mem->grab() : null) { }
+    inline mx(const mx     & b) :  mx( b.mem ?  b.mem->hold() : null) { }
 
     //template <typename T>
     //mx(T& ref, bool cp1) : mx(memory::alloc(typeof(T), 1, 0, cp1 ? &ref : (T*)null), ctx) { }
@@ -1984,7 +1991,6 @@ struct mx {
     template <typename T> inline T *data() const { return  mem->data<T>(0); }
     template <typename T> inline T &ref () const { return *mem->data<T>(0); }
     
-
 
     inline mx(bool   v) : mem(copy(&v, 1, 1)) { }
     inline mx(u8     v) : mem(copy(&v, 1, 1)) { }
@@ -2017,7 +2023,7 @@ struct mx {
     void set(memory *m) {
         if (m != mem) {
             if (mem) mem->drop();
-            mem = m ?  m->grab() : null;
+            mem = m ?  m->hold() : null;
         }
     }
 
@@ -2065,7 +2071,7 @@ struct mx {
     mx &operator=(const mx &b) {
         mx &a = *this;
         if (a.mem != b.mem) {
-            if (b.mem) b.mem->grab();
+            if (b.mem) b.mem->hold();
             if (a.mem) a.mem->drop();
             a.mem = b.mem;
         }
@@ -2116,7 +2122,7 @@ struct mx {
     explicit operator  u64()      { return mem->ref<u64>(); }
     explicit operator  r32()      { return mem->ref<r32>(); }
     explicit operator  r64()      { return mem->ref<r64>(); }
-    explicit operator  memory*()  { return mem->grab(); } /// trace its uses
+    explicit operator  memory*()  { return mem->hold(); } /// trace its uses
     explicit operator  symbol()   { return (ion::symbol)mem->origin; }
 
     type_register(mx);
@@ -2177,7 +2183,7 @@ template <typename R, typename... Args>
 template <typename F>
 lambda<R(Args...)>::lambda(F&& fn) : mx() {
     if constexpr (inherits<mx, F>() || is_lambda<std::remove_reference_t<F>>::value) {
-        mx::mem = fn.mem->grab();
+        mx::mem = fn.mem->hold();
         data    = (container*)mem->origin;
     } else {
         if constexpr (std::is_invocable_r_v<R, F, Args...>) {
@@ -2244,7 +2250,7 @@ public:
 
     static void pushv(array<T> *a, memory *m_item) {
         if constexpr (is_convertible<memory*, T>()) {
-            T item(m_item->grab());
+            T item(m_item->hold());
             a->push(item);
         } else {
             T &item = *(T*)m_item->origin;
@@ -2267,7 +2273,7 @@ public:
     }
 
     array(memory*   mem) : mx(mem), data(mx::data<T>()) { }
-    array(mx          o) : array(o.mem->grab()) { }
+    array(mx          o) : array(o.mem->hold()) { }
     array()              : array(mx::alloc<array>(null, 0, 1)) { }
 
     /// immutable
@@ -2340,7 +2346,7 @@ public:
 
     array      &operator=(const array b) {\
         mx::drop();\
-        mx::mem = b.mem->grab();\
+        mx::mem = b.mem->hold();\
         data = (intern*)mx::mem->data<intern>(0);\
         return *this;\
     }\
@@ -2403,7 +2409,7 @@ public:
             if (!src) return null;
             memory* dst;
             if constexpr (identical<T, S>()) {
-                dst = src->grab();
+                dst = src->hold();
             } else {
                 type_t ty = typeof(T);
                 size_t sz = a_src.len();
@@ -2441,7 +2447,7 @@ public:
     }
 
     ///
-    size_t count(T v) {
+    size_t count_of(T v) {
         size_t c = 0;
         for (size_t i = 0; i < mem->count; i++)
             if (data[i] == v)
@@ -3230,7 +3236,7 @@ struct fmt:str {
     inline fmt(str templ, array<mx> args) : str(templ.format(args)) { }
     fmt():str() { }
 
-    operator memory*() { return grab(); }
+    operator memory*() { return hold(); }
 };
 
 /// cstr operator overload
@@ -3346,7 +3352,7 @@ struct map:mx {
         array<K> keys(K *t = null) {
             array<K> res { fields->len() };
             for (field<V> &f:fields) {
-                K k = K(f.key.grab());
+                K k = K(f.key.hold());
                 res.push(k);
             }
             return res;
@@ -3378,12 +3384,12 @@ struct map:mx {
     /// an init for type would be useful; then we could fill out more on the type
     static void set_value(map<V> *m, memory *key, memory *m_item) {
         if constexpr (is_convertible<memory*, V>()) {
-            mx mkey = key->grab();
+            mx mkey = key->hold();
             assert(m_item->type == typeof(V));
 
             if constexpr (inherits<mx, V>()) {
-                /// grab memory
-                (*m)->fetch(mkey).value = m_item->grab();
+                /// hold memory
+                (*m)->fetch(mkey).value = m_item->hold();
             } else {
                 /// copy V, a non-mx value
                 (*m)->fetch(mkey).value = *(V*)m_item->origin;
@@ -3393,7 +3399,7 @@ struct map:mx {
 
     static int defaults(map<V> &def) {
         for (field<V> &f: def) {
-            str name  = f.key.grab();
+            str name  = f.key.hold();
             str value = f.value.mem->type->functions->to_string(f.value.mem->origin);
             printf("%s: default (%s)", name.cs(), value.cs());
         }
@@ -3614,7 +3620,7 @@ struct states:mx {
         return { bool((data->bits & f) == f), fn };
     }
 
-    operator memory*() { return grab(); }
+    operator memory*() { return hold(); }
 };
 
 // just a mere lexical user of cwd
@@ -4264,10 +4270,6 @@ idata *ident::for_type() {
 
     /// get string name of class (works on win, mac and linux)
     static auto    parse_fn = [&](std::string cn) -> cstr {
-        if (strstr(cn.c_str(), "iVideo")) {
-            int test = 0;
-            test++;
-        }
         std::string      st = is_win() ? "<"  : "T =";
         std::string      en = is_win() ? ">(" : "]";
         num		         p  = cn.find(st) + st.length();
@@ -4283,11 +4285,6 @@ idata *ident::for_type() {
     };
 
     if (!type) {
-        if constexpr (has_intern<T>()) {
-            type_t itype = typeof(typename T::intern); /// iVideo not loading?
-            int test = 0;
-            test++;
-        }
         /// this check was to hide lambdas to prevent lambdas being generated on lambdas
         if constexpr (std::is_function_v<T>) { /// i dont believe we need this case now.
             memory         *mem = memory::raw_alloc(null, sizeof(idata), 1, 1);
@@ -4326,10 +4323,6 @@ idata *ident::for_type() {
 
             type->name    = parse_fn(__PRETTY_FUNCTION__);
 
-            if (strstr(type->name, "iVideo")) {
-                int test = 0;
-                test++;
-            }
             if constexpr (registered<T>() || is_external<T>::value) {
                 type->functions = (ops<void>*)ftable<T>();
                 if (type->functions->init)
@@ -4423,7 +4416,7 @@ idata *ident::for_type() {
                 type->meta    = new doubly<prop> { def->meta() }; /// make a reference to this data
                 for (prop &p: *type->meta) {
                     p.offset     = size_t(p.member_addr) - size_t(def);
-                    p.s_key      = new str(p.key->grab());
+                    p.s_key      = new str(p.key->hold());
                     p.parent_type = type; /// we need to store what type it comes from, as we dont always have this context
 
                     /// this use-case is needed for user interfaces without css defaults
@@ -4487,7 +4480,15 @@ ops<T> *ftable() {
         gen.construct  = ConstructFn<T>(T::_construct);
         gen.destruct   = DestructFn <T>(T::_destruct);
         gen.copy       = CopyFn     <T>(T::_copy);
-        gen.boolean    = BooleanFn  <T>(T::_boolean);
+
+
+        // issues with this: todo: find out why
+        if constexpr (has_bool<T>) {
+            gen.boolean = BooleanFn<T>(T::_boolean);
+        } else {
+            gen.boolean = BooleanFn<T>(null);
+        }
+        
         gen.assign     = AssignFn   <T>(T::_assign); // assign is copy, deprecate (used in mx_object assign)
         gen.to_string  = ToStringFn <T>(T::_to_string);
 
@@ -4538,8 +4539,8 @@ ops<T> *ftable() {
 template <typename V>
 void map<V>::print() {
     for (field<V> &f: *this) {
-        str k = str(f.key.grab());
-        str v = str(f.value.grab());
+        str k = str(f.key.hold());
+        str v = str(f.value.hold());
         console.log("key: {0}, value: {1}", { k, v });
     }
 }

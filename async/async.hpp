@@ -51,7 +51,7 @@ struct completer:mx {
 struct future:mx {
     completer::cdata &cd;
     future (memory*           mem) : mx(mem),         cd(ref<completer::cdata>()) { }
-    future (const completer &comp) : mx(comp.grab()), cd(ref<completer::cdata>()) { }
+    future (const completer &comp) : mx(comp.hold()), cd(ref<completer::cdata>()) { }
     
     int sync() {
         cd.mtx.lock();
@@ -60,7 +60,7 @@ struct future:mx {
             mtx.lock();
             void *v_mtx = &mtx;
             FnFuture fn = [v_mtx] (mx) { ((mutex*)v_mtx)->unlock(); };
-            mx mx_fn = fn.mem->grab();
+            mx mx_fn = fn.mem->hold();
             cd.l_success.push(mx_fn);
             cd.l_failure.push(mx_fn);
         }
@@ -72,7 +72,7 @@ struct future:mx {
     ///
     future& then(FnFuture fn) {
         cd.mtx.lock();
-        cd.l_success += fn.mem->grab();
+        cd.l_success += fn.mem->hold();
         cd.mtx.unlock();
         return *this;
     }
@@ -80,7 +80,7 @@ struct future:mx {
     ///
     future& except(FnFuture fn) {
         cd.mtx.lock();
-        cd.l_failure += fn.mem->grab();
+        cd.l_failure += fn.mem->hold();
         cd.mtx.unlock();
         return *this;
     }

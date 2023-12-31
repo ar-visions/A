@@ -1872,11 +1872,11 @@ struct mx {
     memory *copy(T *src, size_t count, size_t reserve) {
         memory*     mem = (memory*)calloc64(1, sizeof(memory));
         mem->count      = count;
-        mem->reserve    = math::max(count, reserve);
+        mem->reserve    = reserve; //math::max(count, reserve);
         mem->refs       = 1;
         mem->type       = typeof(T);
         mem->managed    = true;
-        mem->origin     = (T*)calloc64(mem->reserve, sizeof(T));
+        mem->origin     = (T*)calloc64(math::max(count, reserve), sizeof(T));
         ///
         if constexpr (is_primitive<T>()) {
             memcpy(mem->origin, src, sizeof(T) * count);
@@ -2083,21 +2083,34 @@ struct mx {
         if (mem) { /// if mem, origin is always set
             type_t ty = mem->type;
 
+            /// satisfies use case
+            /// uint8_t and int8_t types are merging at the moment
+            /// the above is true for a non null first char or the count > 2 (h264 packets are Never Never 1 byte)
+            /// however it may step on toes in different string management regimes
             if (is_string())
                 return mem->origin && (*(char*)mem->origin != 0 || mem->count > 1);
-                /// satisfies use case
-                /// uint8_t and int8_t types are merging at the moment
-                /// the above is true for a non null first char or the count > 2 (h264 packets are Never Never 1 byte)
-                /// however it may step on toes in different string management regimes
 
             /// typeof null_t is false, even if it has 1 of them [?]
             if (ty == typeof(null_t))
                 return false;
             
             /// primitive array boolean
-            if (ty->traits & traits::primitive)
-                return mem->count > 0;
-            
+            if (ty->traits & traits::primitive) {
+                /// if mem->count == 1 and reserve is 0, we can assume these are singular
+                if (mem->count == 1 && mem->reserve == 0) {
+                    for (int i = 0; i < ty->base_sz; i++) {
+                        /// ambiguous between single instance vs array
+                        /// todo: fix this case; an array of int with a value of 0 inside of it should still be truthy
+                        /// to fix that, we would need to make array hold onto a custom data container with its own bool op
+                        u8* b = ((u8*)mem->origin)[i];
+                        if (b > 0)
+                            return true;
+                    }
+                    return false;
+                }
+                return mem->count > 0; /// & data must be truthy
+            }
+
             /// use boolean operator on the data by calling the generated function table
             if (ty->schema && ty->schema->bind->data->functions->boolean) {
                 BooleanFn<void> data = ty->schema->bind->data->functions->boolean;

@@ -2094,6 +2094,9 @@ struct mx {
             if (ty == typeof(null_t))
                 return false;
             
+            if (ty == typeof(bool))
+                return *((bool*)mem->origin); /// bool lies about its size in a couple of ways
+
             /// primitive array boolean
             if (ty->traits & traits::primitive) {
                 /// if mem->count == 1 and reserve is 0, we can assume these are singular
@@ -2102,13 +2105,14 @@ struct mx {
                         /// ambiguous between single instance vs array
                         /// todo: fix this case; an array of int with a value of 0 inside of it should still be truthy
                         /// to fix that, we would need to make array hold onto a custom data container with its own bool op
-                        u8* b = ((u8*)mem->origin)[i];
+                        u8 b = ((u8*)mem->origin)[i];
                         if (b > 0)
                             return true;
                     }
                     return false;
                 }
-                return mem->count > 0; /// & data must be truthy
+                /// used for array data; an array of count > 0 is by default, truthy
+                return mem->count > 0;
             }
 
             /// use boolean operator on the data by calling the generated function table

@@ -1791,12 +1791,6 @@ liter<field<var>> var::end()   const { return map<var>(mx::mem->hold())->fields.
 
     size_t str::reserve() const { return mx::mem->reserve; }
 
-
-
-
-
-
-
 	utf16::utf16(size_t sz)   : utf16(mx::alloc<u16>(null, sz, sz)) { }
 
 	utf16::utf16(char *input) : utf16(strlen(input)) {

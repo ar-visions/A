@@ -492,12 +492,16 @@ size &size::operator=(const size b) {
 }
 
 
-void chdir(std::string c) {
+bool chdir(std::string c) {
 #if defined(_WIN32)
-    // replace w global for both cases; its not worth it
-    //SetCurrentDirectory(c.c_str());
+    return SetCurrentDirectory(c.c_str());
 #else
-    ::chdir(c.c_str());
+    int ret = ::chdir(c.c_str());
+    if (ret != 0) {
+        printf("chdir failed: errno = %d\n", errno);
+        return false;
+    }
+    return true;
 #endif
 }
 
@@ -650,11 +654,14 @@ mx var::parse_obj(cstr *start, type_t type) {
     ws(&(++cur));
 
     type_t p_type = (type && !is_map) ? type->meta_lookup() : null;
+    cstr test1;
 
     /// read this object level, parse_values work recursively with 'cur' updated
     while (*cur != '}') {
         /// parse next field name
-        mx field = mem_symbol((symbol)parse_quoted(&cur, null).mem->origin);
+        cstr prev = cur;
+        mx parsed = parse_quoted(&cur, null);
+        mx field = mem_symbol((symbol)parsed.mem->origin);
 
         /// assert field length, skip over the ':'
         ws(&cur);
@@ -775,9 +782,20 @@ mx var::parse_value(cstr *start, type_t type) {
         bool   is_b64 = strncmp(start1, b64, blen) == 0;
         if (is_b64)
             *start += 1 + blen;
-        mx ret = parse_quoted(start, is_b64 ? typeof(array<u8>) : type); /// this updates the start cursor
-        int test = 0;
-        test++;
+        
+        mx ret;
+        if (!is_b64 && type == typeof(array<u8>)) {
+            mx file = parse_quoted(start, null);
+            FILE *f = fopen(file.origin<char>(), "rb");
+            fseek(f, 0, SEEK_END);
+            ulong sz = ftell(f);
+            u8   *b  = (u8*)malloc(sz);
+            fseek(f, 0, SEEK_SET);
+            assert(fread(b, 1, sz, f) == sz);
+            ret = memory::wrap(typeof(u8), b, sz, true);
+        } else
+            ret = parse_quoted(start, is_b64 ? typeof(array<u8>) : type); /// this updates the start cursor
+
         return ret;
     } else if (numeric) {
         bool floaty;
@@ -813,6 +831,10 @@ mx var::parse_value(cstr *start, type_t type) {
             if (type == typeof(u32))  { u32 vu32 = (u32)v;  return mx::alloc(&vu32); }
             if (type == typeof(i64))  { i64 vi64 = (i64)v;  return mx::alloc(&vi64); }
             if (type == typeof(u64))  { u64 vu64 = (u64)v;  return mx::alloc(&vu64); }
+            if (type == typeof(size_t))  { size_t sz64 = (size_t)v; return mx::alloc(&sz64); }
+
+            if (type == typeof(r32))  { r32 vr32 = (r32)v;  return mx::alloc(&vr32); }
+            if (type == typeof(r64))  { r64 vr64 = (r64)v;  return mx::alloc(&vr64); }
             assert(false);
         }
         return mx::alloc(&v);

@@ -54,6 +54,7 @@
 
 #ifndef _WIN32
 #include <unistd.h>
+#include <limits.h>
 #else
 #include <direct.h>
 #endif
@@ -1138,7 +1139,7 @@ struct has_compare<T, std::void_t<decltype(std::declval<T>().compare((T &)*(T*)n
 template <typename T> struct is_array : false_type {};
 template <typename T> struct is_map   : false_type {};
 
-void chdir(std::string c);
+bool chdir(std::string c);
 
 struct ident;
 
@@ -3640,22 +3641,25 @@ struct states:mx {
     operator memory*() { return hold(); }
 };
 
+#ifdef WIN32
+#define PATH_MAX 4096
+#define getcwd _getcwd
+#endif
+
 // just a mere lexical user of cwd
 struct dir {
     static str cwd() {
-        static char buf[1024];
-        int  len;
-        #ifdef WIN32
-        _getcwd(buf, sizeof(buf));
-        #else
+        static char buf[PATH_MAX + 1]; /// larger of POSIX & windows with null char
+        int len;
         getcwd(buf, sizeof(buf));
-        #endif
         return str(buf);
     }
     str prev;
      ///
-     dir(str p) : prev(cwd()) { chdir(p.cs()); }
-    ~dir()					  { chdir(prev.cs()); }
+     dir(str p = null) : prev(p ? cwd() : null) {
+        chdir(p.cs());
+    }
+    ~dir() { if (prev) chdir(prev.cs()); }
 };
 
 static void brexit() {
@@ -3737,6 +3741,7 @@ external(u32);
 external(u64);
 external(r32);
 external(r64);
+external(sz_t);
 
 /// use char as base.
 struct path:mx {
@@ -3774,7 +3779,7 @@ struct path:mx {
         data->p = fs::path(cs);
     }
 
-    template <typename T> T     read() const;
+    template <typename T> T     read(symbol subpath = null) const;
     template <typename T> bool write(T input) const;
 
     bool get_modified_date(struct tm *res);
@@ -4250,7 +4255,7 @@ struct sp:mx {
     mx_object(sp, mx, T);
 };
 
-void         chdir(std::string c);
+bool         chdir(std::string c);
 memory* mem_symbol(ion::symbol cs, type_t ty, i64 id);
 void *  mem_origin(memory *mem);
 memory *   cstring(cstr cs, size_t len, size_t reserve, bool is_constant);
@@ -4637,7 +4642,7 @@ struct has_int_conversion<T, std::void_t<decltype(static_cast<int>(std::declval<
 
 /// use-case: any kind of file [Joey]
 template <typename T>
-T path::read() const {
+T path::read(symbol subpath) const {
     const bool nullable = std::is_constructible<T, std::nullptr_t>::value;
     const bool integral = !has_int_conversion<T>::value || std::is_integral<T>::value;
     
@@ -4663,6 +4668,9 @@ T path::read() const {
         sstr << fs.rdbuf();
         fs.close();
         std::string st = sstr.str();
+
+        /// for json, we handle the subpath
+        //dir d(subpath);
 
         if constexpr (identical<T, str>()) {
             return str((cstr )st.c_str(), int(st.length()));

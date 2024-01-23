@@ -297,10 +297,6 @@ memory *memory::stringify(cstr cs, size_t len, size_t rsv, bool constant, type_t
         u64  h_sym = djb2(cstr(sym));
         memory *&m = ctype->symbols->djb2[h_sym];
         if (!m) {
-            if (strstr(cs, "NONE") != null) {
-                int test = 0;
-                test++;
-            }
             size_t ln = (len == memory::autolen) ? strlen(sym) : len; /// like auto-wash
             m = memory::alloc(typeof(char), ln, ln + 1, raw_t(sym));
             m->id    = id;

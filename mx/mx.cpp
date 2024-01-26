@@ -490,7 +490,8 @@ size &size::operator=(const size b) {
 
 bool chdir(std::string c) {
 #if defined(_WIN32)
-    return SetCurrentDirectory(c.c_str());
+    utf16 ws(c.c_str());
+    return SetCurrentDirectoryW((LPCWSTR)ws.wstr());
 #else
     int ret = ::chdir(c.c_str());
     if (ret != 0) {
@@ -671,7 +672,8 @@ mx var::parse_obj(cstr *start, type_t type) {
         //assert(!p_type || (p_type->meta_map && (p = p_type->meta_map->lookup((symbol)field.mem->origin, null, null))));
         type_t chosen_t = null;
         if (p_type) {
-            p = p_type->meta_map->lookup((symbol)field.mem->origin, null, null);
+            symbol field_name = (symbol)field.mem->origin;
+            p = p_type->meta_map->lookup(field_name, null, null);
             chosen_t = (*p)->type;
         }
 
@@ -1822,7 +1824,7 @@ liter<field<var>> var::end()   const { return map<var>(mx::mem->hold())->fields.
 
     utf16::utf16(symbol s) : utf16((char*)s) { }
 
-    utf16::utf16(wstr input, size_t len) : utf16(len) {
+    utf16::utf16(ion::wstr input, size_t len) : utf16(len) {
         memcpy(data, input, len * sizeof(char_t));
     }
 

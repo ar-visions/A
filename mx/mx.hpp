@@ -2962,7 +2962,7 @@ struct utf16:mx {
 	utf16(char *input);
 
     utf16(symbol s);
-    utf16(wstr input, size_t len);
+    utf16(ion::wstr input, size_t len);
 
     utf16 operator+(symbol s);
 	char_t &operator[](num index) const;
@@ -2971,6 +2971,10 @@ struct utf16:mx {
 	utf16 mid(num start, num length = -1) const;
 	size_t len() const;
 	static utf16 join(array<utf16> &src, utf16 j);
+
+    ion::wstr wstr() {
+        return (ion::wstr)mem->origin;
+    }
 
     cstr to_utf8() {
         int   sz = mem->count;
@@ -3741,7 +3745,9 @@ external(u32);
 external(u64);
 external(r32);
 external(r64);
+#ifndef WIN32
 external(sz_t);
+#endif
 
 /// use char as base.
 struct path:mx {

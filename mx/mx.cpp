@@ -651,7 +651,6 @@ mx var::parse_obj(cstr *start, type_t type) {
     ws(&(++cur));
 
     type_t p_type = (type && !is_map) ? type->meta_lookup() : null;
-    cstr test1;
 
     /// read this object level, parse_values work recursively with 'cur' updated
     while (*cur != '}') {

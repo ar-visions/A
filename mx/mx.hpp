@@ -4036,7 +4036,7 @@ struct path:mx {
             else if (a.exists())
                 fn_filter(a);
         };
-        static std::string str = pdata->string();
+        std::string str = pdata->string();
         symbol sym = str.c_str();
         return res(sym);
     }

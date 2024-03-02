@@ -5,9 +5,13 @@ if (MSVC)
     # will have an easier go at this in that process rather than trying to get it and everyone else it uses to MT/d, MD/d
     cxxflags(/MT)
 else()
-    cxxflags(+-Wno-writable-strings
-           +-Wno-pointer-bool-conversion
-           +-Wno-ambiguous-reversed-operator
-           +-Wno-deprecated-volatile)
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        cxxflags(
+            +-Wno-writable-strings
+            +-Wno-pointer-bool-conversion
+            +-Wno-ambiguous-reversed-operator
+            +-Wno-deprecated-volatile
+        )
+    endif()
 endif()
 

@@ -31,6 +31,9 @@ struct vec2 {
 
     vec2(T x, T y) : x(x), y(y) { }
 
+    template <typename X, typename Y>
+    vec2(X x, Y y) : x(T(x)), y(T(y)) { }
+
     vec2(cstr s) : vec2(str(s)) { }
 
     vec2 mix(vec2 &b, double v) {
@@ -140,6 +143,9 @@ struct vec4 {
     vec4(T x) : x(x), y(x), z(x), w(x) { }
 
     vec4(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) { }
+
+    template <typename X, typename Y, typename Z, typename W>
+    vec4(X x, Y y, Z z, W w) : x(T(x)), y(T(y)), z(T(z)), w(T(w)) { }
 
     vec4(cstr s) : vec4(str(s)) { }
 

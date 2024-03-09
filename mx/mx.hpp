@@ -190,6 +190,7 @@ constexpr int num_occurances(const char* cs, char c) {
     struct C:ex {\
         enum etype { __VA_ARGS__ };\
         enum etype&    value;\
+        inline static const type_t intern_t = typeof(etype);\
         static memory* lookup(symbol sym) { return typeof(C)->lookup(sym); }\
         static memory* lookup(i64     id) { return typeof(C)->lookup(id);  }\
         static doubly<memory*> &symbols() { return typeof(C)->symbols->list; }\
@@ -514,83 +515,42 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
 //template<typename T>
 //struct is_lambda<T, std::void_t<typename T::fdata>> : true_type { };
 
-#define declare(C, B, D, T) \
-    using parent_class  = B;\
-    using context_class = C;\
-    using intern        = D;\
-    C(intern&  data);\
-    C(intern&& data);\
-    C(memory*  mem);\
-    C(intern*  data);\
-    C(mx o);\
-    C();\
-    intern *data;\
-    T &value();\
-    intern *operator->();\
-    T      *operator &();\
-            operator T &();\
-            operator T *();\
-    C      &operator=(const C b);\
-    intern *operator=(const intern *b);
-
-#define implement(C, B, T, F) \
-    C::C(memory*   mem) : B(mem), data(mdata<intern>(mem, 0)) { }\
-    C::C(mx          o) : C(o.mem->hold()) { }\
-    C::C()              : C(mx::alloc<C>()) { }\
-    C::C(intern  *data) : C(mx::wrap<intern>(data, 1)) { }\
-    C::C(intern  &data) : C(mx::alloc<C>(&data)) { }\
-    C::C(intern &&data) : C(mx::alloc<C>(&data)) { }\
-    T &C::value() { return *(F); }\
-    typename C::intern *C::operator->() { return data; }\
-       C::operator T *() { return   F;  }\
-       C::operator T &() { return *(F); }\
-    T *C::operator   &() { return   F;  }\
-    C &C::operator =(const C  b) {\
-        mem->type->functions->assign(\
-            (void*)this, (void*)&b); return *this;\
-    }\
-    typename C::intern *C::operator=(const C::intern *b) {\
-        drop();\
-        mem = mx::wrap<C>(raw_t(b), 1);\
-        data = (C::intern*)mem->origin;\
-        return data;\
-    }
-
 #define mx_declare(C, B, D) \
     using parent_class  = B;\
     using context_class = C;\
-    using intern        = D;\
-    C(intern&  data);\
-    C(intern&& data);\
+    static type_t intern_t;\
+    C(D&  data);\
+    C(D&& data);\
     C(memory*  mem);\
-    C(intern*  data);\
+    C(D*  data);\
     C(mx o);\
     C();\
-    intern *data;\
-    intern  &operator *();\
-    intern  *operator->();\
-    explicit operator intern *();\
-             operator intern &();\
+    D *data;\
+    D  &operator *();\
+    D  *operator->();\
+    explicit operator D *();\
+             operator D &();\
     C       &operator=(const C b);\
-    intern  *operator=(const intern *b);\
+    D       *operator=(const D *b);\
     type_register(C);
 
-#define mx_implement(C, B) \
-    C::C(memory*   mem) : B(mem), data(mdata<intern>(mem, 0)) { }\
+#define mx_implement(C, B, D) \
+    type_t C::intern_t  = typeof(D);\
+    C::C(memory*   mem) : B(mem), data(mdata<D>(mem, 0)) { }\
     C::C(mx          o) : C(o.mem->hold()) { }\
     C::C()              : C(mx::alloc<C>()) { }\
-    C::C(intern  *data) : C(mx::wrap<intern>(data, 1)) { }\
-    C::C(intern  &data) : C(mx::alloc<C>(&data)) { }\
-    C::C(intern &&data) : C(mx::alloc<C>(&data)) { }\
-    C::intern  &C::operator *() { return *data; }\
-    C::intern  *C::operator->() { return  data; }\
-    C::operator C::intern   *() { return  data; }\
-    C::operator C::intern   &() { return *data; }\
+    C::C(D  *data) : C(mx::wrap<D>(data, 1)) { }\
+    C::C(D  &data) : C(mx::alloc<C>(&data)) { }\
+    C::C(D &&data) : C(mx::alloc<C>(&data)) { }\
+    D  &C::operator *() { return *data; }\
+    D *C::operator->() { return  data; }\
+    C::operator D   *() { return  data; }\
+    C::operator D   &() { return *data; }\
     C &C::operator=(const C b) { mem->type->functions->assign(raw_t(0), (void*)this, (void*)&b); return *this; }\
-    C::intern *C::operator=(const C::intern *b) {\
+    D *C::operator=(const D *b) {\
         drop();\
         mem = mx::wrap<C>(raw_t(b), 1);\
-        data = (C::intern*)mem->origin;\
+        data = (D*)mem->origin;\
         return data;\
     }
 
@@ -605,7 +565,6 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     using parent_class   = B;\
     using context_class  = C;\
     using intern         = D;\
-    static const inline type_t context_t = typeof(C);\
     static const inline type_t intern_t  = typeof(D);\
     intern*    data;\
     C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
@@ -1573,7 +1532,13 @@ size_t schema_info(alloc_schema *schema, int depth, B *top, T *p, idata *ctx_typ
             if (schema->bind_count) {
                 context_bind &bind = schema->composition[schema->bind_count - 1 - depth]; /// [ base data ][ mid data ][ top data ]
                 bind.ctx     = ctx_type ? ctx_type : typeof(T);
-                bind.data    = identical<typename T::intern, none>() ? null : typeof(typename T::intern);
+                bind.data    = T::intern_t;
+                if (!bind.data) {
+                    /// we avoid doing this on array<T> because that breaks schema population;
+                    /// without having intern_t it does not work on gcc, the types are seen as opaque even when its initialized in module
+                    bind.data = identical<typename T::intern, none>() ? null : typeof(typename T::intern);
+                }
+                //bind.data    = identical<typename T::intern, none>() ? null : typeof(typename T::intern);
                 bind.base_sz = bind.data ? bind.data->base_sz : 0; /// if array stores a str, it wont store char, so it must be its mx container.  if array stores char, its base sz is char.  if its a struct, same deal
             }
             typename T::parent_class *placeholder = null;
@@ -1598,6 +1563,10 @@ void schema_populate(idata *type, T *p) {
         context_bind &bind = schema.composition[i];
         bind.offset        = offset;
         offset            += bind.base_sz;
+    }
+    if (offset == 0) {
+        int test = 0;
+        test++;
     }
     schema.total_bytes = offset;
     schema.bind = &schema.composition[schema.bind_count - 1];
@@ -1811,7 +1780,7 @@ struct mx {
     using parent_class  = none;
     using context_class = none;
     using intern        = none;
-
+    static const inline type_t intern_t = null;
     virtual void debug() { } /// implement on your functions to override; so you can debug generics and check your higher defined memory
 
     void *realloc(size_t reserve, bool fill_default);
@@ -2264,6 +2233,7 @@ public:
     using parent_class   = mx;
     using context_class  = array;
     using intern         = T;
+    //inline static const type_t intern_t = typeof(T);
     T*    data;
 
     static void pushv(array<T> *a, memory *m_item) {
@@ -2817,9 +2787,6 @@ external(arg);
 
 using ichar = int;
 
-static lambda<void(u32)> fn = {};
-
-
 /// UTF8 :: Bjoern Hoehrmann <bjoern@hoehrmann.de>
 /// https://bjoern.hoehrmann.de/utf-8/decoder/dfa/
 struct utf {
@@ -2871,6 +2838,7 @@ struct utf {
 
 ///
 struct ex:mx {
+    inline static const type_t intern_t = null;
     static bool matches(symbol a, symbol b, int len) {
         for (int i = 0; i < len; i++) {
             if (!a[i] || !b[i])
@@ -2885,7 +2853,7 @@ struct ex:mx {
     ///
     template <typename C>
     ex(memory *m, C *inst) : mx(m) {
-        mem->attach("container", typeof(C), null); /// idata should facilitate this without attachment into doubly
+        mem->attach("container", m->type->ref, null); /// idata should facilitate this without attachment into doubly
     }
 
     /// called in construction by enum class
@@ -3001,7 +2969,8 @@ struct str:mx {
         String,
         CIString
     };
-    using intern = char;
+    //using intern = char;
+    inline static const type_t intern_t = typeof(char);
     using char_t = unsigned short;
 
     cstr data;
@@ -3141,6 +3110,8 @@ struct str:mx {
     ///
     template <typename L>
     array<str> split(L delim) const {
+        array<int> test;
+        test += 1;
         array<str>  result;
         size_t start = 0;
         size_t end   = 0;
@@ -3774,7 +3745,6 @@ struct path:mx {
         }
         register(M);
     };
-
     mx_basic(path);
 
     path(str      s) : path() {
@@ -4321,6 +4291,8 @@ idata *ident::for_type() {
             type->base_sz       = sizeof(T);
             type->name          = parse_fn(__PRETTY_FUNCTION__);
         } else if constexpr (!type_complete<T> || is_opaque<T>()) {
+            bool is_type_complete = type_complete<T>;
+            bool is_type_opaque = is_opaque<T>();
             /// minimal processing on 'opaque'; certain std design-time calls blow up the vulkan types
             memory         *mem = memory::raw_alloc(null, sizeof(idata), 1, 1);
             type                = (idata*)mem_origin(mem);
@@ -4328,11 +4300,13 @@ idata *ident::for_type() {
             type->base_sz       = sizeof(T*);
             type->traits        = traits::opaque;
             type->name          = parse_fn(__PRETTY_FUNCTION__);
-        } else if constexpr (std::is_const    <T>::value) return ident::for_type<std::remove_const_t    <T>>();
-          else if constexpr (std::is_reference<T>::value) return ident::for_type<std::remove_reference_t<T>>();
-          else if constexpr (std::is_pointer  <T>::value && sizeof(T) == 1) /// char* is abstracted away to char because we vectorize them as char elements
+        } else if constexpr (std::is_const    <T>::value) {
+            return ident::for_type<std::remove_const_t    <T>>();
+        } else if constexpr (std::is_reference<T>::value) {
+            return ident::for_type<std::remove_reference_t<T>>();
+        } else if constexpr (std::is_pointer  <T>::value && sizeof(T) == 1) { /// char* is abstracted away to char because we vectorize them as char elements
             return ident::for_type<std::remove_pointer_t  <T>>(); /// for everything else, we set the pointer type to a primitive so we dont lose context
-          else {
+        } else {
             bool is_mx    = ion::is_mx<T>(); /// this one checks just for type == mx
             bool is_obj   = !is_mx && inherits<mx, T>(); /// used in composer for assignment; will merge in is_mx when possible
             memory *mem   = memory::raw_alloc(null, sizeof(idata), 1, 1);

@@ -231,8 +231,8 @@ constexpr int num_occurances(const char* cs, char c) {
         type_register(C);\
     };\
 
-#define enums_declare(C,D,W...)\
-    enum class W##Wrapper;\
+#define enums_declare(C,D,W,...)\
+    struct W##Wrapper;\
     struct C:ex {\
         enum etype { __VA_ARGS__ };\
         enum etype&    value;\
@@ -252,7 +252,7 @@ constexpr int num_occurances(const char* cs, char c) {
         C(mx  mraw);\
         C(ion::symbol sym);\
         C(memory* mem);\
-        inline  operator etype();\
+        operator etype();\
         C&      operator=  (const C b);\
         bool    operator== (enum etype v);\
         bool    operator== (ion::symbol v);\
@@ -264,45 +264,55 @@ constexpr int num_occurances(const char* cs, char c) {
         explicit operator int();\
         explicit operator i64();\
         operator str();\
-        C(W##Wrapper *r);\
+        C(const W##Wrapper &r);\
+        W##Wrapper convert();\
         type_register(C);\
     };\
 
 #define enums_define(C, W)\
-    using W##Wrapper = W;\
-    ion::symbol C::symbol() {\
-        memory *mem = typeof(C)->lookup(i64(value));\
-        if (!mem) printf("symbol: mem is null for value %d\n", (int)value);\
-        assert(mem);\
-        return (char*)mem->origin;\
+struct W##Wrapper {\
+    W value;\
+    W##Wrapper(W v) : value(v) { }\
+    operator W() {\
+        return value;\
     }\
-    str C::name() { return (char*)symbol(); }\
-    memory *C::to_string() { return typeof(C)->lookup(i64(value)); }\
-    C::C(enum etype t)           :ex(initialize(this,             t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
-    C::C(size_t     t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
-    C::C(int        t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
-    C::C(str sraw):C(ex::convert(sraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
-    C::C(mx  mraw):C(ex::convert(mraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
-    C::C(ion::symbol sym):C(ex::convert(sym, (ion::symbol)C::raw.cs(), (C*)null)) { }\
-    C::C(memory* mem):C(mx(mem)) { }\
-            C::operator etype() { return value; }\
-    C&      C::operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
-    bool    C::operator== (enum etype v) { return value == v; }\
-    bool    C::operator== (ion::symbol v) {\
-        if (!mem && !v)\
-            return true;\
-        memory *m = lookup(v);\
-        return (int)m->id == (int)value;\
-    }\
-    bool    C::operator!= (enum etype v) { return value != v; }\
-    bool    C::operator>  (C &b)       { return value >  b.value; }\
-    bool    C::operator<  (C &b)       { return value <  b.value; }\
-    bool    C::operator>= (C &b)       { return value >= b.value; }\
-    bool    C::operator<= (C &b)       { return value <= b.value; }\
-    C::operator int()         { return int(value); }\
-    C::operator i64()         { return i64(value); }\
-    C::operator str()         { return symbol(); }\
-    C::C(W##Wrapper *r):C((enum etype)*(int*)r) { }\
+};\
+ion::symbol C::symbol() {\
+    memory *mem = typeof(C)->lookup(i64(value));\
+    if (!mem) printf("symbol: mem is null for value %d\n", (int)value);\
+    assert(mem);\
+    return (char*)mem->origin;\
+}\
+str C::name() { return (char*)symbol(); }\
+memory *C::to_string() { return typeof(C)->lookup(i64(value)); }\
+C::C(enum etype t)           :ex(initialize(this,             t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
+C::C(size_t     t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
+C::C(int        t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
+C::C(str sraw):C(ex::convert(sraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
+C::C(mx  mraw):C(ex::convert(mraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
+C::C(ion::symbol sym):C(ex::convert(sym, (ion::symbol)C::raw.cs(), (C*)null)) { }\
+C::C(memory* mem):C(mx(mem)) { }\
+C::operator etype() { return value; }\
+C&      C::operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
+bool    C::operator== (enum etype v) { return value == v; }\
+bool    C::operator== (ion::symbol v) {\
+    if (!mem && !v)\
+        return true;\
+    memory *m = lookup(v);\
+    return (int)m->id == (int)value;\
+}\
+bool    C::operator!= (enum etype v) { return value != v; }\
+bool    C::operator>  (C &b)       { return value >  b.value; }\
+bool    C::operator<  (C &b)       { return value <  b.value; }\
+bool    C::operator>= (C &b)       { return value >= b.value; }\
+bool    C::operator<= (C &b)       { return value <= b.value; }\
+C::operator int()         { return int(value); }\
+C::operator i64()         { return i64(value); }\
+C::operator str()         { return symbol(); }\
+C::C(const W##Wrapper &r):C((enum etype)(int)r.value) { }\
+W##Wrapper C::convert() {\
+    return W##Wrapper((W)(int)value);\
+}\
 
 #ifdef WIN32
 void usleep(__int64 usec);

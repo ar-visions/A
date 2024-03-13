@@ -15,7 +15,7 @@
 namespace ion {
 
 //template <typename T> using vec2 = glm::tvec2<T>;
-template <typename T> using vec3 = glm::tvec3<T>;
+//template <typename T> using vec3 = glm::tvec3<T>;
 //template <typename T> using vec4 = glm::tvec4<T>;
 //template <typename T> using rgba = glm::tvec4<T>;
 
@@ -63,6 +63,10 @@ struct vec2 {
         } else {
             assert(false);
         }
+    }
+
+    operator mx() {
+        return array<T> { x, y };
     }
 
     inline double length() {
@@ -139,6 +143,57 @@ struct vec2 {
 };
 
 template <typename T>
+struct vec3 {
+    T x, y, z;
+
+    operator bool() { return !(x == 0 && y == 0 && z == 0); }
+
+    vec3() : x(0), y(0), z(0) { }
+
+    vec3(T x) : x(x), y(x), z(x) { }
+
+    vec3(T x, T y, T z) : x(x), y(y), z(z) { }
+
+    template <typename X, typename Y, typename Z>
+    vec3(X x, Y y, Z z) : x(T(x)), y(T(y)), z(T(z)) { }
+
+    vec3(cstr s) : vec3(str(s)) { }
+
+    operator mx() {
+        return array<T> { x, y, z };
+    }
+
+    vec3 mix(vec3 &b, double v) {
+        vec3 &a = *this;
+        return vec3 {
+            T(a.x * (1.0 - v) + b.x * v),
+            T(a.y * (1.0 - v) + b.y * v),
+            T(a.z * (1.0 - v) + b.z * v)
+        };
+    }
+
+    vec3(str s) {
+        array<str> v = s.split();
+        size_t len = v.len();
+        if (len == 1) {
+            x = T(v[0].real_value<real>());
+            y = x;
+            z = x;
+        }
+        else if (len == 3) {
+            x = T(v[0].real_value<real>());
+            y = T(v[1].real_value<real>());
+            z = T(v[2].real_value<real>());
+        } else {
+            assert(false);
+        }
+    }
+
+    type_register(vec3);
+};
+
+
+template <typename T>
 struct vec4 {
     T x, y, z, w;
 
@@ -154,6 +209,10 @@ struct vec4 {
     vec4(X x, Y y, Z z, W w) : x(T(x)), y(T(y)), z(T(z)), w(T(w)) { }
 
     vec4(cstr s) : vec4(str(s)) { }
+
+    operator mx() {
+        return array<T> { x, y, z, w };
+    }
 
     vec4 mix(vec4 &b, double v) {
         vec4 &a = *this;

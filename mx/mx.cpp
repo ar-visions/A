@@ -72,7 +72,6 @@ raw_t memory::typed_data(type_t dtype, size_t index) const {
     //static type_t mx_t  = typeof(mx);
     alloc_schema *schema = type->schema;
     if (dtype != type && schema) {
-        size_t offset = 0;
         for (size_t i = 0; i < schema->bind_count; i++) {
             context_bind &c = schema->composition[i];
             if (c.data == dtype)
@@ -327,10 +326,9 @@ memory *memory::symbol (ion::symbol s, type_t ty, i64 id) {
 static int _raw_alloc_count = 0;
 
 memory *memory::raw_alloc(type_t type, size_t sz, size_t count, size_t res) {
-    size_t elements = math::max(count, res);
     memory*     mem = (memory*)calloc64(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
     mem->count      = count;
-    mem->reserve    = res;//math::max(res, count);
+    mem->reserve    = math::max(res, count);
     mem->refs       = 1; /// inc on construction for memory*
     mem->type       = type;
     mem->origin     = sz ? calloc64(sz, math::max(res, count)) : null; /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
@@ -415,7 +413,6 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
     if (type->traits & traits::singleton)
         type->singleton = mem;
     bool primitive = (type->traits & traits::primitive);
-    bool has_init  = (type->traits & traits::init);
 
     /// if allocating a schema-based object (mx being first user of this)
     if (count > 0) {
@@ -655,7 +652,6 @@ mx var::parse_obj(cstr *start, type_t type) {
     /// read this object level, parse_values work recursively with 'cur' updated
     while (*cur != '}') {
         /// parse next field name
-        cstr prev = cur;
         mx parsed = parse_quoted(&cur, null);
         mx field = mem_symbol((symbol)parsed.mem->origin);
 
@@ -665,7 +661,6 @@ mx var::parse_obj(cstr *start, type_t type) {
         assert(*cur == ':');
         ws(&(++cur));
 
-        type_t f_type = null;
         prop** p = null;
         
         //assert(!p_type || (p_type->meta_map && (p = p_type->meta_map->lookup((symbol)field.mem->origin, null, null))));
@@ -1418,8 +1413,6 @@ liter<field<var>> var::end()   const { return map<var>(mx::mem->hold())->fields.
             str    rs      = str(sz);
             for (int i = 0; i <= int(ln); i++) {
                 if (i == ln || be(i) || en(i)) {
-                    bool is_b = be(i);
-                    bool is_e = en(i);
                     int  cr = int(i - fr);
                     if (cr > 0) {
                         if (in) {

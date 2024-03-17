@@ -3,7 +3,9 @@ dep(prefix:ci)
 if (MSVC)
     # when a third party lib, on windows has linker issues best to switch the build to shared
     # will have an easier go at this in that process rather than trying to get it and everyone else it uses to MT/d, MD/d
-    cxxflags(/MT)
+
+    # erroneous warnings about virtual functions we dont have
+    cxxflags(/MT +-Wno-delete-non-abstract-non-virtual-dtor +-Wno-macro-redefined)
 else()
     if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         cxxflags(

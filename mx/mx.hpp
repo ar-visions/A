@@ -328,14 +328,6 @@ void usleep(__int64 usec);
 #    define decl(x) __typeof__(x)
 #endif
 
-static void breakp() {
-    #ifdef _MSC_VER
-    #ifndef NDEBUG
-    DebugBreak();
-    #endif
-    #endif
-}
-
 #define type_assert(CODE_ASSERT, TYPE_ASSERT) \
     do {\
         const auto   v = CODE_ASSERT;\
@@ -582,13 +574,6 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
         return data;\
     }
 
-/// for templates in header
-/// the following is delegated to movable(C): (array<T> blows up for good reason)
-///     inline C(intern    ref) : B(mx::alloc<C>(&ref)), data(mx::data<D>()) { }
-
-// should not expose the intern through a constructor on mx_object
-// C(intern   memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
-
 #define mx_object(C, B, D) \
     using parent_class   = B;\
     using context_class  = C;\
@@ -633,9 +618,6 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C(mx          o) : C(o.mem->hold()) { }\
     C()              : C(mx::alloc<C>(null, 0, 1)) { }\
     type_register(C)\
-
-//#define movable(C)\
-//    inline C(intern data) : C(mx::alloc<C>((raw_t)&data, 1)) { }\
 
 template <typename DC>
 static constexpr void inplace(DC *p, bool dtr) {
@@ -798,7 +780,7 @@ struct pair {
     K key;
     ///
     inline pair() { }
-    inline pair(K k, V v) : key(k), value(v)  { }
+    inline pair(K k, V v) : value(v), key(k)  { }
 };
 
 /// doubly does not require memory* or type
@@ -1591,10 +1573,6 @@ void schema_populate(idata *type, T *p) {
         context_bind &bind = schema.composition[i];
         bind.offset        = offset;
         offset            += bind.base_sz;
-    }
-    if (offset == 0) {
-        int test = 0;
-        test++;
     }
     schema.total_bytes = offset;
     schema.bind = &schema.composition[schema.bind_count - 1];
@@ -3138,8 +3116,6 @@ struct str:mx {
     ///
     template <typename L>
     array<str> split(L delim) const {
-        array<int> test;
-        test += 1;
         array<str>  result;
         size_t start = 0;
         size_t end   = 0;
@@ -3653,7 +3629,6 @@ struct states:mx {
 struct dir {
     static str cwd() {
         static char buf[PATH_MAX + 1]; /// larger of POSIX & windows with null char
-        int len;
         getcwd(buf, sizeof(buf));
         return str(buf);
     }
@@ -3792,7 +3767,6 @@ struct path:mx {
     /// utility for knowing if you are trying to go up beyond a relative dir
     /// without any dir analysis is more reduced
     static bool backwards(cstr cs) {
-        int i = 0;
         cstr v = cs;
         if (v[0] == '/') v++;
         double b = 0;
@@ -3968,7 +3942,6 @@ struct path:mx {
         lambda<void(path)> res;
         map<mx>    fetched_dir;  /// this is temp and map needs a hash lambdas pronto
         fs::path   parent   = *pdata; /// parent relative to the git-ignore index; there may be multiple of these things.
-        fs::path&  fsp		= *pdata;
 
         ///
         res = [&](path a) {
@@ -4319,8 +4292,6 @@ idata *ident::for_type() {
             type->base_sz       = sizeof(T);
             type->name          = parse_fn(__PRETTY_FUNCTION__);
         } else if constexpr (!type_complete<T> || is_opaque<T>()) {
-            bool is_type_complete = type_complete<T>;
-            bool is_type_opaque = is_opaque<T>();
             /// minimal processing on 'opaque'; certain std design-time calls blow up the vulkan types
             memory         *mem = memory::raw_alloc(null, sizeof(idata), 1, 1);
             type                = (idata*)mem_origin(mem);

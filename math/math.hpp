@@ -1,5 +1,8 @@
 #pragma once
 
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 #include <mx/mx.hpp>
 
 #define GLM_FORCE_RADIANS
@@ -9,9 +12,6 @@
 #include <glm/gtc/random.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
-
-#define _USE_MATH_DEFINES
-#include <cmath>
 
 namespace ion {
 

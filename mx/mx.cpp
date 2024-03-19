@@ -668,6 +668,9 @@ mx var::parse_obj(cstr *start, type_t type) {
         if (p_type) {
             symbol field_name = (symbol)field.mem->origin;
             p = p_type->meta_map->lookup(field_name, null, null);
+            if (!p) {
+                console.fault("var: field not found on destination type when parsing object: {0}", {field_name});
+            }
             chosen_t = (*p)->type;
         }
 
@@ -1486,6 +1489,7 @@ liter<field<var>> var::end()   const { return map<var>(mx::mem->hold())->fields.
   //bool  str::operator== (std::string  b) const { return strcmp(data, b.c_str()) == 0;  }
   //bool  str::operator!= (std::string  b) const { return strcmp(data, b.c_str()) != 0;  }
     bool  str::operator== (str          b) const { return strcmp(data, b.data)  == 0;  }
+    bool  str::operator!= (str          b) const { return strcmp(data, b.data)  != 0;  }
     bool  str::operator== (symbol       b) const { return strcmp(data, b)       == 0;  }
     bool  str::operator!= (symbol       b) const { return strcmp(data, b)       != 0;  }
     char& str::operator[] (size_t       i) const { return (char&)data[i];               }

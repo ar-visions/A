@@ -1349,6 +1349,18 @@ struct idata {
     idata *meta_lookup() {
         return meta ? this : (schema ? schema->bind->data : null);
     }
+
+    template <typename T>
+    bool inherits() {
+        idata *tcompare = typeof(T);
+        idata *tself    = this;
+        while (tself) {
+            if (tself == tcompare)
+                return true;
+            tself = tself->parent;
+        }
+        return false;
+    }
 };
 
 #undef min
@@ -1657,7 +1669,7 @@ struct memory {
     void drop();
     attachment *attach(symbol id, void *data, func<void()> release);
     attachment *find_attachment(symbol id);
-    
+
     static inline const size_t autolen = UINT64_MAX;
 
     static inline memory *wrap(type_t type, void *origin, size_t count = 1, bool managed = true) {
@@ -1798,6 +1810,7 @@ struct mx {
     }
     
     sz_t reserve() { return math::max(mem->reserve, mem->count); }
+    
     template <typename T>
     static inline memory *wrap(void *m, size_t count = 1, T *placeholder = (T*)null) {
         memory*     mem = (memory*)calloc64(1, sizeof(memory));
@@ -1806,6 +1819,13 @@ struct mx {
         mem->refs       = 1;
         mem->type       = typeof(T);
         mem->origin     = m;
+        return mem;
+    }
+
+    template <typename T>
+    static inline memory *window(T *m, size_t count = 1) {
+        memory *mem = wrap((void*)m, count, (T*)null);
+        mem->managed = false;
         return mem;
     }
 
@@ -3057,6 +3077,7 @@ struct str:mx {
   //bool        operator== (std::string  b) const;
   //bool        operator!= (std::string  b) const;
     bool        operator== (str          b) const;
+    bool        operator!= (str          b) const;
     bool        operator== (symbol       b) const;
     bool        operator!= (symbol       b) const;
     char&		operator[] (size_t       i) const;
@@ -4307,7 +4328,7 @@ idata *ident::for_type() {
             return ident::for_type<std::remove_pointer_t  <T>>(); /// for everything else, we set the pointer type to a primitive so we dont lose context
         } else {
             bool is_mx    = ion::is_mx<T>(); /// this one checks just for type == mx
-            bool is_obj   = !is_mx && inherits<mx, T>(); /// used in composer for assignment; will merge in is_mx when possible
+            bool is_obj   = !is_mx && ion::inherits<mx, T>(); /// used in composer for assignment; will merge in is_mx when possible
             memory *mem   = memory::raw_alloc(null, sizeof(idata), 1, 1);
             type          = (idata*)mem_origin(mem);
             type->base_sz = sizeof(T);
@@ -4340,7 +4361,7 @@ idata *ident::for_type() {
             }
             
             /// all mx classes have a parent_class; we use this to know the polymorphic chain
-            if constexpr (!identical<mx, T>() && inherits<mx, T>()) {
+            if constexpr (!identical<mx, T>() && ion::inherits<mx, T>()) {
                 type->parent = typeof(typename T::parent_class);
             }
 
@@ -4407,7 +4428,7 @@ idata *ident::for_type() {
                         return result;
                     });
             }
-            if constexpr (is_lambda<T>() || is_primitive<T>() || inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value) {
+            if constexpr (is_lambda<T>() || is_primitive<T>() || ion::inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value) {
                 schema_populate(type, (T*)null);
             }
 
@@ -4470,7 +4491,7 @@ ops<T> *ftable() {
         
         gen.alloc_new  = NewFn      <T>(T::_new);
         
-        if constexpr (!inherits<mx, T>())
+        //if constexpr (!inherits<mx, T>())
             gen.valloc = VAllocFn<T>(T::_valloc);
 
         gen.del        = DelFn      <T>(T::_del);
@@ -4481,7 +4502,6 @@ ops<T> *ftable() {
         gen.construct  = ConstructFn<T>(T::_construct);
         gen.destruct   = DestructFn <T>(T::_destruct);
         gen.copy       = CopyFn     <T>(T::_copy);
-
 
         // issues with this: todo: find out why
         if constexpr (has_bool<T>) {

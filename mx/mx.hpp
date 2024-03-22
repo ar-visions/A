@@ -87,6 +87,10 @@ typedef size_t             sz_t;
 
 struct none { };
 
+/// everybody has to do this, because you cant just break anywhere
+/// this lets us define where we put these so we can find them later
+#define debug_break() do { int test = 0; } while(0);
+
 struct idata;
 struct mx;
 struct memory;

@@ -478,6 +478,10 @@ memory *memory::hold() {
     return this;
 }
 
+memory *memory::weak() {
+    return this;
+}
+
 size &size::operator=(const size b) {
     memcpy(values, b.values, sizeof(values));
     count = b.count;

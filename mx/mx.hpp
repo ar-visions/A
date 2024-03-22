@@ -38,6 +38,7 @@
 #include <initializer_list>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <algorithm>
 #include <iterator>
 #include <new>
@@ -1699,6 +1700,7 @@ struct memory {
 
     memory *copy(size_t reserve = 0);
     memory *hold();
+    memory *weak();
     
     /// now it has a schema with types to each data structure, their offset in allocation, and the total allocation bytes
     /// also supports the primative store, non-mx
@@ -1884,6 +1886,7 @@ struct mx {
     }
 
     inline memory *hold() const { return mem->hold(); }
+    inline memory *weak() const { return mem->weak(); }
 
     template <typename T>
     inline T use() const {
@@ -3544,6 +3547,47 @@ struct assigner {
     }
 };
 
+template <typename T>
+struct uniques:mx {
+    struct M {
+        std::unordered_set<T> uset;
+        register(M)
+    };
+
+    uniques(std::initializer_list<T> l) : uniques() {
+        data->uset = l;
+    }
+
+    bool set(T v) {
+        std::pair<typename std::unordered_set<T>::iterator, bool> i = data->uset.insert(v);
+        return bool(i.second);
+    }
+
+    bool unset(T v) {
+        size_t count = data->uset.erase(v);
+        return count == 1;
+    }
+
+    bool contains(T v) {
+        return data->uset.find(v) != data->uset.end();
+    }
+
+    /// bit ridiculous, but why not have the syntax
+    inline assigner<bool> operator[](T v) const {
+        lambda<void(bool&)> fn {
+            [&](bool &from_assign) -> void {
+                if (from_assign)
+                    data->uset.insert(v);
+                else
+                    data->uset.erase(v);
+            }
+        };
+        return { v, fn };
+    }
+
+    mx_basic(uniques)
+};
+
 using Map = map<mx>;
 
 template <typename T>
@@ -3626,9 +3670,8 @@ struct states:mx {
         } else
             f = to_flag(u64(varg));
         
-        static lambda<void(bool&)> fn {
-            [&](bool &from_assign) -> void {
-                u64 f = to_flag(from_assign);
+        lambda<void(bool&)> fn {
+            [this, f](bool &from_assign) -> void {
                 if (from_assign)
                     data->bits |=  f;
                 else

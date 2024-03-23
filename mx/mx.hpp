@@ -1791,8 +1791,6 @@ struct rand {
 
 struct size;
 
-/// memory will be converted to the proper mx type
-/// so you can process any form of memory here, the conversion can happen at the Arg scope; need not have explicit memory*
 template<typename, typename = void>
 struct has_process : std::false_type {};
 
@@ -1800,23 +1798,29 @@ template<typename T>
 struct has_process<T, std::void_t<decltype(std::declval<T>().process(std::declval<memory*>()))>> : std::true_type {};
 
 struct mx {
-    memory *mem = null; ///type_t  ctx = null; // ctx == mem->type for contextual classes, with schema populated
+    memory *mem = null;
     using parent_class  = none;
     using context_class = none;
     using intern        = none;
     static const inline type_t intern_t = null;
-    virtual void debug() { } /// implement on your functions to override; so you can debug generics and check your higher defined memory
 
     void *realloc(size_t reserve, bool fill_default);
 
     raw_t find_prop_value(str name, prop *&rprop);
+
+    mx raw_copy(size_t reserve) {
+        type_t type = mem->type;
+        void *m = calloc(type->base_sz, reserve ? reserve : mem->count);
+        memcpy(m, mem->origin, type->base_sz * mem->count);
+        return memory::wrap(type, m, mem->count);
+    }
 
     sz_t total_size() {
         return count() * mem->type->base_sz;
     }
     
     sz_t reserve() { return math::max(mem->reserve, mem->count); }
-    
+
     template <typename T>
     static inline memory *wrap(void *m, size_t count = 1, T *placeholder = (T*)null) {
         memory*     mem = (memory*)calloc64(1, sizeof(memory));
@@ -3490,6 +3494,9 @@ struct map:mx {
     /// props bypass dependency with this operator returning a list of field, which is supported by mx (map would not be)
     operator doubly<field<V>> &() { return data->fields; }
     bool       operator()(mx key) { return (*data)(key); }
+
+    bool contains(mx key) { return (*data)(key); }
+    
     operator               bool() { return mx::mem && *data; }
 
     template <typename K>  K &get(K k) const { return lookup(k)->value; }

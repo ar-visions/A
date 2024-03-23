@@ -567,8 +567,6 @@ raw_t mx::find_prop_value(str name, prop *&rprop) {
     return property_find(mem->origin, mem->type, name, rprop);
 }
 
-
-
 bool get_bool(type_t type, raw_t data, str &name) {
     prop  *p;
     u8    *p_value = get_member_address(type, data, name, p);

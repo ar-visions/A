@@ -920,6 +920,22 @@ struct doubly {
             item<T> *i = get(index);
             return remove(i);
         }
+
+        bool remove(num index, num count) {
+            item<T> *i = get(index);
+            for (int v = 0; v < count; v++) {
+                if (!remove(i))
+                    return false;
+                i = i->next;
+            }
+            return count > 0;
+        }
+
+        void clear() {
+            while (icount)
+                remove(-1);
+        }
+
         size_t             count() const { return icount;       }
         T                 &first() const { return ifirst->data; }
         T                  &last() const { return ilast->data;  }
@@ -957,6 +973,8 @@ struct doubly {
 	inline liter<T>             end() const { return (*data).end();       }
     inline T   &operator+=    (T   v)       { return (*data) += v;        }
     inline bool operator-=    (num i)       { return (*data) -= i;        }
+
+    size_t len() { return data->count(); }
 
     inline doubly<T>& operator=(const doubly<T> &b) {
              this -> ~doubly( ); /// destruct this
@@ -2377,7 +2395,7 @@ public:
     }\
 
     /// push an element, return its reference
-    T &push(T &v) {
+    T &push(const T &v) {
         size_t csz = mem->count;
         if (csz >= alloc_size())
             data = (T*)mem->realloc(csz + 1, false);
@@ -2484,20 +2502,11 @@ public:
     T* elements() const { return data; }
 
     ///
-    int index_of(T v) const {
-        if constexpr (std::is_same_v<T, str>) {
-            size_t l = v.len();
-            for (size_t i = 0; i < mem->count; i++) {
-                if (strncmp((ion::symbol)&data[i], (ion::symbol)v.data, l))
-                    return int(i);
-            }
-        } else {
-            for (size_t i = 0; i < mem->count; i++) {
-                if (data[i] == v)
-                    return int(i);
-            }
+    int index_of(const T &v) const {
+        for (size_t i = 0; i < mem->count; i++) {
+            if (data[i] == (T&)v)
+                return int(i);
         }
-
         return -1;
     }
 
@@ -2509,8 +2518,8 @@ public:
         return -1;
     }
 
-    bool has(T v) const {
-        return index_of(v) >= 0;
+    bool contains(const T &v) const {
+        return index_of(v) != -1;
     }
 
     ///
@@ -2712,7 +2721,7 @@ public:
         }
     }
 
-    inline T &operator+=(T v) { 
+    inline T &operator+=(const T &v) { 
         return push(v);
     }
 

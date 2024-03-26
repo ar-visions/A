@@ -3,7 +3,6 @@
 struct Test3:mx {
     struct M {
         int t3_int;
-        register(M)
         properties meta() {
             return {
                 prop { "t3_int", t3_int }
@@ -17,7 +16,6 @@ struct Test2:mx {
     struct M {
         int test2_int;
         array<Test3> test3_values;
-        register(M)
         properties meta() {
             return {
                 prop { "test2_int",    test2_int    },
@@ -35,7 +33,6 @@ struct Test1:mx {
         short short_value;
         bool  bool_value;
         Test2 test2_value;
-        register(M)
         properties meta() {
             return {
                 prop { "str_value",   str_value   },

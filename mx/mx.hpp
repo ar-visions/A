@@ -233,7 +233,6 @@ constexpr int num_occurances(const char* cs, char c) {
         explicit operator int()         { return int(value); }\
         explicit operator i64()         { return i64(value); }\
         operator str()         { return symbol(); }\
-        type_register(C);\
     };\
 
 #define enums_declare(C,D,W,...)\
@@ -271,7 +270,6 @@ constexpr int num_occurances(const char* cs, char c) {
         operator str();\
         C(const W##Wrapper &r);\
         W##Wrapper convert();\
-        type_register(C);\
     };\
 
 #define enums_define(C, W)\
@@ -399,136 +397,6 @@ typename std::enable_if<std::is_same<T, double>::value
         return new T(T(std::stoi(data)));
 }
 
-#define register(C) type_register(C)
-
-#define type_register(C)\
-    template <typename _T>\
-    static _T* _mix(_T *a, _T *b, double v) {\
-        if constexpr (has_mix<_T>::value)\
-            return new _T(a->mix(*b, v));\
-        return null;\
-    }\
-    template <typename _T>\
-    static void _set_memory(_T *dst, ion::memory *mem) {\
-        if constexpr (inherits<mx, _T>())\
-            if (dst->mem != mem) {\
-                dst -> ~_T();\
-                new (dst) _T(mem ? ion::hold(mem) : (ion::memory*)null);\
-            }\
-    }\
-    template <typename _T>\
-    static void _init(_T *src) {\
-        if constexpr (has_init<_T>::value) {\
-            src->init();\
-        }\
-    }\
-    template <typename _T>\
-    static struct memory *_to_string(_T *src) {\
-        if constexpr (registered_instance_to_string<_T>())\
-            return src ? src->to_string() : null;\
-        return null;\
-    }\
-    template <typename _T>\
-    static void _process(_T *src, struct memory *mem) {\
-        if constexpr (has_process<_T>())\
-            src->process(mem);\
-    }\
-    template <typename _T>\
-    static _T *_from_string(_T *placeholder, cstr src) {\
-        if constexpr (identical<_T, mx>()) {\
-            return new _T(src, typeof(char));\
-        }\
-        else if constexpr (std::is_constructible<_T, cstr>::value) {\
-            return new _T(src);\
-        } else\
-            return null;\
-    }\
-    template <typename _T>\
-    static _T *_new(C *ph, _T *type) {\
-        return new _T();\
-    }\
-    template <typename _T>\
-    static _T *_valloc(C *ph, _T *type, size_t count) {\
-        return (_T*)calloc(sizeof(_T), count);\
-    }\
-    template <typename _T>\
-    static void _del(C *ph, _T *instance) {\
-        delete instance;\
-    }\
-    template <typename _T>\
-    static void _construct(C *dst0, _T *dst) {\
-        new (dst) _T();\
-    }\
-    template <typename _T>\
-    static void _assign(C *dst0, _T *dst, _T *src) {\
-        if constexpr (std::is_copy_constructible<_T>()) {\
-            dst -> ~_T();\
-            new (dst) _T(*src);\
-        }\
-    }\
-    template <typename _T>\
-    static bool _boolean(C *dst0, _T *src) {\
-        if constexpr (has_bool<_T>) \
-            return bool(*src); \
-        else \
-            return false; \
-    }\
-    template <typename _T>\
-    static void _destruct(C *dst0, _T *dst) {\
-        if constexpr (!is_opaque<_T>()) dst -> ~_T();\
-    }\
-    template <typename _T>\
-    static void _copy(C *dst0, _T *dst, _T *src) { \
-        if constexpr (std::is_assignable_v<_T&, const _T&>) *dst = *src;\
-        else assert(false);\
-    }\
-
-#define external(C)\
-    template <> struct is_external<C> : true_type { };\
-    template <typename _T>\
-    _T *_new(C *ph, _T *type) {\
-        if constexpr (!is_opaque<_T>()) return new _T(); else return null;\
-    }\
-    template <typename _T>\
-    void _del(C *ph, _T *instance) {\
-        if constexpr (!is_opaque<_T>()) delete instance;\
-    }\
-    template <typename _T>\
-    void _construct(C *dst0, _T *dst) {\
-        if constexpr (!is_opaque<_T>()) new (dst) _T();\
-    }\
-    template <typename _T>\
-    void _assign(C *dst0, _T *dst, _T *src) {\
-        if constexpr (!is_opaque<_T>() && std::is_copy_constructible<_T>()) {\
-            dst -> ~_T();\
-            new (dst) _T(*src);\
-        }\
-    }\
-    template <typename _T>\
-    bool _boolean(C *dst0, _T *src) {\
-        if constexpr (has_bool<_T>) \
-            return bool(*src); \
-        else \
-            return false; \
-    }\
-    template <typename _T>\
-    void _destruct(C *dst0, _T *dst) {\
-        if constexpr (!is_opaque<_T>()) dst -> ~_T();\
-    }\
-    template <typename _T>\
-    void _copy(C *dst0, _T *dst, _T *src) { \
-        if constexpr (std::is_same_v<_T, std::filesystem::path>) {\
-            *dst = src->string();\
-        }\
-        else if constexpr (std::is_assignable_v<_T&, const _T&>)\
-            *dst = *src;\
-        else\
-        {\
-            printf("cannnot assign in _copy() generic with type: %s\n", typeof(_T)->name);\
-            exit(1);\
-        }\
-    }\
-
 template<typename T, typename = void>
 struct has_intern : false_type { };
 
@@ -557,7 +425,6 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
              operator D &();\
     C       &operator=(const C b);\
     D       *operator=(const D *b);\
-    type_register(C);
 
 #define mx_implement(C, B, D) \
     type_t C::intern_t  = typeof(D);\
@@ -571,7 +438,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     D *C::operator->() { return  data; }\
     C::operator D   *() { return  data; }\
     C::operator D   &() { return *data; }\
-    C &C::operator=(const C b) { mem->type->functions->assign(raw_t(0), (void*)this, (void*)&b); return *this; }\
+    C &C::operator=(const C b) { mem->type->functions->assign((none*)null, (none*)this, (none*)&b); return *this; }\
     D *C::operator=(const D *b) {\
         drop();\
         mem = mx::wrap<C>(raw_t(b), 1);\
@@ -609,7 +476,6 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
         }\
         return data;\
     }\
-    type_register(C)\
 
 #define mx_basic(C) mx_object(C, mx, M)
 
@@ -622,25 +488,6 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C(memory*   mem) : B(mem) { }\
     C(mx          o) : C(o.mem->hold()) { }\
     C()              : C(mx::alloc<C>(null, 0, 1)) { }\
-    type_register(C)\
-
-template <typename DC>
-static constexpr void inplace(DC *p, bool dtr) {
-    if (dtr) (p) -> ~DC(); 
-    new (p) DC();
-}
-
-template <typename DC>
-static constexpr void inplace(DC *p, DC &data, bool dtr) {
-    if (dtr) (p) -> ~DC(); 
-    new (p) DC(data);
-}
-
-template <typename DC, typename ARG>
-static constexpr void inplace(DC *p, ARG *arg, bool dtr) {
-    if (dtr) (p) -> ~DC(); 
-    new (p) DC(arg);
-}
 
 template <class T, class Enable = void>
 struct is_defined {
@@ -700,6 +547,31 @@ struct has_addition : false_type {};
 
 template <typename T>
 struct has_addition<T, void_t<decltype(std::declval<T>() + std::declval<T>())>> : true_type {};
+
+template <typename T, typename = void>
+struct has_multiply : false_type {};
+
+template <typename T>
+struct has_multiply<T, void_t<decltype(std::declval<T>() * std::declval<T>())>> : true_type {};
+
+template <typename T, typename = void>
+struct has_multiply_scalar : false_type {};
+
+template <typename T>
+struct has_multiply_scalar<T, void_t<decltype(std::declval<T>() * std::declval<float>())>> : true_type {};
+
+template <typename T, typename = void>
+struct has_divide : false_type {};
+
+template <typename T>
+struct has_divide<T, void_t<decltype(std::declval<T>() / std::declval<T>())>> : true_type {};
+
+/// redundant..  should be conquered?
+template <typename T, typename = void>
+struct has_divide_scalar : false_type {};
+
+template <typename T>
+struct has_divide_scalar<T, void_t<decltype(std::declval<T>() / std::declval<float>())>> : true_type {};
 
 template <typename T>
 constexpr bool transitionable() {
@@ -1293,24 +1165,32 @@ struct ident {
     ident(memory* mem) : mem(mem) { }
 };
 
+template <typename T>
+using fun = std::function<T>;
+
 /// these should be vectorized but its not worth it for now
-template <typename T> using   SetMemoryFn =          void(*)(T*, memory*);  /// a (inst), b (memory)
-template <typename T> using         MixFn =            T*(*)(T*, T*, double); /// placeholder, src-cstring
-template <typename T> using     CompareFn =           int(*)(T*, T*, T*);  /// a, b
-template <typename T> using     BooleanFn =          bool(*)(T*, T*);      /// src
-template <typename T> using    ToStringFn =       memory*(*)(T*);          /// src (user implemented on external)
-template <typename T> using  FromStringFn =            T*(*)(T*, cstr);    /// placeholder, src-cstring
-template <typename T> using        CopyFn =          void(*)(T*, T*, T*);  /// dst, src (realloc case)
-template <typename T> using    DestructFn =          void(*)(T*, T*);      /// src
-template <typename T> using   ConstructFn =          void(*)(T*, T*);      /// src
-template <typename T> using        InitFn =          void(*)(T*);          /// src
-template <typename T> using         NewFn =            T*(*)(T*, T*);  /// placeholder, placeholder2, count
-template <typename T> using      VAllocFn =            T*(*)(T*, T*, size_t); /// simply 'free' this one.  made for basic structs
-template <typename T> using         DelFn =          void(*)(T*, T*);      /// placeholder, instance
-template <typename T> using      AssignFn =          void(*)(T*, T*, T*);  /// dst, src
+template <typename T> using   SetMemoryFn =          fun<void(T*, memory*)>;  /// a (inst), b (memory)
+template <typename T> using         AddFn =          fun<void(const T&, const T&, T&)>;
+template <typename T> using         MulFn =          fun<void(const T&, const T&, T&)>;
+template <typename T> using         DivFn =          fun<void(const T&, const T&, T&)>;
+template <typename T> using        DivSFn =          fun<void(const T&, const float, T&)>;
+template <typename T> using        MulSFn =          fun<void(const T&, const float, T&)>;
+template <typename T> using         MixFn =          fun<T*  (T*, T*, double)>;
+template <typename T> using     CompareFn =           fun<int(T*, T*, T*)>;  /// a, b
+template <typename T> using     BooleanFn =          fun<bool(T*, T*)>;      /// src
+template <typename T> using    ToStringFn =       fun<memory*(T*)>;          /// src (user implemented on external)
+template <typename T> using  FromStringFn =            fun<T*(T*, cstr)>;    /// placeholder, src-cstring
+template <typename T> using        CopyFn =          fun<void(T*, T*, T*)>;  /// dst, src (realloc case)
+template <typename T> using    DestructFn =          fun<void(T*, T*)>;      /// src
+template <typename T> using   ConstructFn =          fun<void(T*, T*)>;      /// src
+template <typename T> using        InitFn =          fun<void(T*)>;          /// src
+template <typename T> using         NewFn =            fun<T*()>;
+template <typename T> using      VAllocFn =            fun<T*(T*, T*, size_t)>; /// simply 'free' this one.  made for basic structs
+template <typename T> using         DelFn =          fun<void(T*, T*)>;      /// placeholder, instance
+template <typename T> using      AssignFn =          fun<void(T*, T*, T*)>;  /// dst, src
 template <typename T> using        HashFn =        size_t(*)(T*, size_t);  /// src
-template <typename T> using     ProcessFn =          void(*)(T*, memory*); /// dst, src
-template <typename T> using    SetValueFn =          void(*)(T*, memory*, memory*);  /// dst, src
+template <typename T> using     ProcessFn =          fun<void(T*, memory*)>; /// dst, src
+template <typename T> using    SetValueFn =          fun<void(T*, memory*, memory*)>;  /// dst, src
 
 using PushFn = void(*)(void*, void*); /// array<T>* dst, T* src
 //using SetValueFn = void(*)(void*, memory*, memory*); /// map origin, key, value
@@ -1319,6 +1199,11 @@ template <typename T>
 struct ops {
         //FreeFn<T> free;
     SetMemoryFn<T> set_memory;
+          AddFn<T> add;
+          MulFn<T> mul;
+          DivFn<T> div;
+         MulSFn<T> mul_scalar;
+         DivSFn<T> div_scalar;
       CompareFn<T> compare;
       BooleanFn<T> boolean;
           MixFn<T> mix;
@@ -1347,6 +1232,7 @@ struct array;
 struct str;
 
 using GenericLambda = std::function<mx(void*, array<str>&)>;
+
 ///
 struct idata {
     void            *src;     /// the source.
@@ -1357,7 +1243,7 @@ struct idata {
     doubly<prop>    *meta;    /// doubly<prop>
     prop_map        *meta_map; // prop_map
     alloc_schema    *schema;  /// primitives dont need this one -- used by array and map for type aware contents, also any mx-derrived object containing data will populate this polymorphically
-    ops<void>       *functions;
+    ops<none>       *functions;
     symbol_data     *symbols;
     memory          *singleton;
     idata           *ref; /// if you are given a primitive enum, you can find the schema and symbols on ref (see: to_string)
@@ -1622,7 +1508,8 @@ u64 hash_value(T &key) {
     } else if constexpr (is_convertible<T, hash>()) {
         return hash(key);
     } else if constexpr (inherits<mx, T>() || is_mx<T>()) {
-        return key.mx::mem->type->functions->hash(key.mem->origin, key.mem->count);
+        ops<T> *fn = (ops<T>*)key.mx::mem->type->functions;
+        return fn->hash(&key, key.mem->count);
     } else {
         return 0;
     }
@@ -1764,7 +1651,7 @@ template <typename T> T* mdata(memory *mem, size_t index) { return mem ? mem->da
 
 template <typename T>
 inline T &assign_mx(T &a, const T &b) {
-    typeof(T)->functions->assign(raw_t(0), raw_t(&a), raw_t(&b));
+    typeof(T)->functions->assign((none*)null, (none*)&a, (none*)&b);
     return a;
 }
 
@@ -1969,12 +1856,12 @@ struct mx {
         void *src = p->member_pointer(mem->origin);
         assert(src);
 
-        void *dst = p->type->functions->alloc_new(null, null);
+        void *dst = p->type->functions->alloc_new();
         bool is_mx = p->type->traits & traits::mx_obj;
         if (!is_mx)
-            p->type->functions->assign(null, dst, src); /// copy primitives and structs
+            p->type->functions->assign(null, (none*)dst, (none*)src); /// copy primitives and structs
         else
-            p->type->functions->set_memory(dst, ((mx*)src)->mem); /// quick assignment for mx
+            p->type->functions->set_memory((none*)dst, ((mx*)src)->mem); /// quick assignment for mx
 
         return memory::wrap(p->type, dst, 1);
     }
@@ -1994,9 +1881,9 @@ struct mx {
 
         bool is_mx = p->type->traits & traits::mx_obj;
         if (!is_mx)
-            p->type->functions->assign(null, src, value.mem->origin); /// copy primitives and structs
+            p->type->functions->assign(null, (none*)src, (none*)value.mem->origin); /// copy primitives and structs
         else
-            p->type->functions->set_memory(src, value.mem); /// quick assignment for mx
+            p->type->functions->set_memory((none*)src, value.mem); /// quick assignment for mx
     }
 
     inline ~mx() { if (mem) mem->drop(); }
@@ -2028,6 +1915,9 @@ struct mx {
     inline mx(i64    v) : mem(copy(&v, 1, 1)) { }
     inline mx(r32    v) : mem(copy(&v, 1, 1)) { }
     inline mx(r64    v) : mem(copy(&v, 1, 1)) { }
+
+    /// construct element of type with optional copy
+    mx(type_t type, void *src = null) : mem(memory::alloc(type, 1, 0, src)) { }
 
     template <typename E, typename = std::enable_if_t<std::is_enum_v<E>>>
     inline mx(E v) : mem(alloc(&v)) { }
@@ -2074,7 +1964,8 @@ struct mx {
             if (ty->traits & traits::primitive)
                 return memcmp(mem->origin, b.mem->origin, ty->base_sz * cn) == 0;
             else if (ty->functions && ty->functions->compare)
-                return ty->functions->compare(raw_t(0), mem->origin, b.mem->origin); /// must pass this in; dont change to memory* type, deprecate those
+                assert(false);
+            //    return ty->functions->compare(raw_t(0), mem->origin, b.mem->origin); /// must pass this in; dont change to memory* type, deprecate those
         }
         return false;
     }
@@ -2142,8 +2033,8 @@ struct mx {
 
             /// use boolean operator on the data by calling the generated function table
             if (ty->schema && ty->schema->bind->data->functions->boolean) {
-                BooleanFn<void> data = ty->schema->bind->data->functions->boolean;
-                return mem->origin && data(raw_t(0), (void*)mem->origin);
+                BooleanFn<none> data = ty->schema->bind->data->functions->boolean;
+                return mem->origin && data((none*)null, (none*)mem->origin);
             }
             
             return mem->count > 0;
@@ -2166,8 +2057,6 @@ struct mx {
     explicit operator  r64()      { return mem->ref<r64>(); }
     explicit operator  memory*()  { return mem->hold(); } /// trace its uses
     explicit operator  symbol()   { return (ion::symbol)mem->origin; }
-
-    type_register(mx);
 };
 
 template <typename T>
@@ -2196,7 +2085,6 @@ struct lambda<R(Args...)>:mx {
     /// just so we can set it in construction
     struct container {
         fdata *fn;
-        type_register(container);
         ~container() {
             delete fn;
         }
@@ -2740,8 +2628,6 @@ public:
         }
         mem->count = 0;
     }
-    
-    type_register(array);
 };
 
 template <typename T>
@@ -2829,7 +2715,8 @@ struct io:mx {
 using arg = pair<mx, mx>;
 using ax  = array<arg>;
 
-external(arg);
+// todo: was this needed for var/json?
+//external(arg);
 
 using ichar = int;
 
@@ -2957,8 +2844,6 @@ struct ex:mx {
     ex(E v, C *inst) : ex(alloc<E>(&v), this) { }
 
     ex(memory *mem) : mx(mem) {}
-
-    type_register(ex);
 };
 
 /// useful for constructors that deal with ifstream
@@ -3225,7 +3110,6 @@ struct str:mx {
     bool matches(str input) const;
     str trim() const;
     size_t reserve() const;
-    type_register(str);
 };
 
 using astr = array<str>;
@@ -3291,8 +3175,6 @@ struct map:mx {
     struct mdata {
         doubly<field<V>>  fields;
         hmap           *hash_map;
-
-        type_register(mdata);
 
         /// boolean operator for key
         bool operator()(mx key) {
@@ -3571,7 +3453,6 @@ template <typename T>
 struct uniques:mx {
     struct M {
         std::unordered_set<T> uset;
-        register(M)
     };
 
     uniques(std::initializer_list<T> l) : uniques() {
@@ -3625,7 +3506,6 @@ struct states:mx {
     struct fdata {
         type_t type;
         u64    bits;
-        type_register(fdata);
     };
 
     /// get the bitmask (1 << value); 0 = 1bit set
@@ -3736,6 +3616,7 @@ struct logger {
         append
     };
 
+    inline static type_t l_type = typeof(lambda<void(mx)>);
     inline static lambda<void(mx)> service;
 
     protected:
@@ -3789,24 +3670,6 @@ struct basic_string {
     int  len;
 };
 
-external(std::nullptr_t);
-external(std::filesystem::path);
-external(char);
-external(bool);
-external(i8);
-external(i16);
-external(i32);
-external(i64);
-external(u8);
-external(u16);
-external(u32);
-external(u64);
-external(r32);
-external(r64);
-#ifndef WIN32
-external(sz_t);
-#endif
-
 /// use char as base.
 struct path:mx {
     inline static std::error_code ec;
@@ -3830,7 +3693,6 @@ struct path:mx {
             str = p.string();
             return memory::string(str);
         }
-        register(M);
     };
     mx_basic(path);
 
@@ -4408,10 +4270,172 @@ idata *ident::for_type() {
 
             type->name    = parse_fn(__PRETTY_FUNCTION__);
 
-            if constexpr (registered<T>() || is_external<T>::value) {
-                type->functions = (ops<void>*)ftable<T>();
-                if (type->functions->init)
-                    type->traits |= traits::init; // only functionally registered types get these
+            if constexpr (true || registered<T>() || is_external<T>::value) {
+                ops<T> *fn = (ops<T>*)ftable<T>();
+
+                type->functions = (ops<none>*)fn;
+
+                using _T = T;
+                using  C = T;
+
+                if constexpr (!inherits<ex, T>) {
+                    if constexpr (has_addition<T>::value) {
+                        fn->add = [](const T &a, const T &b, T &res) -> void {
+                            res = T(a + b);
+                        };
+                    }
+
+                    if constexpr (has_multiply<T>::value) {
+                        fn->mul = [](const _T &a, const T &b, _T &res) -> void {
+                            res = a * b;
+                        };
+                    }
+
+                    if constexpr (has_multiply_scalar<T>::value) {
+                        fn->mul_scalar = [](const _T &a, const float b, _T &res) -> void {
+                            res = a * b;
+                        };
+                    }
+
+                    if constexpr (has_divide<T>::value) {
+                        fn->div = [](const _T &a, const T &b, _T &res) -> void {
+                            res = a / b;
+                        };
+                    }
+
+                    if constexpr (has_divide_scalar<T>::value) {
+                        fn->div_scalar = [](const _T &a, const float b, _T &res) -> void {
+                            res = a / b;
+                        };
+                    }
+                }
+
+
+                if constexpr (!std::is_array<T>::value && inherits<mx, T>())
+                    fn->set_memory = [](_T *dst, ion::memory *mem) -> void {
+                        if constexpr (inherits<mx, _T>())
+                            if (dst->mem != mem) {
+                                dst -> ~_T();
+                                new (dst) _T(mem ? ion::hold(mem) : (ion::memory*)null);
+                            }
+                    };
+
+                /// deprecate!
+                if constexpr (!std::is_array<T>::value) {
+                    fn->alloc_new  = []() -> T* {
+                        return new T();
+                    };
+                    /// deprecate!
+                    fn->del        = [](_T *ph, _T *ptr) { delete ptr; };
+
+                    if constexpr (!inherits<mx, T>())
+                        fn->valloc = [](C *ph, _T *type, size_t count) -> _T* {
+                            return (_T*)calloc(sizeof(_T), count);
+                        };
+
+                    /// we want an add, and div
+                    if constexpr (has_mix<T>::value)
+                        fn->mix = [](T *a, T *b, double v) -> T* {
+                            if constexpr (has_mix<T>::value)
+                                return new T(a->mix(*b, v));
+                            return null;
+                        };
+
+                    fn->construct  = [](C *dst0, _T *dst) -> void { new (dst) _T(); };
+
+                    fn->destruct   = [](C *dst0, _T *dst) -> void { dst -> ~_T(); };
+                }
+
+
+                fn->copy       = [](C *dst0, _T *dst, _T *src) -> void {
+                    if constexpr (std::is_same_v<_T, std::filesystem::path>)
+                        *dst = src->string();
+                    else if constexpr (std::is_assignable_v<_T&, const _T&>)
+                        *dst = *src;
+                    else {
+                        printf("cannnot assign in _copy() generic with type: %s\n", typeof(_T)->name);
+                        exit(1);
+                    }
+                };
+
+                if constexpr (has_bool<T>)
+                    fn->boolean = [](C *dst0, _T *src) -> bool {
+                        if constexpr (has_bool<_T>) 
+                            return bool(*src); 
+                        else 
+                            return false; 
+                    };
+                
+                fn->assign     = [](C *dst0, _T *dst, _T *src) -> void {
+                    if constexpr (std::is_copy_constructible<_T>()) {
+                        dst -> ~_T();
+                        new (dst) _T(*src);
+                    }
+                };
+
+                if constexpr (has_init<T>::value) {
+                    fn->init = [](_T *src) -> void {
+                        if constexpr (has_init<_T>::value) {
+                            src->init();
+                        }
+                    };
+                    type->traits |= traits::init;
+                }
+
+                if constexpr (registered_instance_to_string<_T>())
+                    fn->to_string  = [](_T *src) -> memory* {
+                        return src ? src->to_string() : null;
+                    };
+                else if constexpr (external_to_string<_T>())
+                    fn->to_string = [](_T *src) -> memory* {
+                        return src ? _to_string(src) : null;
+                    };
+                
+                if constexpr (identical<T, mx>() || std::is_constructible<T, cstr>::value)
+                    fn->from_string = [](_T *placeholder, cstr src) -> _T* {
+                        if constexpr (identical<_T, mx>()) {
+                            return new _T(src, typeof(char));
+                        }
+                        else if constexpr (std::is_constructible<_T, cstr>::value) {
+                            return new _T(src);
+                        } else
+                            return null;
+                    };
+                else if constexpr (external_from_string<T>())
+                    fn->from_string = [](_T *placeholder, cstr src) -> _T* { // deprecate the placeholders
+                        return _from_string(placeholder, src);
+                    };
+
+                if constexpr (identical<T, mx>())
+                    fn->from_string = [](_T *placeholder, cstr src) -> _T* {
+                        if constexpr (identical<_T, mx>()) {
+                            return new _T(src, typeof(char));
+                        }
+                        else if constexpr (std::is_constructible<_T, cstr>::value) {
+                            return new _T(src);
+                        } else
+                            return null;
+                    };
+                else if constexpr (external_from_string<T>())
+                    fn->from_string = [](_T *placeholder, cstr src) -> _T* { // deprecate the placeholders
+                        return _from_string(placeholder, src);
+                    };
+
+                if constexpr (registered_compare<T>())
+                    fn->compare = CompareFn<T>(T::_compare);
+                
+                if constexpr (registered_hash<T>())
+                    fn->hash = HashFn<T>(T::hash);
+                else if constexpr (external_hash<T>())
+                    fn->hash = HashFn<T>(_hash);
+                
+                if constexpr (has_push<T>())
+                    fn->push = PushFn(T::pushv);
+
+                if constexpr (has_process<T>()) /// deprecate
+                    fn->process = [](_T *src, struct memory *mem) -> void {
+                        src->process(mem);
+                    };
             }
 
             /// if the type contains enum, we want to link the enum back to its parent type
@@ -4491,7 +4515,7 @@ idata *ident::for_type() {
                         return result;
                     });
             }
-            if constexpr (is_lambda<T>() || is_primitive<T>() || ion::inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value) {
+            if constexpr (registered_instance_meta<T>() || is_lambda<T>() || is_primitive<T>() || ion::inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value) {
                 schema_populate(type, (T*)null);
             }
 
@@ -4505,16 +4529,16 @@ idata *ident::for_type() {
                     p.parent_type = type; /// we need to store what type it comes from, as we dont always have this context
 
                     /// this use-case is needed for user interfaces without css defaults
-                    p.init_value = p.type->functions ?
-                        p.type->functions->alloc_new(null, null) : calloc64(1, p.type->base_sz);
+                    p.init_value = (p.type->functions && p.type->functions->alloc_new) ?
+                        p.type->functions->alloc_new() : calloc64(1, p.type->base_sz);
 
                     if (p.type->functions) {
                         u8 *prop_dest = &(((u8*)def)[p.offset]);
                         if (p.type->traits & traits::mx_obj) {
                             mx *mx_data = (mx*)prop_dest;
-                            p.type->functions->set_memory(p.init_value, mx_data->mem);
+                            p.type->functions->set_memory((none*)p.init_value, mx_data->mem);
                         } else {
-                            p.type->functions->assign(null, p.init_value, prop_dest);
+                            p.type->functions->assign((none*)null, (none*)p.init_value, (none*)prop_dest);
                         }
                     }
                 }
@@ -4547,76 +4571,6 @@ T *memory::data(size_t index) const {
 template <typename T>
 ops<T> *ftable() {
     static ops<T> gen;
-    ///
-    if constexpr (registered<T>()) { // if the type is registered as a data class with its own methods declared inside
-        if constexpr (inherits<mx, T>())
-            gen.set_memory = SetMemoryFn<T>(T::_set_memory);
-        
-        gen.alloc_new  = NewFn      <T>(T::_new);
-        
-        //if constexpr (!inherits<mx, T>())
-            gen.valloc = VAllocFn<T>(T::_valloc);
-
-        gen.del        = DelFn      <T>(T::_del);
-
-        if constexpr (has_mix<T>::value)
-            gen.mix = MixFn<T>(T::_mix);
-
-        gen.construct  = ConstructFn<T>(T::_construct);
-        gen.destruct   = DestructFn <T>(T::_destruct);
-        gen.copy       = CopyFn     <T>(T::_copy);
-
-        // issues with this: todo: find out why
-        if constexpr (has_bool<T>) {
-            gen.boolean = BooleanFn<T>(T::_boolean);
-        } else {
-            gen.boolean = BooleanFn<T>(null);
-        }
-        
-        gen.assign     = AssignFn   <T>(T::_assign); // assign is copy, deprecate (used in mx_object assign)
-        gen.to_string  = ToStringFn <T>(T::_to_string);
-
-        if constexpr (has_init<T>::value)
-            gen.init = InitFn<T>(T::_init);
-        
-        if constexpr (registered_compare<T>())
-            gen.compare = CompareFn<T>(T::_compare);
-        
-        if constexpr (identical<T, mx>() || std::is_constructible<T, cstr>::value)
-            gen.from_string = FromStringFn<T>(T::_from_string);
-
-        if constexpr (registered_hash<T>())
-            gen.hash = HashFn<T>(T::hash);
-
-        if constexpr (has_push<T>())
-            gen.push = PushFn(T::pushv);
-
-        if constexpr (has_process<T>())
-            gen.process = ProcessFn<T>(T::_process);
-
-        //if constexpr (is_map<T>())
-        //    gen.set_value = SetValueFn<T>(T::set_value);
-        
-        ///
-    } else if constexpr (is_external<T>::value) { /// primitives, std::filesystem, and other foreign objects
-        gen.alloc_new   = NewFn        <T>(_new);
-        gen.del         = DelFn        <T>(_del);
-        gen.construct   = ConstructFn  <T>(_construct);
-        gen.destruct    = DestructFn   <T>(_destruct);
-        gen.copy        = CopyFn       <T>(_copy);
-        gen.boolean     = BooleanFn    <T>(_boolean);
-        gen.assign      = AssignFn     <T>(_assign);
-
-        //if constexpr (external_compare<T>()) gen.compare = CompareFn<T>(_compare);
-        if constexpr (external_to_string<T>())
-            gen.to_string   = ToStringFn<T>(_to_string);
-
-        if constexpr (external_from_string<T>())
-            gen.from_string = FromStringFn<T>(_from_string);
-
-        if constexpr (external_hash<T>())
-            gen.hash = HashFn<T>(_hash);
-    }
     return (ops<T>*)&gen;
 }
 

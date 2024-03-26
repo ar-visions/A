@@ -241,8 +241,8 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
                 if (data_prim) {
                     memcpy(&dst[c.offset + ii * type_sz], &src[c.offset + ii * type_sz], type_sz);
                 } else {
-                    c.data->functions->copy    (raw_t(0), &dst[c.offset + ii * type_sz], &src[c.offset + ii * type_sz]); /// copy prior data
-                    c.data->functions->destruct(raw_t(0), &src[c.offset + ii * type_sz]); /// destruct prior data
+                    c.data->functions->copy    ((none*)null, (none*)&dst[c.offset + ii * type_sz], (none*)&src[c.offset + ii * type_sz]); /// copy prior data
+                    c.data->functions->destruct((none*)null, (none*)&src[c.offset + ii * type_sz]); /// destruct prior data
                 }
             }
         }
@@ -255,7 +255,7 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
                 context_bind &c  = type->schema->composition[i];
                 if (!(c.data->traits & traits::primitive))
                     for (size_t ii = mn; ii < alloc_reserve; ii++)
-                        c.data->functions->construct(raw_t(0), &dst[c.offset + ii * type_sz]);
+                        c.data->functions->construct((none*)null, (none*)&dst[c.offset + ii * type_sz]);
             }
         }
     }
@@ -282,7 +282,7 @@ void memory::clear() {
         for (size_t i = 0; i < mx->bind_count; i++) { /// count should be called bind_count or something; its too ambiguous with memory
             context_bind &c  = mx->composition[i];
             for (size_t ii = 0; ii < count; ii++)
-                c.data->functions->destruct(raw_t(0), &dst[c.offset + ii * mx->total_bytes]);
+                c.data->functions->destruct((none*)null, (none*)&dst[c.offset + ii * mx->total_bytes]);
         }
     }
     count = 0;
@@ -430,7 +430,7 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
                             if (bind.data->traits & traits::primitive)
                                 memcpy(&dst[ii * type_sz], &src[ii * type_sz], type_sz);
                             else
-                                bind.data->functions->copy(raw_t(0), &dst[ii * type_sz], &src[ii * type_sz]);
+                                bind.data->functions->copy((none*)null, (none*)&dst[ii * type_sz], (none*)&src[ii * type_sz]);
                     }
                 }
             }
@@ -451,12 +451,12 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
                     u8 *dst  = &((u8*)mem->origin)[bind.offset];
                     if (bind.data && !(bind.data->traits & traits::primitive)) {
                         for (size_t ii = 0; ii < count; ii++) {
-                            bind.data->functions->construct(raw_t(0), &dst[ii * type_sz]);
+                            bind.data->functions->construct((none*)null, (none*)&dst[ii * type_sz]);
                             
                             /// allow for trivial construction and subsequent init; this alllows one to use .fields and others,
                             /// and still have an init.
                             if (bind.data->traits & traits::init)
-                                bind.data->functions->init(&dst[ii * type_sz]); 
+                                bind.data->functions->init((none*)&dst[ii * type_sz]); 
                                 /// this may need to be called in the case where the context type has one too
                         }
                     }
@@ -570,7 +570,7 @@ raw_t mx::find_prop_value(str name, prop *&rprop) {
 bool get_bool(type_t type, raw_t data, str &name) {
     prop  *p;
     u8    *p_value = get_member_address(type, data, name, p);
-    bool   result  = p->type->functions->boolean(null, p_value);
+    bool   result  = p->type->functions->boolean((none*)null, (none*)p_value);
     return result;
 }
 
@@ -579,7 +579,7 @@ memory *get_string(type_t type, raw_t data, str &name) {
     u8     *p_value = get_member_address(type, data, name, p);
     if (!p_value)
         return null;
-    memory *m       = p->type->functions->to_string(p_value);
+    memory *m       = p->type->functions->to_string((none*)p_value);
     return  m;
 }
 
@@ -605,12 +605,12 @@ memory  *mx::to_string() const {
         return res;
     }
     else if   (type->functions->to_string)
-        return type->functions->to_string(mem->origin); /// call to_string() on context class
+        return type->functions->to_string((none*)mem->origin); /// call to_string() on context class
     
     else   if (type->schema &&
                type->schema->bind->data->functions &&
                type->schema->bind->data->functions->to_string)
-        return type->schema->bind->data->functions->to_string(mem->origin); /// or data...
+        return type->schema->bind->data->functions->to_string((none*)mem->origin); /// or data...
     
     else if (type == typeof(char))
         return mem->hold();
@@ -634,12 +634,12 @@ mx var::parse_obj(cstr *start, type_t type) {
     map<mx>  m_result;
 
     if (!is_map) {
-        void *alloc = type->functions->alloc_new(null, null);
+        void *alloc = type->functions->alloc_new();
         /// if its an mx-based object, we need to get its memory
         if (type->traits & traits::mx_obj) {
             memory *mem = ((mx*)alloc)->mem->hold();
             mx_result = mx(mem);
-            type->functions->del(null, alloc);
+            type->functions->del((none*)null, (none*)alloc);
         } else
             mx_result = memory::wrap(type, alloc, 1);
     }
@@ -707,7 +707,7 @@ mx var::parse_arr(cstr *start, type_t type) {
     array<mx> a_result;
 
     if (type) {
-        container = type->functions->alloc_new(null, null);
+        container = type->functions->alloc_new();
     } else
         a_result = array<mx>();
 
@@ -740,7 +740,7 @@ mx var::parse_arr(cstr *start, type_t type) {
     *start = cur;
     if (container) {
         memory *mem = ((mx*)container)->mem->hold();
-        type->functions->del(null, container);
+        type->functions->del((none*)null, (none*)container);
         return mx(mem);
     }
     return a_result;
@@ -813,7 +813,7 @@ mx var::parse_value(cstr *start, type_t type) {
         } else if (type && (type->traits & traits::mx_enum)) {
             void *temp = type->functions->from_string(null, value.cs());
             memory *mem = ((mx*)temp)->hold();
-            type->functions->del(null, temp);
+            type->functions->del((none*)null, (none*)temp);
             return mem;
         }
 

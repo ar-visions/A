@@ -17,7 +17,6 @@ struct path_op:mx {
         ion::path path;
         size_t    path_index;
         path::op  op;
-        type_register(M);
     };
     mx_object(path_op, mx, M);
     bool operator==(path::op op) const { return op == data->op; }
@@ -30,7 +29,6 @@ struct path_state:mx {
         i64         modified;
         bool        found;
         void reset() { found = false; }
-        type_register(state);
     };
     mx_object(path_state, mx, state)
 };
@@ -50,7 +48,6 @@ struct watch:mx {
         int           largest;
         array<str>       exts;
         map<path_state> path_states;
-        type_register(state);
     };
 
     mx_object(watch, mx, state);

@@ -22,7 +22,6 @@ struct completer:mx {
         bool            completed;
         array<mx>       l_success;
         array<mx>       l_failure;
-        type_register(cdata);
     };
     mx_object(completer, mx, cdata);
 
@@ -103,7 +102,6 @@ struct runtime {
     bool                       failure   = false;
     bool                       join      = false;
     bool                       stop      = false; /// up to the user to implement this effectively.  any given service isnt going to stop without first checking
-    type_register(runtime);
 };
 
 struct process:mx {
@@ -238,8 +236,6 @@ struct async {
 
     /// return future for this async
     operator future();
-
-    type_register(async);
 };
 
 /// sync just performs sync on construction

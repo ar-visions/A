@@ -139,8 +139,6 @@ struct vec2 {
         y /= v;
         return *this;
     }
-
-    type_register(vec2);
 };
 
 template <typename T>
@@ -189,8 +187,6 @@ struct vec3 {
             assert(false);
         }
     }
-
-    type_register(vec3);
 };
 
 
@@ -243,8 +239,6 @@ struct vec4 {
             assert(false);
         }
     }
-
-    type_register(vec4);
 };
 
 //template <> struct is_opaque<glm::vec2> : true_type { };

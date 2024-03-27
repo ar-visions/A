@@ -3339,7 +3339,7 @@ struct map:mx {
                 if (found) {
                     str     aval = str(argv[ai + 1]);
                     type_t  type = found->value.type();
-                    mx mstr = type->functions->from_string(raw_t(0), (cstr)aval.mem->origin);
+                    mx mstr = type->functions->from_string((none*)null, (cstr)aval.mem->origin);
                     iargs[key] = mstr;
                 } else {
                     printf("arg not found: %s\n", str(key.mem).data);
@@ -4464,7 +4464,7 @@ idata *ident::for_type() {
                         #define ARG(N) \
                             using   T ## N = std::remove_const_t<std::remove_reference_t<std::tuple_element_t<N, args_t>>>;\
                             type_t  t ## N = typeof(T ## N);\
-                            T ## N* a ## N = (T ## N *)(t ## N)->functions->from_string((void*)null, args[N].cs());
+                            T ## N* a ## N = (T ## N *)(t ## N)->functions->from_string((none*)null, args[N].cs());
                         if constexpr (n_args == 0) {
                             if constexpr (identical<void, rtype>()) 
                                 (*data->fn)();

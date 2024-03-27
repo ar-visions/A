@@ -412,8 +412,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     using parent_class  = B;\
     using context_class = C;\
     static type_t intern_t;\
-    C(D&  data);\
-    C(D&& data);\
+    C(const D& data);\
     C(memory*  mem);\
     C(D*  data);\
     C(mx o);\
@@ -423,8 +422,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     D  *operator->();\
     explicit operator D *();\
              operator D &();\
-    C       &operator=(const C b);\
-    D       *operator=(const D *b);\
+    C       &operator=(const C &b);
 
 #define mx_implement(C, B, D) \
     type_t C::intern_t  = typeof(D);\
@@ -432,19 +430,15 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C::C(mx          o) : C(o.mem->hold()) { }\
     C::C()              : C(mx::alloc<C>()) { }\
     C::C(D  *data) : C(mx::wrap<D>(data, 1)) { }\
-    C::C(D  &data) : C(mx::alloc<C>(&data)) { }\
-    C::C(D &&data) : C(mx::alloc<C>(&data)) { }\
+    C::C(const D  &data) : C(mx::alloc<C>((void*)&data)) { }\
     D  &C::operator *() { return *data; }\
     D *C::operator->() { return  data; }\
     C::operator D   *() { return  data; }\
     C::operator D   &() { return *data; }\
-    C &C::operator=(const C b) { mem->type->functions->assign((none*)null, (none*)this, (none*)&b); return *this; }\
-    D *C::operator=(const D *b) {\
-        drop();\
-        mem = mx::wrap<C>(raw_t(b), 1);\
-        data = (D*)mem->origin;\
-        return data;\
-    }
+    C &C::operator=(const C &b) { mem->type->functions->assign((none*)null, (none*)this, (none*)&b); return *this; }
+
+//
+// C(const C& b) : B(b.mem->hold()), data(mx::data<D>()) { }\
 
 #define mx_object(C, B, D) \
     using parent_class   = B;\
@@ -453,29 +447,21 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     static const inline type_t intern_t  = typeof(D);\
     intern*    data;\
     C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
+    C(const C& b)    : C(b.mem->hold()) { }\
     C(intern*  data) : C(mx::wrap <C>(raw_t(data), 1)) { }\
-    C(intern&&  memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
-    C(intern&   memb) : B(mx::alloc<C>(&memb)), data(mx::data<D>()) { }\
+    C(const intern& memb) : B(mx::alloc<C>((void*)&memb)), data(mx::data<D>()) { }\
     C(mx          o) : C(o.mem->hold()) { }\
     C()              : C(mx::alloc<C>()) { }\
     intern    &operator *() { return *data; }\
     intern    *operator->() { return  data; }\
     explicit operator intern *() { return  data; }\
     operator     intern &() { return *data; }\
-    C      &operator=(const C b) {\
+    C      &operator=(const C &b) {\
         mx::drop();\
         mx::mem = b.mem->hold();\
         data = (intern*)mx::mem->data<intern>(0);\
         return *this;\
-    }\
-    intern *operator=(const intern *b) {\
-        if (data != b) {\
-            mx::drop();\
-            mx::mem = mx::wrap<C>(raw_t(b), 1);\
-            data = (intern*)mx::mem->origin;\
-        }\
-        return data;\
-    }\
+    }
 
 #define mx_basic(C) mx_object(C, mx, M)
 
@@ -2275,9 +2261,11 @@ public:
     //intern    *operator &() { return  data; } -- dont ever do these!
     //operator     intern *() { return  data; }
 
-    array      &operator=(const array b) {\
+    template <typename B>
+    array      &operator=(const array<B> &b) {\
         mx::drop();\
         mx::mem = b.mem->hold();\
+        assert(typeof(B) == typeof(T));
         data = (intern*)mx::mem->data<intern>(0);\
         return *this;\
     }\

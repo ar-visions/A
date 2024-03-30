@@ -3546,17 +3546,27 @@ struct states:mx {
         }
     }
 
+    void clear(T v) {
+        u64 f = to_flag((i64)i32(v));
+        data->bits &= ~f;
+    }
+
+    void set(T v) {
+        u64 f = to_flag((i64)i32(v)); /// this was reading u64 from an int, segfaulting
+        data->bits |= f;
+    }
+
     template <typename ET>
     inline assigner<bool> operator[](ET varg) const {
         u64 f = 0;
         if constexpr (identical<ET, initial<T>>()) {
             for (auto &v:varg)
-                f |= to_flag(u64(v));
+                f |= to_flag(u32(v));
         } else if constexpr (identical<ET, symbol>()) { /// support states["enum-name"] = true;  this reduces code
             T v = T(varg);
-            f = to_flag(u64(v.value));
+            f = to_flag(i32(v.value));
         } else
-            f = to_flag(u64(varg));
+            f = to_flag(i32(varg));
         
         lambda<void(bool&)> fn {
             [this, f](bool &from_assign) -> void {

@@ -532,32 +532,19 @@ template <typename T, typename = void>
 struct has_addition : false_type {};
 
 template <typename T>
-struct has_addition<T, void_t<decltype(std::declval<T>() + std::declval<T>())>> : true_type {};
+struct has_addition<T, void_t<decltype(std::declval<T>() + std::declval<T>())>> : std::is_same<decltype(std::declval<T>() + std::declval<T>()), T>::type {};
 
 template <typename T, typename = void>
 struct has_multiply : false_type {};
 
 template <typename T>
-struct has_multiply<T, void_t<decltype(std::declval<T>() * std::declval<T>())>> : true_type {};
+struct has_multiply<T, void_t<decltype(std::declval<T>() * std::declval<T>())>> : std::is_same<decltype(std::declval<T>() * std::declval<T>()), T>::type {};
 
 template <typename T, typename = void>
 struct has_multiply_scalar : false_type {};
 
 template <typename T>
-struct has_multiply_scalar<T, void_t<decltype(std::declval<T>() * std::declval<float>())>> : true_type {};
-
-template <typename T, typename = void>
-struct has_divide : false_type {};
-
-template <typename T>
-struct has_divide<T, void_t<decltype(std::declval<T>() / std::declval<T>())>> : true_type {};
-
-/// redundant..  should be conquered?
-template <typename T, typename = void>
-struct has_divide_scalar : false_type {};
-
-template <typename T>
-struct has_divide_scalar<T, void_t<decltype(std::declval<T>() / std::declval<float>())>> : true_type {};
+struct has_multiply_scalar<T, void_t<decltype(std::declval<T>() * std::declval<float>())>> : std::is_same<decltype(std::declval<T>() * std::declval<float>()), T>::type {};
 
 template <typename T>
 constexpr bool transitionable() {
@@ -1187,9 +1174,7 @@ struct ops {
     SetMemoryFn<T> set_memory;
           AddFn<T> add;
           MulFn<T> mul;
-          DivFn<T> div;
          MulSFn<T> mul_scalar;
-         DivSFn<T> div_scalar;
       CompareFn<T> compare;
       BooleanFn<T> boolean;
           MixFn<T> mix;
@@ -1246,7 +1231,7 @@ struct idata {
     }
 
     template <typename T>
-    bool inherits() {
+    bool classof() {
         idata *tcompare = typeof(T);
         idata *tself    = this;
         while (tself) {
@@ -1432,7 +1417,7 @@ size_t schema_info(alloc_schema *schema, int depth, B *top, T *p, idata *ctx_typ
     /// for simple types (and mx base), we have a single schema entry of itself
     /// mx inherited types do not get a mx base because it would be redundant
     /// combine design-time check into something like is has_schema <B>, but the quirk is is_mx; basic mx classes have singular mx schema
-    if constexpr (!is_hmap<B>::value && !is_doubly<B>::value && (!inherits<ion::mx, B>() || is_mx<B>())) {
+    if constexpr (!is_hmap<B>::value && !is_doubly<B>::value && (!ion::inherits<ion::mx, B>() || is_mx<B>())) {
         if (schema->bind_count) {
             context_bind &bind = *schema->composition;
             bind.ctx     = ctx_type;
@@ -1493,7 +1478,7 @@ u64 hash_value(T &key) {
         return djb2(cstr(key));
     } else if constexpr (is_convertible<T, hash>()) {
         return hash(key);
-    } else if constexpr (inherits<mx, T>() || is_mx<T>()) {
+    } else if constexpr (ion::inherits<mx, T>() || is_mx<T>()) {
         ops<T> *fn = (ops<T>*)key.mx::mem->type->functions;
         return fn->hash(&key, key.mem->count);
     } else {
@@ -2098,7 +2083,7 @@ template <typename T> struct is_lambda<lambda<T>> : true_type  { };
 template <typename R, typename... Args>
 template <typename F>
 lambda<R(Args...)>::lambda(F&& fn) : mx() {
-    if constexpr (inherits<mx, F>() || is_lambda<std::remove_reference_t<F>>::value) {
+    if constexpr (ion::inherits<mx, F>() || is_lambda<std::remove_reference_t<F>>::value) {
         mx::mem = fn.mem->hold();
         data    = (container*)mem->origin;
     } else {
@@ -3035,7 +3020,7 @@ struct str:mx {
         size_t end   = 0;
         cstr   pc    = (cstr)data;
         ///
-        if constexpr (inherits<str, L>() || identical<symbol, L>() || identical<cstr, L>()) {
+        if constexpr (ion::inherits<str, L>() || identical<symbol, L>() || identical<cstr, L>()) {
             str s_delim = delim;
             int  delim_len = int(s_delim.byte_len());
             ///
@@ -3178,7 +3163,7 @@ struct map:mx {
 
         template <typename K>
         inline V &operator[](K k) {
-            if constexpr (inherits<mx, K>()) {
+            if constexpr (ion::inherits<mx, K>()) {
                 return fetch(k).value;
             } else {
                 mx io_key = mx(k);
@@ -3295,7 +3280,7 @@ struct map:mx {
             mx mkey = key->hold();
             assert(m_item->type == typeof(V));
 
-            if constexpr (inherits<mx, V>()) {
+            if constexpr (ion::inherits<mx, V>()) {
                 /// hold memory
                 (*m)->fetch(mkey).value = m_item->hold();
             } else {
@@ -4198,7 +4183,7 @@ struct is_allowed_type {
     static constexpr bool value = 
         !std::is_pointer_v  <T> && 
         !std::is_reference_v<T> &&
-        (is_primitive<T>() || inherits<mx, T>());
+        (is_primitive<T>() || ion::inherits<mx, T>());
 
 };
 
@@ -4276,7 +4261,7 @@ idata *ident::for_type() {
                 using _T = T;
                 using  C = T;
 
-                if constexpr (!inherits<ex, T>) {
+                if constexpr (!ion::inherits<ex, T>()) {
                     if constexpr (has_addition<T>::value) {
                         fn->add = [](const T &a, const T &b, T &res) -> void {
                             res = T(a + b);
@@ -4290,28 +4275,17 @@ idata *ident::for_type() {
                     }
 
                     if constexpr (has_multiply_scalar<T>::value) {
+                        static_assert(std::is_same<decltype(std::declval<T>() * std::declval<float>()), T>::value, "Operator * does not return expected type");
                         fn->mul_scalar = [](const _T &a, const float b, _T &res) -> void {
                             res = a * b;
-                        };
-                    }
-
-                    if constexpr (has_divide<T>::value) {
-                        fn->div = [](const _T &a, const T &b, _T &res) -> void {
-                            res = a / b;
-                        };
-                    }
-
-                    if constexpr (has_divide_scalar<T>::value) {
-                        fn->div_scalar = [](const _T &a, const float b, _T &res) -> void {
-                            res = a / b;
                         };
                     }
                 }
 
 
-                if constexpr (!std::is_array<T>::value && inherits<mx, T>())
+                if constexpr (!std::is_array<T>::value && ion::inherits<mx, T>())
                     fn->set_memory = [](_T *dst, ion::memory *mem) -> void {
-                        if constexpr (inherits<mx, _T>())
+                        if constexpr (ion::inherits<mx, _T>())
                             if (dst->mem != mem) {
                                 dst -> ~_T();
                                 new (dst) _T(mem ? ion::hold(mem) : (ion::memory*)null);
@@ -4326,7 +4300,7 @@ idata *ident::for_type() {
                     /// deprecate!
                     fn->del        = [](_T *ph, _T *ptr) { delete ptr; };
 
-                    if constexpr (!inherits<mx, T>())
+                    if constexpr (!ion::inherits<mx, T>())
                         fn->valloc = [](C *ph, _T *type, size_t count) -> _T* {
                             return (_T*)calloc(sizeof(_T), count);
                         };
@@ -4688,9 +4662,9 @@ T path::read(symbol subpath) const {
 
         if constexpr (identical<T, str>()) {
             return str((cstr )st.c_str(), int(st.length()));
-        } else if constexpr (inherits<var, T>()) {
+        } else if constexpr (ion::inherits<var, T>()) {
             return var::parse(cstr(st.c_str()), null);
-        } else if constexpr (inherits<mx, T>()) {
+        } else if constexpr (ion::inherits<mx, T>()) {
             /// if its a user-class, we can use var's schema option
             return var::parse(cstr(st.c_str()), typeof(T));
         } else {

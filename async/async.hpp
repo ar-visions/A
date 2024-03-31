@@ -1,3 +1,4 @@
+#ifdef __cplusplus
 #pragma once
 
 #include <mx/mx.hpp>
@@ -253,3 +254,4 @@ struct sync:async {
     operator      int() { return async::sync(); }
 };
 }
+#endif

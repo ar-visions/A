@@ -5,273 +5,112 @@
 
 #include <mx/mx.hpp>
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtc/random.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/hash.hpp>
-
 namespace ion {
 
-//template <typename T> using vec2 = glm::tvec2<T>;
-//template <typename T> using vec3 = glm::tvec3<T>;
-//template <typename T> using vec4 = glm::tvec4<T>;
-//template <typename T> using rgba = glm::tvec4<T>;
+#define vec2_decl(T, t) \
+struct vec2##t { \
+    T x, y; \
+    operator bool(); \
+    vec2##t(); \
+    vec2##t(const vec2##t &v); \
+    vec2##t(T x); \
+    vec2##t(T x, T y); \
+    vec2##t(cstr s); \
+    vec2##t mix(vec2##t &b, double v); \
+    vec2##t(str s); \
+    operator mx(); \
+    double length(); \
+    vec2##t &operator= (vec2##t v); \
+    vec2##t operator+ (const vec2##t &b) const; \
+    vec2##t operator- (const vec2##t &b) const; \
+    vec2##t operator* (const vec2##t &b) const; \
+    vec2##t operator/ (const vec2##t &b) const; \
+    vec2##t operator* (const T v) const; \
+    vec2##t operator/ (const T v) const; \
+    vec2##t &operator += (vec2##t v); \
+    vec2##t &operator -= (vec2##t v); \
+    vec2##t &operator *= (vec2##t v); \
+    vec2##t &operator /= (vec2##t v); \
+    vec2##t &operator *= (T v); \
+    vec2##t &operator /= (T v); \
+}; \
 
-template <typename T> using m44  = glm::tmat4x4<T>;
-template <typename T> using m33  = glm::tmat3x3<T>;
-template <typename T> using m22  = glm::tmat2x2<T>;
+#define vec3_decl(T, t) \
+struct vec3##t { \
+    T x, y, z; \
+    operator bool(); \
+    vec3##t(); \
+    vec3##t(T x); \
+    vec3##t(T x, T y, T z); \
+    vec3##t(cstr s); \
+    operator mx(); \
+    vec3##t mix(vec3##t &b, double v); \
+    vec3##t(str s); \
+}; \
 
-template <typename T>
-struct vec2 {
-    T x, y;
+#define vec4_decl(T, t) \
+struct vec4##t { \
+    T x, y, z, w; \
+    operator bool() { return !(x == 0 && y == 0 && z == 0 && w == 0); } \
+    vec4##t(); \
+    vec4##t(T x); \
+    vec4##t(T x, T y, T z, T w); { } \
+    vec4##t(cstr s); { } \
+    T &operator[](int i); \
+    operator mx(); \
+    vec4##t mix(vec4##t &b, double v); \
+    vec4##t(str s); \
+}; \
 
-    operator bool() { return !(x == 0 && y == 0); }
+#define mat4_decl(T, t) \
+struct mat##t { \
+    vec4 rows[4]; \
+    operator bool(); \
+    mat##t(); \
+    mat##t(T x); \
+    mat##t(T x, T y, T z, T w); { } \
+    mat##t(const &T[16]); \
+    operator mx(); \
+    mat##t mix(mat##t &b, double v); \
+    mat##t(str s); \
+}; \
 
-    vec2() : x(0), y(0) { }
+vec2_decl(float,  f)
+vec2_decl(double, d)
+vec2_decl(i8,     i8)
+vec2_decl(u8,     u8)
+vec2_decl(i16,    i16)
+vec2_decl(u16,    u16)
+vec2_decl(i32,    i32)
+vec2_decl(u32,    u32)
+vec2_decl(i64,    i64)
+vec2_decl(u64,    u64)
 
-    vec2(const vec2 &v) : x(v.x), y(v.y) { }
- 
-    vec2(T x) : x(x), y(x) { }
+vec3_decl(float,  f)
+vec3_decl(double, d)
+vec3_decl(i8,     i8)
+vec3_decl(u8,     u8)
+vec3_decl(i16,    i16)
+vec3_decl(u16,    u16)
+vec3_decl(i32,    i32)
+vec3_decl(u32,    u32)
+vec3_decl(i64,    i64)
+vec3_decl(u64,    u64)
 
-    vec2(T x, T y) : x(x), y(y) { }
+vec4_decl(float,  f)
+vec4_decl(double, d)
+vec4_decl(i8,     i8)
+vec4_decl(u8,     u8)
+vec4_decl(i16,    i16)
+vec4_decl(u16,    u16)
+vec4_decl(i32,    i32)
+vec4_decl(u32,    u32)
+vec4_decl(i64,    i64)
+vec4_decl(u64,    u64)
 
-    template <typename X, typename Y>
-    vec2(X x, Y y) : x(T(x)), y(T(y)) { }
+mat4_decl(float,  f)
 
-    vec2(cstr s) : vec2(str(s)) { }
-
-    vec2 mix(vec2 &b, double v) {
-        vec2 &a = *this;
-        return vec2 {
-            T(a.x * (1.0 - v) + b.x * v),
-            T(a.y * (1.0 - v) + b.y * v)
-        };
-    }
-
-    vec2(str s) {
-        array<str> v = s.split();
-        size_t len = v.len();
-        if (len == 1) {
-            x = T(v[0].real_value<real>());
-            y = x;
-        }
-        else if (len == 2) {
-            x = T(v[0].real_value<real>());
-            y = T(v[1].real_value<real>());
-        } else {
-            assert(false);
-        }
-    }
-
-    operator mx() {
-        return array<T> { x, y };
-    }
-
-    inline double length() {
-        return sqrt((x * x) + (y * y));
-    }
-
-    inline vec2 &operator= (vec2 v) {
-        x = v.x;
-        y = v.y;
-        return *this;
-    }
-
-    inline vec2 operator+ (const vec2 &b) const {
-        return { x + b.x, y + b.y };
-    }
-
-    inline vec2 operator- (const vec2 &b) const {
-        return { x - b.x, y - b.y };
-    }
-
-    inline vec2 operator* (const vec2 &b) const {
-        return { x * b.x, y * b.y };
-    }
-
-    inline vec2 operator/ (const vec2 &b) const {
-        return { x / b.x, y / b.y };
-    }
-
-    inline vec2 operator* (const T v) const {
-        return { x * v, y * v };
-    }
-
-    inline vec2 operator/ (const T v) const {
-        return { x / v, y / v };
-    }
-
-    inline vec2 &operator += (vec2 v) {
-        x += v.x;
-        y += v.y;
-        return *this;
-    }
-
-    inline vec2 &operator -= (vec2 v) {
-        x -= v.x;
-        y -= v.y;
-        return *this;
-    }
-
-    inline vec2 &operator *= (vec2 v) {
-        x *= v.x;
-        y *= v.y;
-        return *this;
-    }
-
-    inline vec2 &operator /= (vec2 v) {
-        x /= v.x;
-        y /= v.y;
-        return *this;
-    }
-
-    inline vec2 &operator *= (T v) {
-        x *= v;
-        y *= v;
-        return *this;
-    }
-
-    inline vec2 &operator /= (T v) {
-        x /= v;
-        y /= v;
-        return *this;
-    }
-};
-
-template <typename T>
-struct vec3 {
-    T x, y, z;
-
-    operator bool() { return !(x == 0 && y == 0 && z == 0); }
-
-    vec3() : x(0), y(0), z(0) { }
-
-    vec3(T x) : x(x), y(x), z(x) { }
-
-    vec3(T x, T y, T z) : x(x), y(y), z(z) { }
-
-    template <typename X, typename Y, typename Z>
-    vec3(X x, Y y, Z z) : x(T(x)), y(T(y)), z(T(z)) { }
-
-    vec3(cstr s) : vec3(str(s)) { }
-
-    operator mx() {
-        return array<T> { x, y, z };
-    }
-
-    vec3 mix(vec3 &b, double v) {
-        vec3 &a = *this;
-        return vec3 {
-            T(a.x * (1.0 - v) + b.x * v),
-            T(a.y * (1.0 - v) + b.y * v),
-            T(a.z * (1.0 - v) + b.z * v)
-        };
-    }
-
-    vec3(str s) {
-        array<str> v = s.split();
-        size_t len = v.len();
-        if (len == 1) {
-            x = T(v[0].real_value<real>());
-            y = x;
-            z = x;
-        }
-        else if (len == 3) {
-            x = T(v[0].real_value<real>());
-            y = T(v[1].real_value<real>());
-            z = T(v[2].real_value<real>());
-        } else {
-            assert(false);
-        }
-    }
-};
-
-
-template <typename T>
-struct vec4 {
-    T x, y, z, w;
-
-    operator bool() { return !(x == 0 && y == 0 && z == 0 && w == 0); }
-
-    vec4() : x(0), y(0), z(0), w(0) { }
-
-    vec4(T x) : x(x), y(x), z(x), w(x) { }
-
-    vec4(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) { }
-
-    template <typename X, typename Y, typename Z, typename W>
-    vec4(X x, Y y, Z z, W w) : x(T(x)), y(T(y)), z(T(z)), w(T(w)) { }
-
-    vec4(cstr s) : vec4(str(s)) { }
-
-    operator mx() {
-        return array<T> { x, y, z, w };
-    }
-
-    vec4 mix(vec4 &b, double v) {
-        vec4 &a = *this;
-        return vec4 {
-            T(a.x * (1.0 - v) + b.x * v),
-            T(a.y * (1.0 - v) + b.y * v),
-            T(a.z * (1.0 - v) + b.z * v),
-            T(a.w * (1.0 - v) + b.w * v)
-        };
-    }
-
-    vec4(str s) {
-        array<str> v = s.split();
-        size_t len = v.len();
-        if (len == 1) {
-            x = T(v[0].real_value<real>());
-            y = x;
-            z = x;
-            w = x;
-        }
-        else if (len == 4) {
-            x = T(v[0].real_value<real>());
-            y = T(v[1].real_value<real>());
-            z = T(v[2].real_value<real>());
-            w = T(v[3].real_value<real>());
-        } else {
-            assert(false);
-        }
-    }
-};
-
-//template <> struct is_opaque<glm::vec2> : true_type { };
-//template <> struct is_opaque<glm::vec3> : true_type { };
-//template <> struct is_opaque<glm::vec4> : true_type { };
-//template <> struct is_opaque<glm::mat4> : true_type { };
-
-//external(glmv2);
-//external(glmv3);
-
-/// vkg must use doubles!
-using m44d    = m44 <r64>;
-using m44f    = m44 <r32>;
-
-using m33d    = m33 <r64>;
-using m33f    = m33 <r32>;
-
-using m22d    = m22 <r64>;
-using m22f    = m22 <r32>;
-
-using vec2u8  = vec2 <u8>;
-using vec2i   = vec2 <i32>;
-using vec2d   = vec2 <r64>;
-using vec2f   = vec2 <r32>;
-
-using vec3u8  = vec3 <u8>;
-using vec3i   = vec3 <i32>;
-using vec3d   = vec3 <r64>;
-using vec3f   = vec3 <r32>;
-
-using vec4u8  = vec4 <u8>;
-using vec4i   = vec4 <i32>;
-using vec4d   = vec4 <r64>;
-using vec4f   = vec4 <r32>;
+using m44d    = mat44d;
+using m44f    = mat44f;
 
 }

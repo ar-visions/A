@@ -217,7 +217,7 @@ constexpr int num_occurances(const char* cs, char c) {
         C(ion::symbol sym):C(ex::convert(sym, (ion::symbol)C::raw.cs(), (C*)null)) { }\
         C(memory* mem):C(mx(mem)) { }\
         inline  operator etype() { return value; }\
-        C&      operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
+        C&      operator=  (const C &b)  { return (C&)assign_mx(*this, b); }\
         bool    operator== (enum etype v) { return value == v; }\
         bool    operator== (ion::symbol v) {\
             if (!mem && !v)\
@@ -230,8 +230,8 @@ constexpr int num_occurances(const char* cs, char c) {
         bool    operator<  (C &b)       { return value <  b.value; }\
         bool    operator>= (C &b)       { return value >= b.value; }\
         bool    operator<= (C &b)       { return value <= b.value; }\
-        explicit operator int()         { return int(value); }\
-        explicit operator i64()         { return i64(value); }\
+        explicit operator int() const   { return int(value); }\
+        explicit operator i64() const   { return i64(value); }\
         operator str()         { return symbol(); }\
     };\
 
@@ -257,7 +257,7 @@ constexpr int num_occurances(const char* cs, char c) {
         C(ion::symbol sym);\
         C(memory* mem);\
         operator etype();\
-        C&      operator=  (const C b);\
+        C&      operator=  (const C &b);\
         bool    operator== (enum etype v);\
         bool    operator== (ion::symbol v);\
         bool    operator!= (enum etype v);\
@@ -265,8 +265,8 @@ constexpr int num_occurances(const char* cs, char c) {
         bool    operator<  (C &b);\
         bool    operator>= (C &b);\
         bool    operator<= (C &b);\
-        explicit operator int();\
-        explicit operator i64();\
+        explicit operator int() const;\
+        explicit operator i64() const;\
         operator str();\
         C(const W##Wrapper &r);\
         W##Wrapper convert();\
@@ -296,7 +296,7 @@ C::C(mx  mraw):C(ex::convert(mraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
 C::C(ion::symbol sym):C(ex::convert(sym, (ion::symbol)C::raw.cs(), (C*)null)) { }\
 C::C(memory* mem):C(mx(mem)) { }\
 C::operator etype() { return value; }\
-C&      C::operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
+C&      C::operator=  (const C &b)   { return (C&)assign_mx(*this, b); }\
 bool    C::operator== (enum etype v) { return value == v; }\
 bool    C::operator== (ion::symbol v) {\
     if (!mem && !v)\
@@ -309,9 +309,9 @@ bool    C::operator>  (C &b)       { return value >  b.value; }\
 bool    C::operator<  (C &b)       { return value <  b.value; }\
 bool    C::operator>= (C &b)       { return value >= b.value; }\
 bool    C::operator<= (C &b)       { return value <= b.value; }\
-C::operator int()         { return int(value); }\
-C::operator i64()         { return i64(value); }\
-C::operator str()         { return symbol(); }\
+C::operator int() const   { return int(value); }\
+C::operator i64() const   { return i64(value); }\
+C::operator str() const   { return symbol(); }\
 C::C(const W##Wrapper &r):C((enum etype)(int)r.value) { }\
 W##Wrapper C::convert() {\
     return W##Wrapper((W)(int)value);\
@@ -1198,7 +1198,6 @@ struct ops {
 
 struct symbol_data;
 
-template<typename T>
 struct array;
 struct str;
 
@@ -1436,7 +1435,7 @@ size_t schema_info(alloc_schema *schema, int depth, B *top, T *p, idata *ctx_typ
                 bind.ctx     = ctx_type ? ctx_type : typeof(T);
                 bind.data    = T::intern_t;
                 if (!bind.data) {
-                    /// we avoid doing this on array<T> because that breaks schema population;
+                    /// we avoid doing this on array because that breaks schema population;
                     /// without having intern_t it does not work on gcc, the types are seen as opaque even when its initialized in module
                     bind.data = identical<typename T::intern, none>() ? null : typeof(typename T::intern);
                 }
@@ -2028,6 +2027,12 @@ struct mx {
     explicit operator  r64()      { return mem->ref<r64>(); }
     explicit operator  memory*()  { return mem->hold(); } /// trace its uses
     explicit operator  symbol()   { return (ion::symbol)mem->origin; }
+
+    size_t alloc_size() const {
+        size_t usz = size_t(mem->count);
+        size_t ual = size_t(mem->reserve);
+        return ual == 0 ? usz : ual;
+    }
 };
 
 template <typename T>
@@ -2112,7 +2117,7 @@ lambda<R(Args...)>::lambda(CL* cl, F fn) {
     //}
 }
 
-mx call(mx lambda, array<str> args);
+mx call(mx lambda, const array &args);
 
 template <typename T>
 inline void vset(T *data, u8 bv, size_t c) {
@@ -2131,24 +2136,19 @@ struct has_push : std::false_type {};
 template<typename T>
 struct has_push<T, std::void_t<decltype(T::pushv(std::declval<T*>(), std::declval<memory*>()))>> : std::true_type {};
 
-template <typename T>
+template<typename T>
+struct Array<T>:mx {
+    T* data;
+};
+
 struct array:mx {
-protected:
-    size_t alloc_size() const {
-        size_t usz = size_t(mem->count);
-        size_t ual = size_t(mem->reserve);
-        return ual == 0 ? usz : ual;
+    raw_t  data; /// casting to an Array<T> with a data window would effectively let us see this, and we can even define that above Array
+
+    /// copying this adds a reference count all the time.  its just posing as another type.  no big deal
+    template <typename T>
+    operator Array<T> &() const {
+        return *(const Array<T>*)this;
     }
-
-public:
-    static inline type_t element_type() { return typeof(T); }
-
-    //mx_object(array, mx, T);
-    using parent_class   = mx;
-    using context_class  = array;
-    using intern         = T;
-    //inline static const type_t intern_t = typeof(T);
-    T*    data;
 
     static void pushv(array<T> *a, memory *m_item) {
         if constexpr (is_convertible<memory*, T>()) {
@@ -3403,26 +3403,6 @@ template <typename T> struct is_array<array<T>> : true_type  {};
 template <typename T> struct is_map  <map  <T>> : true_type  {};
 
 template <typename T>
-struct assigner {
-    protected:
-    T val;
-    lambda<void(bool&)> &on_assign;
-    public:
-
-    ///
-    inline assigner(T v, lambda<void(bool&)> &fn) : val(v), on_assign(fn) { }
-
-    ///
-    inline operator T() { return val; }
-
-    /// the cycle must end [/picard-shoots-picard]
-    inline void operator=(T n) {
-        val = n; /// probably wont set this
-        on_assign(val);
-    }
-};
-
-template <typename T>
 struct uniques:mx {
     struct M {
         std::unordered_set<T> uset;
@@ -3432,31 +3412,22 @@ struct uniques:mx {
         data->uset = l;
     }
 
-    bool set(T v) {
+    bool set(const T &v) {
         std::pair<typename std::unordered_set<T>::iterator, bool> i = data->uset.insert(v);
         return bool(i.second);
     }
 
-    bool unset(T v) {
+    bool unset(const T &v) {
         size_t count = data->uset.erase(v);
         return count == 1;
     }
 
-    bool contains(T v) {
+    bool contains(const T &v) {
         return data->uset.find(v) != data->uset.end();
     }
 
-    /// bit ridiculous, but why not have the syntax
-    inline assigner<bool> operator[](T v) const {
-        lambda<void(bool&)> fn {
-            [&](bool &from_assign) -> void {
-                if (from_assign)
-                    data->uset.insert(v);
-                else
-                    data->uset.erase(v);
-            }
-        };
-        return { v, fn };
+    inline bool operator[](const T &v) const {
+        return contains(v);
     }
 
     mx_basic(uniques)
@@ -3531,18 +3502,18 @@ struct states:mx {
         }
     }
 
-    void clear(T v) {
+    void clear(const T &v) {
         u64 f = to_flag((i64)i32(v));
         data->bits &= ~f;
     }
 
-    void set(T v) {
+    void set(const T &v) {
         u64 f = to_flag((i64)i32(v)); /// this was reading u64 from an int, segfaulting
         data->bits |= f;
     }
 
     template <typename ET>
-    inline assigner<bool> operator[](ET varg) const {
+    inline bool operator[](const ET &varg) const {
         u64 f = 0;
         if constexpr (identical<ET, initial<T>>()) {
             for (auto &v:varg)
@@ -3553,15 +3524,7 @@ struct states:mx {
         } else
             f = to_flag(i32(varg));
         
-        lambda<void(bool&)> fn {
-            [this, f](bool &from_assign) -> void {
-                if (from_assign)
-                    data->bits |=  f;
-                else
-                    data->bits &= ~f;
-            }
-        };
-        return { bool((data->bits & f) == f), fn };
+        return (data->bits & f) == f;
     }
 
     operator memory*() { return hold(); }

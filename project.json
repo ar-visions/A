@@ -8,7 +8,7 @@
             "commit":   "bf71a83",
             "url":      "https://github.com/g-truc/glm",
             "cmake": {
-                "args": ["-DBUILD_STATIC_LIBS=1"]
+                "args": ["-DBUILD_STATIC_LIBS=%STATIC%", "-DCMAKE_CXX_FLAGS=-Wno-error -Wno-implicit-int-float-conversion"]
             }
         }
     ]

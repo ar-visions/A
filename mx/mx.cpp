@@ -10,6 +10,23 @@
 
 namespace ion {
 
+u64 hash_value(memory *key) {
+    type_t type = key->type;
+    raw_t  k    = key->origin;
+
+    if (type == types::i64  || type == types::u64)    return (u64)*(u64*)v;
+    if (type == types::i32  || type == types::u32)    return (u64)*(u32*)v;
+    if (type == types::cstr || type == types::symbol) return (u64)djb2(cstr(v));
+    if (type->functions->hash) return type->functions->hash((none*)k);
+
+    assert(false);
+    return 0;
+}
+
+u64 hash_index(memory *key, size_t mod) {
+    return hash_value(key) % mod;
+}
+
 template <>
 str convert_str<str>(const str& s) {
     return s;

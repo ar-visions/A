@@ -1524,6 +1524,19 @@ struct attachment {
 
 using mutex = std::mutex;
 
+template<typename T>
+struct Memory:mx {
+    size_t              refs;
+    u64                 attrs;
+    type_t              type;
+    size_t              count, reserve;
+    size               *shape; // if null, then, its just 1 dim, of count.  otherwise this is the 'shape' of the data and strides through according
+    doubly<attachment> *atts;
+    size_t              id;
+    bool                managed; /// origin is allocated by us
+    T*                  origin;
+};
+
 struct memory {
     enum attr { constant = 1 };
     size_t              refs;
@@ -1536,6 +1549,11 @@ struct memory {
     size_t              id;
     bool                managed; /// origin is allocated by us
     raw_t               origin;
+
+    template <typename T>
+    operator Memory<T> &() const {
+        return *(const Memory<T>*)this;
+    }
 
     static memory *raw_alloc(type_t type, size_t sz, size_t count, size_t res);
     static int raw_alloc_count();
@@ -2148,6 +2166,10 @@ struct array:mx {
     template <typename T>
     operator Array<T> &() const {
         return *(const Array<T>*)this;
+    }
+
+    template <typename T>
+    array(const Array<T> &a) : array(a.mem.hold()) {
     }
 
     static void pushv(array<T> *a, memory *m_item) {

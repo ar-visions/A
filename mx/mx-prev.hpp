@@ -1820,7 +1820,7 @@ struct mx {
 
     /// gets a wrapped mx value; supports primitive/struct/context
     mx get_meta(cstr cs) const { return get_meta(mx(mem_symbol(cs))); }
-    mx get_meta(mx  key) const {
+    mx get_meta(const mx &key) const {
         prop *p = lookup(key);
         assert(p);
         
@@ -1837,8 +1837,8 @@ struct mx {
         return memory::wrap(p->type, dst, 1);
     }
 
-    void set_meta(cstr cs, mx value) { set_meta(mx(mem_symbol(cs)), value); }
-    void set_meta(mx key,  mx value) {
+    void set_meta(cstr cs, const &mx value) { set_meta(mx(mem_symbol(cs)), value); }
+    void set_meta(const &mx key, const &mx value) {
         prop *p = lookup(key);
         assert(p);
 

@@ -1,4 +1,5 @@
 dep(prefix:ci)
+cpp(20)
 
 if (win)
     dep(@libucrt @libvcruntime @libcmt)

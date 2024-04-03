@@ -85,10 +85,7 @@ typedef i64                num;
 typedef void*              handle_t;
 typedef size_t             sz_t;
 
-/// none is generic context, its internal is void.  so when we define origin it must be of the internal pointer
-struct none {
-    using intern = void;
-};
+struct none { };
 
 /// everybody has to do this, because you cant just break anywhere
 /// this lets us define where we put these so we can find them later
@@ -107,54 +104,15 @@ memory*       hold(memory *mem);
 memory*       drop(memory *mem);
 memory* mem_symbol(symbol cs, type_t ty, i64 id);
 void*   mem_origin(memory *mem);
+//memory*    cstring(cstr cs, size_t len, size_t reserve, bool is_constant);
 memory*    cstring(cstr cs, size_t len = UINT64_MAX, size_t reserve = 0, bool sym = false);
 
-u64     hash_value(const mx &key);
-u64     hash_index(const mx &key, size_t mod);
 
 template <typename T> T *mdata(memory *mem, size_t index);
-
-struct doubly;
-struct size;
-
-
-
-/// mx type check must look for MX<CTX> too; the allocation wont work otherwise
-template<typename T>
-struct Memory {
-    size_t              refs;
-    u64                 attrs;
-    type_t              type;
-    size_t              count, reserve;
-    size               *shape; // if null, then, its just 1 dim, of count.  otherwise this is the 'shape' of the data and strides through according
-    doubly             *atts;
-    size_t              id;
-    typename T::intern* origin;
-};
-
 
 using        null_t      = std::nullptr_t;
 static const null_t null = nullptr;
 
-/// we eventually want to properly window the structs with exposed type, but it may take multiple inheritence
-template<typename CTX>
-struct MX {
-    memory *mem;
-    using mx_base = MX<CTX>;
-    MX(); /// simple allocation
-    MX(memory*);
-    MX(MX<CTX>*);
-};
-
-template<typename CTX>
-memory *drop(const MX<CTX> &o) {
-    return ion::drop(((MX<CTX> *)o)->mem);
-}
-
-template<typename CTX>
-memory *hold(const MX<CTX> &o) {
-    return ion::hold(o.mem);
-}
 
 struct true_type {
     static constexpr bool value = true;
@@ -240,7 +198,7 @@ constexpr int num_occurances(const char* cs, char c) {
         inline static const type_t intern_t = typeof(etype);\
         static memory* lookup(symbol sym) { return typeof(C)->lookup(sym); }\
         static memory* lookup(i64     id) { return typeof(C)->lookup(id);  }\
-        static doubly &symbols() { return typeof(C)->symbols->list; }\
+        static doubly<memory*> &symbols() { return typeof(C)->symbols->list; }\
         inline static const int count = num_args(__VA_ARGS__);\
         inline static const str raw   = str_args(__VA_ARGS__);\
         ion::symbol symbol() {\
@@ -251,15 +209,15 @@ constexpr int num_occurances(const char* cs, char c) {
         }\
         str name() { return (char*)symbol(); }\
         struct memory *to_string() { return typeof(C)->lookup(i64(value)); }\
-        C(enum etype t = etype::D):ex(initialize(this,             t, (ion::symbol)raw.cs(), typeof(C)), this), value(*get<enum etype>()) { }\
-        C(size_t     t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(*get<enum etype>()) { }\
-        C(int        t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(*get<enum etype>()) { }\
+        C(enum etype t = etype::D):ex(initialize(this,             t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
+        C(size_t     t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
+        C(int        t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
         C(str sraw):C(ex::convert(sraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
         C(mx  mraw):C(ex::convert(mraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
         C(ion::symbol sym):C(ex::convert(sym, (ion::symbol)C::raw.cs(), (C*)null)) { }\
         C(memory* mem):C(mx(mem)) { }\
         inline  operator etype() { return value; }\
-        C&      operator=  (const C &b)  { return (C&)assign_mx(*this, b); }\
+        C&      operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
         bool    operator== (enum etype v) { return value == v; }\
         bool    operator== (ion::symbol v) {\
             if (!mem && !v)\
@@ -272,8 +230,8 @@ constexpr int num_occurances(const char* cs, char c) {
         bool    operator<  (C &b)       { return value <  b.value; }\
         bool    operator>= (C &b)       { return value >= b.value; }\
         bool    operator<= (C &b)       { return value <= b.value; }\
-        explicit operator int() const   { return int(value); }\
-        explicit operator i64() const   { return i64(value); }\
+        explicit operator int()         { return int(value); }\
+        explicit operator i64()         { return i64(value); }\
         operator str()         { return symbol(); }\
     };\
 
@@ -285,7 +243,7 @@ constexpr int num_occurances(const char* cs, char c) {
         inline static const type_t intern_t = typeof(etype);\
         static memory* lookup(symbol sym) { return typeof(C)->lookup(sym); }\
         static memory* lookup(i64     id) { return typeof(C)->lookup(id);  }\
-        static doubly &symbols() { return typeof(C)->symbols->list; }\
+        static doubly<memory*> &symbols() { return typeof(C)->symbols->list; }\
         inline static const int count = num_args(__VA_ARGS__);\
         inline static const str raw   = str_args(__VA_ARGS__);\
         ion::symbol symbol();\
@@ -299,7 +257,7 @@ constexpr int num_occurances(const char* cs, char c) {
         C(ion::symbol sym);\
         C(memory* mem);\
         operator etype();\
-        C&      operator=  (const C &b);\
+        C&      operator=  (const C b);\
         bool    operator== (enum etype v);\
         bool    operator== (ion::symbol v);\
         bool    operator!= (enum etype v);\
@@ -307,8 +265,8 @@ constexpr int num_occurances(const char* cs, char c) {
         bool    operator<  (C &b);\
         bool    operator>= (C &b);\
         bool    operator<= (C &b);\
-        explicit operator int() const;\
-        explicit operator i64() const;\
+        explicit operator int();\
+        explicit operator i64();\
         operator str();\
         C(const W##Wrapper &r);\
         W##Wrapper convert();\
@@ -330,15 +288,15 @@ ion::symbol C::symbol() {\
 }\
 str C::name() { return (char*)symbol(); }\
 memory *C::to_string() { return typeof(C)->lookup(i64(value)); }\
-C::C(enum etype t)           :ex(initialize(this,             t, (ion::symbol)raw.cs(), typeof(C)), this), value(*get<enum etype>()) { }\
-C::C(size_t     t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(*get<enum etype>()) { }\
-C::C(int        t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(*get<enum etype>()) { }\
+C::C(enum etype t)           :ex(initialize(this,             t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
+C::C(size_t     t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
+C::C(int        t)           :ex(initialize(this, (enum etype)t, (ion::symbol)raw.cs(), typeof(C)), this), value(ref<enum etype>()) { }\
 C::C(str sraw):C(ex::convert(sraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
 C::C(mx  mraw):C(ex::convert(mraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
 C::C(ion::symbol sym):C(ex::convert(sym, (ion::symbol)C::raw.cs(), (C*)null)) { }\
 C::C(memory* mem):C(mx(mem)) { }\
 C::operator etype() { return value; }\
-C&      C::operator=  (const C &b)   { return (C&)assign_mx(*this, b); }\
+C&      C::operator=  (const C b)  { return (C&)assign_mx(*this, b); }\
 bool    C::operator== (enum etype v) { return value == v; }\
 bool    C::operator== (ion::symbol v) {\
     if (!mem && !v)\
@@ -351,9 +309,9 @@ bool    C::operator>  (C &b)       { return value >  b.value; }\
 bool    C::operator<  (C &b)       { return value <  b.value; }\
 bool    C::operator>= (C &b)       { return value >= b.value; }\
 bool    C::operator<= (C &b)       { return value <= b.value; }\
-C::operator int() const   { return int(value); }\
-C::operator i64() const   { return i64(value); }\
-C::operator str() const   { return symbol(); }\
+C::operator int()         { return int(value); }\
+C::operator i64()         { return i64(value); }\
+C::operator str()         { return symbol(); }\
 C::C(const W##Wrapper &r):C((enum etype)(int)r.value) { }\
 W##Wrapper C::convert() {\
     return W##Wrapper((W)(int)value);\
@@ -469,7 +427,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
 #define mx_implement(C, B, D) \
     type_t C::intern_t  = typeof(D);\
     C::C(memory*   mem) : B(mem), data(mdata<D>(mem, 0)) { }\
-    C::C(mx          o) : C(ion::hold(o)) { }\
+    C::C(mx          o) : C(o.mem->hold()) { }\
     C::C()              : C(mx::alloc<C>()) { }\
     C::C(D  *data) : C(mx::wrap<D>(data, 1)) { }\
     C::C(const D  &data) : C(mx::alloc<C>((void*)&data)) { }\
@@ -479,28 +437,29 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C::operator D   &() { return *data; }\
     C &C::operator=(const C &b) { mem->type->functions->assign((none*)null, (none*)this, (none*)&b); return *this; }
 
+//
+// C(const C& b) : B(b.mem->hold()), data(mx::data<D>()) { }\
+
 #define mx_object(C, B, D) \
     using parent_class   = B;\
     using context_class  = C;\
     using intern         = D;\
     static const inline type_t intern_t  = typeof(D);\
     intern*    data;\
-    C(memory*   mem) : B(mem), data(mx::get<D>()) { }\
-    C(const C& b)    : C(ion::hold(b)) { }\
+    C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
+    C(const C& b)    : C(b.mem->hold()) { }\
     C(intern*  data) : C(mx::wrap <C>(raw_t(data), 1)) { }\
-    C(const intern& memb) : B(mx::alloc<C>((void*)&memb)), data(mx::get<D>()) { }\
-    C(mx          o) : C(ion::hold(o)) { }\
+    C(const intern& memb) : B(mx::alloc<C>((void*)&memb)), data(mx::data<D>()) { }\
+    C(mx          o) : C(o.mem->hold()) { }\
     C()              : C(mx::alloc<C>()) { }\
     intern    &operator *() { return *data; }\
     intern    *operator->() { return  data; }\
     explicit operator intern *() { return  data; }\
     operator     intern &() { return *data; }\
     C      &operator=(const C &b) {\
-        if(mx_base::mem != b.mx_base::mem) {\
-            ion::drop(mx_base::mem);\
-            mx_base::mem = ion::hold(b.mx_base::mem);\
-            data = (intern*)mx::get<intern>(0);\
-        }\
+        mx::drop();\
+        mx::mem = b.mem->hold();\
+        data = (intern*)mx::mem->data<intern>(0);\
         return *this;\
     }
 
@@ -513,7 +472,7 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     using intern         = D;\
     static const inline type_t intern_t = typeof(D);\
     C(memory*   mem) : B(mem) { }\
-    C(mx          o) : C(ion::hold(o)) { }\
+    C(mx          o) : C(o.mem->hold()) { }\
     C()              : C(mx::alloc<C>(null, 0, 1)) { }\
 
 template <class T, class Enable = void>
@@ -602,46 +561,50 @@ static inline void yield() {
 
 template <typename T> using initial = std::initializer_list<T>;
 
-/// this is memory-specific now
+template <typename T>
 struct item {
     struct item *next;
     struct item *prev;
-    memory*      mem;
+    T            data;
 
-    /// return the wrapped item memory
-    static item *container(memory *&mem) {
-        return (item *)((symbol)&mem - sizeof(struct item*) * 2);
+    /// return the wrapped item memory, just 3 doors down.
+    static item<T> *container(T& i) {
+        return (item<T> *)(
+            (symbol)&i - sizeof(struct item*) * 2
+        );
     }
 };
 
 /// iterator unique for doubly
 template <typename T>
 struct liter {
-    item* cur;
+    item<T>* cur;
     ///
-    liter& operator++() { cur = cur->next; return *this; }
-    liter& operator--() { cur = cur->prev; return *this; }
+    liter& operator++  () { cur = cur->next; return *this;          }
+    liter& operator--  () { cur = cur->prev; return *this;          }
 
-    T& operator *  () const;
-       operator T& () const;
+    T& operator *  ()                  const { return cur->data;     }
+       operator T& ()                  const { return cur->data;     }
 
-    bool operator==  (const liter& b) const { return cur == b.cur; }
-    bool operator!=  (const liter& b) const { return cur != b.cur; }
+    inline bool operator==  (const liter& b) const { return cur == b.cur; }
+    inline bool operator!=  (const liter& b) const { return cur != b.cur; }
 };
 
-/// iterator unique for doubly
-struct liter_item {
-    item* cur;
-    ///
-    liter_item& operator++() { cur = cur->next; return *this; }
-    liter_item& operator--() { cur = cur->prev; return *this; }
 
-    item& operator *     () const;
-          operator item &() const;
+/// iterator
+/*
+template <typename T>
+struct iter {
+    T      *start;
+    size_t  index;
 
-    bool operator==  (const liter_item& b) const { return cur == b.cur; }
-    bool operator!=  (const liter_item& b) const { return cur != b.cur; }
+    iter       &operator++()       { index++; return *this; }
+    iter       &operator--()       { index--; return *this; }
+    T&         operator * () const { return start[index];   }
+    bool operator==(iter &b) const { return start == b.start && index == b.index; }
+    bool operator!=(iter &b) const { return start != b.start || index != b.index; }
 };
+*/
 
 template <typename T>
 struct iter {
@@ -654,308 +617,300 @@ struct iter {
     iter  operator++(int)    { iter tmp = *this; ++(*this); return tmp; }  // Post-increment
     iter& operator--()       { index--; return *this; }
     iter  operator--(int)    { iter tmp = *this; --(*this); return tmp; }  // Post-decrement
-
     T&    operator* () const { return start[index]; }
 
-    bool operator==(const iter& i) const { return start == i.start && index == i.index; }
-    bool operator!=(const iter& i) const { return !(*this == i); }
+    bool operator==(const iter& other) const { return start == other.start && index == other.index; } // made 'other' const
+    bool operator!=(const iter& other) const { return !(*this == other); } // simplified
 };
 
-/// removing template from doubly, map, and array
 
-/// simplifying pair / fields declaration; we will go with this castable architecture for less generation
-
-/// if we need context on the value, we dont have that once the memory is given
-///
-struct field {
-    memory *k; // renaming so we can spot uses of these and revamp
-    memory *v;
-
-    template <typename K>
-    K   &key();
-
-    template <typename V>
-    V &value();
+template <typename K, typename V>
+struct pair {
+    V value;
+    K key;
+    ///
+    inline pair() { }
+    inline pair(K k, V v) : value(v), key(k)  { }
 };
 
-struct ldata {
-    size_t   icount;
-    item    *ifirst, *ilast;
-    type_t   type;
+/// doubly does not require memory* or type
+template <typename T>
+struct doubly {
+    /// might be good not to reference ldata elsewhere
+    struct ldata {
+        size_t   refs = 1;
+        size_t   icount;
+        item<T> *ifirst, *ilast;
 
-    ~ldata() {
-        item* d = ifirst;
-        while(d) {
-            item* dn = d->next;
-            delete d;
-            d = dn;
-        }
-        icount = 0;
-        ifirst = ilast = 0;
-    }
-
-    operator  bool() const { return ifirst != null; }
-    bool operator!() const { return ifirst == null; }
-
-    template <typename T>
-    void shift(mx* prev_first = null);
-
-    /// push by value, return its new instance
-    template <typename T>
-    T &push(const T &v);
-
-    /// push and return default instance
-    template <typename T>
-    T &push();
-
-    /// 
-    item *get(num index) const {
-        if (index == icount)
-            return ilast;
-        else if (index == 0)
-            return ifirst;
-        item *i;
-        if (index < 0) { /// if i is negative, its from the end.
-            i = ilast;
-            while (++index <  0 && i)
-                i = i->prev;
-            assert(index == 0); // (negative-count) length mismatch
-        } else { /// otherwise 0 is positive and thats an end of it.
-            i = ifirst;
-            while (--index >= 0 && i)
-                i = i->next;
-            assert(index == -1); // (positive-count) length mismatch
-        }
-        return i;
-    }
-
-    /// no need for insert before AND after when you can give it the count of the list
-    template <typename T>
-    item *insert(num before, T &data) {
-        item *i;
-        if (before == icount) {
-            i = new item { null, ilast, data };
-            if (ilast)
-                ilast->next = i;
-            ilast = i;
-            if (icount == 0)
-                ifirst = i;
-        } else {
-            item *s = get(before);
-            i = new item { s, s->prev, data };
-            if (s->prev) {
-                s->prev->next = i;
-            } else {
-                ifirst = i;
+        ~ldata() {
+            item<T>* d = ifirst;
+            while   (d) {
+                item<T>* dn = d->next;
+                delete   d;
+                d      = dn;
             }
-            s->prev = i;
+            icount = 0;
+            ifirst = ilast = 0;
         }
-        icount++;
-        return i;
-    }
 
-    size_t    len() { return icount; }
-    size_t length() { return icount; }
+        operator  bool() const { return ifirst != null; }
+        bool operator!() const { return ifirst == null; }
 
-    bool remove(item *i) {
-        if (i) {
-            if (i->next)    i->next->prev = i->prev;
-            if (i->prev)    i->prev->next = i->next;
-            if (ifirst == i) ifirst   = i->next;
-            if (ilast  == i) ilast    = i->prev;
-            --icount;
+        T shift() {
+            assert(ilast);
+            ///
+            item<T>    *i = ifirst;
+            bool set_last = ilast == ifirst;
+            ifirst        = ifirst->next;
+            ///
+            if (!ifirst) {
+                ilast = null;
+            } else
+                ifirst->prev = 0;
+            ///
+            icount--;
+            T data = i->data;
             delete i;
-            return true;
+            return data;
         }
-        return false;
-    }
 
-    bool remove(num index) {
-        item *i = get(index);
-        return remove(i);
-    }
-
-    bool remove(num index, num count) {
-        item *i = get(index);
-        for (int v = 0; v < count; v++) {
-            if (!remove(i))
-                return false;
-            i = i->next;
+        /// push by value, return its new instance
+        T &push(T v) {
+            item<T> *plast = ilast;
+            ilast = new item<T> { null, ilast, v };
+            ///
+            (!ifirst) ? 
+            ( ifirst      = ilast) : 
+            ( plast->next = ilast);
+            ///
+            icount++;
+            return ilast->data;
         }
-        return count > 0;
+
+        /// push and return default instance
+        T &push() {
+            item<T> *plast = ilast;
+                ilast = new item<T> { null, ilast }; /// default-construction on data
+            ///
+            (!ifirst) ? 
+                (ifirst      = ilast) : 
+                (  plast->next = ilast);
+            ///
+            icount++;
+            return ilast->data;
+        }
+
+        /// 
+        item<T> *get(num index) const {
+            if (index == icount)
+                return ilast;
+            else if (index == 0)
+                return ifirst;
+            item<T> *i;
+            if (index < 0) { /// if i is negative, its from the end.
+                i = ilast;
+                while (++index <  0 && i)
+                    i = i->prev;
+                assert(index == 0); // (negative-count) length mismatch
+            } else { /// otherwise 0 is positive and thats an end of it.
+                i = ifirst;
+                while (--index >= 0 && i)
+                    i = i->next;
+                assert(index == -1); // (positive-count) length mismatch
+            }
+            return i;
+        }
+
+        /// no need for insert before AND after when you can give it the count of the list
+        item<T> *insert(num before, T &data) {
+            item<T> *i;
+            if (before == icount) {
+                i = new item<T> { null, ilast, data };
+                if (ilast)
+                    ilast->next = i;
+                ilast = i;
+                if (icount == 0)
+                    ifirst = i;
+            } else {
+                item<T> *s = get(before);
+                i = new item<T> { s, s->prev, data };
+                if (s->prev) {
+                    s->prev->next = i;
+                } else {
+                    ifirst = i;
+                }
+                s->prev = i;
+            }
+            icount++;
+            return i;
+        }
+
+        size_t    len() { return icount; }
+        size_t length() { return icount; }
+
+        bool remove(item<T> *i) {
+            if (i) {
+                if (i->next)    i->next->prev = i->prev;
+                if (i->prev)    i->prev->next = i->next;
+                if (ifirst == i) ifirst   = i->next;
+                if (ilast  == i) ilast    = i->prev;
+                --icount;
+                delete i;
+                return true;
+            }
+            return false;
+        }
+
+        bool remove(num index) {
+            item<T> *i = get(index);
+            return remove(i);
+        }
+
+        bool remove(num index, num count) {
+            item<T> *i = get(index);
+            for (int v = 0; v < count; v++) {
+                if (!remove(i))
+                    return false;
+                i = i->next;
+            }
+            return count > 0;
+        }
+
+        void clear() {
+            while (icount)
+                remove(-1);
+        }
+
+        size_t             count() const { return icount;       }
+        T                 &first() const { return ifirst->data; }
+        T                  &last() const { return ilast->data;  }
+        ///
+        void          pop(T *prev = null) { assert(icount); if (prev) *prev = last();  remove(-1);     }
+        void        shift(T *prev = null) { assert(icount); if (prev) *prev = first(); remove(int(0)); }
+        ///
+        T                  pop_v()       { assert(icount); T cp =  last(); remove((num)-1); return cp; }
+        T                shift_v()       { assert(icount); T cp = first(); remove((num) 0); return cp; }
+        T   &operator[]   (num ix) const { assert(ix >= 0 && ix < num(icount)); return get(ix)->data; }
+        liter<T>           begin() const { return { ifirst }; }
+        liter<T>             end() const { return { null  }; }
+        T   &operator+=    (T   v)       { return push  (v); }
+        bool operator-=    (num i)       { return remove(i); }
+    } *data;
+
+    doubly(ldata *data) : data(data) {
+        data->refs++;
     }
-
-    item   *first_item() const;
-    item   * last_item() const;
-
-    mx     &  first_mx() const;
-    mx     &   last_mx() const;
-
-    void clear() {
-        while (icount)
-            remove(-1);
-    }
-
-    size_t count() const { return icount; }
-
-    template <typename T>
-    T     &first() const;
     
-    template <typename T>
-    T      &last() const;
+    doubly() : doubly(new ldata()) { }
     
-    void pop(mx *prev = null);
-
-    template <typename T>
-    T &data(num ix) const;
-
-    template <typename T>
-    T   &operator+=   (const T& v) { return push(v); }
-
-    bool operator-=   (num i) { return remove(i); }
-
-    /// better to use the .elements<T> on generics; we cannot have a begin() on something without a template arg
-    template <typename T>
-    struct literable {
-        item *ifirst, *ilast;
-        liter<T> begin() const { return liter<T>{ ifirst }; }
-        liter<T>   end() const { return liter<T>{ null }; }
-    };
-
-    struct literable_items {
-        item *ifirst, *ilast;
-        liter_item begin() const { return liter_item{ ifirst }; }
-        liter_item   end() const { return liter_item{ null }; }
-    };
-
-    template <typename T>
-    literable<T> elements() const { return literable<T> { ifirst, ilast }; }
-
-    literable_items items() const { return literable_items { ifirst, ilast }; }
-};
-
-/// maybe just switch to identical ?
-template <typename T> struct is_array  : false_type {};
-template <typename T> struct is_map    : false_type {};
-template <typename T> struct is_hmap   : false_type {};
-template <typename T> struct is_doubly : false_type {};
-
-struct doubly:MX<doubly> {
-    using intern = ldata;
-    using parent_class = none;
-    static inline type_t intern_t = null;
-
-    ldata *data;
-    doubly(memory* mem);
-    doubly(); // ^ memory* is base constructor
-
-    template <typename T>
     doubly(initial<T> a) : doubly() {
         for (auto &v: a)
             data->push(v);
     }
 
-    template <typename T>
-    ldata::literable<T> elements() const { return data->elements<T>(); }
-
     operator bool() const { return bool(*data); }
+    
+    ldata &operator *() { return *data; }
+    ldata *operator->() { return  data; }
 
-    template <typename T>
-    T   &operator[](num ix) const { return data->data<T>(ix); }
-
-    template <typename T>
-    T   &operator+=(const T &v) { return data->push(v); }
-
-    bool operator-=(num i)      { return data->remove(i); }
+    inline T   &operator[]   (num ix) const { return (*data)[ix];         }
+    inline liter<T>           begin() const { return (*data).begin();     }
+	inline liter<T>             end() const { return (*data).end();       }
+    inline T   &operator+=    (T   v)       { return (*data) += v;        }
+    inline bool operator-=    (num i)       { return (*data) -= i;        }
 
     size_t len() { return data->count(); }
 
-    doubly& operator=(const doubly &b) {
+    inline doubly<T>& operator=(const doubly<T> &b) {
              this -> ~doubly( ); /// destruct this
         new (this)    doubly(b); /// copy construct into this, from b; lets us reset refs
         return *this;
     }
 
-    ldata *operator->() const {
-        return data;
-    }
+     doubly(const doubly &ref) : doubly(ref.data) {
+        if (data)
+            data->refs++;
+     }
 
-     doubly(const doubly &ref);
-
-    ~doubly();
-};
-
-template <> struct is_doubly<doubly> : true_type { };
-
-using bucket = ldata;
-
-struct hmdata {
-    bucket *h_pairs;
-    size_t  sz;
-
-    /// i'll give you a million quid, or, This Bucket.
-    bucket &operator[](u64 k) {
-        assert(sz > 0);
-        if (!h_pairs)
-            h_pairs = (bucket*)calloc64(sz, sizeof(bucket)); /// inits from zero
-        return h_pairs[k];
-    }
-
-    void push(const field &f) {
-        u64 k = hash_index(*(mx*)&f.k, sz); // if sz is 1 for non-hash use-cases, that would be a reduction
-        ldata &b = (*this)[k];
-        b.push(f);
-    }
-    
-    ~hmdata() {
-        for (size_t  i = 0; i < sz; i++)
-            h_pairs[i]. ~ bucket(); // data destructs but does not construct and thats safe to do
-        free64(h_pairs);
+    ~doubly() {
+        if (data && --data->refs == 0) {
+            delete data;
+        }
     }
 };
 
-struct hashmap:MX<hashmap> {
-    using intern = hmdata; // MX<context-here> not <data-here>
-    using parent_class = none;
-    static inline type_t intern_t = null;
+/// a simple hash K -> V impl; used by types so it does not use types itsself
+template <typename K, typename V>
+struct hmap {
+  //using hmap   = ion::hmap <K,V>;
+    using pair   = ion::pair <K,V>;
+    using bucket = typename doubly<pair>::ldata; /// no reason i should have to put typename. theres no conflict on data.
+
+    struct hmdata {
+        int     refs = 1;
+        bucket *h_pairs;
+        size_t  sz;
+
+        /// i'll give you a million quid, or, This Bucket.
+        bucket &operator[](u64 k) {
+            if (!h_pairs)
+                 h_pairs = (bucket*)calloc64(sz, sizeof(bucket));
+            return h_pairs[k];
+        }
+        
+        ~hmdata() {
+            for (size_t  i = 0; i < sz; i++) h_pairs[i]. ~ bucket(); // data destructs but does not construct and thats safe to do
+            free64(h_pairs);
+        }
+    };
+
     hmdata *data;
 
-    hashmap(size_t    sz = 1);
-    hashmap(initial<field> a) : hashmap(a.size() > 0 ? a.size() : 1) {
-        for (auto &v: a)
-            data->push(v);
+    hmap(hmdata *data) : data(data) {
+        data->refs++; /// a bit different than other cases
+    }
+    hmap(size_t   sz = 0) : hmap(new hmdata()) { data->sz = sz; }
+    hmap(initial<pair> a) : hmap(a.size()) { for (auto &v: a) push(v); }
+
+    hmap& operator=(hmap &a) {
+        if (data && --data->refs == 0) {
+            delete data;
+        }
+        data = a.data;
+        data->refs++;
+        return *this;
     }
 
-    hashmap& operator=(hashmap &a);
+    inline pair* shared_lookup(K key); 
+    
+    V* lookup(K input, u64 *pk = null, bucket **b = null) const;
+    V &operator[](K key);
 
-    item  *item (const mx &key, bucket **list = null) const;
-    field &field(const mx &key);
-    mx    &value(const mx &key);
-    void   set  (const mx &key, const mx &value);
-
-    template <typename K>
-    mx &lookup(const K &k) const;
-
-    bool contains(const mx& key) const;
-
-    bool remove(const mx &key);
-
-    mx &operator[](const mx &key);
-
-    size_t    len() { return data->sz; }
-    operator bool() { return data->sz > 0; }
+    inline size_t    len() { return data->sz; }
+    inline operator bool() { return data->sz > 0; }
 };
 
-template <> struct is_hmap<hashmap> : true_type { };
+template <typename>
+struct is_hmap : false_type {};
+
+template <typename K, typename V>
+struct is_hmap<hmap<K, V>> : true_type {};
+
+template <typename T>
+struct is_doubly : false_type {};
+
+template <typename T>
+struct is_doubly<doubly<T>> : true_type {};
 
 struct prop;
-using prop_map = hashmap;
+using prop_map = hmap<ion::symbol, prop*>;
 
 struct symbol_data {
-    hashmap   djb2 { 32 }; // u64 -> memory*
-    hashmap   ids  { 32 }; // i64 -> memory*
-    doubly list { }; // memory*
+    hmap<u64, memory*> djb2 { 32 };
+    hmap<i64, memory*> ids  { 32 };
+    doubly<memory*>    list { };
 };
+
 
 static inline void sleep(u64 u) {
     #ifdef _WIN32
@@ -965,29 +920,29 @@ static inline void sleep(u64 u) {
     #endif
 }
 
-/// why do we even allow opaque types to be externally registered?
-/// when a type is impl() we may not have a lambda table?
 struct traits {
     enum bit {
-        primitive       = 1,
-        integral        = 2,
-        realistic       = 4,
-        singleton       = 8,
-        lambda          = 16,
-        array           = 32,
-        map             = 64,
-        mx              = 128,
-        mx_obj          = 256,
-        init            = 512, /// has an init method
-        mx_enum         = 1024,
-        enum_primitive  = 2048,
-        opaque          = 4096,
-        managed         = 8192
+        primitive = 1,
+        integral  = 2,
+        realistic = 4,
+        singleton = 8,
+        lambda    = 16,
+        array     = 32,
+        map       = 64,
+        mx        = 128,
+        mx_obj    = 256,
+        init      = 512,
+        mx_enum   = 1024,
+        enum_primitive = 2048,
+        opaque         = 4096 /// may simply check for sizeof() in completeness check, unless we want complete types as opaque too which i dont see point of
     };
 };
 
 ///
 template <typename T> using func    = std::function<T>;
+
+
+//template <typename T> using lambda  = std::function<T>;
 
 template <typename K, typename V> using umap = std::unordered_map<K,V>;
 namespace fs  = std::filesystem;
@@ -1007,23 +962,19 @@ struct has_operator <A, B, decltype((void)(void (A::*)(B))& A::operator())> : tr
 template<typename, typename = void> constexpr bool type_complete = false;
 template<typename T>                constexpr bool type_complete <T, std::void_t<decltype(sizeof(T))>> = true;
 
-/// deprecate
 template <typename T, typename = void>
 struct has_convert : false_type {};
 template <typename T>
 struct has_convert<T, std::void_t<decltype(std::declval<T>().convert((memory*)nullptr))>> : true_type {};
 
-/// deprecate
 template <typename T, typename = void>
 struct has_compare : false_type {};
 template <typename T>
 struct has_compare<T, std::void_t<decltype(std::declval<T>().compare((T &)*(T*)nullptr))>> : true_type {};
 
-template <typename T, typename = void>
-struct has_equals : std::false_type {};
 
-template <typename T>
-struct has_equals<T, std::enable_if_t<std::is_same<decltype(std::declval<T>() == std::declval<T>()), bool>::value>> : std::true_type {};
+template <typename T> struct is_array : false_type {};
+template <typename T> struct is_map   : false_type {};
 
 bool chdir(std::string c);
 
@@ -1038,16 +989,16 @@ struct buffer {
 struct size:buffer<num, 16> {
     using base = buffer<num, 16>;
 
-    size(num        sz = 0) { memset(values, 0, sizeof(values)); values[0] = sz; count = 1; }
-    size(null_t           ) : size(num(0))  { }
-    size(size_t         sz) : size(num(sz)) { }
-    size(i8             sz) : size(num(sz)) { }
-    size(u8             sz) : size(num(sz)) { }
-    size(i16            sz) : size(num(sz)) { }
-    size(u16            sz) : size(num(sz)) { }
-    size(i32            sz) : size(num(sz)) { }
-    size(u32            sz) : size(num(sz)) { }
-    size(initial<num> args) : base() {
+    inline size(num        sz = 0) { memset(values, 0, sizeof(values)); values[0] = sz; count = 1; }
+    inline size(null_t           ) : size(num(0))  { }
+    inline size(size_t         sz) : size(num(sz)) { }
+    inline size(i8             sz) : size(num(sz)) { }
+    inline size(u8             sz) : size(num(sz)) { }
+    inline size(i16            sz) : size(num(sz)) { }
+    inline size(u16            sz) : size(num(sz)) { }
+    inline size(i32            sz) : size(num(sz)) { }
+    inline size(u32            sz) : size(num(sz)) { }
+    inline size(initial<num> args) : base() {
         size_t i = 0;
         for (auto &v: args)
             values[i++] = v;
@@ -1106,7 +1057,7 @@ struct size:buffer<num, 16> {
     explicit operator r32() const { return r32(area()); }
     explicit operator r64() const { return r64(area()); }
 
-    num &operator[](num i) { return values[i]; }
+    inline num &operator[](num i) { return values[i]; }
 
     size &operator=(i8   i) { *this = size(i); return *this; }
     size &operator=(u8   i) { *this = size(i); return *this; }
@@ -1139,6 +1090,21 @@ memory *talloc(size_t count = 1, size_t reserve = 0);
 
 struct hash { u64 value; hash(u64 v) : value(v) { } operator u64() { return value; } };
 
+template <typename T>
+u64 hash_value(T &key);
+
+template <typename T>
+u64 hash_index(T &key, size_t mod);
+
+/// a field can be single param, value only resorting and that reduces code in many cases
+/// to remove pair is a better idea if we want to reduce the template arg confusion away
+template <typename V, typename K=mx>
+struct field:pair<K, V> {
+    inline field()         : pair<K,V>()     { }
+    inline field(K k, V v) : pair<K,V>(k, v) { }
+    operator V &() { return pair<K, V>::value; }
+};
+
 /// string with precision of float/double
 template <typename T> std::string string_from_real(T a_value, int n = 6) {
     std::ostringstream out;
@@ -1162,7 +1128,6 @@ struct alloc_schema {
 };
 
 struct str;
-
 /// mx-mock-type
 struct ident {
     memory *mem;
@@ -1183,7 +1148,6 @@ template <typename T> using         MulFn =          fun<void(const T&, const T&
 template <typename T> using         DivFn =          fun<void(const T&, const T&, T&)>;
 template <typename T> using        DivSFn =          fun<void(const T&, const float, T&)>;
 template <typename T> using        MulSFn =          fun<void(const T&, const float, T&)>;
-template <typename T> using      EqualsFn =          fun<bool(T*, T*, size_t)>;
 template <typename T> using         MixFn =          fun<T*  (T*, T*, double)>;
 template <typename T> using     CompareFn =           fun<int(T*, T*, T*)>;  /// a, b
 template <typename T> using     BooleanFn =          fun<bool(T*, T*)>;      /// src
@@ -1199,8 +1163,10 @@ template <typename T> using         DelFn =          fun<void(T*, T*)>;      ///
 template <typename T> using      AssignFn =          fun<void(T*, T*, T*)>;  /// dst, src
 template <typename T> using        HashFn =        size_t(*)(T*, size_t);  /// src
 template <typename T> using     ProcessFn =          fun<void(T*, memory*)>; /// dst, src
+template <typename T> using    SetValueFn =          fun<void(T*, memory*, memory*)>;  /// dst, src
 
 using PushFn = void(*)(void*, void*); /// array<T>* dst, T* src
+//using SetValueFn = void(*)(void*, memory*, memory*); /// map origin, key, value
 
 template <typename T>
 struct ops {
@@ -1209,7 +1175,6 @@ struct ops {
           AddFn<T> add;
           MulFn<T> mul;
          MulSFn<T> mul_scalar;
-       EqualsFn<T> equals;
       CompareFn<T> compare;
       BooleanFn<T> boolean;
           MixFn<T> mix;
@@ -1225,6 +1190,7 @@ struct ops {
        AssignFn<T> assign;
          HashFn<T> hash;
          PushFn    push; /// only for array<T>; we needed a way to allocate array<T> and at runtime push with pointers
+         SetValueFn<T> set_value;
          ProcessFn<T> process;
 
          void     *meta;
@@ -1232,10 +1198,11 @@ struct ops {
 
 struct symbol_data;
 
+template<typename T>
 struct array;
 struct str;
 
-using GenericLambda = std::function<mx(void*, const array &)>;
+using GenericLambda = std::function<mx(void*, array<str>&)>;
 
 ///
 struct idata {
@@ -1244,7 +1211,7 @@ struct idata {
     size_t           base_sz; /// a types base sz is without regards to pointer state
     size_t           traits;
     bool             pointer; /// allocate enough space for a pointer to be stored
-    doubly          *meta;    /// doubly<prop>
+    doubly<prop>    *meta;    /// doubly<prop>
     prop_map        *meta_map; // prop_map
     alloc_schema    *schema;  /// primitives dont need this one -- used by array and map for type aware contents, also any mx-derrived object containing data will populate this polymorphically
     ops<none>       *functions;
@@ -1330,15 +1297,15 @@ struct prop {
     }
 };
 
-using properties = doubly;
+using properties = doubly<prop>;
 
 template <typename T> using MetaFn = properties(*)(T*);
 
 /// must cache by cstr, and id; ideally support any sort of id range
 /// symbols 
-using symbol_djb2  = hashmap; // <u64, memory*>;
-using symbol_ids   = hashmap; // <i64, memory*>;
-using     prop_map = hashmap; // <symbol, prop*>;
+using symbol_djb2  = hmap<u64, memory*>;
+using symbol_ids   = hmap<i64, memory*>;
+using     prop_map = hmap<symbol, prop*>;
 
 struct context_bind;
 
@@ -1389,10 +1356,10 @@ template <typename T> struct registered_construct  <T, std::enable_if_t<std::is_
 /// this does not need the double argument because the user-implemented function does not have the prototype
 template <typename T> struct registered_to_string  <T, std::enable_if_t<std::is_same_v<decltype(T::_to_string  (std::declval<T*>  ())), memory*>>> : true_type { };
 
-template <typename T> struct registered_from_string<T, std::enable_if_t<std::is_same_v<decltype(T::_from_string(std::declval<T*>  (), std::declval<cstr>())), T*>>>     : true_type { };
-template <typename T> struct registered_init       <T, std::enable_if_t<std::is_same_v<decltype(T::_init       (std::declval<T*>  (), std::declval<T*>  ())), void>>>   : true_type { };
-template <typename T> struct registered_destruct   <T, std::enable_if_t<std::is_same_v<decltype(T::_destruct   (std::declval<T*>  (), std::declval<T*>  ())), void>>>   : true_type { };
-template <typename T> struct registered_meta       <T, std::enable_if_t<std::is_same_v<decltype(T::meta        (std::declval<T*>  (), std::declval<T*>  ())), doubly>>> : true_type { };
+template <typename T> struct registered_from_string<T, std::enable_if_t<std::is_same_v<decltype(T::_from_string(std::declval<T*>  (), std::declval<cstr>())), T*>>>                       : true_type { };
+template <typename T> struct registered_init       <T, std::enable_if_t<std::is_same_v<decltype(T::_init       (std::declval<T*>  (), std::declval<T*>  ())), void>>>                     : true_type { };
+template <typename T> struct registered_destruct   <T, std::enable_if_t<std::is_same_v<decltype(T::_destruct   (std::declval<T*>  (), std::declval<T*>  ())), void>>>                     : true_type { };
+template <typename T> struct registered_meta       <T, std::enable_if_t<std::is_same_v<decltype(T::meta        (std::declval<T*>  (), std::declval<T*>  ())), doubly<prop>>>>             : true_type { };
 template <typename T> struct registered_hash       <T, std::enable_if_t<std::is_same_v<decltype(T::hash        (std::declval<T*>  (), size_t(0))), size_t>>>        : true_type { };
 
 /// externals need two args (first unused); its so we are explicit about its definition
@@ -1405,14 +1372,14 @@ template <typename T> struct external_construct    <T, std::enable_if_t<std::is_
 /// user must implement this one (see mx.cpp:_to_string of char*)
 template <typename T> struct external_to_string    <T, std::enable_if_t<std::is_same_v<decltype(_to_string     (std::declval<T*>())), memory*>>> : true_type { };
 
-template <typename T> struct external_from_string  <T, std::enable_if_t<std::is_same_v<decltype(_from_string   (std::declval<T*>(), std::declval<cstr>())), T*>>>   : true_type { };
-template <typename T> struct external_init         <T, std::enable_if_t<std::is_same_v<decltype(_init          (std::declval<T*>(), std::declval<T*>())), void>>>   : true_type { };
-template <typename T> struct external_destruct     <T, std::enable_if_t<std::is_same_v<decltype(_destruct      (std::declval<T*>(), std::declval<T*>())), void>>>   : true_type { };
-template <typename T> struct external_meta         <T, std::enable_if_t<std::is_same_v<decltype(_meta          (std::declval<T*>(), std::declval<T*>())), doubly>>> : true_type { };
+template <typename T> struct external_from_string  <T, std::enable_if_t<std::is_same_v<decltype(_from_string   (std::declval<T*>(), std::declval<cstr>())), T*>>> : true_type { };
+template <typename T> struct external_init         <T, std::enable_if_t<std::is_same_v<decltype(_init          (std::declval<T*>(), std::declval<T*>())), void>>>                     : true_type { };
+template <typename T> struct external_destruct     <T, std::enable_if_t<std::is_same_v<decltype(_destruct      (std::declval<T*>(), std::declval<T*>())), void>>>                     : true_type { };
+template <typename T> struct external_meta         <T, std::enable_if_t<std::is_same_v<decltype(_meta          (std::declval<T*>(), std::declval<T*>())), doubly<prop>>>>             : true_type { };
 template <typename T> struct external_hash         <T, std::enable_if_t<std::is_same_v<decltype(_hash          (std::declval<T*>(), size_t(0))), size_t>>>  : true_type { };
 
 template <typename T>
-struct registered_instance_meta<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().meta()), doubly>>> : true_type { };
+struct registered_instance_meta<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().meta()), doubly<prop>>>> : true_type { };
 
 
 template <typename T>
@@ -1469,7 +1436,7 @@ size_t schema_info(alloc_schema *schema, int depth, B *top, T *p, idata *ctx_typ
                 bind.ctx     = ctx_type ? ctx_type : typeof(T);
                 bind.data    = T::intern_t;
                 if (!bind.data) {
-                    /// we avoid doing this on array because that breaks schema population;
+                    /// we avoid doing this on array<T> because that breaks schema population;
                     /// without having intern_t it does not work on gcc, the types are seen as opaque even when its initialized in module
                     bind.data = identical<typename T::intern, none>() ? null : typeof(typename T::intern);
                 }
@@ -1501,6 +1468,27 @@ void schema_populate(idata *type, T *p) {
     }
     schema.total_bytes = offset;
     schema.bind = &schema.composition[schema.bind_count - 1];
+}
+
+template <typename T>
+u64 hash_value(T &key) {
+    if constexpr (is_primitive<T>()) {
+        return u64(key);
+    } else if constexpr (identical<T, cstr>() || identical<T, symbol>()) {
+        return djb2(cstr(key));
+    } else if constexpr (is_convertible<T, hash>()) {
+        return hash(key);
+    } else if constexpr (ion::inherits<mx, T>() || is_mx<T>()) {
+        ops<T> *fn = (ops<T>*)key.mx::mem->type->functions;
+        return fn->hash(&key, key.mem->count);
+    } else {
+        return 0;
+    }
+}
+
+template <typename T>
+u64 hash_index(T &key, size_t mod) {
+    return hash_value(key) % mod;
 }
 
 constexpr bool is_debug() {
@@ -1537,26 +1525,29 @@ struct attachment {
 
 using mutex = std::mutex;
 
-struct memory:Memory<none> {
+struct memory {
     enum attr { constant = 1 };
-
-    template <typename T>
-    operator Memory<T> &() const {
-        return *(const Memory<T>*)this;
-    }
-
-    void    drop() { ion::drop(this); }
-    memory *hold() { return ion::hold(this); }
+    size_t              refs;
+    u64                 attrs;
+    type_t              com; /// if not null, this is the com type
+    type_t              type;
+    size_t              count, reserve;
+    size               *shape; // if null, then, its just 1 dim, of count.  otherwise this is the 'shape' of the data and strides through according
+    doubly<attachment> *atts;
+    size_t              id;
+    bool                managed; /// origin is allocated by us
+    raw_t               origin;
 
     static memory *raw_alloc(type_t type, size_t sz, size_t count, size_t res);
     static int raw_alloc_count();
 
-    static memory *    alloc(type_t type, size_t count = 1, size_t reserve = 1, raw_t src = null);
+    static memory *    alloc(type_t type, size_t count, size_t reserve, raw_t src);
            void   *  realloc(size_t res,  bool fill_default);
 
     /// destruct data and set count to 0
     void clear();
 
+    void drop();
     attachment *attach(symbol id, void *data, func<void()> release);
     attachment *find_attachment(symbol id);
 
@@ -1565,7 +1556,7 @@ struct memory:Memory<none> {
     static inline memory *wrap(type_t type, void *origin, size_t count = 1, bool managed = true) {
         memory*     mem = raw_alloc(type, sizeof(idata), count, count);
         mem->origin     = origin;
-        mem->attrs     |= traits::managed;
+        mem->managed    = managed;
         return mem;
     }
 
@@ -1588,17 +1579,24 @@ struct memory:Memory<none> {
     }
 
     memory *copy(size_t reserve = 0);
+    memory *hold();
+    memory *weak();
     
     /// now it has a schema with types to each data structure, their offset in allocation, and the total allocation bytes
     /// also supports the primative store, non-mx
     template <typename T>
-    T *get(size_t index) const;
-
-    template <typename T>
-    T *set(size_t index, const T& data);
+    T *data(size_t index) const;
 
     raw_t typed_data(type_t data_type, size_t index) const;
+
+    template <typename T>
+    T &ref() const { return *data<T>(0); }
 };
+
+template <typename T>
+memory *talloc(size_t count, size_t reserve) {
+    return memory::alloc(typeof(T), count, reserve, (T*)null);
+}
 
 template <typename T>
 class has_string {
@@ -1620,24 +1618,23 @@ T *defaults() {
     return  &def_instance;
 }
 
-template <typename T> T* mdata(memory *mem, size_t index) { return mem ? mem->get<T>(index) : null; }
+template <typename T> T* mdata(memory *mem, size_t index) { return mem ? mem->data<T>(index) : null; }
 
 template <typename T>
-T &assign_mx(T &a, const T &b) {
+inline T &assign_mx(T &a, const T &b) {
     typeof(T)->functions->assign((none*)null, (none*)&a, (none*)&b);
     return a;
 }
 
 using fn_t = func<void()>;
 
-// should be in math module?
 struct rand {
     struct seq {
         enum seeding {
             Machine,
             Seeded
         };
-        seq(i64 seed, seq::seeding t = Seeded) {
+        inline seq(i64 seed, seq::seeding t = Seeded) {
             if (t == Machine) {
                 std::random_device r;
                 e = std::default_random_engine(r());
@@ -1676,25 +1673,12 @@ struct has_process : std::false_type {};
 template<typename T>
 struct has_process<T, std::void_t<decltype(std::declval<T>().process(std::declval<memory*>()))>> : std::true_type {};
 
-struct mx:MX<mx> { /// the intern of mx is raw_t
+struct mx {
+    memory *mem = null;
     using parent_class  = none;
     using context_class = none;
     using intern        = none;
     static const inline type_t intern_t = null;
-
-    template <typename T>
-    struct iterable {
-        T*     data;
-        size_t size;
-
-        iter<T> begin() const { return iter<T>{data, 0};    }
-        iter<T>   end() const { return iter<T>{data, size}; }
-    };
-
-    template <typename T>
-    iterable<T> elements() const {
-        return iterable<T> { get<T>(0), mem->count };
-    }
 
     void *realloc(size_t reserve, bool fill_default);
 
@@ -1726,7 +1710,9 @@ struct mx:MX<mx> { /// the intern of mx is raw_t
 
     template <typename T>
     static inline memory *window(T *m, size_t count = 1) {
-        return wrap((void*)m, count, (T*)null);
+        memory *mem = wrap((void*)m, count, (T*)null);
+        mem->managed = false;
+        return mem;
     }
 
     /// T is context, not always the data type.  sometimes it is for simple cases, but not in context -> data 
@@ -1740,18 +1726,25 @@ struct mx:MX<mx> { /// the intern of mx is raw_t
         return memory::alloc(typeof(T), 1, 1, raw_t(cp));
     }
 
-    mx(u8 *bytes, size_t len) : MX<mx>(memory::alloc(typeof(u8), len, len, (void*)bytes)) { }
+    template <typename DP>
+    inline mx(DP **dptr) {
+        mx::alloc((DP*)null);
+        *dptr = (DP*)mem->origin;
+    }
+
+    mx(u8 *bytes, size_t len) : mem(memory::alloc(typeof(u8), len, len, (void*)bytes)) { }
 
     operator std::string() {
         return std::string((symbol)mem->origin);
     }
     
-    mx(std::string s) : MX<mx>(memory:: string(s)) { }
+    ///
+    inline mx(std::string s) : mem(memory:: string(s)) { }
 
     template <typename T>
     static memory *import(T *addr, size_t count, size_t reserve, bool managed) {
         memory*     mem = alloc<T>(count, reserve);
-        mem->attrs     |= traits::managed;
+        mem->managed    = managed;
         mem->origin     = addr;
         return mem;
     }
@@ -1764,7 +1757,7 @@ struct mx:MX<mx> { /// the intern of mx is raw_t
         mem->reserve    = reserve; //math::max(count, reserve);
         mem->refs       = 1;
         mem->type       = typeof(T);
-        mem->attrs     |= traits::managed;
+        mem->managed    = true;
         mem->origin     = (T*)calloc64(math::max(count, reserve), sizeof(T));
         ///
         if constexpr (is_primitive<T>()) {
@@ -1776,18 +1769,26 @@ struct mx:MX<mx> { /// the intern of mx is raw_t
         return mem;
     }
 
+    inline memory *hold() const { return mem->hold(); }
+    inline memory *weak() const { return mem->weak(); }
+
     template <typename T>
-    T use() {
-        return T(ion::hold(mem));
+    inline T use() const {
+        return T(mem->hold());
     }
 
-    size  *shape() const { return mem->shape;  }
+    inline size  *shape() const { return mem->shape;  }
+    inline void    drop() const {
+        if (mem)
+            mem->drop();
+    }
 
-    attachment *find_attachment(symbol id) {
+
+    inline attachment *find_attachment(symbol id) {
         return mem->find_attachment(id);
     }
 
-    attachment *attach(symbol id, void *data, func<void()> release) {
+    inline attachment *attach(symbol id, void *data, func<void()> release) {
         return mem->attach(id, data, release);
     }
 
@@ -1797,41 +1798,20 @@ struct mx:MX<mx> { /// the intern of mx is raw_t
 
     prop *lookup(mx key) const {
         if (key.is_const() && mem->type->schema) {
-            doubly *meta = (doubly*)mem->type->schema->bind->data->meta;
+            doubly<prop> *meta = (doubly<prop> *)mem->type->schema->bind->data->meta;
             if (meta)
-                for (prop &p: meta->elements<prop>())
-                    if ((memory*)key.mem == p.key) 
+                for (prop &p: *meta)
+                    if (key.mem == p.key) 
                         return &p;
         }
         return null;
     }
 
     template <typename T>
-    T *get(size_t index = 0) const {
-        return mem->get<T>(index);
-    }
-
-    void set(memory *m) {
-        if (m != mem) {
-            ion::drop(mem);
-            mem = ion::hold(m);
-        }
-    }
+    inline T *get(size_t index) const { return mem->data<T>(index); }
 
     template <typename T>
-    T &set(const T &v) {
-        memory *nm = alloc(v);
-        set(nm);
-        return ref<T>();
-    }
-
-    template <typename T>
-    T *set(size_t index, const T &value) const {
-        return mem->set<T>(index, value);
-    }
-
-    template <typename T>
-    T *origin() const { return (T*)mem->origin; }
+    inline T *origin() const { return (T*)mem->origin; }
 
     void set_size(sz_t sz) {
         assert(mem->reserve >= sz);
@@ -1852,7 +1832,7 @@ struct mx:MX<mx> { /// the intern of mx is raw_t
         if (!is_mx)
             p->type->functions->assign(null, (none*)dst, (none*)src); /// copy primitives and structs
         else
-            p->type->functions->set_memory((none*)dst, (memory*)((mx*)src)->mem); /// quick assignment for mx
+            p->type->functions->set_memory((none*)dst, ((mx*)src)->mem); /// quick assignment for mx
 
         return memory::wrap(p->type, dst, 1);
     }
@@ -1874,38 +1854,46 @@ struct mx:MX<mx> { /// the intern of mx is raw_t
         if (!is_mx)
             p->type->functions->assign(null, (none*)src, (none*)value.mem->origin); /// copy primitives and structs
         else
-            p->type->functions->set_memory((none*)src, (memory*)value.mem); /// quick assignment for mx
+            p->type->functions->set_memory((none*)src, value.mem); /// quick assignment for mx
     }
 
-   ~mx() { ion::drop(mem); }
+    inline ~mx() { if (mem) mem->drop(); }
     
-    mx(null_t = null): MX<mx>(alloc<null_t>()) { }
-    mx(memory *mem)  : MX<mx>(mem) { }
-
-    mx(symbol ccs, type_t type = typeof(char)) : mx(mem_symbol(ccs, type)) { }
-    mx(cstr   cs,  type_t type = typeof(char)) : mx(memory::stringify(cs, memory::autolen, 0, false, type)) { }
+    /// interop with shared; needs just base type functionality for lambda
+    inline mx(null_t = null): mem(alloc<null_t>()) { }
+    inline mx(memory *mem)    : mem(mem->hold()) { }
+    inline mx(symbol ccs, type_t type = typeof(char)) : mx(mem_symbol(ccs, type)) { }
     
-    mx(const mx &b) : mx(ion::hold(b.mem)) { }
+    mx(  cstr  cs, type_t type = typeof(char)) : mx(memory::stringify(cs, memory::autolen, 0, false, type)) { }
+    
+    inline mx(const mx     & b) :  mx( b.mem ?  b.mem->hold() : null) { }
 
-    mx(bool   v) : mx(copy(&v, 1, 1)) { }
-    mx(u8     v) : mx(copy(&v, 1, 1)) { }
-    mx(i8     v) : mx(copy(&v, 1, 1)) { }
-    mx(u16    v) : mx(copy(&v, 1, 1)) { }
-    mx(i16    v) : mx(copy(&v, 1, 1)) { }
-    mx(u32    v) : mx(copy(&v, 1, 1)) { }
-    mx(i32    v) : mx(copy(&v, 1, 1)) { }
-    mx(u64    v) : mx(copy(&v, 1, 1)) { }
-    mx(i64    v) : mx(copy(&v, 1, 1)) { }
-    mx(r32    v) : mx(copy(&v, 1, 1)) { }
-    mx(r64    v) : mx(copy(&v, 1, 1)) { }
+    //template <typename T>
+    //mx(T& ref, bool cp1) : mx(memory::alloc(typeof(T), 1, 0, cp1 ? &ref : (T*)null), ctx) { }
+
+    template <typename T> inline T *data() const { return  mem->data<T>(0); }
+    template <typename T> inline T &ref () const { return *mem->data<T>(0); }
+    
+
+    inline mx(bool   v) : mem(copy(&v, 1, 1)) { }
+    inline mx(u8     v) : mem(copy(&v, 1, 1)) { }
+    inline mx(i8     v) : mem(copy(&v, 1, 1)) { }
+    inline mx(u16    v) : mem(copy(&v, 1, 1)) { }
+    inline mx(i16    v) : mem(copy(&v, 1, 1)) { }
+    inline mx(u32    v) : mem(copy(&v, 1, 1)) { }
+    inline mx(i32    v) : mem(copy(&v, 1, 1)) { }
+    inline mx(u64    v) : mem(copy(&v, 1, 1)) { }
+    inline mx(i64    v) : mem(copy(&v, 1, 1)) { }
+    inline mx(r32    v) : mem(copy(&v, 1, 1)) { }
+    inline mx(r64    v) : mem(copy(&v, 1, 1)) { }
 
     /// construct element of type with optional copy
-    mx(type_t type, void *src = null) : mx(memory::alloc(type, 1, 0, src)) { }
+    mx(type_t type, void *src = null) : mem(memory::alloc(type, 1, 0, src)) { }
 
     template <typename E, typename = std::enable_if_t<std::is_enum_v<E>>>
-    mx(E v) : mx(alloc(&v)) { }
+    inline mx(E v) : mem(alloc(&v)) { }
 
-    size_t   byte_len() const {
+    inline size_t   byte_len() const {
         type_t type = mem->type;
         size_t t    = (type->schema && type->schema->total_bytes) ? type->schema->total_bytes : type->base_sz;
         return count() * t;
@@ -1918,12 +1906,26 @@ struct mx:MX<mx> { /// the intern of mx is raw_t
         return mem->type == typeof(char) || (mem->type->schema && mem->type->schema->bind->data == typeof(char));
     }
 
+    void set(memory *m) {
+        if (m != mem) {
+            if (mem) mem->drop();
+            mem = m ?  m->hold() : null;
+        }
+    }
+
+    template <typename T>
+    T &set(T v) {
+        memory *nm = alloc(v);
+        set(nm);
+        return ref<T>();
+    }
+
     size_t count() const { return mem ? mem->count : 0;    }
     type_t  type() const { return mem ? mem->type  : null; }
 
     memory  *to_string() const;
 
-    bool operator==(const mx &b) const {
+    inline bool operator==(mx &b) const {
         if (mem == b.mem)
             return true;
     
@@ -1939,25 +1941,25 @@ struct mx:MX<mx> { /// the intern of mx is raw_t
         return false;
     }
 
-    bool operator!=(const mx &b)    const { return !operator==(b); }
+    inline bool operator!=(mx &b)    const { return !operator==(b); }
     
-    bool operator==(symbol b) const {
+    inline bool operator==(symbol b) const {
         if (mem && mem->type == typeof(char)) {
             if (mem->attrs & memory::attr::constant) {
                 return mem == mem_symbol(b);
             } else {
-                return strcmp(b, mem->get<char>(0)) == 0;
+                return strcmp(b, mem->data<char>(0)) == 0;
             }
         }
         return false;
     }
-    bool operator!=(symbol b) const { return !operator==(b); }
+    inline bool operator!=(symbol b) const { return !operator==(b); }
 
     mx &operator=(const mx &b) {
         mx &a = *this;
         if (a.mem != b.mem) {
-            ion::drop(a.mem);
-            ion::hold(b.mem);
+            if (b.mem) b.mem->hold();
+            if (a.mem) a.mem->drop();
             a.mem = b.mem;
         }
         return *this;
@@ -2011,144 +2013,22 @@ struct mx:MX<mx> { /// the intern of mx is raw_t
             return false;
     }
     
-    bool operator!() const { return !(operator bool()); }
+    inline bool operator!() const { return !(operator bool()); }
 
     ///
-    explicit operator   i8()      { return *get<i8>();  }
-    explicit operator   u8()      { return *get<u8>();  }
-    explicit operator  i16()      { return *get<i16>(); }
-    explicit operator  u16()      { return *get<u16>(); }
-    explicit operator  i32()      { return *get<i32>(); }
-    explicit operator  u32()      { return *get<u32>(); }
-    explicit operator  i64()      { return *get<i64>(); }
-    explicit operator  u64()      { return *get<u64>(); }
-    explicit operator  r32()      { return *get<r32>(); }
-    explicit operator  r64()      { return *get<r64>(); }
-    
+    explicit operator   i8()      { return mem->ref<i8>();  }
+    explicit operator   u8()      { return mem->ref<u8>();  }
+    explicit operator  i16()      { return mem->ref<i16>(); }
+    explicit operator  u16()      { return mem->ref<u16>(); }
+    explicit operator  i32()      { return mem->ref<i32>(); }
+    explicit operator  u32()      { return mem->ref<u32>(); }
+    explicit operator  i64()      { return mem->ref<i64>(); }
+    explicit operator  u64()      { return mem->ref<u64>(); }
+    explicit operator  r32()      { return mem->ref<r32>(); }
+    explicit operator  r64()      { return mem->ref<r64>(); }
+    explicit operator  memory*()  { return mem->hold(); } /// trace its uses
     explicit operator  symbol()   { return (ion::symbol)mem->origin; }
-
-    size_t alloc_size() const {
-        size_t usz = size_t(mem->count);
-        size_t ual = size_t(mem->reserve);
-        return ual == 0 ? usz : ual;
-    }
-
-    template <typename V>
-    static mx pointer(V* ptr, int sz = 1) {
-        return memory::window(typeof(V), ptr, sz);
-    }
 };
-
-
-template <typename T>
-T &ldata::push(const T &v) {
-    item *plast = ilast;
-    ilast = new item { null, ilast,
-        memory::alloc(typeof(T), 1, 1, (raw_t)&v) };
-    ///
-    (!ifirst) ? 
-    ( ifirst      = ilast) : 
-    ( plast->next = ilast);
-    ///
-    icount++;
-    return *ilast->mem->get<T>(0);
-}
-
-template <typename T>
-T &ldata::push() {
-    item *plast = ilast;
-        ilast = new item { null, ilast }; /// default-construction on data
-    ///
-    (!ifirst) ? 
-    ( ifirst      = ilast) : 
-    ( plast->next = ilast);
-    ///
-    icount++;
-    return ilast->mem->get<T>();
-}
-
-item   *ldata::first_item() const { return ifirst; }
-item   *ldata:: last_item() const { return ilast; }
-
-mx     &ldata::  first_mx() const { return *(mx*)&ifirst->mem; }
-mx     &ldata::   last_mx() const { return *(mx*)&ilast ->mem; }
-
-template <typename T>
-T   &ldata::first() const { return *ifirst->mem->get<T>(0); }
-
-template <typename T>
-T   &ldata::last() const { return *ilast->mem->get<T>(0); }
-
-void ldata::pop(mx *prev) {
-    assert(icount);
-    if (prev)
-       *prev = ion::hold(ilast->mem);
-    remove(-1);
-}
-
-template <typename T>
-void ldata::shift(mx* prev_first) {
-    assert(ilast);
-    ///
-    item *i = ifirst;
-    bool set_last = ilast == ifirst;
-    ifirst        = ifirst->next;
-    ///
-    if (!ifirst) {
-        ilast = null;
-    } else
-        ifirst->prev = 0;
-    ///
-    icount--;
-    if (prev_first) {
-        *prev_first = *(mx*)&i->mem; // location of mx is the location of memory pointer, not its value
-    }
-    delete i;
-}
-
-template <typename CTX>
-MX<CTX>::MX() : mem(memory::alloc(typeof(CTX))) { }
-
-hashmap::hashmap(size_t sz) : MX<hashmap>(), data(mem->get<hmdata>(0)) { data->sz = sz; }
-
-hashmap& hashmap::operator=(hashmap &a) {
-    ion::drop(mem);
-    mem = ion::hold(a.mem);
-    return *this;
-}
-
-doubly::doubly(memory* mem) : MX<doubly>(mem), data(mem->get<ldata>(0)) { }
-
-doubly::doubly() : doubly(memory::alloc(typeof(ldata))) { }
-
-doubly::doubly(const doubly &ref) : doubly(ion::hold(ref)) { }
-
-doubly::~doubly() {
-    ion::drop(mem);
-}
-
-template <typename T>
-T &ldata::data(num ix) const {
-    assert(ix >= 0 && ix < num(icount));
-    return ldata::get(ix)->mem->get<T>();
-}
-
-template <typename T>
-T& liter<T>::operator *() const { return *cur->mem->get<T>(0); }
-
-template <typename T>
-liter<T>::operator T& () const { return *cur->mem->get<T>(0); }
-
-item& liter_item::operator *     () const { return *cur; }
-      liter_item::operator item& () const { return *cur; }
-
-template <typename K>
-K &field::  key() { return *k->get<K>(); }
-
-template <typename V>
-V &field::value() { return *v->get<V>(); }
-
-
 
 template <typename T>
 constexpr bool is_mx() {
@@ -2204,7 +2084,7 @@ template <typename R, typename... Args>
 template <typename F>
 lambda<R(Args...)>::lambda(F&& fn) : mx() {
     if constexpr (ion::inherits<mx, F>() || is_lambda<std::remove_reference_t<F>>::value) {
-        mx::mem = ion::hold(fn);
+        mx::mem = fn.mem->hold();
         data    = (container*)mem->origin;
     } else {
         if constexpr (std::is_invocable_r_v<R, F, Args...>) {
@@ -2232,7 +2112,7 @@ lambda<R(Args...)>::lambda(CL* cl, F fn) {
     //}
 }
 
-mx call(mx lambda, const array &args);
+mx call(mx lambda, array<str> args);
 
 template <typename T>
 inline void vset(T *data, u8 bv, size_t c) {
@@ -2251,18 +2131,28 @@ struct has_push : std::false_type {};
 template<typename T>
 struct has_push<T, std::void_t<decltype(T::pushv(std::declval<T*>(), std::declval<memory*>()))>> : std::true_type {};
 
-/// lets make a different type called vector, for simple, primitive data
-/// vector will not scheme its name but rather simply store a vector of primitives
-
-
-
+template <typename T>
 struct array:mx {
-    type_t element_type() { return mem->type->schema ? mem->type->schema->bind->data : mem->type; }
+protected:
+    size_t alloc_size() const {
+        size_t usz = size_t(mem->count);
+        size_t ual = size_t(mem->reserve);
+        return ual == 0 ? usz : ual;
+    }
 
-    template <typename T>
-    static void pushv(array *a, memory *m_item) {
+public:
+    static inline type_t element_type() { return typeof(T); }
+
+    //mx_object(array, mx, T);
+    using parent_class   = mx;
+    using context_class  = array;
+    using intern         = T;
+    //inline static const type_t intern_t = typeof(T);
+    T*    data;
+
+    static void pushv(array<T> *a, memory *m_item) {
         if constexpr (is_convertible<memory*, T>()) {
-            T item(ion::hold(m_item));
+            T item(m_item->hold());
             a->push(item);
         } else {
             T &item = *(T*)m_item->origin;
@@ -2270,35 +2160,27 @@ struct array:mx {
         }
     }
 
-    template <typename T>
-    static array read_file(symbol filename) {
+    static array<T> read_file(symbol filename) {
         std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
         if (!file.is_open())
             throw std::runtime_error("failed to open file!");
 
         size_t byte_sz = (size_t) file.tellg();
-        array result(typeof(T), byte_sz / sizeof(T), byte_sz / sizeof(T));
+        array<T> result(byte_sz / sizeof(T), byte_sz / sizeof(T));
         file.seekg(0);
-        file.read((char*)result.data<T>(), byte_sz);
+        file.read((char*)result.data, byte_sz);
         file.close();
         return result;
     }
 
-    template <typename T>
-    T *data() const {
-        return (T*)mem->origin;
-    }
-
-    array(memory*   mem) : mx(mem) { }
-    array(const mx   &o) : array(ion::hold(o.mem)) { }
-    array()              : array(mx::alloc<array>(null, 0, 0)) { } /// this must be lazy-alloc'd; generically, if we have a void type, then allocation must be lazy
+    array(memory*   mem) : mx(mem), data(mx::data<T>()) { }
+    array(mx          o) : array(o.mem->hold()) { }
+    array()              : array(mx::alloc<array>(null, 0, 1)) { }
 
     /// immutable
-    template <typename T>
-    array unshift(T &v) const {
-        array res { typeof(T), mem->count + 1 };
-        T *data = array::data<T>();
+    array<T> unshift(T &v) const {
+        array<T> res { mem->count + 1 };
         res += v;
         for (size_t i = 0; i < mem->count; i++)
             res += data[i];
@@ -2306,64 +2188,53 @@ struct array:mx {
     }
 
     /// immutable 
-    template <typename T>
-    array shift() const {
+    array<T> shift() const {
         if (mem->count <= 1)
             return {};
-        array res { typeof(T), mem->count - 1 };
-        T *data = array::data<T>();
+        array<T> res { mem->count - 1 };
         for (size_t i = 1; i < mem->count; i++)
             res += data[i];
         return res;
     }
-
     /// likely need to do a constexpr to check if its able to concat
     /// in the condition its not it would be best to return default
     /// and not implement by other means
-    template <typename T>
     T join(T s = T()) const {
-        T *data = array::data<T>();
         T v = data[0];
         for (size_t i = 1; i < mem->count; i++)
             v += data[i];
         return v;
     }
 
-    template <typename T>
-    array reverse() const {
-        array res;
-        T *data = array::data<T>();
+    array<T> reverse() const {
+        array<T> res;
         for (size_t i = 0; i < mem->count; i++)
-            res += ((T*)data)[mem->count - 1 - i];
+            res += data[mem->count - 1 - i];
         return res;
     }
 
-    template <typename T>
-    array slice(size_t start, size_t end) const {
+    array<T> slice(size_t start, size_t end) const {
         size_t count = end - start;
         assert(count <= mem->count);
-        array res;
-        T *data = array::data<T>();
+        array<T> res;
         for (size_t i = start; i < start + count; i++) {
-            res += ((T*)data)[i];
+            res += data[i];
         }
         return res;
     }
 
-    template <typename T>
-    array every(lambda<bool(T&)> fn) const {
-        array res(typeof(T), mem->count);
-        for (T &v: elements<T>()) {
+    array<T> every(lambda<bool(T&)> fn) const {
+        array<T> res;
+        for (T &v: *this) {
             if (fn(v))
                 res.push(v);
         }
         return res;
     }
 
-    template <typename T>
-    bool some(lambda<bool(T&)> fn) const {
+    array<T> some(lambda<bool(T&)> fn) const {
         bool res = false;
-        for (T &v: elements<T>()) {
+        for (T &v: *this) {
             if (fn(v)) {
                 res = true;
                 break;
@@ -2372,48 +2243,45 @@ struct array:mx {
         return res;
     }
 
-    array &operator=(const array &b) {
-        if (mem != b.mem) {
-            ion::drop(mx::mem);
-            mx::mem = ion::hold(b);
-            assert(b.type() == type());
-        }
-        return *this;
-    }
+    //intern    *operator &() { return  data; } -- dont ever do these!
+    //operator     intern *() { return  data; }
+
+    template <typename B>
+    array      &operator=(const array<B> &b) {\
+        mx::drop();\
+        mx::mem = b.mem->hold();\
+        assert(typeof(B) == typeof(T));
+        data = (intern*)mx::mem->data<intern>(0);\
+        return *this;\
+    }\
 
     /// push an element, return its reference
-    template <typename T>
     T &push(const T &v) {
-        T *data = array::data<T>();
         size_t csz = mem->count;
         if (csz >= alloc_size())
-            realloc(csz + 1);
-        new ((T*)&data[csz]) T(v);
+            data = (T*)mem->realloc(csz + 1, false);
+        new (&data[csz]) T(v);
         mem->count++;
-        return (T&)data[csz];
+        return data[csz];
     }
 
-    template <typename T>
     T &push() {
-        T *data = array::data<T>();
         size_t csz = mem->count;
         if (csz >= alloc_size())
-            realloc(csz + 1);
+            data = (T*)mem->realloc(csz + 1, false);
         new (&data[csz]) T();
         mem->count++;
         return data[csz];
     }
 
-    template <typename T>
     void push(T *pv, size_t push_count) {
-        T *data = array::data<T>();
         if (!push_count) return; 
         ///
         size_t usz = size_t(mem->count);
         size_t rsv = size_t(mem->reserve);
 
         if (usz + push_count > rsv)
-            realloc(usz + push_count);
+            data = (T*)mem->realloc(usz + push_count, false);
         
         if constexpr (is_primitive<T>()) {
             memcpy(&data[usz], pv, sizeof(T) * push_count);
@@ -2426,80 +2294,100 @@ struct array:mx {
         mem->count = usz;
     }
 
-    template <typename T>
     void pop(T *prev = null) {
-        T *data = array::data<T>();
         size_t i = size_t(mem->count);
         assert(i > 0);
         if (prev)
-            *prev = ((T*)data)[i];
+        *prev = data[i];
         if constexpr (!is_primitive<T>())
-            ((T*)data)[i]. ~T();
+            data[i]. ~T();
         --mem->count;
     }
 
-    static inline type_t data_type() { return typeof(intern); }
-    
-    template <typename T>
-    static array empty() { return array(typeof(T), size_t(1)); }
+    ///
+    template <typename S>
+    memory *convert_elements(array<S> &a_src) {
+        constexpr bool can_convert = std::is_convertible<S, T>::value;
+        if constexpr (can_convert) {
+            memory* src = a_src.mem;
+            if (!src) return null;
+            memory* dst;
+            if constexpr (identical<T, S>()) {
+                dst = src->hold();
+            } else {
+                type_t ty = typeof(T);
+                size_t sz = a_src.len();
+                dst       = memory::alloc(ty, sz, sz, (T*)null);
+                T*      b = dst->data<T>(0);
+                S*      a = src->data<S>(0);
+                for (size_t i = 0; i < sz; i++)
+                    new (&b[i]) T(a[i]);
+            }
+            return dst;
+        } else {
+            printf("cannot convert elements on array\n");
+            return null;
+        }
+    }
 
-    template <typename T>
-    array(std::initializer_list<T> args) : array() { //  size_t(args.size()) -- doesnt work with the pre-alloc; find out why.
+    static inline type_t data_type() { return typeof(T); }
+    
+    static array<T> empty() { return array<T>(size_t(1)); }
+
+    array(initial<T> args) : array() { //  size_t(args.size()) -- doesnt work with the pre-alloc; find out why.
         for (auto &v:args) {
             T &element = (T &)v;
             push(element);
         }
     }
 
-    void reserve_size(size sz) {
+    inline void reserve_size(size sz) {
         if (mem->reserve < sz)
-            realloc(sz); // this was fill-default before, not for reserve so thats a bug
+            data = (T*)mem->realloc(sz, true);
     }
 
     void set_size(size_t sz) {
         mem->count = sz;
     }
 
-    template <typename T>
-    size_t count_of(const T& v) {
-        T *data = array::data<T>();
+    ///
+    size_t count_of(T v) {
         size_t c = 0;
         for (size_t i = 0; i < mem->count; i++)
-            if (((T*)data)[i] == v)
+            if (data[i] == v)
                 c++;
         return c;
     }
 
-    template <typename T>
+    ///
+    T* elements() const { return data; }
+
+    ///
     int index_of(const T &v) const {
-        T *data = array::data<T>();
         for (size_t i = 0; i < mem->count; i++) {
-            if (((T*)data)[i] == (T&)v)
+            if (data[i] == (T&)v)
                 return int(i);
         }
         return -1;
     }
 
-    template <typename T>
     int index_of(lambda<bool(T&)> v) const {
-        T *data = array::data<T>();
         for (size_t i = 0; i < mem->count; i++) {
-            if (v(((T*)data)[i]))
+            if (v(data[i]))
                 return int(i);
         }
         return -1;
     }
 
-    template <typename T>
     bool contains(const T &v) const {
         return index_of(v) != -1;
     }
 
-    template <typename T, typename R>
+    ///
+    template <typename R>
     R select_first(lambda<R(T&)> qf) const {
-        T *data = array::data<T>();
         for (size_t i = 0; i < mem->count; i++) {
-            R r = qf(((T*)data)[i]);
+            R r = qf(data[i]);
             if (r)
                 return r;
         }
@@ -2509,39 +2397,36 @@ struct array:mx {
             return R();
     }
 
-    template <typename T, typename R>
-    array map(lambda<R(T&)> qf) const {
-        T *data = array::data<T>();
-        array res(typeof(R), mem->count); /// we need to properly convert array<T>(sz) to this
+    template <typename R>
+    array<R> map(lambda<R(T&)> qf) const {
+        array<R> res(mem->count);
         ///
         for (size_t i = 0; i < mem->count; i++) {
-            R r = qf(((T*)data)[i]);
+            R r = qf(data[i]);
             res += r;
         }
         return res;
     }
 
-    template <typename T, typename R>
-    array flat_map(lambda<R(T&)> qf) const {
-        T *data = array::data<T>();
-        array res(typeof(R), mem->count);
+    template <typename R>
+    array<R> flat_map(lambda<R(T&)> qf) const {
+        array<R> res(mem->count);
         ///
         for (size_t i = 0; i < mem->count; i++) {
-            array r = qf(((T*)data)[i]);
-            for (R &ri: r.elements<R>())
+            array<R> r = qf(data[i]);
+            for (R &ri: r)
                 res += ri;
         }
         return res;
     }
 
     ///
-    template <typename T, typename R>
+    template <typename R>
     R select(lambda<R(T&)> qf) const {
-        T *data = array::data<T>();
-        array res(typeof(R), mem->count);
+        array<R> res(mem->count);
         ///
         for (size_t i = 0; i < mem->count; i++) {
-            R r = qf(((T*)data)[i]);
+            R r = qf(data[i]);
             if (r)
                 res += r;
         }
@@ -2549,14 +2434,12 @@ struct array:mx {
     }
 
     /// quick-sort
-    template <typename T>
-    array sort(lambda<int(T &a, T &b)> cmp) {
-        T *data = array::data<T>();
+    array<T> sort(lambda<int(T &a, T &b)> cmp) {
         /// create reference list of identical size as given, pointing to the respective index
         size_t sz = len();
         T **refs = (T **)calloc64(len(), sizeof(T*));
         for (size_t i = 0; i < sz; i++)
-            refs[i] = &((T*)data)[i];
+            refs[i] = &data[i];
 
         /// recursion lambda
         lambda<void(int, int)> qk;
@@ -2583,42 +2466,39 @@ struct array:mx {
         /// create final result array from references
 
         size_t ln = len();
-        array result { typeof(T), ln };
+        array<T> result { ln };
         for (size_t i = 0; i < ln; i++) {
             T &r = *refs[i];
             result.push(r);
         }
 
-        free(refs);
+        //free(refs);
         return result;
     }
     
-    size     shape() const { return mem->shape ? *mem->shape : size(mem->count); }
-    size_t     len() const { return mem->count; }
-    size_t  length() const { return mem->count; }
-    size_t reserve() const { return mem->reserve; }
+    inline size     shape() const { return mem->shape ? *mem->shape : size(mem->count); }
+    inline size_t     len() const { return mem->count; }
+    inline size_t  length() const { return mem->count; }
+    inline size_t reserve() const { return mem->reserve; }
 
-    array(type_t type, size al, size sz = size(0)) : 
-            array(memory::alloc(type, sz, al)) {
+    array(size al, size sz = size(0)) : 
+            array(talloc<T>(sz, al)) {
         if (al.count > 1)
             mem->shape = new size(al); /// allocate a shape if there are more than 1 dims
     }
 
     /// constructor for allocating with a space to fill (and construct; this allocation does not run the constructor (if non-primitive) until append)
     /// indexing outside of shape space does cause error
-    array(type_t type, size_t  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
-    array(type_t type,    u32  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
-    array(type_t type,    i32  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
-    array(type_t type,    i64  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
+    array(size_t  reserve) : array(talloc<T>(0, size_t(reserve))) { }
+    array(   u32  reserve) : array(talloc<T>(0, size_t(reserve))) { }
+    array(   i32  reserve) : array(talloc<T>(0, size_t(reserve))) { }
+    array(   i64  reserve) : array(talloc<T>(0, size_t(reserve))) { }
 
-    template <typename T>
-    T &push_default()  { return push<T>();  }
+    inline T &push_default()  { return push();  }
 
     /// important that this should always assign or
     /// copy construct the elements in, as supposed to  a simple reference
-    template <typename T>
-    array mid(int start, int len = -1) const {
-        T *data = array::data<T>();
+    array<T> mid(int start, int len = -1) const {
         /// make sure we dont stride out of bounds
         int ilen = int(this->len());
         assert(abs(start) < ilen);
@@ -2626,39 +2506,31 @@ struct array:mx {
         size_t cp_count = len < 0 ? math::max(0, (ilen - start) + len) : len; /// 0 is a value to keep as 0 len, auto starts at -1 (+ -1 from remaining len)
         assert(start + cp_count <= ilen);
 
-        array result(typeof(T), cp_count);
+        array<T> result(cp_count);
         for (size_t i = 0; i < cp_count; i++)
-            result.push(((T*)data)[start + i]);
+            result.push(data[start + i]);
         ///
         return result;
     }
 
     /// get has more logic in the indexing than the delim.  wouldnt think of messing with delim logic but this is useful in general
-    template <typename T>
-    T &get(num i) const {
-        T *data = array::data<T>();
+    inline T &get(num i) const {
         if (i < 0) {
             i += num(mem->count);
             assert(i >= 0);
         }
         assert(i >= 0 && i < num(mem->count));
-        return ((T*)data)[i];
+        return data[i];
     }
 
-    template <typename T>
-    T&  first() const {
-        T *data = array::data<T>();
-        return ((T*)data)[0];
-    }
 
-    template <typename T>
-	T&   last() const {
-        T *data = array::data<T>();
-        return ((T*)data)[mem->count - 1];
-    }
+    iter<T>  begin() const { return { (T *)data, size_t(0)    }; }
+	iter<T>    end() const { return { (T *)data, size_t(mem->count) }; }
+    T&       first() const { return data[0];        }
+	T&        last() const { return data[mem->count - 1]; }
     
-    virtual void realloc(size s_to) {
-        mx::realloc(s_to, false); // todo: no mx-specific 'realloc'
+    void realloc(size s_to) {
+        data = mx::realloc(s_to, false);
     }
 
     operator  bool() const { return mx::mem && mem->count > 0; }
@@ -2668,47 +2540,41 @@ struct array:mx {
         if (mx::mem == b.mem) return true;
         if (mx::mem && b.mem) {
             if (mem->count != b.mem->count) return false;
-            size_t sz = mem->type->base_sz;
-            return mem->type->functions->equals((none*)mem->origin, (none*)b.mem->origin, mem->count);
+            for (size_t i = 0; i < mem->count; i++)
+                if (!(data[i] == b.data[i])) return false;
         }
         return true;
     }
 
+    /// not-equals
     bool operator!=(array b) const { return !(operator==(b)); }
     
-    template <typename T>
-    T &operator[](size index) const {
-        T *data = array::data<T>();
+    inline T &operator[](size index) const {
         if (index.count == 1) {
             size_t i = size_t(index.values[0]);
             assert(i >= 0 && i < mem->count);
             /// make sure this is within valid count range
             /// want to make sure all arrays even with primitive values do this
-            return (T &)((T*)data)[i];
+            return (T &)data[i];
         } else {
             assert(mem->shape);
             mem->shape->assert_index(index);
             size_t i = mem->shape->index_value(index);
-            return (T &)((T*)data)[i];
+            return (T &)data[i];
         }
     }
 
-    template <typename T>
-    T &operator[](size_t index) {
-        T *data = array::data<T>();
-        return ((T*)data)[index];
-    }
+    inline T &operator[](size_t index) { return data[index]; }
 
-    template <typename T, typename IX>
-    T &operator[](IX index) {
-        T *data = array::data<T>();
+    template <typename IX>
+    inline T &operator[](IX index) {
         if constexpr (identical<IX, size>()) {
             mem->shape->assert_index(index);
             size_t i = mem->shape->index_value(index);
-            return (T &)((T*)data)[i];
+            return (T &)data[i];
         } else if constexpr (std::is_enum<IX>() || is_integral<IX>()) { /// just dont bitch at people.  people index by so many types.. most type casts are crap and noise as result
             size_t i = size_t(index);
-            return (T &)((T*)data)[i];
+            return (T &)data[i];
         } else {
             /// now this is where you bitch...
             assert(!"index type must be size or integral type");
@@ -2716,61 +2582,26 @@ struct array:mx {
         }
     }
 
-    template <typename T>
-    T &operator+=(const T &v) {
+    inline T &operator+=(const T &v) { 
         return push(v);
     }
 
     /// clearing a list reallocates to 1, destructing previous
-    template <typename T>
     void clear() {
-        T *data = array::data<T>();
         for (int i = 0; i < mem->count; i++) {
-            ((T*)data)[i] . ~T();
+            data[i] . ~T();
         }
         mem->count = 0;
     }
 
     /// destructing a list means it keeps the size
-    template <typename T>
     void destruct() {
-        T *data = array::data<T>();
         for (int i = 0; i < mem->count; i++) {
-            ((T*)data)[i] . ~T();
+            data[i] . ~T();
         }
         mem->count = 0;
     }
 };
-
-template <> struct is_array<array> : true_type { };
-
-template<typename T>
-struct Array:array {
-    T* window;
-    void realloc(size s_to) {
-        array::realloc(s_to);
-        window = mx::get<T>(0);
-    }
-    Array(memory* mem) : array(mem), window((T*)mem->origin) { }
-    Array(const array &ar) : Array(hold(ar.mem)) { }
-    Array() : array(memory::alloc(typeof(Array<T>))) { }
-
-    T &operator[](num i);
-};
-
-/// make Array<T> use the function table for array (explicit use in ident::for_type)
-template <typename T> struct is_array<Array<T>> : true_type { };
-
-
-
-template<typename T>
-T &Array<T>::operator[](num i) {
-    assert(i >= 0 && i < math::max(mem->count, mem->reserve));
-    return window[i];
-}
-
-using arg = field;
-using ax  = Array<arg>;
 
 template <typename T>
 T convert_str(const str& s) {
@@ -2785,14 +2616,14 @@ template <typename Lambda, std::size_t... Is>
 auto invokeImpl(
         const Lambda& lambda,
         const std::index_sequence<Is...>&,
-        const array& args)
+        const array<str>& args)
 {
     using traits = lambda_traits<Lambda>;
-    return lambda(convert_str<std::tuple_element_t<Is, typename traits::arg_types>>(args.get<str>(Is))...);
+    return lambda(convert_str<std::tuple_element_t<Is, typename traits::arg_types>>(args[Is])...);
 }
 
 template <typename Lambda>
-auto invoke(const Lambda& lambda, const array& args) {
+auto invoke(const Lambda& lambda, const array<str>& args) {
     using traits = lambda_traits<Lambda>;
     constexpr size_t numArgs = std::tuple_size_v<typename traits::arg_types>;
 
@@ -2803,6 +2634,11 @@ auto invoke(const Lambda& lambda, const array& args) {
     return invokeImpl(lambda, std::make_index_sequence<numArgs>{}, args);
 }
 
+
+/// stream accept types going out, and accept types going in
+/// we just put them in a list of accepted.  its good to declare that for something as robust as streaming
+/// Streamers will use an array of these; I dont believe its a good idea to 'name' each stream though; type identity is fine
+/// 
 struct io:mx {
     struct Source {
         type_t           type; /// types are the stream identifier
@@ -2810,8 +2646,8 @@ struct io:mx {
     };
 
     struct M {
-        array sources   { typeof(Source), 1 };
-        array types_out { typeof(type_t), 1 };
+        array<Source> sources;
+        array<type_t> types_out;
         lambda<void()> shutdown;
         ~M() {
             /// stream shutdown
@@ -2821,14 +2657,14 @@ struct io:mx {
 
         void emit(mx data) {
             type_t type = data.type();
-            for (Source &src: sources.elements<Source>()) {
+            for (Source &src: sources) {
                 if (src.type == type)
                     src.fn(data);
             }
         }
         
         bool attach(Source &src) {
-            bool valid = types_out.index_of<type_t>([&](Source &a) -> bool {
+            bool valid = types_out.index_of([&](Source &a) -> bool {
                 return a.type == src.type;
             }) >= 0;
             assert(valid);
@@ -2839,15 +2675,18 @@ struct io:mx {
     
     mx_basic(io)
 
-    io(const Array<type_t> &types_out, const lambda<void()> &shutdown) : io() {
+    io(array<type_t> types_out, lambda<void()> shutdown) : io() {
         data->types_out = types_out;
         data->shutdown  = shutdown;
     }
 
-    bool operator+=(const Source &src) {
-        return data->attach((Source &)src);
+    bool operator+=(Source src) {
+        return data->attach(src);
     }
 };
+
+using arg = pair<mx, mx>;
+using ax  = array<arg>;
 
 // todo: was this needed for var/json?
 //external(arg);
@@ -2928,21 +2767,21 @@ struct ex:mx {
     static typename C::etype convert(mx raw, symbol S, C *p) {
         type_t type = typeof(C);
         ex::initialize((C*)null, (typename C::etype)0, S, type);
-        mx psym;
+        memory **psym = null;
         if (raw.type() == typeof(char)) {
-            char  *d = raw.get<char>();
+            char  *d = &raw.ref<char>();
             /// in json, the enum can sometimes be given in "23124" form; no enum begins with a numeric so we can handle this
             if (d[0] == '-' || isdigit(*d)) {
                 std::string str = (symbol)d;
-                i64 num = (i64)std::stoi(str);
-                psym = type->symbols->ids.lookup(num);
+                int num = std::stoi(str);
+                psym = type->symbols->ids.lookup((i64)num);
             } else {
                 u64 hash = djb2(d);
                 psym     = type->symbols->djb2.lookup(hash);
             }
             if (!psym) {
                 /// if lookup fails, compare by the number of chars given
-                for (memory *mem: type->symbols->list.elements<memory*>()) {
+                for (memory *mem: type->symbols->list) {
                     if (raw.mem->count > mem->count)
                         continue;
                     if (matches((symbol)mem->origin, (symbol)d, raw.mem->count))
@@ -2950,13 +2789,13 @@ struct ex:mx {
                 }
             }
         } else if (raw.type() == typeof(int)) {
-            i64   id = i64(*raw.get<int>());
+            i64   id = i64(raw.ref<int>());
             psym     = type->symbols->ids.lookup(id);
         } else if (raw.type() == typeof(i64)) {
-            i64   id = *raw.get<i64>();
+            i64   id = raw.ref<i64>();
             psym     = type->symbols->ids.lookup(id);
         } else if (raw.type() == typeof(typename C::etype)) {
-            i64   id = *raw.get<typename C::etype>();
+            i64   id = raw.ref<typename C::etype>();
             psym     = type->symbols->ids.lookup(id);
         }
         if (!psym) {
@@ -2964,7 +2803,7 @@ struct ex:mx {
             fflush(stdout);
             throw C();
         }
-        return (typename C::etype)(psym.mem->id);
+        return (typename C::etype)((*psym)->id);
     }
 
     /// we need to bootstrap the symbols from the construction level of enum classes
@@ -3003,7 +2842,7 @@ struct utf16:mx {
     utf16 escape(utf16 chars, char esc = '\\') const;
 	utf16 mid(num start, num length = -1) const;
 	size_t len() const;
-	static utf16 join(const array &src, utf16 j);
+	static utf16 join(array<utf16> &src, utf16 j);
 
     ion::wstr wstr() {
         return (ion::wstr)mem->origin;
@@ -3094,37 +2933,37 @@ struct str:mx {
     str expr(lambda<str(str)> fn) const;
 
     /// format is a user of expr
-    str format(const array &args) const;
+    str format(array<mx> args) const;
 
     /// just using cs here, for how i typically use it you could cache the strings
-    static str format(symbol cs, const array &args);
+    static str format(symbol cs, array<mx> args);
 
     operator fs::path() const;
     
     void        clear() const;
 
-    bool        contains   (const array &a) const;
+    bool        contains   (array<str>   a) const;
     str         operator+  (symbol       s) const;
-    bool        operator<  (const str   &b) const;
-    bool        operator>  (const str   &b) const;
+    bool        operator<  (const str    b) const;
+    bool        operator>  (const str    b) const;
     bool        operator<  (symbol       b) const;
     bool        operator>  (symbol       b) const;
-    bool        operator<= (const str   &b) const;
-    bool        operator>= (const str   &b) const;
+    bool        operator<= (const str    b) const;
+    bool        operator>= (const str    b) const;
     bool        operator<= (symbol       b) const;
     bool        operator>= (symbol       b) const;
   //bool        operator== (std::string  b) const;
   //bool        operator!= (std::string  b) const;
-    bool        operator== (const str   &b) const;
-    bool        operator!= (const str   &b) const;
+    bool        operator== (str          b) const;
+    bool        operator!= (str          b) const;
     bool        operator== (symbol       b) const;
     bool        operator!= (symbol       b) const;
     char&		operator[] (size_t       i) const;
-    int         operator[] (const str   &b) const;
+    int         operator[] (str          b) const;
                 operator             bool() const;
     bool        operator!()                 const;
-    str         operator+    (const str &sb) const;
-    str        &operator+=   (const str &b);
+    str         operator+    (const str sb) const;
+    str        &operator+=   (str        b);
 
     str &operator+= (const char b);
 
@@ -3145,7 +2984,7 @@ struct str:mx {
         return ret;
     }
     
-    int index_of_first(const array &elements, int *str_index) const;
+    int index_of_first(array<str> elements, int *str_index) const;
 
     bool starts_with(symbol s) const;
 
@@ -3175,8 +3014,8 @@ struct str:mx {
 
     ///
     template <typename L>
-    array split(L delim) const {
-        array  result;
+    array<str> split(L delim) const {
+        array<str>  result;
         size_t start = 0;
         size_t end   = 0;
         cstr   pc    = (cstr)data;
@@ -3218,8 +3057,8 @@ struct str:mx {
     iter<char> begin();
     iter<char>   end();
 
-    array split(symbol s) const;
-    array split();
+    array<str> split(symbol s) const;
+    array<str> split();
 
     enum index_base {
         forward,
@@ -3246,27 +3085,26 @@ struct str:mx {
     size_t reserve() const;
 };
 
+using astr = array<str>;
+
 template <typename C, typename E>
 E ex::initialize(C *p, E v, symbol names, type_t ty) {
     /// names should support normal enum syntax like abc = 2, abc2 = 4, abc3, abc4; we can infer what C++ does to its values
     /// get this value from raw.origin (symbol) instead of the S
     if (ty->secondary_init) return v;
     ty->secondary_init = true;
-    array   sp = str((cstr)names).split(", ");
-    int      c = (int)sp.len();
-    i64   next = 0;
+    array<str>   sp = str((cstr)names).split(", ");
+    int           c = (int)sp.len();
+    i64        next = 0;
 
-    Array<str> split(sp); /// this is just a cast with different windowing
-                                 /// it has the operator[] overloaded
-                                 /// will probably do the same for Map where we use it that way
     for (int i = 0; i < c; i++) {
-        num idx = split[i].index_of(str("="));
+        num idx = sp[i].index_of(str("="));
         if (idx >= 0) {
-            str sym = split[i].mid(0, idx).trim();
-            str val = split[i].mid(idx + 1).trim();
+            str sym = sp[i].mid(0, idx).trim();
+            str val = sp[i].mid(idx + 1).trim();
             mem_symbol(sym.data, ty, val.integer_value());
         } else {
-            mem_symbol(split[i].data, ty, i64(next));
+            mem_symbol(sp[i].data, ty, i64(next));
         }
         next = i + 1;
     };
@@ -3290,80 +3128,69 @@ struct fmt:str {
     };
 
     /// format string given template, and mx-based arguments
-    fmt(str templ, const array &args) : str(templ.format(args)) { }
+    inline fmt(str templ, array<mx> args) : str(templ.format(args)) { }
     fmt():str() { }
 
-    operator memory*() { return ion::hold(mem); } // ? lol
+    operator memory*() { return hold(); }
 };
 
 /// cstr operator overload
-str operator+(cstr cs, str rhs) { return str(cs) + rhs; }
+inline str operator+(cstr cs, str rhs) { return str(cs) + rhs; }
 
-template <typename T>
-u64 hash_value(const T &k) {
-    type_t type = typeof(T);
-    if (type == typeof(i64)  || type == typeof(u64))    return (u64)*(u64*)&k;
-    if (type == typeof(i32)  || type == typeof(u32))    return (u64)*(u32*)&k;
-    if (type == typeof(cstr) || type == typeof(symbol)) return (u64)djb2(cstr(k));
-    assert(type->functions);
-    if (type->functions->hash)
-        return type->functions->hash((none*)&k, 1);
-    assert(false);
-    return 0;
-}
-
-/// probably dont need V mentioned in here; maps can store anything by key
+template <typename V>
 struct map:mx {
+    static inline type_t value_type() { return typeof(V); }
     inline static const size_t default_hash_size = 64;
+    using hmap = ion::hmap<mx, field<V>*>;
+
+    using ValueType = V;
 
     struct mdata {
-        doubly fields;
-        hashmap  *hash_map;
+        doubly<field<V>>  fields;
+        hmap           *hash_map;
 
         /// boolean operator for key
-        bool operator()(const mx &key) {
+        bool operator()(mx key) {
             if (hash_map)
-                return hash_map->contains(key);
+                return hash_map->lookup(key);
             else {
-                for (field &f:fields.elements<field>())
-                    if (f.k == key.mem)
+                for (field<V> &f:fields)
+                    if (f.key.mem == key.mem)
                         return true;
             }
             return false; 
         }
 
-        field &fetch(const mx &k) {
-            field *f = lookup(k);
-            if (f) return *f;
-            ///
-            fields += field { k.mem, (memory*)null };
-            field &last = fields->last<field>();
-
-            if (hash_map) (*hash_map)[k] = &last;
-
-            return last;
+        template <typename K>
+        inline V &operator[](K k) {
+            if constexpr (ion::inherits<mx, K>()) {
+                return fetch(k).value;
+            } else {
+                mx io_key = mx(k);
+                return fetch(io_key).value;
+            }
         }
 
-        field &first()  { return fields->first<field>(); }
-        field & last()  { return fields-> last<field>(); }
-        size_t count()  { return fields->len();   }
-        size_t   len()  { return fields->len();   }
+        field<V> &first()  { return fields->first(); }
+        field<V> & last()  { return fields-> last(); }
+        size_t    count()  { return fields->len();   }
+        size_t      len()  { return fields->len();   }
 
         template <typename R>
-        array map(lambda<R(const field&)> fn) {
-            array r { typeof(R), fields->len() };
-            for (field &f:fields.elements<field>())
+        array<R> map(lambda<R(field<V>&)> fn) {
+            array<R> r { fields->len() };
+            for (field<V> &f:fields)
                 r += fn(f);
             return r;
         }
 
-        size_t    count(const mx &k) {
+        size_t    count(mx k) {
             type_t tk = k.type();
-            memory *b = (memory*)k.mem;
+            memory *b = k.mem;
             if (!(k.mem->attrs & memory::constant) && (tk->traits & traits::primitive)) {
                 size_t res = 0;
-                for (field &f:fields.elements<field>()) {
-                    memory *a = f.k;
+                for (field<V> &f:fields) {
+                    memory *a = f.key.mem;
                     assert(a->type->size() == b->type->size());
                     if (a == b || (a->count == b->count && memcmp(a->origin, b->origin, a->count * a->type->size()) == 0)) // think of new name instead of type_* ; worse yet is handle base types in type
                         res++;
@@ -3371,8 +3198,8 @@ struct map:mx {
                 return res;
             } else {
                 size_t res = 0;
-                for (field &f:fields.elements<field>())
-                    if (f.k == b)
+                for (field<V> &f:fields)
+                    if (f.key.mem == b)
                         res++;
                 return res;
             }
@@ -3380,80 +3207,100 @@ struct map:mx {
 
         size_t count(cstr cs) {
             size_t res = 0;
-            for (field &f:fields.elements<field>())
-                if (strcmp(symbol(f.k->origin), symbol(cs)) == 0)
+            for (field<V> &f:fields)
+                if (strcmp(symbol(f.key.mem->origin), symbol(cs)) == 0)
                     res++;
             return res;
         }
 
-        field *lookup(const mx &k) const {
+        field<V> *lookup(mx &k) const {
             if (hash_map) {
-                item *pf = hash_map->item(k);
-                return pf ? pf->mem->get<field>(0) : null;
+                field<V> **ppf = hash_map->lookup(k);
+                return  ppf ? *ppf : null;
             } else {
-                for (field & f : fields.elements<field>())
-                    if (f.k == (memory*)k.mem)
+                for (field<V> & f : fields)
+                    if (f.key == k)
                         return &f;
             }
             return null;
         }
 
-        bool remove(const mx &k) {
-            bool removed = false;
-            if (hash_map) {
-                removed = hash_map->remove(k);
-            } else {
-                int index = 0;
-                for (field & f : fields.elements<field>()) {
-                    if (f.k == (memory*)k.mem) {
-                        fields->remove(index);
-                        removed = true;
-                        break;
-                    }
-                    index++;
-                }
-            }
-            return removed;
+        V* get(mx key) const {
+            field<V> *f = lookup(key);
+            return f ? &f->value : null;
         }
 
-        /// should not CONVERT. this is just copying the key used; should assert too.
-        array keys() {
-            if (!fields)
-                return array {};
-            type_t key_t = fields->first<field>().k->type;
-            array res { key_t, fields->len() };
-            for (field &f:fields.elements<field>())
-                res.push(ion::hold(f.k));
-            return res;
+        bool remove(field<V> &f) {
+            item<field<V>> *i = item<field<V>>::container(f); // the container on field<V> is item<field<V>>, a negative offset
+            fields->remove(i);
+            return true;
         }
 
-        // value could be item memory reference
-        template <typename V>
-        array values() {
-            array res { typeof(V), fields->len() };
-            for (field &f:fields.elements<field>()) {
-                assert(f.v.type() == typeof(V));
-                if constexpr (ion::inherits<mx, V>())
-                    res.push(ion::hold(f.v)); /// this calls the mx constructor which performs an increment to the reference count
-                else
-                    res.push(f.v->get<V>(0));
+        bool remove(mx &k) {
+            field<V> *f = lookup(k);
+            return f ? remove(*f) : false;
+        }
+
+        template <typename K>
+        array<K> keys(K *t = null) {
+            array<K> res { fields->len() };
+            for (field<V> &f:fields) {
+                K k = K(f.key.hold());
+                res.push(k);
             }
             return res;
         }
 
-        ldata::literable<field> elements() const {
-            return fields->elements<field>();
+        array<V> values() {
+            array<V> res { fields->len() };
+            for (field<V> &f:fields)
+                res.push(f.value);
+            return res;
         }
 
-        mx &operator[](const mx &key) {
-            return *(mx*)&fetch(key).v;
+        field<V> &fetch(mx &k) {
+            field<V> *f = lookup(k);
+            if (f) return *f;
+            ///
+            fields += { k, V() };
+            field<V> &last = fields->last();
+
+            if (hash_map)
+              (*hash_map)[k] = &last;
+
+            return last;
         }
 
         operator bool() { return ((hash_map && hash_map->len() > 0) || (fields->len() > 0)); }
     };
 
-    static map parse(int argc, cstr *argv, map &def) {
-        map iargs = map();
+    /// an init for type would be useful; then we could fill out more on the type
+    static void set_value(map<V> *m, memory *key, memory *m_item) {
+        if constexpr (is_convertible<memory*, V>()) {
+            mx mkey = key->hold();
+            assert(m_item->type == typeof(V));
+
+            if constexpr (ion::inherits<mx, V>()) {
+                /// hold memory
+                (*m)->fetch(mkey).value = m_item->hold();
+            } else {
+                /// copy V, a non-mx value
+                (*m)->fetch(mkey).value = *(V*)m_item->origin;
+            }
+        }
+    }
+
+    static int defaults(map<V> &def) {
+        for (field<V> &f: def) {
+            str name  = f.key.hold();
+            str value = f.value.mem->type->functions->to_string(f.value.mem->origin);
+            printf("%s: default (%s)", name.cs(), value.cs());
+        }
+        return 1;
+    }
+
+    static map<V> parse(int argc, cstr *argv, map<V> &def) {
+        map<V> iargs = map<V>();
         ///
         for (int ai = 0; ai < argc; ai++) {
             cstr ps = argv[ai];
@@ -3463,10 +3310,10 @@ struct map:mx {
                 mx key {
                     cstr(&ps[is_single ? 1 : 2]), typeof(char)
                 };
-                field* found;
+                field<mx>* found;
                 if (is_single) {
-                    for (field &df: def.fields()) {
-                        symbol s = symbol(df.k);
+                    for (field<mx> &df: def) {
+                        symbol s = symbol(df.key);
                         if (ps[1] == s[0]) {
                             found = &df;
                             break;
@@ -3476,37 +3323,32 @@ struct map:mx {
                 ///
                 if (found) {
                     str     aval = str(argv[ai + 1]);
-                    type_t  type = found->v->type;
+                    type_t  type = found->value.type();
                     mx mstr = type->functions->from_string((none*)null, (cstr)aval.mem->origin);
                     iargs[key] = mstr;
                 } else {
-                    printf("arg not found: %s\n", key.mem->get<char>(0)); // shouldnt do this dangerous thing with strings
+                    printf("arg not found: %s\n", str(key.mem).data);
                     return {};
                 }
             }
         }
         ///
         /// return results in order of defaults, with default value given
-        map res = map();
-        for(field &df:def.data->fields.elements<field>()) {
-            field *ov = iargs->lookup(*(mx*)&df.k);
-            res.data->fields += field { ion::hold(df.k), ov ? ion::hold(ov->v) : ion::hold(df.v) };
+        map<V> res = map<V>();
+        for(field<V> &df:def.data->fields) {
+            field<V> *ov = iargs->lookup(df.key);
+            res.data->fields += { df.key, ov ? ov->value : df.value };
         }
         return res;
     }
 
-    ldata::literable<field> fields() const {
-        return data->elements();
-    }
-
     template <typename K>
-    array keys() {
-        return data->keys(); /// cannot pass K without a phony default arg.
+    array<K> keys() {
+        return data->keys((K*)null); /// cannot pass K without a phony default arg.
     }
 
-    template <typename V>
-    array values() {
-        return data->values<V>();
+    array<V> values() {
+        return data->values();
     }
 
     size_t len() { return data->fields->len(); }
@@ -3514,54 +3356,71 @@ struct map:mx {
     void print();
 
     /// props bypass dependency with this operator returning a list of field, which is supported by mx (map would not be)
-    operator   doubly &() { return data->fields; }
+    operator doubly<field<V>> &() { return data->fields; }
     bool       operator()(mx key) { return (*data)(key); }
 
     bool contains(mx key) { return (*data)(key); }
     
-    operator bool() { return mx::mem && *data; }
+    operator               bool() { return mx::mem && *data; }
 
-    template <typename K> K &get(const K &k) const { return lookup(k)->value; }
+    template <typename K>  K &get(K k) const { return lookup(k)->value; }
+    inline liter<field<V>>     begin() const { return data->fields->begin(); }
+    inline liter<field<V>>       end() const { return data->fields->end();   }
 
     mx_object(map, mx, mdata);
 
     /// when a size is specified to map, it engages hash map mode
     map(size sz) : map() {
-        data->fields = doubly();
-        if (sz) data->hash_map = new hashmap(sz);
+        data->fields = doubly<field<V>>();
+        if (sz) data->hash_map = new hmap(sz);
     }
 
     map(size_t sz) : map() {
-        data->fields = doubly();
-        if (sz) data->hash_map = new hashmap(sz);
+        data->fields = doubly<field<V>>();
+        if (sz) data->hash_map = new hmap(sz);
     }
 
-    map(initial<field> args) : map(size(0)) {
-        for(const field &f:args)
-            data->fields += f;
+    map(initial<field<V>> args) : map(size(0)) {
+        for(auto &f:args) data->fields += f;
     }
 
-    map(const array &arr) : map(size(default_hash_size)) {
-        for(field &f:arr.elements<field>()) data->fields += f;
+    map(array<field<V>> arr) : map(size(default_hash_size)) {
+        for(field<V> &f:arr)  data->fields += f;
     }
 
-    map(const doubly &li) : map(size(default_hash_size)) {
-        for(field &f:li.elements<field>()) data->fields += f;
+    map(doubly<field<V>> li) : map(size(default_hash_size)) {
+        for(field<V> &f:li)   data->fields += f;
     }
     
-    mx &operator[](const mx &k) { return (*data)[k]; }
-
+    /// pass through key operator
     template <typename K>
-    mx &operator[](K k) {
-        u64 hash = hash_value(k);
-        return (*data)[hash];
-    }
+    inline V &operator[](K k) { return (*data)[k]; }
 };
 
+using args = map<mx>;
 
-template <> struct is_map  <map>   : true_type { };
+template <typename T> struct is_array<array<T>> : true_type  {};
+template <typename T> struct is_map  <map  <T>> : true_type  {};
 
-using args = map;
+template <typename T>
+struct assigner {
+    protected:
+    T val;
+    lambda<void(bool&)> &on_assign;
+    public:
+
+    ///
+    inline assigner(T v, lambda<void(bool&)> &fn) : val(v), on_assign(fn) { }
+
+    ///
+    inline operator T() { return val; }
+
+    /// the cycle must end [/picard-shoots-picard]
+    inline void operator=(T n) {
+        val = n; /// probably wont set this
+        on_assign(val);
+    }
+};
 
 template <typename T>
 struct uniques:mx {
@@ -3573,26 +3432,37 @@ struct uniques:mx {
         data->uset = l;
     }
 
-    bool set(const T &v) {
+    bool set(T v) {
         std::pair<typename std::unordered_set<T>::iterator, bool> i = data->uset.insert(v);
         return bool(i.second);
     }
 
-    bool unset(const T &v) {
+    bool unset(T v) {
         size_t count = data->uset.erase(v);
         return count == 1;
     }
 
-    bool contains(const T &v) {
+    bool contains(T v) {
         return data->uset.find(v) != data->uset.end();
     }
 
-    inline bool operator[](const T &v) const {
-        return contains(v);
+    /// bit ridiculous, but why not have the syntax
+    inline assigner<bool> operator[](T v) const {
+        lambda<void(bool&)> fn {
+            [&](bool &from_assign) -> void {
+                if (from_assign)
+                    data->uset.insert(v);
+                else
+                    data->uset.erase(v);
+            }
+        };
+        return { v, fn };
     }
 
     mx_basic(uniques)
 };
+
+using Map = map<mx>;
 
 template <typename T>
 class has_count {
@@ -3635,14 +3505,14 @@ struct states:mx {
             const size_t sz = 32 * (T::count + 1);
             char format[sz];
             ///
-            doubly &symbols = T::symbols();
+            doubly<memory*> &symbols = T::symbols();
             ///
             u64    v     = data->bits;
             size_t c_id  = 0;
             size_t c_len = 0;
             bool   first = true;
             ///
-            for (memory *sym: symbols.elements<memory*>()) {
+            for (memory *sym:symbols) {
                 if (v & 1 && c_id == sym->id) {
                     char *name = (char*)sym->origin;
                     if (!first)
@@ -3661,18 +3531,18 @@ struct states:mx {
         }
     }
 
-    void clear(const T &v) {
+    void clear(T v) {
         u64 f = to_flag((i64)i32(v));
         data->bits &= ~f;
     }
 
-    void set(const T &v) {
+    void set(T v) {
         u64 f = to_flag((i64)i32(v)); /// this was reading u64 from an int, segfaulting
         data->bits |= f;
     }
 
     template <typename ET>
-    inline bool operator[](const ET &varg) const {
+    inline assigner<bool> operator[](ET varg) const {
         u64 f = 0;
         if constexpr (identical<ET, initial<T>>()) {
             for (auto &v:varg)
@@ -3683,10 +3553,18 @@ struct states:mx {
         } else
             f = to_flag(i32(varg));
         
-        return (data->bits & f) == f;
+        lambda<void(bool&)> fn {
+            [this, f](bool &from_assign) -> void {
+                if (from_assign)
+                    data->bits |=  f;
+                else
+                    data->bits &= ~f;
+            }
+        };
+        return { bool((data->bits & f) == f), fn };
     }
 
-    operator memory*() { return ion::hold(mem); }
+    operator memory*() { return hold(); }
 };
 
 #ifdef WIN32
@@ -3725,7 +3603,7 @@ struct logger {
     inline static lambda<void(mx)> service;
 
     protected:
-    static void _print(const str &st, const array &ar, const states<option> opts) {
+    static void _print(const str &st, const array<mx> &ar, const states<option> opts) {
         static std::mutex mtx;
         mtx.lock();
         str msg = st.format(ar);
@@ -3739,12 +3617,12 @@ struct logger {
 
 
     public:
-    inline void log(mx m, array ar = {}) {
+    inline void log(mx m, array<mx> ar = {}) {
         str st = m.to_string();
         _print(st, ar, { });
     }
 
-    void test(const bool cond, mx templ = {}, array ar = {}) {
+    void test(const bool cond, mx templ = {}, array<mx> ar = {}) {
         #ifndef NDEBUG
         if (!cond) {
             str st = templ.count() ? templ.to_string() : null;
@@ -3761,10 +3639,10 @@ struct logger {
         return s;
     }
 
-    inline void fault(mx m, array ar = array { }) { str s = m.to_string(); _print(s, ar, { err }); brexit(); }
-    inline void error(mx m, array ar = array { }) { str s = m.to_string(); _print(s, ar, { err }); brexit(); }
-    inline void print(mx m, array ar = array { }) { str s = m.to_string(); _print(s, ar, { append }); }
-    inline void debug(mx m, array ar = array { }) { str s = m.to_string(); _print(s, ar, { append }); }
+    inline void fault(mx m, array<mx> ar = array<mx> { }) { str s = m.to_string(); _print(s, ar, { err }); brexit(); }
+    inline void error(mx m, array<mx> ar = array<mx> { }) { str s = m.to_string(); _print(s, ar, { err }); brexit(); }
+    inline void print(mx m, array<mx> ar = array<mx> { }) { str s = m.to_string(); _print(s, ar, { append }); }
+    inline void debug(mx m, array<mx> ar = array<mx> { }) { str s = m.to_string(); _print(s, ar, { append }); }
 };
 
 /// define a logger for global use; 'console' can certainly be used as delegate in mx or node, for added context
@@ -3935,7 +3813,7 @@ struct path:mx {
         return  s.c_str();
     }
 
-    static path  format(str t, array args) {
+    static path  format(str t, array<mx> args) {
         return t.format(args);
     }
 
@@ -3968,14 +3846,13 @@ struct path:mx {
         return true;
     }
 
-    bool append(const array &bytes) {
-        assert(bytes.type() == typeof(u8));
+    bool append(array<uint8_t> bytes) {
         fs::path *pdata = this->pdata();
         try {
             size_t sz = bytes.len();
             std::ofstream f(*pdata, std::ios::out | std::ios::binary | std::ios::app);
             if (sz)
-                f.write((symbol)bytes.data<u8>(), sz);
+                f.write((symbol)bytes.data, sz);
         } catch (std::ofstream::failure e) {
             std::cerr << "read failure on resource: " << pdata->string() << std::endl;
         }
@@ -3985,30 +3862,42 @@ struct path:mx {
     /// visual studio code should use this
     bool same_as  (path b) const { std::error_code ec; return fs::equivalent(*pdata(), *b.pdata(), ec); }
 
-    void resources(array exts, states<option> states, Fn fn) {
+    void resources(array<str> exts, states<option> states, Fn fn) {
         fs::path *pdata     = this->pdata();
         bool use_gitignore	= states[ option::use_git_ignores ];
         bool recursive		= states[ option::recursion       ];
         bool no_hidden		= states[ option::no_hidden       ];
-        array ignore        = states[ option::use_git_ignores ] ? path((*pdata / ".gitignore").string().c_str()).read<str>().split("\n") : array();
+        array<str> ignore   = states[ option::use_git_ignores ] ? path((*pdata / ".gitignore").string().c_str()).read<str>().split("\n") : array<str>();
         lambda<void(path)> res;
-        map        fetched_dir;  /// this is temp and map needs a hash lambdas pronto
+        map<mx>    fetched_dir;  /// this is temp and map needs a hash lambdas pronto
         fs::path   parent   = *pdata; /// parent relative to the git-ignore index; there may be multiple of these things.
 
         ///
         res = [&](path a) {
             auto fn_filter = [&](ion::path p) -> bool {
                 str      ext = p.ext4();
-                bool proceed = (!exts || exts.contains(ext)) ? (!no_hidden || !is_hidden()) : false;
+                bool proceed = false;
+                /// proceed if the extension is matching one, or no extensions are given
+                if (!exts) {
+                    proceed = !no_hidden || !is_hidden();
+                } else
+                    for (size_t i = 0; i < exts.len(); i++) {
+                        const str &e = (const str &)exts[i];
+                        if (ext == e) {
+                            proceed = !no_hidden || !is_hidden();
+                            break;
+                        }
+                    }
 
                 /// proceed if proceeding, and either not using git ignore,
                 /// or the file passes the git ignore collection of patterns
+                
                 if (proceed && use_gitignore) {
                     path    pp = path(parent.string().c_str());
                     path   rel = pp.relative(p); // original parent, not resource parent
                     str   srel = rel;
                     ///
-                    for (str& i: ignore.elements<str>())
+                    for (str& i: ignore)
                         if (i && srel.has_prefix(i)) {
                             proceed = false;
                             break;
@@ -4052,8 +3941,8 @@ struct path:mx {
         return res(sym);
     }
 
-    array matching(array exts) {
-        auto ret = array();
+    array<path> matching(array<str> exts) {
+        auto ret = array<path>();
         resources(exts, { }, [&](path p) { ret += p; });
         return ret;
     }
@@ -4130,13 +4019,13 @@ struct base64 {
         return encoded;
     }
 
-    static array decode(symbol b64, size_t b64_len) {
+    static array<u8> decode(symbol b64, size_t b64_len) {
         assert(b64_len % 4 == 0);
         /// --------------------------------------
         umap<size_t, size_t> &dec = dec_map();
         size_t alloc_sz = b64_len / 4 * 3;
-        array out(typeof(u8), alloc_sz + 1);
-        u8     *o = (u8*)out.data<u8>();
+        array<u8> out(size_t(alloc_sz + 1));
+        u8     *o = out.data;
         size_t  n = 0;
         size_t  e = 0;
         /// --------------------------------------
@@ -4196,13 +4085,14 @@ protected:
 
     str stringify() const;
 
-    //map items();
-    //array list();
+    map<mx> items();
+
+    array<mx> list();
 
     /// default constructor constructs map
     var();
     var(mx b);
-    var(map m);
+    var(map<mx> m);
 
     template <typename T>
     var(const T b) : mx(alloc(&b)) { }
@@ -4216,29 +4106,30 @@ protected:
 
         if constexpr (identical<KT, char*>() || identical<KT, const char*>() || identical<KT, str>()) {
             /// if key is something else just pass the mx to map
-            map::mdata *ptr = mx::get<map::mdata>(0);
-            assert(ptr);
+            map<mx>::mdata &dref = mx::mem->ref<map<mx>::mdata>();
+            assert(&dref);
             mx skey = mx(key);
-            return *(var*)&(*ptr)[skey];
+            return *(var*)&dref[skey];
         } else if (kt->traits & traits::integral) {    
-            assert(data_type == typeof(array) || data_type == typeof(mx)); // array or mx
-            mx *ptr = mx::get<mx>(0);
-            assert(ptr);
+            assert(data_type == typeof(array<mx>) || data_type == typeof(mx)); // array<mx> or mx
+            mx *dref = mx::mem->data<mx>(0);
+            assert(dref);
             size_t ix;
                  if (kt == typeof(i32)) ix = size_t(int(key));
             else if (kt == typeof(u32)) ix = size_t(int(key));
             else if (kt == typeof(i64)) ix = size_t(int(key));
             else if (kt == typeof(u64)) ix = size_t(int(key));
             else {
-                console.fault("weird integral type given for indexing var: {0}\n", array { mx((symbol)kt->name) });
+                console.fault("weird integral type given for indexing var: {0}\n", array<mx> { mx((symbol)kt->name) });
                 ix = 0;
             }
-            return *(var*)&ptr[ix];
+            return *(var*)&dref[ix];
         } else if (kt == typeof(mx)) {
-            map::mdata *ptr = mx::mem->get<map::mdata>(0);
-            assert(ptr);
+            /// not able to pass a integer via mx
+            map<mx>::mdata &dref = mx::mem->ref<map<mx>::mdata>();
+            assert(&dref);
             mx skey = mx(key);
-            return *(var*)&(*ptr)[skey];
+            return *(var*)&dref[skey];
         }
         console.fault("incorrect indexing type provided to var");
         return *this;
@@ -4258,20 +4149,8 @@ protected:
 
     operator bool();
 
-    ldata::literable<field> fields() const { // replaces items
-        map iter;
-        if (mem->type->traits & traits::map)
-            iter = mem->hold();
-        return iter.fields();
-    }
-
-    template <typename T>
-    iterable<T> elements() const { // replaces list
-        array iter;
-        if (mem->type->traits & traits::array)
-            iter = mem->hold();
-        return iter.elements<T>();
-    }
+    liter<field<var>> begin() const;
+    liter<field<var>>   end() const;
 };
 
 using FnFuture = lambda<void(mx)>;
@@ -4287,7 +4166,18 @@ memory* mem_symbol(ion::symbol cs, type_t ty, i64 id);
 void *  mem_origin(memory *mem);
 memory *   cstring(cstr cs, size_t len, size_t reserve, bool is_constant);
 
-/// wouldnt include the doubly or the hashmap; for those we wont have a function table
+template <typename K, typename V>
+pair<K,V> *hmap<K, V>::shared_lookup(K input) {
+    pair* p = lookup(input);
+    return p;
+}
+
+struct types {
+    static inline hmap<ion::symbol, type_t> *type_map;
+    static idata *lookup(str &);
+    static void hash_type(type_t);
+};
+
 template<typename T>
 struct is_allowed_type {
     static constexpr bool value = 
@@ -4300,12 +4190,6 @@ struct is_allowed_type {
 template<typename... Ts>
 struct allowed_types {
     static constexpr bool value = (... && is_allowed_type<Ts>::value);
-};
-
-struct type_cache {
-    static inline hashmap *type_map;
-    static idata *lookup(str &);
-    static void hash_type(type_t);
 };
 
 template <typename T>
@@ -4372,13 +4256,6 @@ idata *ident::for_type() {
             if constexpr (true || registered<T>() || is_external<T>::value) {
                 ops<T> *fn = (ops<T>*)ftable<T>();
 
-                /// avoid expansion for Array<T>, Map<T>
-                if constexpr ((is_array<T>() && !identical<T, array>()) ||
-                              (is_map  <T>() && !identical<T, map>())) {
-                    type->functions = typeof(array)->functions;
-                    return type;
-                }
-
                 type->functions = (ops<none>*)fn;
 
                 using _T = T;
@@ -4390,11 +4267,13 @@ idata *ident::for_type() {
                             res = T(a + b);
                         };
                     }
+
                     if constexpr (has_multiply<T>::value) {
                         fn->mul = [](const _T &a, const T &b, _T &res) -> void {
                             res = a * b;
                         };
                     }
+
                     if constexpr (has_multiply_scalar<T>::value) {
                         static_assert(std::is_same<decltype(std::declval<T>() * std::declval<float>()), T>::value, "Operator * does not return expected type");
                         fn->mul_scalar = [](const _T &a, const float b, _T &res) -> void {
@@ -4403,12 +4282,13 @@ idata *ident::for_type() {
                     }
                 }
 
+
                 if constexpr (!std::is_array<T>::value && ion::inherits<mx, T>())
                     fn->set_memory = [](_T *dst, ion::memory *mem) -> void {
                         if constexpr (ion::inherits<mx, _T>())
                             if (dst->mem != mem) {
                                 dst -> ~_T();
-                                new (dst) _T(mem ? ion::hold(mem) : null);
+                                new (dst) _T(mem ? ion::hold(mem) : (ion::memory*)null);
                             }
                     };
 
@@ -4437,6 +4317,7 @@ idata *ident::for_type() {
 
                     fn->destruct   = [](C *dst0, _T *dst) -> void { dst -> ~_T(); };
                 }
+
 
                 fn->copy       = [](C *dst0, _T *dst, _T *src) -> void {
                     if constexpr (std::is_same_v<_T, std::filesystem::path>)
@@ -4514,15 +4395,7 @@ idata *ident::for_type() {
 
                 if constexpr (registered_compare<T>())
                     fn->compare = CompareFn<T>(T::_compare);
-
-                if constexpr (has_equals<T>::value)
-                    fn->equals = [](T* a, T* b, size_t count) -> bool {
-                        for (int i = 0; i < count; i++)
-                            if (!(a[i] == b[i]))
-                                return false;
-                        return true;
-                    };
-
+                
                 if constexpr (registered_hash<T>())
                     fn->hash = HashFn<T>(T::hash);
                 else if constexpr (external_hash<T>())
@@ -4563,7 +4436,7 @@ idata *ident::for_type() {
                 /// for simplicity sake just none of either
                 /// when you dont have this set on the type, the test for it failed; thus your lambda cannot be invoked through introspection
                 if constexpr (allowed_types<args_t>::value && (identical<void, rtype>() || is_convertible<rtype, mx>()))
-                    type->generic_lambda = new GenericLambda([type=type](void* ldata, const array &args) -> mx {
+                    type->generic_lambda = new GenericLambda([type=type](void* ldata, array<str> &args) -> mx {
                         ///
                         lcontainer *data = (lcontainer*)ldata;
 
@@ -4575,7 +4448,7 @@ idata *ident::for_type() {
                         #define ARG(N) \
                             using   T ## N = std::remove_const_t<std::remove_reference_t<std::tuple_element_t<N, args_t>>>;\
                             type_t  t ## N = typeof(T ## N);\
-                            T ## N* a ## N = (T ## N *)(t ## N)->functions->from_string((none*)null, args.get<str>(N).cs());
+                            T ## N* a ## N = (T ## N *)(t ## N)->functions->from_string((none*)null, args[N].cs());
                         if constexpr (n_args == 0) {
                             if constexpr (identical<void, rtype>()) 
                                 (*data->fn)();
@@ -4621,10 +4494,10 @@ idata *ident::for_type() {
             ///
             if constexpr (registered_instance_meta<T>()) {
                 static T *def = new T();
-                type->meta    = new doubly { def->meta() }; /// make a reference to this data
-                for (prop &p: type->meta->elements<prop>()) {
+                type->meta    = new doubly<prop> { def->meta() }; /// make a reference to this data
+                for (prop &p: *type->meta) {
                     p.offset     = size_t(p.member_addr) - size_t(def);
-                    p.s_key      = new str(ion::hold(p.key));
+                    p.s_key      = new str(p.key->hold());
                     p.parent_type = type; /// we need to store what type it comes from, as we dont always have this context
 
                     /// this use-case is needed for user interfaces without css defaults
@@ -4642,41 +4515,28 @@ idata *ident::for_type() {
                     }
                 }
                 delete def;
-                prop_map *pmap = new prop_map(size_t(16));
-                doubly   *meta = (doubly*)type->meta;
-                for (ion::prop &prop: meta->elements<ion::prop>()) {
+                prop_map     *pmap = new prop_map(size_t(16));
+                doubly<prop> *meta = (doubly<prop>*)type->meta;
+                for (ion::prop &prop: *meta) {
                     symbol prop_name = prop.name();
-                    mx sym = mem_symbol(prop_name);
-                    (*pmap)[sym] = mx::pointer(&prop);
+                    (*pmap)[prop_name] = &prop;
                 }
                 type->meta_map = pmap;
             }
-            type_cache::hash_type(type);
+            types::hash_type(type);
         }
     }
     return type_t(type);
 }
 
 template <typename T>
-T *memory::get(size_t index) const {
+T *memory::data(size_t index) const {
     if constexpr (type_complete<T>) {
-        type_t dtype = typeof(T);
+        type_t dtype = ident::for_type<T>();
         return (T*)typed_data(dtype, index);
     } else {
         assert(index == 0);
         return (T*)origin;
-    }
-}
-
-template <typename T>
-T *memory::set(size_t index, const T &v) {
-    if constexpr (type_complete<T>) {
-        type_t dtype = typeof(T);
-        *(T*)typed_data(dtype, index) = v;
-        return (T*)origin + index;
-    } else {
-        assert(index == 0);
-        return (T*)origin + index;
     }
 }
 
@@ -4686,84 +4546,56 @@ ops<T> *ftable() {
     return (ops<T>*)&gen;
 }
 
-void map::print() {
-    for (field &f: fields()) {
-        str k = str(ion::hold(f.k));
-        str v = str(ion::hold(f.v));
-        console.log("key: {0}, value: {1}", array { k, v });
+template <typename V>
+void map<V>::print() {
+    for (field<V> &f: *this) {
+        str k = str(f.key.hold());
+        str v = str(f.value.hold());
+        console.log("key: {0}, value: {1}", { k, v });
     }
 }
 
-/// we need to rename hashmap.  its such a mundane unnoticable name.  stupid to say too..
+template <typename K, typename V>
+V &hmap<K,V>::operator[](K input) {
+    u64 k;
+    
+    /// lookup a pointer to V
+    using ldata = typename doubly<pair>::ldata;
+    ldata *b = null;
+    V*  pv = lookup(input, &k, &b); /// this needs to lock in here
+    if (pv) return *pv;
+    
+    /// default allocation on V; here we need constexpr switch on V type, res
+    if        constexpr (std::is_integral<V>()) {
+        *b += pair { input, V(0) };
+    } else if constexpr (std::is_pointer<V>()) {
+        *b += pair { input, V(null) };
+    } else if constexpr (std::is_default_constructible<V>()) {
+        *b += pair { input, V() };
+    } else
+        static_assert("hash V-type is not default initializable (and you Know it must be!)");
+    
+    V &result = b->last().value;
+    return result;
+}
 
-item* hashmap::item(const mx &key, bucket **list) const {
-    const u64 k = hash_index(key, data->sz);
-    const bucket &hist = (*data)[k];
-    if (list)
-        *list = (bucket*)&hist;
-    for (ion::item &fi: hist.items()) {
-        ion::field &f = *(ion::field*)fi.mem->origin;
-        const mx &k = *(mx*)&f.k;
-        if (k == key)
-            return &fi;
-    }
+struct test1 {
+    static inline int test;
+};
+
+template <typename K, typename V>
+V* hmap<K,V>::lookup(K input, u64 *pk, bucket **pbucket) const {
+    u64 k = hash_index(input, data->sz); // todo: make sure this has uniformity
+    if (pk) *pk  =   k;
+    bucket &hist = (*data)[k];
+
+    for (pair &p: hist)
+        if (p.key == input) {
+            if (pbucket) *pbucket = &hist;
+            return &p.value;
+        }
+    if (pbucket) *pbucket = &hist;
     return null;
-}
-
-/// always creates a field
-field &hashmap::field(const mx &key) {
-    bucket     *list = null;
-    ion::item  *fi   = item(key, &list);
-    ion::field *f    = null;
-    if (!fi) {
-        list->push(ion::field { ion::hold(key), null });
-        f = &list->last<ion::field>();
-    } else {
-        f = fi->mem->get<ion::field>(0);
-    }
-    return *f;
-}
-
-mx &hashmap::operator[](const mx &key) {
-    ion::field &f = field(key);
-    return *(mx*)&f.v;
-}
-
-mx &hashmap::value(const mx &key) {
-    ion::item  *fi = item(key);
-    ion::field *f  = (ion::field*)fi->mem->origin;
-    return f ? *(mx*)&f->v : *defaults<mx>();
-}
-
-/// get rid of 'memory::' types, and use allocate, drag, drop, etc
-/// under ion
-
-void hashmap::set(const mx &key, const mx &value) {
-    ion::field &f = field(key);
-    if (value.mem != f.v) {
-        ion::drop(f.v);
-        f.v = ion::hold(value);
-    }
-}
-
-template <typename K>
-mx &hashmap::lookup(const K &k) const {
-    mx key(k);
-    return lookup(key);
-}
-
-bool hashmap::remove(const mx &key) {
-    bucket *list = null;
-    ion::item *fi = item(key, &list);
-    if (fi && list) {
-        list->remove(fi);
-        return true;
-    }
-    return false;
-}
-
-bool hashmap::contains(const mx &key) const {
-    return item(key, null);
 }
 
 template <typename T>
@@ -4783,7 +4615,7 @@ bool path::write(T input) const {
         if (input.len() > 0)
             f.write((symbol)input.cs(), input.len());
     } else {
-        console.log("path conversion to {0} is not implemented. surely it wont take long.", { mx(typeof(T)->name) });
+        console.log("path conversion to {0} is not implemented. do it, im sure it wont take long.", { mx(typeof(T)->name) });
         return false;
     }
     return true;
@@ -4811,11 +4643,11 @@ T path::read(symbol subpath) const {
             return T();
     }
 
-    if constexpr (identical<T, array>()) {
+    if constexpr (identical<T, array<u8>>()) {
         std::ifstream input(data->p, std::ios::binary);
         std::vector<char> buffer(std::istreambuf_iterator<char>(input), { });
-        array res(typeof(u8), buffer.size());
-        memcpy(res.data<u8>(), (u8*)buffer.data(), buffer.size());
+        array<u8> res(buffer.size());
+        memcpy(res.data, (u8*)buffer.data(), buffer.size());
         res.set_size(buffer.size());
     } else {
         std::ifstream fs;

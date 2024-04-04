@@ -1,8 +1,9 @@
 #include <mx/mx.hpp>
+#include <sys/stat.h>
 
 namespace ion {
 
-static path path::cwd() {
+path path::cwd() {
     return dir::cwd();
 }
 
@@ -22,8 +23,33 @@ path::path(symbol  cs) : path() {
     data->p = fs::path(cs);
 }
 
-bool path::get_modified_date(struct tm *res);
-str  path::get_modified_string();
+bool path::get_modified_date(struct tm *res) {
+    const char* filename = cs();
+    struct stat file_stat;
+
+    if (stat(filename, &file_stat) == -1) {
+        perror("stat");
+        return false;
+    }
+    static mutex mx;
+    mx.lock();
+    *res = *gmtime(&file_stat.st_mtime);
+    mx.unlock();
+    return true;
+}
+
+str path::get_modified_string() {
+    str result(size_t(128));
+    struct tm gm_time;
+    ///
+    if (get_modified_date(&gm_time)) {
+        // RFC 1123 format (used with http)
+        if (strftime(result.data, result.reserve(), "%a, %d %b %Y %H:%M:%S GMT", &gm_time) == 0)
+            fprintf(stderr, "strftime failed\n");
+    }
+    return result;
+}
+
 
 /// utility for knowing if you are trying to go up beyond a relative dir
 /// without any dir analysis is more reduced
@@ -58,7 +84,14 @@ fs::path *path::pdata() const {
     return &data->p;
 }
 
-str  path::      mime_type();
+str path::mime_type() {
+    mx e = ext().mid(1).symbolize();
+    static path data = "data/mime-type.json";
+    static map  js   =  data.read<var>();
+    field      *find = js->lookup(e);
+    return find ? ion::hold(find->v) : ion::hold(js["default"]);
+}
+
 str  path::           stem() const { return !pdata()->empty() ? str(pdata()->stem().string()) : str(null);    }
 bool path::     remove_all() const { std::error_code ec;          return fs::remove_all(*pdata(), ec); }
 bool path::         remove() const { std::error_code ec;          return fs::remove(*pdata(), ec); }
@@ -73,11 +106,13 @@ path path::remove_filename()       {
 bool path::   has_filename() const { return pdata()->has_filename(); }
 path path::           link() const { return fs::is_symlink(*pdata()) ? path(pdata()->string().c_str()) : path(); }
 bool path::        is_file() const { return !fs::is_directory(*pdata()) && fs::is_regular_file(*pdata()); }
-char path::            *cs() const {
+
+char *path::cs() const {
     static std::string static_thing;
     static_thing = pdata()->string();
     return (char*)static_thing.c_str();
 }
+
 path::operator cstr() const {
     return cstr(cs());
 }
@@ -115,10 +150,12 @@ path path::link(path alias) const {
 }
 
 /// operators
-operator      path::  bool()         const {
+path::operator bool()         const {
     return cs()[0];
 }
-operator      path::   str()         const { return str(cs()); }
+
+path::operator str() const { return str(cs()); }
+
 path          path::parent()         const {
     std::string s = pdata()->parent_path().string();
     return  s.c_str();
@@ -136,7 +173,7 @@ bool  path::operator==(symbol     b) const { return *pdata() == b; }
 bool  path::operator!=(symbol     b) const { return !(operator==(b)); }
 
 ///
-static path path::uid(path b) {
+path path::uid(path b) {
     auto rand = [](num i) -> str { return rand::uniform('a', 'z'); };
     fs::path p { };
     do { p = fs::path(str::fill(6, rand)); }
@@ -145,7 +182,7 @@ static path path::uid(path b) {
     return  s.c_str();
 }
 
-static path  path::format(str t, array args) {
+path  path::format(str t, array args) {
     return t.format(args);
 }
 

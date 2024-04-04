@@ -1571,11 +1571,6 @@ struct fmt:str {
     operator memory*() { return ion::hold(mem); } // ? lol
 };
 
-/// cstr operator overload
-str operator+(cstr cs, str rhs) { return str(cs) + rhs; }
-
-
-
 template <typename T> using MetaFn = properties(*)(T*);
 
 /// must cache by cstr, and id; ideally support any sort of id range
@@ -1727,7 +1722,7 @@ idata *ident::for_type() {
 
             type->name    = parse_fn(__PRETTY_FUNCTION__);
 
-            if constexpr (true || registered<T>() || is_external<T>::value) {
+            if constexpr (true) {
                 ops<T> *fn = (ops<T>*)ftable<T>();
 
                 /// avoid expansion for Array<T>, Map<T>

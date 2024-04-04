@@ -29,7 +29,7 @@ field &map::mdata::fetch(const mx &k) {
     fields += field { k.mem, (memory*)null };
     field &last = fields->last<field>();
 
-    if (hash_map) (*hash_map)[k] = &last;
+    if (hash_map && *hash_map) (*hash_map)[k] = (field*)&last;
 
     return last;
 }
@@ -120,7 +120,7 @@ mx &map::mdata::operator[](const mx &key) {
 map::mdata::operator bool() { return ((hash_map && hash_map->len() > 0) || (fields->len() > 0)); }
 
 
-    map map::mdata::parse(int argc, cstr *argv, map &def) {
+    map map::parse(int argc, cstr *argv, map &def) {
         map iargs = map();
         ///
         for (int ai = 0; ai < argc; ai++) {
@@ -202,6 +202,5 @@ map::mdata::operator bool() { return ((hash_map && hash_map->len() > 0) || (fiel
     }
     
     mx &map::operator[](const mx &k) { return (*data)[k]; }
-};
 
 }

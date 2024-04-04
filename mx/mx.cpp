@@ -10,6 +10,45 @@
 
 namespace ion {
 
+/// cstr operator overload
+str operator+(cstr cs, str rhs) { return str(cs) + rhs; }
+
+item& liter_item::operator *     () const { return *cur; }
+
+      liter_item::operator item& () const { return *cur; }
+
+void ldata::pop(mx *prev) {
+    assert(icount);
+    if (prev)
+       *prev = ion::hold(ilast->mem);
+    remove(-1);
+}
+
+hashmap::hashmap(size_t sz) : mem(memory::alloc(typeof(hmdata))), data(mem->get<hmdata>(0)) { data->sz = sz; }
+
+hashmap& hashmap::operator=(hashmap &a) {
+    ion::drop(mem);
+    mem = ion::hold(a.mem);
+    return *this;
+}
+
+doubly::doubly(memory* mem) : mem(mem), data(mem->get<ldata>(0)) { }
+
+doubly::doubly() : doubly(memory::alloc(typeof(ldata))) { }
+
+doubly::doubly(const doubly &ref) : doubly(ion::hold(ref.mem)) { }
+
+doubly::~doubly() {
+    ion::drop(mem);
+}
+
+item   *ldata::first_item() const { return ifirst; }
+item   *ldata:: last_item() const { return ilast; }
+
+mx     &ldata::  first_mx() const { return *(mx*)&ifirst->mem; }
+mx     &ldata::   last_mx() const { return *(mx*)&ilast ->mem; }
+
+
 template <>
 str convert_str<str>(const str& s) {
     return s;
@@ -123,14 +162,6 @@ int snprintf(cstr str, size_t size, const char *format, ...) {
         // handle error here
     }
     return n;
-}
-
-str path::mime_type() {
-    mx e = ext().mid(1).symbolize();
-    static path data = "data/mime-type.json";
-    static map  js   =  data.read<var>();
-    field      *find = js->lookup(e);
-    return find ? ion::hold(find->v) : ion::hold(js["default"]);
 }
 
 i64 integer_value(memory *mem) {
@@ -384,33 +415,6 @@ void usleep(__int64 usec) {
 }
 #endif
 
-bool path::get_modified_date(struct tm *res) {
-    const char* filename = cs();
-    struct stat file_stat;
-
-    if (stat(filename, &file_stat) == -1) {
-        perror("stat");
-        return false;
-    }
-    static mutex mx;
-    mx.lock();
-    *res = *gmtime(&file_stat.st_mtime);
-    mx.unlock();
-    return true;
-}
-
-str path::get_modified_string() {
-    str result(size_t(128));
-    struct tm gm_time;
-    ///
-    if (get_modified_date(&gm_time)) {
-        // RFC 1123 format (used with http)
-        if (strftime(result.data, result.reserve(), "%a, %d %b %Y %H:%M:%S GMT", &gm_time) == 0)
-            fprintf(stderr, "strftime failed\n");
-    }
-    return result;
-}
-
 memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
     if (type->singleton)
         return ion::hold(type->singleton);
@@ -480,13 +484,6 @@ memory *memory::copy(size_t reserve) {
     memory *res = alloc(a->type, a->count, reserve, a->origin);
     return  res;
 }
-
-size &size::operator=(const size b) {
-    memcpy(values, b.values, sizeof(values));
-    count = b.count;
-    return *this;
-}
-
 
 bool chdir(std::string c) {
 #if defined(_WIN32)

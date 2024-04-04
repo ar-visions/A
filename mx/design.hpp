@@ -245,10 +245,6 @@ template<typename T>
 struct has_push<T, std::void_t<decltype(T::pushv(std::declval<T*>(), std::declval<memory*>()))>> : std::true_type {};
 
 
-/*
-
-
-
 /// type-api-check
 /// typeof usage need not apply registration, registration is about ops on the object not its identification; that only requires a name)
 template <typename T, typename = void> struct registered             : false_type { };
@@ -318,6 +314,3 @@ template <typename T> struct external_hash         <T, std::enable_if_t<std::is_
 
 template <typename T>
 struct registered_instance_meta<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().meta()), doubly>>> : true_type { };
-
-
-*/

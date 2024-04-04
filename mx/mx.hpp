@@ -624,6 +624,8 @@ struct size:buffer<num, 16> {
     size(i32            sz);
     size(u32            sz);
 
+    size(std::initializer_list<num> args);
+
     size_t    x() const;
     size_t    y() const;
     size_t    z() const;
@@ -643,9 +645,7 @@ struct size:buffer<num, 16> {
     size  &operator+=(size_t sz);
     size  &operator-=(size_t sz);
 
-    num &operator[](size_t index) const {
-        return (num&)values[index];
-    }
+    num &operator[](size_t index) const;
 
     size &zero();
 
@@ -841,24 +841,11 @@ T &ldata::push() {
     return ilast->mem->get<T>();
 }
 
-item   *ldata::first_item() const { return ifirst; }
-item   *ldata:: last_item() const { return ilast; }
-
-mx     &ldata::  first_mx() const { return *(mx*)&ifirst->mem; }
-mx     &ldata::   last_mx() const { return *(mx*)&ilast ->mem; }
-
 template <typename T>
 T   &ldata::first() const { return *ifirst->mem->get<T>(0); }
 
 template <typename T>
 T   &ldata::last() const { return *ilast->mem->get<T>(0); }
-
-void ldata::pop(mx *prev) {
-    assert(icount);
-    if (prev)
-       *prev = ion::hold(ilast->mem);
-    remove(-1);
-}
 
 template <typename T>
 void ldata::shift(mx* prev_first) {
@@ -880,24 +867,6 @@ void ldata::shift(mx* prev_first) {
     delete i;
 }
 
-hashmap::hashmap(size_t sz) : mem(memory::alloc(typeof(hmdata))), data(mem->get<hmdata>(0)) { data->sz = sz; }
-
-hashmap& hashmap::operator=(hashmap &a) {
-    ion::drop(mem);
-    mem = ion::hold(a.mem);
-    return *this;
-}
-
-doubly::doubly(memory* mem) : mem(mem), data(mem->get<ldata>(0)) { }
-
-doubly::doubly() : doubly(memory::alloc(typeof(ldata))) { }
-
-doubly::doubly(const doubly &ref) : doubly(ion::hold(ref.mem)) { }
-
-doubly::~doubly() {
-    ion::drop(mem);
-}
-
 template <typename T>
 T &ldata::data(num ix) const {
     assert(ix >= 0 && ix < num(icount));
@@ -909,9 +878,6 @@ T& liter<T>::operator *() const { return *cur->mem->get<T>(0); }
 
 template <typename T>
 liter<T>::operator T& () const { return *cur->mem->get<T>(0); }
-
-item& liter_item::operator *     () const { return *cur; }
-      liter_item::operator item& () const { return *cur; }
 
 template <typename K>
 K &field::  key() { return *k->get<K>(); }
@@ -1115,15 +1081,6 @@ struct map:mx {
     };
 
     static map parse(int argc, cstr *argv, map &def);
-        ///
-        /// return results in order of defaults, with default value given
-        map res = map();
-        for(field &df:def.data->fields.elements<field>()) {
-            field *ov = iargs->lookup(*(mx*)&df.k);
-            res.data->fields += field { ion::hold(df.k), ov ? ion::hold(ov->v) : ion::hold(df.v) };
-        }
-        return res;
-    }
 
     ldata::literable<field> fields() const;
 
@@ -1418,8 +1375,7 @@ struct path:mx {
     /// without any dir analysis is more reduced
     static bool backwards(cstr cs);
 
-    fs::path *pdata() const;
-
+    fs::path      *pdata() const;
     str        mime_type();
     str             stem() const;
     bool      remove_all() const;
@@ -1433,15 +1389,15 @@ struct path:mx {
     path            link() const;
     bool         is_file() const;
     char             *cs() const;
-    str         ext () const;
-    str         ext4() const;
-    path        file() const;
-    bool copy(path to) const;
+    str             ext () const;
+    str             ext4() const;
+    path            file() const;
+    bool     copy(path to) const;
     
     path &assert_file();
 
     /// create an alias; if successful return its location
-    path link(path alias) const;
+    path  link(path alias) const;
 
     /// operators
     operator        bool()         const;

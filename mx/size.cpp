@@ -2,7 +2,7 @@
 
 namespace ion {
 
-size::size(num        sz = 0) { memset(values, 0, sizeof(values)); values[0] = sz; count = 1; }
+size::size(num            sz) { memset(values, 0, sizeof(values)); values[0] = sz; count = 1; }
 size::size(null_t           ) : size(num(0))  { }
 size::size(size_t         sz) : size(num(sz)) { }
 size::size(i8             sz) : size(num(sz)) { }
@@ -11,6 +11,7 @@ size::size(i16            sz) : size(num(sz)) { }
 size::size(u16            sz) : size(num(sz)) { }
 size::size(i32            sz) : size(num(sz)) { }
 size::size(u32            sz) : size(num(sz)) { }
+
 size::size(std::initializer_list<num> args) : base() {
     size_t i = 0;
     for (auto &v: args)
@@ -53,16 +54,16 @@ num &size::operator[](size_t index) const {
 size &size::zero() { memset(values, 0, sizeof(values)); return *this; }
 
             size::operator num() const { return     area();  }
-explicit size::operator  i8() const { return  i8(area()); }
-explicit size::operator  u8() const { return  u8(area()); }
-explicit size::operator i16() const { return i16(area()); }
-explicit size::operator u16() const { return u16(area()); }
-explicit size::operator i32() const { return i32(area()); }
-explicit size::operator u32() const { return u32(area()); }
+size::operator  i8() const { return  i8(area()); }
+size::operator  u8() const { return  u8(area()); }
+size::operator i16() const { return i16(area()); }
+size::operator u16() const { return u16(area()); }
+size::operator i32() const { return i32(area()); }
+size::operator u32() const { return u32(area()); }
 //explicit size::operator i64() const { return i64(area()); }
-explicit size::operator u64() const { return u64(area()); }
-explicit size::operator r32() const { return r32(area()); }
-explicit size::operator r64() const { return r64(area()); }
+size::operator u64() const { return u64(area()); }
+size::operator r32() const { return r32(area()); }
+size::operator r64() const { return r64(area()); }
 
 num  &size::operator[](num i) { return values[i]; }
 
@@ -75,7 +76,11 @@ size &size::operator=(u32  i) { *this = size(i); return *this; }
 size &size::operator=(i64  i) { *this = size(i); return *this; }
 size &size::operator=(u64  i) { *this = size(i64(i)); return *this; }
 
-size &size::operator=(const size b);
+size &size::operator=(const size b) {
+    memcpy(values, b.values, sizeof(values));
+    count = b.count;
+    return *this;
+}
 
 size_t size::index_value(const size &index) const {
     size &shape = (size &)*this;

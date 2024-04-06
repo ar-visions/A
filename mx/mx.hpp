@@ -97,6 +97,7 @@ struct none {
 struct idata;
 struct mx;
 struct memory;
+struct MX;
 
 using raw_t = void*;
 using type_t = idata *;
@@ -105,8 +106,8 @@ void*     calloc64(size_t count, size_t size);
 void        free64(void* ptr);
 memory*       hold(memory *mem);
 memory*       drop(memory *mem);
-memory*       hold(const mx &o);
-memory*       drop(const mx &o);
+memory*       hold(const MX &o);
+memory*       drop(const MX &o);
 memory* mem_symbol(symbol cs, type_t ty, i64 id);
 void*   mem_origin(memory *mem);
 memory*    cstring(cstr cs, size_t len = UINT64_MAX, size_t reserve = 0, bool sym = false);
@@ -145,13 +146,6 @@ struct false_type {
     static constexpr bool value = false;
     constexpr operator bool() const noexcept { return value; }
 };
-
-
-template <typename T, typename = std::void_t<>>
-struct has_mix : std::false_type {};
-
-template <typename T>
-struct has_mix<T, std::void_t<decltype(std::declval<T>().mix(std::declval<T&>(), 1.0))>> : std::true_type {};
 
 template <typename T, typename = void> struct registered_instance_to_string : false_type { };
 template <typename T>                  struct registered_instance_to_string<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().to_string()), memory *>>> : true_type { };
@@ -218,10 +212,40 @@ struct item {
     struct item *next;
     struct item *prev;
     memory*      mem;
+    u64          hash; /// keep hash here; use as a filter in iteration
 
     /// return the wrapped item memory
     static item *container(memory *&mem) {
         return (item *)((symbol)&mem - sizeof(struct item*) * 2);
+    }
+};
+
+/// iterator unique for doubly
+struct liter_item {
+    item* cur;
+    ///
+    liter_item& operator++() { cur = cur->next; return *this; }
+    liter_item& operator--() { cur = cur->prev; return *this; }
+
+    item& operator *     () const;
+          operator item &() const;
+
+    bool operator==  (const liter_item& b) const { return cur == b.cur; }
+    bool operator!=  (const liter_item& b) const { return cur != b.cur; }
+};
+
+/// doubly is partnered with hashmap, so an iterator filters by hash
+struct liter_item_hash:liter_item {
+    u64   hash;
+    using LT = liter_item;
+    ///
+    liter_item_hash& operator++() {
+        do { LT::cur = LT::cur->next; } while (LT::cur && LT::cur->hash != hash);
+        return *this;
+    }
+    liter_item_hash& operator--() {
+        do { LT::cur = LT::cur->prev; } while (LT::cur && LT::cur->hash != hash);
+        return *this;
     }
 };
 
@@ -240,19 +264,21 @@ struct liter {
     bool operator!=  (const liter& b) const { return cur != b.cur; }
 };
 
-/// iterator unique for doubly
-struct liter_item {
-    item* cur;
+template <typename T>
+struct liter_hash:liter<T> {
+    u64   hash;
+    using LT = liter<T>;
     ///
-    liter_item& operator++() { cur = cur->next; return *this; }
-    liter_item& operator--() { cur = cur->prev; return *this; }
-
-    item& operator *     () const;
-          operator item &() const;
-
-    bool operator==  (const liter_item& b) const { return cur == b.cur; }
-    bool operator!=  (const liter_item& b) const { return cur != b.cur; }
+    liter_hash& operator++() {
+        do { LT::cur = LT::cur->next; } while (LT::cur && LT::cur->hash != hash);
+        return *this;
+    }
+    liter_hash& operator--() {
+        do { LT::cur = LT::cur->prev; } while (LT::cur && LT::cur->hash != hash);
+        return *this;
+    }
 };
+
 
 template <typename T>
 struct iter {
@@ -278,15 +304,26 @@ struct iter {
 
 /// if we need context on the value, we dont have that once the memory is given
 ///
+struct mx;
+
+struct MX {
+    memory *mem;
+    MX(memory* mem) : mem(mem) { }
+    operator mx &() const;
+};
+
 struct field {
-    memory *k; // renaming so we can spot uses of these and revamp
-    memory *v;
+    MX key;
+    MX value;
 
-    template <typename K>
-    K   &key();
+    //memory *k; // renaming so we can spot uses of these and revamp
+    //memory *v;
 
-    template <typename V>
-    V &value();
+    //template <typename K>
+    //K   &key();
+
+    //template <typename V>
+    //V &value();
 };
 
 struct ldata {
@@ -313,7 +350,7 @@ struct ldata {
 
     /// push by value, return its new instance
     template <typename T>
-    T &push(const T &v);
+    T &push(const T &v, u64 hash = 0);
 
     /// push and return default instance
     template <typename T>
@@ -342,10 +379,10 @@ struct ldata {
 
     /// no need for insert before AND after when you can give it the count of the list
     template <typename T>
-    item *insert(num before, T &data) {
+    item *insert(num before, T &data, u64 hash = 0) {
         item *i;
         if (before == icount) {
-            i = new item { null, ilast, data };
+            i = new item { null, ilast, data, hash };
             if (ilast)
                 ilast->next = i;
             ilast = i;
@@ -353,7 +390,7 @@ struct ldata {
                 ifirst = i;
         } else {
             item *s = get(before);
-            i = new item { s, s->prev, data };
+            i = new item { s, s->prev, data, hash };
             if (s->prev) {
                 s->prev->next = i;
             } else {
@@ -429,20 +466,44 @@ struct ldata {
     template <typename T>
     struct literable {
         item *ifirst, *ilast;
+        literable(item *ifirst, item *ilast) :
+            ifirst(ifirst), ilast(ilast) { }
         liter<T> begin() const { return liter<T>{ ifirst }; }
         liter<T>   end() const { return liter<T>{ null }; }
     };
 
+    template <typename T>
+    struct literable_hash:literable<T> {
+        u64 hash;
+        literable_hash(item *ifirst, item *ilast, u64 hash) :
+            literable<T>(ifirst, ilast), hash(hash) { }
+        liter_hash<T> begin() const { return liter_hash<T>{ literable<T>::ifirst }; }
+        liter_hash<T>   end() const { return liter_hash<T>{ null }; }
+    };
+
     struct literable_items {
         item *ifirst, *ilast;
+        literable_items(item *ifirst, item *last) : ifirst(ifirst), ilast(ilast) { }
         liter_item begin() const { return liter_item{ ifirst }; }
         liter_item   end() const { return liter_item{ null }; }
+    };
+
+    struct literable_items_hash:literable_items {
+        u64 hash;
+        literable_items_hash(item *ifirst, item *ilast, u64 hash) :
+            literable_items(ifirst, ilast), hash(hash) { }
+        liter_item_hash begin() const { return liter_item_hash { literable_items::ifirst }; }
+        liter_item_hash   end() const { return liter_item_hash { null }; }
     };
 
     template <typename T>
     literable<T> elements() const { return literable<T> { ifirst, ilast }; }
 
-    literable_items items() const { return literable_items { ifirst, ilast }; }
+    template <typename T>
+    literable_hash<T> elements(u64 hash) const { return literable_hash<T>    { ifirst, ilast, hash }; }
+
+    literable_items      items()         const { return literable_items      { ifirst, ilast }; }
+    literable_items_hash items(u64 hash) const { return literable_items_hash { ifirst, ilast, hash }; }
 };
 
 /// maybe just switch to identical ?
@@ -469,6 +530,13 @@ struct doubly {
 
     template <typename T>
     ldata::literable<T> elements() const { return data->elements<T>(); }
+
+    template <typename T>
+    ldata::literable_hash<T> elements(u64 hash) const { return data->elements<T>(hash); }
+
+    ldata::literable_items items() const { return data->items(); }
+
+    ldata::literable_items_hash items(u64 hash) const { return data->items(hash); }
 
     operator bool() const { return bool(*data); }
 
@@ -508,13 +576,11 @@ struct hmdata {
     /// i'll give you a million quid, or, This Bucket.
     bucket &operator[](u64 k) {
         assert(sz > 0);
-        if (!h_pairs)
-            h_pairs = (bucket*)calloc64(sz, sizeof(bucket)); /// inits from zero
         return h_pairs[k];
     }
 
     void push(const field &f) {
-        u64 k = hash_index(*(mx*)&f.k, sz); // if sz is 1 for non-hash use-cases, that would be a reduction
+        u64 k = hash_index(f.key, sz); // if sz is 1 for non-hash use-cases, that would be a reduction
         ldata &b = (*this)[k];
         b.push(f);
     }
@@ -543,14 +609,17 @@ struct hashmap {
 
     hashmap& operator=(hashmap &a);
 
-    ion::item  *item (const mx &key, bucket **list = null) const;
+    ion::item  *item (const mx &key, bucket **list = null, u64 *phash = null) const;
     ion::field &fetch(const mx &key);
+    ion::field &fetch(cstr key);
+
     mx    &value(const mx &key);
     void   set  (const mx &key, const mx &value);
 
     template <typename K>
     mx &lookup(const K &k) const;
 
+    bool contains(cstr str) const;
     bool contains(const mx& key) const;
 
     bool remove(const mx &key);
@@ -758,16 +827,6 @@ T *defaults() {
     return  &def_instance;
 }
 
-template <typename T>
-class has_string {
-    typedef char one;
-    struct two { char x[2]; };
-    template <typename C> static one test( decltype(&C::string) ) ;
-    template <typename C> static two test(...);    
-public:
-    enum { value = sizeof(test<T>(0)) == sizeof(char) };
-};
-
 i64 integer_value(memory *mem);
 struct str;
 
@@ -815,10 +874,10 @@ struct rand {
 struct size;
 
 template <typename T>
-T &ldata::push(const T &v) {
+T &ldata::push(const T &v, u64 hash) {
     item *plast = ilast;
     ilast = new item { null, ilast,
-        memory::alloc(typeof(T), 1, 1, (raw_t)&v) };
+        memory::alloc(typeof(T), 1, 1, (raw_t)&v), hash };
     ///
     (!ifirst) ? 
     ( ifirst      = ilast) : 
@@ -879,11 +938,11 @@ T& liter<T>::operator *() const { return *cur->mem->get<T>(0); }
 template <typename T>
 liter<T>::operator T& () const { return *cur->mem->get<T>(0); }
 
-template <typename K>
-K &field::  key() { return *k->get<K>(); }
+//template <typename K>
+//K &field::  key() { return *k->get<K>(); }
 
-template <typename V>
-V &field::value() { return *v->get<V>(); }
+//template <typename V>
+//V &field::value() { return *v->get<V>(); }
 
 using arg = field;
 using ax  = Array<arg>;
@@ -1064,11 +1123,11 @@ struct map:mx {
         array values() {
             array res { typeof(V), fields->len() };
             for (field &f:fields.elements<field>()) {
-                assert(f.v->type == typeof(V));
+                assert(f.value.mem->type == typeof(V));
                 if constexpr (ion::inherits<mx, V>())
-                    res.push(ion::hold(f.v)); /// this calls the mx constructor which performs an increment to the reference count
+                    res.push(ion::hold(f.value)); /// this calls the mx constructor which performs an increment to the reference count
                 else
-                    res.push(f.v->get<V>(0));
+                    res.push(f.value.mem->get<V>(0));
             }
             return res;
         }

@@ -89,7 +89,7 @@ str path::mime_type() {
     static path data = "data/mime-type.json";
     static map  js   =  data.read<var>();
     field      *find = js->lookup(e);
-    return find ? ion::hold(find->v) : ion::hold(js["default"]);
+    return find ? ion::hold(find->value) : ion::hold(js["default"]);
 }
 
 str  path::           stem() const { return !pdata()->empty() ? str(pdata()->stem().string()) : str(null);    }

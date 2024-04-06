@@ -10,6 +10,98 @@
 
 namespace ion {
 
+static ident id_types(true);
+
+void *idata::ctr() {
+    void *alloc = calloc(1, base_sz);
+    return f.ctr(alloc);
+}
+
+void *idata::ctr_mem(memory *mem) {
+    void *alloc = calloc(1, base_sz);
+    return f.ctr_mem(alloc, mem);
+}
+
+void *idata::ctr_type(memory *mem) {
+    void *alloc = calloc(1, base_sz);
+    return f.ctr_type(alloc, mem, mem->type);
+}
+
+void *idata::ctr_cp(void *b) {
+    void *alloc = calloc(1, base_sz);
+    return f.ctr_cp(alloc, b);
+}
+
+mx &assign_mx(const mx &a, const mx &b) {
+    if (a.mem != b.mem) {
+        typeof(T)->f.dtr(&a);
+        typeof(T)->f.ctr_mem(&a, b.mem);
+    }
+    return a;
+}
+
+MX::operator mx&() const {
+    return *(mx*)(this);
+}
+
+mx mx::mix(const mx& b, float f) const {
+    /// interpolate props here
+    return mx();
+}
+
+int mx::compare(const mx& b) const {
+    /// compare props here
+    return 0;
+}
+
+u64 mx::hash() const {
+    if (!mem) return 0;
+    type_t type = mem->type;
+    void*  k    = mem->origin;
+    if (k == null) return 0;
+    if (type == ident::char_t) return (u64)djb2(cstr(k));
+    if (type == typeof(i64)   || type == typeof(u64))    return (u64)*(u64*)&k;
+    if (type == typeof(i32)   || type == typeof(u32))    return (u64)*(u32*)&k;
+    console.fault("implement hash in context for data: %s", { str(type->name) });
+    return 0;
+}
+
+mx mx::to_string() const {
+    type_t type = mem->type->schema ? mem->type->schema->bind->data : mem->type;
+
+    if      (type == typeof(i8) ) return memory::string(std::to_string(*(i8*)  mem->origin));
+    else if (type == typeof(i16)) return memory::string(std::to_string(*(i16*) mem->origin));
+    else if (type == typeof(i32)) return memory::string(std::to_string(*(i32*) mem->origin));
+    else if (type == typeof(i64)) return memory::string(std::to_string(*(i64*) mem->origin));
+    else if (type == typeof(u8) ) return memory::string(std::to_string(*(u8*)  mem->origin));
+    else if (type == typeof(u16)) return memory::string(std::to_string(*(u16*) mem->origin));
+    else if (type == typeof(u32)) return memory::string(std::to_string(*(u32*) mem->origin));
+    else if (type == typeof(u64)) return memory::string(std::to_string(*(u64*) mem->origin));
+    else if (type == typeof(r32)) return memory::string(std::to_string(*(r32*) mem->origin));
+    else if (type == typeof(r64)) return memory::string(std::to_string(*(r64*) mem->origin));
+    else if (type == typeof(bool))return memory::string(std::to_string(*(bool*)mem->origin));
+
+    else if  ((type->traits & traits::enum_primitive) && type->ref) {
+        int iraw = *(int*)mem->origin;
+        memory *res = type->ref->lookup(u64(iraw));
+        return res;
+    }
+    else if   (type->functions->to_string)
+        return type->functions->to_string((none*)mem->origin); /// call to_string() on context class
+    
+    else   if (type->schema &&
+               type->schema->bind->data->functions &&
+               type->schema->bind->data->functions->to_string)
+        return type->schema->bind->data->functions->to_string((none*)mem->origin); /// or data...
+    
+    else if (type == typeof(char))
+        return ion::hold(mem);
+    
+    static char buf[128];
+    const int l = snprintf(buf, sizeof(buf), "%s/%p", type->name, (void*)mem);
+    return memory::stringify(cstr(buf), l);
+}
+
 /// cstr operator overload
 str operator+(cstr cs, str rhs) { return str(cs) + rhs; }
 
@@ -24,13 +116,6 @@ void ldata::pop(mx *prev) {
     remove(-1);
 }
 
-hashmap::hashmap(size_t sz) : mem(memory::alloc(typeof(hmdata))), data(mem->get<hmdata>(0)) { data->sz = sz; }
-
-hashmap& hashmap::operator=(hashmap &a) {
-    ion::drop(mem);
-    mem = ion::hold(a.mem);
-    return *this;
-}
 
 doubly::doubly(memory* mem) : mem(mem), data(mem->get<ldata>(0)) { }
 
@@ -47,7 +132,6 @@ item   *ldata:: last_item() const { return ilast; }
 
 mx     &ldata::  first_mx() const { return *(mx*)&ifirst->mem; }
 mx     &ldata::   last_mx() const { return *(mx*)&ilast ->mem; }
-
 
 template <>
 str convert_str<str>(const str& s) {
@@ -108,16 +192,17 @@ void* calloc64(size_t count, size_t size) {
 }
 
 raw_t memory::typed_data(type_t dtype, size_t index) const {
-    size_t mxc = math::max(reserve, count);
+    sz_t res = math::max(reserve, count);
     //static type_t mx_t  = typeof(mx);
     alloc_schema *schema = type->schema;
     if (dtype != type && schema) {
+        sz_t voffset = 0;
         for (size_t i = 0; i < schema->bind_count; i++) {
             context_bind &c = schema->composition[i];
-            if (c.data == dtype)
-                return (raw_t)&cstr(origin)[c.offset * mxc + c.data->base_sz * index];
+            if (c.data == dtype) return (raw_t)&cstr(origin)[voffset * res + c.data->base_sz * index];
+            voffset += c.voffset;
         }
-        //console.fault("type not found in schema: {0}", { str(dtype->name) });
+        console.fault("type not found in schema: {0}", { str(dtype->name) });
         return (raw_t)null;
     } else
         return (raw_t)(cstr(origin) + dtype->base_sz * index);
@@ -203,10 +288,10 @@ memory *hold(memory *mem) {
     return mem;
 }
 
-memory* hold(const mx &o) {
+memory* hold(const MX &o) {
     return hold(o.mem);
 }
-memory* drop(const mx &o) {
+memory* drop(const MX &o) {
     return drop(o.mem);
 }
 
@@ -289,22 +374,27 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
     u8             *src       = (u8*)origin;
     size_t          mn        = math::min(alloc_reserve, count);
     const bool      prim      = !type->schema || (type->traits & (traits::primitive | traits::opaque)) != 0;
+    const sz_t      res       = alloc_reserve;
 
     /// if single primitive, it can be mem copied.  otherwise this is interleaved vector
     if (prim) {
         memcpy(dst, src, type_sz * mn);
     } else {
+        sz_t voffset = 0;
+        
         for (size_t i = 0; i < type->schema->bind_count; i++) {
             context_bind &c  = type->schema->composition[i];
             for (size_t ii = 0; ii < mn; ii++) {
                 const bool data_prim = !c.data->schema || (c.data->traits & (traits::primitive | traits::opaque)) != 0;
                 if (data_prim) {
-                    memcpy(&dst[c.offset + ii * type_sz], &src[c.offset + ii * type_sz], type_sz);
+                    memcpy(&dst[voffset * res + ii * c.base_sz], &src[voffset * res + ii * c.base_sz], c.base_sz);
                 } else {
-                    c.data->functions->copy    ((none*)null, (none*)&dst[c.offset + ii * type_sz], (none*)&src[c.offset + ii * type_sz]); /// copy prior data
-                    c.data->functions->destruct((none*)null, (none*)&src[c.offset + ii * type_sz]); /// destruct prior data
+                    /// todo:
+                    c.data->f.ctr_cp(&dst[voffset * res + ii * c.base_sz], &src[voffset * res + ii * c.base_sz]); /// copy prior data
+                    c.data->f.dtr   (&src[voffset * res + ii * c.base_sz]); /// destruct prior data
                 }
             }
+            voffset += c.voffset;
         }
     }
     /// this controls the 'count' which is in-effect the constructed count.  if we are not constructing, no updating count
@@ -315,7 +405,7 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
                 context_bind &c  = type->schema->composition[i];
                 if (!(c.data->traits & traits::primitive))
                     for (size_t ii = mn; ii < alloc_reserve; ii++)
-                        c.data->functions->construct((none*)null, (none*)&dst[c.offset + ii * type_sz]);
+                        c.data->f.ctr(&dst[c.voffset * res + ii * c.base_sz]);
             }
         }
     }
@@ -338,11 +428,12 @@ size_t  _hash(cstr data, size_t count) {
 void memory::clear() {
     alloc_schema *mx  = type->schema;
     u8           *dst = (u8*)origin;
+    const sz_t    res = math::max(count, reserve);
     if (mx) {
         for (size_t i = 0; i < mx->bind_count; i++) { /// count should be called bind_count or something; its too ambiguous with memory
             context_bind &c  = mx->composition[i];
             for (size_t ii = 0; ii < count; ii++)
-                c.data->functions->destruct((none*)null, (none*)&dst[c.offset + ii * mx->total_bytes]);
+                c.data->functions->destruct((none*)null, (none*)&dst[c.voffset * res + ii * c.base_sz]);
         }
     }
     count = 0;
@@ -420,7 +511,8 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
         return ion::hold(type->singleton);
     
     size_t  type_sz = type->size(); /// this is the 'data size', should name the function just that; if the type has no schema the data size is its own size
-    memory *mem = memory::raw_alloc(type, type_sz, count, reserve);
+    sz_t    res = math::max(count, reserve);
+    memory *mem = memory::raw_alloc(type, type_sz, count, res);
 
     if (type->traits & traits::singleton)
         type->singleton = mem;
@@ -435,8 +527,8 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
                 /// if schema-copy-construct (call cpctr for each data type in composition)
                 for (size_t i = 0; i < type->schema->bind_count; i++) {
                     context_bind &bind = type->schema->composition[i];
-                    u8 *dst = &((u8*)mem->origin)[bind.offset];
-                    u8 *src = &((u8*)      v_src)[bind.offset];
+                    u8 *dst = &((u8*)mem->origin)[bind.voffset * res];
+                    u8 *src = &((u8*)      v_src)[bind.voffset * res];
                     if (bind.data) {
                         for (size_t ii = 0; ii < count; ii++)
                             if (bind.data->traits & traits::primitive)
@@ -458,20 +550,16 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
                     memset(dst, 0, count * type_sz);
                 }
             } else {
+                sz_t voffset = 0;
                 for (size_t i = 0; i < type->schema->bind_count; i++) {
                     context_bind &bind = type->schema->composition[i];
-                    u8 *dst  = &((u8*)mem->origin)[bind.offset];
+                    u8 *dst  = &((u8*)mem->origin)[voffset * res];
                     if (bind.data && !(bind.data->traits & traits::primitive)) {
                         for (size_t ii = 0; ii < count; ii++) {
-                            bind.data->functions->construct((none*)null, (none*)&dst[ii * type_sz]);
-                            
-                            /// allow for trivial construction and subsequent init; this alllows one to use .fields and others,
-                            /// and still have an init.
-                            if (bind.data->traits & traits::init)
-                                bind.data->functions->init((none*)&dst[ii * type_sz]); 
-                                /// this may need to be called in the case where the context type has one too
+                            bind.data->f.ctr(&dst[ii * type_sz]);
                         }
                     }
+                    voffset += bind.voffset;
                 }
             }
         }
@@ -508,22 +596,8 @@ void *mem_origin(memory *mem) {
 }
 
 memory *cstring(cstr cs, size_t len, size_t reserve, bool is_constant) {
+    static ident id_types(true);
     return memory::stringify(cs, len, 0, is_constant, typeof(char), 0);
-}
-
-idata *type_cache::lookup(str &name) {
-    mx  sym  = name.symbolize();
-    mx  info = (*type_cache::type_map)[sym];
-    return info.type(); /// mapping with unintialized singular alloc
-}
-
-void type_cache::hash_type(type_t type) {
-    str type_name = type->name;
-    mx  sym = type_name.symbolize();
-    if (!type_cache::type_map)
-         type_cache::type_map = new hashmap(64);
-    mx info = memory::alloc(type, 0, 0); /// create uninitialized
-    type_cache::type_map->set(sym, info);
 }
 
 u8* get_member_address(type_t type, raw_t data, str &name, prop *&rprop) {
@@ -577,45 +651,6 @@ memory *get_string(type_t type, raw_t data, str &name) {
         return null;
     memory *m       = p->type->functions->to_string((none*)p_value);
     return  m;
-}
-
-memory  *mx::to_string() const {
-    type_t type = mem->type->schema ? mem->type->schema->bind->data : mem->type;
-    /// will likely need to iterate through the 2 types (in case of enumerable)
-
-    if      (type == typeof(i8) ) return memory::string(std::to_string(*(i8*)  mem->origin));
-    else if (type == typeof(i16)) return memory::string(std::to_string(*(i16*) mem->origin));
-    else if (type == typeof(i32)) return memory::string(std::to_string(*(i32*) mem->origin));
-    else if (type == typeof(i64)) return memory::string(std::to_string(*(i64*) mem->origin));
-    else if (type == typeof(u8) ) return memory::string(std::to_string(*(u8*)  mem->origin));
-    else if (type == typeof(u16)) return memory::string(std::to_string(*(u16*) mem->origin));
-    else if (type == typeof(u32)) return memory::string(std::to_string(*(u32*) mem->origin));
-    else if (type == typeof(u64)) return memory::string(std::to_string(*(u64*) mem->origin));
-    else if (type == typeof(r32)) return memory::string(std::to_string(*(r32*) mem->origin));
-    else if (type == typeof(r64)) return memory::string(std::to_string(*(r64*) mem->origin));
-    else if (type == typeof(bool))return memory::string(std::to_string(*(bool*)mem->origin));
-
-    else if  ((type->traits & traits::enum_primitive) && type->ref) {
-        int iraw = *(int*)mem->origin;
-        memory *res = type->ref->lookup(u64(iraw));
-        return res;
-    }
-    else if   (type->functions->to_string)
-        return type->functions->to_string((none*)mem->origin); /// call to_string() on context class
-    
-    else   if (type->schema &&
-               type->schema->bind->data->functions &&
-               type->schema->bind->data->functions->to_string)
-        return type->schema->bind->data->functions->to_string((none*)mem->origin); /// or data...
-    
-    else if (type == typeof(char))
-        return ion::hold(mem);
-    
-    else {
-        static char buf[128];
-        const int l = snprintf(buf, sizeof(buf), "%s/%p", type->name, (void*)mem);
-        return memory::stringify(cstr(buf), l);
-    }
 }
 
 }

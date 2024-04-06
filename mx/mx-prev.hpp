@@ -2100,16 +2100,9 @@ lambda<R(Args...)>::lambda(F&& fn) : mx() {
 template <typename R, typename... Args>
 template <typename CL, typename F>
 lambda<R(Args...)>::lambda(CL* cl, F fn) {
-    mx::mem  = mx::alloc<lambda>();
+    mx::mem  = mx::alloc<lambda>(); /// trace usage of this
     data     = (container*)mem->origin;
-
-    using traits     = lambda_traits<lambda>;
-    using args_t     = typename traits::arg_types;
-    constexpr size_t n_args = std::tuple_size_v<args_t>;
-    //if constexpr (n_args == 1) { /// remove test.
-        //data->fn = new fdata(std::bind(cl, fn, std::placeholders::_1));
     data->fn = new fdata([=](Args... args) { return (cl->*fn)(std::forward<Args>(args)...); });
-    //}
 }
 
 mx call(mx lambda, array<str> args);

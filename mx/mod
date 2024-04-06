@@ -6,9 +6,9 @@ if (win)
     # erroneous warnings about virtual functions we dont have
     cxxflags(/MT +-Wno-delete-non-abstract-non-virtual-dtor +-Wno-macro-redefined)
 else()
-    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    if (clang)
         cxxflags(
-            +-Wno-writable-strings
+            +-Wno-write-strings
             +-Wno-pointer-bool-conversion
             +-Wno-ambiguous-reversed-operator
             +-Wno-deprecated-volatile

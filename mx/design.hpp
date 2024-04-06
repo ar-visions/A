@@ -162,12 +162,6 @@ struct has_convert : false_type {};
 template <typename T>
 struct has_convert<T, std::void_t<decltype(std::declval<T>().convert((memory*)nullptr))>> : true_type {};
 
-/// deprecate
-template <typename T, typename = void>
-struct has_compare : false_type {};
-template <typename T>
-struct has_compare<T, std::void_t<decltype(std::declval<T>().compare((T &)*(T*)nullptr))>> : true_type {};
-
 template <typename T, typename = void>
 struct has_equals : std::false_type {};
 

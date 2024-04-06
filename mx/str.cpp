@@ -245,8 +245,7 @@ str str::format(const array &args) const {
         size_t index = size_t(e.integer_value());
         if (index >= 0 && index < args.len()) {
             mx     &a    = args.get<mx>(index);
-            memory *smem = a.to_string();
-            return  smem;
+            return a.to_string();
         }
         return null;
     });

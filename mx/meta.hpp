@@ -10,11 +10,26 @@ using fun = std::function<T>;
 struct ident {
     memory *mem;
 
+    static inline hashmap *types; /// cstr -> type_t
+    static inline idata *char_t; /// cannot use hashmap/mx::hash without a registered char type
+    static inline idata *i64_t;
+    static inline idata *u64_t;
+    
+
     template <typename T>
     static idata* for_type();
 
+    template <typename T>
+    static idata* for_type2();
+
     ident(memory* mem) : mem(mem) { }
+    ident(bool init);
 };
+
+template <> idata *ident::for_type2<null_t>();
+template <> idata *ident::for_type2<char>();
+template <> idata *ident::for_type2<i64>();
+template <> idata *ident::for_type2<u64>();
 
 memory *mem_symbol(symbol cs, type_t ty = typeof(char), i64 id = 0);
 
@@ -22,7 +37,7 @@ struct context_bind {
     type_t        ctx;
     type_t        data;
     size_t        base_sz;
-    size_t        offset;
+    size_t        voffset;
 };
 
 struct alloc_schema {
@@ -60,49 +75,12 @@ using PushFn = void(*)(void*, void*); /// array<T>* dst, T* src
 
 using GenericLambda = fun<mx(void*, const array &)>;
 
-template <typename T>
-struct ops {
-        //FreeFn<T> free;
-    SetMemoryFn<T> set_memory;
-          AddFn<T> add;
-          MulFn<T> mul;
-         MulSFn<T> mul_scalar;
-       EqualsFn<T> equals;
-      CompareFn<T> compare;
-      BooleanFn<T> boolean;
-          MixFn<T> mix;
-     ToStringFn<T> to_string;
-   FromStringFn<T> from_string;
-         CopyFn<T> copy;
-     DestructFn<T> destruct;
-    ConstructFn<T> construct;
-         InitFn<T> init;
-       VAllocFn<T> valloc;
-          NewFn<T> alloc_new;
-          DelFn<T> del;
-       AssignFn<T> assign;
-         HashFn<T> hash;
-         PushFn    push; /// only for array<T>; we needed a way to allocate array<T> and at runtime push with pointers
-         ProcessFn<T> process;
-
-         void     *meta;
-};
-
-template <typename T>
-T &assign_mx(T &a, const T &b) {
-    typeof(T)->functions->assign((none*)null, (none*)&a, (none*)&b);
-    return a;
-}
-
-template <typename T>
-ops<T> *ftable() {
-    static ops<T> gen;
-    return (ops<T>*)&gen;
-}
+mx &assign_mx(const mx &a, const mx &b);
 
 ///
 struct idata {
-    void            *src;     /// the source.
+    memory          *mem;     /// origin memory
+    void            *src;     ///
     cstr             name;
     size_t           base_sz; /// a types base sz is without regards to pointer state
     size_t           traits;
@@ -110,7 +88,18 @@ struct idata {
     doubly          *meta;    /// doubly<prop>
     prop_map        *meta_map; // prop_map
     alloc_schema    *schema;  /// primitives dont need this one -- used by array and map for type aware contents, also any mx-derrived object containing data will populate this polymorphically
-    ops<none>       *functions;
+    
+    struct f_table {
+        bool mix;     /// mix op allowed (these are virtual, so performing that takes just mx expression on the addresses)
+        bool compare; /// compare op allowed
+
+        std::function<void(void*)>         dtr;
+        std::function<void(void*)>         ctr;
+        std::function<void(void*,memory*)> ctr_mem;  /// for mx objects (assign from memory)
+        std::function<void(void*,memory*)> ctr_type; /// for mx objects (copy convert)
+        std::function<void(void*,void*)>   ctr_cp;
+    } f;
+
     symbol_data     *symbols;
     memory          *singleton;
     idata           *ref; /// if you are given a primitive enum, you can find the schema and symbols on ref (see: to_string)
@@ -118,11 +107,14 @@ struct idata {
     bool             secondary_init; /// used by enums but flag can be used elsewhere.  could use 'flags' too
     GenericLambda   *generic_lambda;
 
-    size_t size();
+    void   *ctr();
+    void   *ctr_mem (memory *mem);
+    void   *ctr_type(memory *mem, idata *type);
+    void   *ctr_cp  (void* b);
+    size_t  size();
     memory *lookup(symbol sym);
     memory *lookup(i64 id);
-
-    idata *meta_lookup() {
+    idata  *meta_lookup() {
         return meta ? this : (schema ? schema->bind->data : null);
     }
 
@@ -232,14 +224,20 @@ using properties = doubly;
 
 template <typename T> T* mdata(memory *mem, size_t index) { return mem ? mem->get<T>(index) : null; }
 
-struct mx { /// the intern of mx is raw_t
+mx mix_wrap(mx* obj, mx* other, float factor);
+int compare_wrap(mx* a, mx* b);
+
+struct mx:MX {
     using parent_class  = none;
     using context_class = none;
     using intern        = none;
     static const inline type_t intern_t = null;
 
-    memory *mem;
-
+    virtual mx  mix    (const mx& b, float f) const;
+    virtual int compare(const mx& b) const;
+    virtual mx  to_string() const;
+    virtual u64 hash() const;
+    
     template <typename T>
     struct iterable {
         T*     data;
@@ -396,27 +394,17 @@ struct mx { /// the intern of mx is raw_t
         mem->count = sz;
     }
 
-    /// gets a wrapped mx value; supports primitive/struct/context
     mx get_meta(cstr cs) const { return get_meta(mx(mem_symbol(cs))); }
-    mx get_meta(mx  key) const {
-        prop *p = lookup(key);
-        assert(p);
-        
-        void *src = p->member_pointer(mem->origin);
-        assert(src);
 
-        void *dst = p->type->functions->alloc_new();
-        bool is_mx = p->type->traits & traits::mx_obj;
-        if (!is_mx)
-            p->type->functions->assign(null, (none*)dst, (none*)src); /// copy primitives and structs
-        else
-            p->type->functions->set_memory((none*)dst, (memory*)((mx*)src)->mem); /// quick assignment for mx
-
-        return memory::wrap(p->type, dst, 1);
+    mx get_meta(const mx &key) const {
+        ion::prop *pr    = lookup(key);                    assert(pr);
+        void      *src   = pr->member_pointer(mem->origin); assert(src);
+        bool       is_mx = (pr->type->traits & traits::mx_obj) || (pr->type->traits & traits::mx);
+        return    (is_mx) ? hold(((mx*)src)->mem) : memory::window(pr->type, src);
     }
 
     void set_meta(cstr cs, mx value) { set_meta(mx(mem_symbol(cs)), value); }
-    void set_meta(mx key,  mx value) {
+    void set_meta(const mx &key,  const mx &value) {
         prop *p = lookup(key);
         assert(p);
 
@@ -424,11 +412,15 @@ struct mx { /// the intern of mx is raw_t
         assert((p->type == value.type() || (p->type->traits & traits::mx_enum)) || 
                (p->type->schema && p->type->schema->bind->data == value.type()));
         
-        /// property must exist
         void *src = p->member_pointer(mem->origin); //
         assert(src);
 
         bool is_mx = p->type->traits & traits::mx_obj;
+
+        bool   is_mx = (p->type->traits & traits::mx_obj) || (p->type->traits & traits::mx);
+        
+        //void  *dst   = is_mx ? p->type->ctr_mem(hold(value.mem)) : p->type->ctr_cp(value.mem->origin);
+
         if (!is_mx)
             p->type->functions->assign(null, (none*)src, (none*)value.mem->origin); /// copy primitives and structs
         else
@@ -438,7 +430,7 @@ struct mx { /// the intern of mx is raw_t
    ~mx() { ion::drop(mem); }
     
     mx(null_t = null): mx(alloc<null_t>()) { }
-    mx(memory *mem)  : mem(mem) { }
+    mx(memory *mem)  : MX(mem) { }
 
     mx(symbol ccs, type_t type = typeof(char)) : mx(mem_symbol(ccs, type)) { }
     mx(cstr   cs,  type_t type = typeof(char)) : mx(memory::stringify(cs, memory::autolen, 0, false, type)) { }
@@ -478,8 +470,6 @@ struct mx { /// the intern of mx is raw_t
 
     size_t count() const { return mem ? mem->count : 0;    }
     type_t  type() const { return mem ? mem->type  : null; }
-
-    memory  *to_string() const;
 
     bool operator==(const mx &b) const {
         if (mem == b.mem)
@@ -606,9 +596,9 @@ struct lambda<R(Args...)>:mx {
     
     /// just so we can set it in construction
     struct container {
-        fdata *fn;
+        fdata *lfn;
         ~container() {
-            delete fn;
+            delete lfn;
         }
     };
     
@@ -621,11 +611,11 @@ struct lambda<R(Args...)>:mx {
     lambda(CL* cl, F fn);
 
     R operator()(Args... args) const {
-        return (*data->fn)(std::forward<Args>(args)...);
+        return (*data->lfn)(std::forward<Args>(args)...);
     }
     
     operator bool() const {
-        return data && data->fn && *data->fn;
+        return data && data->lfn && *data->lfn;
     }
 };
 
@@ -641,12 +631,13 @@ lambda<R(Args...)>::lambda(F&& fn) : mx() {
         if constexpr (std::is_invocable_r_v<R, F, Args...>) {
             mx::mem  = mx::alloc<lambda>();
             data     = (container*)mem->origin;
-            data->fn = new fdata(std::forward<F>(fn));
+            data->lfn = new fdata(std::forward<F>(fn));
         } else {
             static_assert("F type is not a functor");
         }
     }
 }
+
 
 template <typename R, typename... Args>
 template <typename CL, typename F>
@@ -656,16 +647,36 @@ lambda<R(Args...)>::lambda(CL* cl, F fn) {
 
     using traits     = lambda_traits<lambda>;
     using args_t     = typename traits::arg_types;
-    constexpr size_t n_args = std::tuple_size_v<args_t>;
-    //if constexpr (n_args == 1) { /// remove test.
-        //data->fn = new fdata(std::bind(cl, fn, std::placeholders::_1));
-    data->fn = new fdata([=](Args... args) { return (cl->*fn)(std::forward<Args>(args)...); });
-    //}
+    data->lfn = new fdata([=](Args... args) { return (cl->*fn)(std::forward<Args>(args)...); });
 }
 
 mx call(mx lambda, const array &args);
 
 struct array:mx {
+    array(memory*   mem) : mx(mem) { }
+    array(const mx   &o) : array(ion::hold(o.mem)) { }
+    array()              : array(mx::alloc<array>(null, 0, 0)) { } /// this must be lazy-alloc'd; generically, if we have a void type, then allocation must be lazy
+    
+    template <typename T>
+    array(std::initializer_list<T> args) : array() { //  size_t(args.size()) -- doesnt work with the pre-alloc; find out why.
+        for (auto &v:args) {
+            T &element = (T &)v;
+            push(element);
+        }
+    }
+    array(type_t type, size al, size sz = size(0)) : 
+            array(memory::alloc(type, sz, al)) {
+        if (al.count > 1)
+            mem->shape = new size(al); /// allocate a shape if there are more than 1 dims
+    }
+
+    /// constructor for allocating with a space to fill (and construct; this allocation does not run the constructor (if non-primitive) until append)
+    /// indexing outside of shape space does cause error
+    array(type_t type, size_t  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
+    array(type_t type,    u32  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
+    array(type_t type,    i32  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
+    array(type_t type,    i64  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
+
     type_t element_type() const { return mem->type->schema ? mem->type->schema->bind->data : mem->type; }
 
     template <typename T>
@@ -698,10 +709,6 @@ struct array:mx {
     T *data() const {
         return (T*)mem->origin;
     }
-
-    array(memory*   mem) : mx(mem) { }
-    array(const mx   &o) : array(ion::hold(o.mem)) { }
-    array()              : array(mx::alloc<array>(null, 0, 0)) { } /// this must be lazy-alloc'd; generically, if we have a void type, then allocation must be lazy
 
     /// immutable
     template <typename T>
@@ -852,14 +859,6 @@ struct array:mx {
     template <typename T>
     static array empty() { return array(typeof(T), size_t(1)); }
 
-    template <typename T>
-    array(std::initializer_list<T> args) : array() { //  size_t(args.size()) -- doesnt work with the pre-alloc; find out why.
-        for (auto &v:args) {
-            T &element = (T &)v;
-            push(element);
-        }
-    }
-
     void reserve_size(size sz) {
         if (mem->reserve < sz)
             realloc(sz); // this was fill-default before, not for reserve so thats a bug
@@ -1007,19 +1006,6 @@ struct array:mx {
     size_t  length() const { return mem->count; }
     size_t reserve() const { return mem->reserve; }
 
-    array(type_t type, size al, size sz = size(0)) : 
-            array(memory::alloc(type, sz, al)) {
-        if (al.count > 1)
-            mem->shape = new size(al); /// allocate a shape if there are more than 1 dims
-    }
-
-    /// constructor for allocating with a space to fill (and construct; this allocation does not run the constructor (if non-primitive) until append)
-    /// indexing outside of shape space does cause error
-    array(type_t type, size_t  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
-    array(type_t type,    u32  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
-    array(type_t type,    i32  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
-    array(type_t type,    i64  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
-
     template <typename T>
     T &push_default()  { return push<T>();  }
 
@@ -1072,17 +1058,7 @@ struct array:mx {
 
     operator  bool() const { return mx::mem && mem->count > 0; }
     bool operator!() const { return !(operator bool()); }
-
-    bool operator==(array b) const {
-        if (mx::mem == b.mem) return true;
-        if (mx::mem && b.mem) {
-            if (mem->count != b.mem->count) return false;
-            size_t sz = mem->type->base_sz;
-            return mem->type->functions->equals((none*)mem->origin, (none*)b.mem->origin, mem->count);
-        }
-        return true;
-    }
-
+    bool operator==(const array &b) const;
     bool operator!=(array b) const { return !(operator==(b)); }
     
     template <typename T>
@@ -1309,6 +1285,7 @@ struct str:mx {
         String,
         CIString
     };
+    
     //using intern = char;
     inline static const type_t intern_t = typeof(char);
     using char_t = unsigned short;
@@ -1341,6 +1318,7 @@ struct str:mx {
     static char &non_wspace(cstr cs);
 
     str(memory        *mem);
+    str(const mx &o) : str(o.mem) { }
     str(null_t = null);
     str(char            ch);
     str(size_t          sz);
@@ -1629,13 +1607,13 @@ void schema_populate(idata *type, T *p) {
     schema.bind_count    = schema_info(&schema, 0, (T*)null, (T*)null, type);
     schema.composition   = (context_bind*)calloc64(schema.bind_count, sizeof(context_bind));
     schema_info(&schema, 0, (T*)null, (T*)null, type);
-    size_t offset = 0;
+    size_t voffset = 0;
     for (size_t i = 0; i < schema.bind_count; i++) {
         context_bind &bind = schema.composition[i];
-        bind.offset        = offset;
-        offset            += bind.base_sz;
+        bind.voffset       = voffset;
+        voffset           += bind.base_sz;
     }
-    schema.total_bytes = offset;
+    schema.total_bytes = voffset;
     schema.bind = &schema.composition[schema.bind_count - 1];
 }
 
@@ -1655,11 +1633,186 @@ struct allowed_types {
     static constexpr bool value = (... && is_allowed_type<Ts>::value);
 };
 
-struct type_cache {
-    static inline hashmap *type_map;
-    static idata *lookup(str &);
-    static void hash_type(type_t);
+/// mix method
+template <typename T, typename = void>
+struct has_mix : std::false_type {};
+template <typename T>
+struct has_mix<T, std::void_t<decltype(&T::mix)>> : std::true_type {};
+
+/// compare method
+template <typename T, typename = void>
+struct has_compare : std::false_type {};
+template <typename T>
+struct has_compare<T, std::void_t<decltype(&T::compare)>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_ctr_mem : std::false_type {};
+template<typename T>
+struct has_ctr_mem<T, std::enable_if_t<std::is_constructible<T, memory*>::value>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_ctr_type : std::false_type {};
+template<typename T>
+struct has_ctr_type<T, std::enable_if_t<std::is_constructible<T, memory*, type_t>::value>> : std::true_type {};
+
+template<typename T, typename = void>
+struct has_ctr_cp : std::false_type {};
+template<typename T>
+struct has_ctr_cp<T, std::enable_if_t<std::is_constructible<T, const T &>::value>> : std::true_type {};
+
+/// converts T&, T* [const], to T
+template <typename T>
+struct pure_type_ {
+    using type = typename std::remove_pointer<
+        typename std::remove_reference<
+            typename std::remove_const<T>::type
+        >::type
+    >::type;
 };
+template <typename T>
+using pure_type = typename pure_type_<T>::type;
+
+void register_type(memory *mem, const std::string &sig, sz_t sz, u64 traits);
+
+template <typename TT>
+idata *ident::for_type2() {
+    using T = pure_type<TT>;
+    static type_t type; if (type) return type; /// assert the name and traits are set
+
+    /// static identity: make sure we only proceed to pure type's definition; otherwise we are redefining type_t multiple times
+    /// side effect is one more call
+    if constexpr (!identical<T, TT>()) return for_type2<T>(); 
+
+    memory *mem   = memory::raw_alloc((type_t)null, sizeof(idata), 1, 1);
+    mem->type     = (type_t)calloc(1, sizeof(idata));
+    mem->origin   = mem->type;
+    type          = mem->type;
+
+    bool is_mx    = ion::is_mx<T>(); /// this one checks just for type == mx
+    bool is_obj   = !is_mx && ion::inherits<mx, T>(); /// used in composer for assignment; will merge in is_mx when possible
+
+    u64 traits = (is_primitive<T> ()  ? traits::primitive : 0) |
+                 (is_integral <T> ()  ? traits::integral  : 0) |
+                 (is_realistic<T> ()  ? traits::realistic : 0) | // if references radioshack catalog
+                 (is_singleton<T> ()  ? traits::singleton : 0) |
+                 (is_array    <T> ()  ? traits::array     : 0) |
+                 (is_lambda   <T> ()  ? traits::lambda    : 0) |
+                 (is_map      <T> ()  ? traits::map       : 0) |
+                 (is_mx               ? traits::mx        : 0) |
+                 (has_etype<T>::value ? traits::mx_enum   : 0) |
+                 (is_obj              ? traits::mx_obj    : 0);
+
+    /// --------- alloc and init ----------
+    register_type(mem, __PRETTY_FUNCTION__, sizeof(T), traits);
+
+    if constexpr (!is_lambda<T>()) {
+        type->f.mix     = (!identical<T, mx>() && has_mix<T>    ::value);
+        type->f.compare = (!identical<T, mx>() && has_compare<T>::value);
+        if constexpr (std::is_default_constructible<T>::value)
+            type->f.ctr = [](void* a) -> void { new (a) T(); };
+        type->f.dtr     = [](void* a) -> void { ((T*)a) -> ~T(); };
+        if constexpr (has_ctr_mem <T>::value) type->f.ctr_mem  = [](void* a, memory* mem) -> void { new (a) T(mem); };
+        if constexpr (has_ctr_cp  <T>::value) type->f.ctr_cp   = [](void* a, void* b)     -> void { new (a) T(*(const T*)b); };
+        if constexpr (has_ctr_type<T>::value) type->f.ctr_type = [](void* a, memory* mem) -> void { new (a) T(mem, mem->type); };
+        if constexpr (has_etype   <T>::value) {
+            type_t etype = typeof(typename T::etype);
+            etype->ref = type; ///
+            etype->traits |= traits::enum_primitive;
+            //type->ref = etype; // they reference each other
+        }
+        if constexpr (!identical<mx, T>() && ion::inherits<mx, T>())
+            type->parent = typeof(typename T::parent_class);
+        if constexpr (ion::inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value)
+            schema_populate(type, (T*)null);
+        if constexpr (registered_instance_meta<T>()) {
+            static T *def = new T();
+            type->meta    = new doubly { def->meta() }; /// make a reference to this data
+            for (prop &p: type->meta->elements<prop>()) {
+                p.offset     = size_t(p.member_addr) - size_t(def);
+                p.s_key      = new str(ion::hold(p.key));
+                p.parent_type = type; /// we need to store what type it comes from, as we dont always have this context
+
+                /// this use-case is needed for user interfaces without css defaults
+                p.init_value = (p.type->functions && p.type->functions->alloc_new) ?
+                    p.type->functions->alloc_new() : calloc64(1, p.type->base_sz);
+
+                if (p.type->functions) {
+                    u8 *prop_dest = &(((u8*)def)[p.offset]);
+                    if (p.type->traits & traits::mx_obj) {
+                        mx *mx_data = (mx*)prop_dest;
+                        p.type->functions->set_memory((none*)p.init_value, mx_data->mem);
+                    } else {
+                        p.type->functions->assign((none*)null, (none*)p.init_value, (none*)prop_dest);
+                    }
+                }
+            }
+            delete def;
+            prop_map *pmap = new prop_map(size_t(16));
+            doubly   *meta = (doubly*)type->meta;
+            for (ion::prop &prop: meta->elements<ion::prop>()) {
+                symbol prop_name = prop.name();
+                mx sym = mem_symbol(prop_name);
+                (*pmap)[sym] = mx::pointer(&prop);
+            }
+            type->meta_map = pmap;
+        }
+    } else {
+        using lcontainer = typename T::container;
+        using traits     = lambda_traits<T>;
+        using args_t     = typename traits::arg_types;
+        using rtype      = typename traits::return_type;
+        if constexpr (allowed_types<args_t>::value && (identical<void, rtype>() || is_convertible<rtype, mx>()))
+            type->generic_lambda = new GenericLambda([type=type](void* ldata, const array &args) -> mx {
+                ///
+                lcontainer *data = (lcontainer*)ldata;
+                constexpr size_t n_args = std::tuple_size_v<args_t>;
+                if (args.len() != n_args)
+                    throw std::runtime_error("arg count mismatch");
+                mx result;
+                #define ARG(N) \
+                    using   T ## N = std::remove_const_t<std::remove_reference_t<std::tuple_element_t<N, args_t>>>;\
+                    type_t  t ## N = typeof(T ## N);\
+                    T ## N* a ## N = (T ## N *)(t ## N)->f.ctr_type(null, args.get<str>(N).mem);
+                if constexpr (n_args == 0) {
+                    if constexpr (identical<void, rtype>()) 
+                        (*data->fn)();
+                    else
+                        result = (*data->fn)();
+                } else if constexpr (n_args == 1) {
+                    ARG(0)
+                    if constexpr (identical<void, rtype>())
+                        (*data->fn)(*a0);
+                    else
+                        result = (*data->fn)(*a0);
+                    delete a0;
+                } else if constexpr (n_args == 2) {
+                    ARG(0) ARG(1)
+                    if constexpr (identical<void, rtype>())
+                        (*data->fn)(*a0, *a1);
+                    else
+                        result = (*data->fn)(*a0, *a1);
+                    delete a0; delete a1;
+                } else if constexpr (n_args == 3) {
+                    ARG(0) ARG(1) ARG(2)
+                    if constexpr (identical<void, rtype>())
+                        (*data->fn)(*a0, *a1, *a2);
+                    else
+                        result = (*data->fn)(*a0, *a1, *a2);
+                    delete a0; delete a1; delete a2;
+                } else if constexpr (n_args == 4) {
+                    ARG(0) ARG(1) ARG(2) ARG(3)
+                    if constexpr (identical<void, rtype>())
+                        (*data->fn)(*a0, *a1, *a2, *a3);
+                    else
+                        result = (*data->fn)(*a0, *a1, *a2, *a3);
+                    delete a0; delete a1; delete a2; delete a3;
+                }
+                #undef ARG
+                return result;
+            });
+    }
+    return type_t(type);
+}
 
 template <typename T>
 idata *ident::for_type() {
@@ -1779,12 +1932,12 @@ idata *ident::for_type() {
                         };
 
                     /// we want an add, and div
-                    if constexpr (has_mix<T>::value)
-                        fn->mix = [](T *a, T *b, double v) -> T* {
-                            if constexpr (has_mix<T>::value)
-                                return new T(a->mix(*b, v));
-                            return null;
-                        };
+                    //if constexpr (has_mix<T>::value)
+                    //    fn->mix = [](T *a, T *b, double v) -> T* {
+                    //        if constexpr (has_mix<T>::value)
+                    //            return new T(a->mix(*b, v));
+                    //        return null;
+                    //    };
 
                     fn->construct  = [](C *dst0, _T *dst) -> void { new (dst) _T(); };
 
@@ -1925,10 +2078,12 @@ idata *ident::for_type() {
                             throw std::runtime_error("arg count mismatch");
 
                         mx result;
+
                         #define ARG(N) \
                             using   T ## N = std::remove_const_t<std::remove_reference_t<std::tuple_element_t<N, args_t>>>;\
                             type_t  t ## N = typeof(T ## N);\
-                            T ## N* a ## N = (T ## N *)(t ## N)->functions->from_string((none*)null, args.get<str>(N).cs());
+                            T ## N* a ## N = (T ## N *)(t ## N)->f.ctr_type(null, args.get<str>(N).mem);\
+
                         if constexpr (n_args == 0) {
                             if constexpr (identical<void, rtype>()) 
                                 (*data->fn)();
@@ -1967,7 +2122,7 @@ idata *ident::for_type() {
                         return result;
                     });
             }
-            if constexpr (registered_instance_meta<T>() || is_lambda<T>() || is_primitive<T>() || ion::inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value) {
+            if constexpr (ion::inherits<ion::mx, T>() || is_hmap<T>::value || is_doubly<T>::value) {
                 schema_populate(type, (T*)null);
             }
 
@@ -2004,7 +2159,6 @@ idata *ident::for_type() {
                 }
                 type->meta_map = pmap;
             }
-            //type_cache::hash_type(type);
         }
     }
     return type_t(type);

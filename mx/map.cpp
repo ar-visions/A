@@ -4,8 +4,8 @@ namespace ion {
 
 void map::print() {
     for (field &f: fields()) {
-        str k = str(ion::hold(f.k));
-        str v = str(ion::hold(f.v));
+        str k = str(ion::hold(f.key));
+        str v = str(ion::hold(f.value));
         console.log("key: {0}, value: {1}", array { k, v });
     }
 }
@@ -16,7 +16,7 @@ bool map::mdata::operator()(const mx &key) {
         return hash_map->contains(key);
     else {
         for (field &f:fields.elements<field>())
-            if (f.k == key.mem)
+            if ((const mx &)f.key == key.mem)
                 return true;
     }
     return false; 
@@ -45,7 +45,7 @@ size_t    map::mdata::count(const mx &k) {
     if (!(k.mem->attrs & memory::constant) && (tk->traits & traits::primitive)) {
         size_t res = 0;
         for (field &f:fields.elements<field>()) {
-            memory *a = f.k;
+            memory *a = f.key.mem;
             assert(a->type->size() == b->type->size());
             if (a == b || (a->count == b->count && memcmp(a->origin, b->origin, a->count * a->type->size()) == 0)) // think of new name instead of type_* ; worse yet is handle base types in type
                 res++;
@@ -54,7 +54,7 @@ size_t    map::mdata::count(const mx &k) {
     } else {
         size_t res = 0;
         for (field &f:fields.elements<field>())
-            if (f.k == b)
+            if ((const mx &)f.key == k)
                 res++;
         return res;
     }
@@ -63,7 +63,7 @@ size_t    map::mdata::count(const mx &k) {
 size_t map::mdata::count(cstr cs) {
     size_t res = 0;
     for (field &f:fields.elements<field>())
-        if (strcmp(symbol(f.k->origin), symbol(cs)) == 0)
+        if (strcmp(symbol(f.key.mem->origin), symbol(cs)) == 0)
             res++;
     return res;
 }
@@ -74,7 +74,7 @@ field *map::mdata::lookup(const mx &k) const {
         return pf ? pf->mem->get<field>(0) : null;
     } else {
         for (field & f : fields.elements<field>())
-            if (f.k == (memory*)k.mem)
+            if ((const mx &)f.key == k)
                 return &f;
     }
     return null;
@@ -87,7 +87,7 @@ bool map::mdata::remove(const mx &k) {
     } else {
         int index = 0;
         for (field & f : fields.elements<field>()) {
-            if (f.k == (memory*)k.mem) {
+            if ((const mx &)f.key == k) {
                 fields->remove(index);
                 removed = true;
                 break;
@@ -102,10 +102,10 @@ bool map::mdata::remove(const mx &k) {
 array map::mdata::keys() {
     if (!fields)
         return array {};
-    type_t key_t = fields->first<field>().k->type;
+    type_t key_t = fields->first<field>().key.mem->type;
     array res { key_t, fields->len() };
     for (field &f:fields.elements<field>())
-        res.push(ion::hold(f.k));
+        res.push(ion::hold(f.key));
     return res;
 }
 
@@ -114,15 +114,12 @@ ldata::literable<field> map::mdata::elements() const {
 }
 
 mx &map::mdata::operator[](const mx &key) {
-    return *(mx*)&fetch(key).v;
+    return *(mx*)&fetch(key).value;
 }
 
 map::mdata::operator bool() { return ((hash_map && hash_map->len() > 0) || (fields->len() > 0)); }
-
-
     map map::parse(int argc, cstr *argv, map &def) {
         map iargs = map();
-        ///
         for (int ai = 0; ai < argc; ai++) {
             cstr ps = argv[ai];
             ///
@@ -134,7 +131,7 @@ map::mdata::operator bool() { return ((hash_map && hash_map->len() > 0) || (fiel
                 field* found;
                 if (is_single) {
                     for (field &df: def.fields()) {
-                        symbol s = symbol(df.k);
+                        symbol s = symbol(df.key.mem->origin);
                         if (ps[1] == s[0]) {
                             found = &df;
                             break;
@@ -144,7 +141,7 @@ map::mdata::operator bool() { return ((hash_map && hash_map->len() > 0) || (fiel
                 ///
                 if (found) {
                     str     aval = str(argv[ai + 1]);
-                    type_t  type = found->v->type;
+                    type_t  type = found->value.mem->type;
                     mx mstr = type->functions->from_string((none*)null, (cstr)aval.mem->origin);
                     iargs[key] = mstr;
                 } else {
@@ -157,8 +154,8 @@ map::mdata::operator bool() { return ((hash_map && hash_map->len() > 0) || (fiel
         /// return results in order of defaults, with default value given
         map res = map();
         for(field &df:def.data->fields.elements<field>()) {
-            field *ov = iargs->lookup(*(mx*)&df.k);
-            res.data->fields += field { ion::hold(df.k), ov ? ion::hold(ov->v) : ion::hold(df.v) };
+            field *ov = iargs->lookup(df.key);
+            res.data->fields += field { ion::hold(df.key), ov ? ion::hold(ov->value) : ion::hold(df.value) };
         }
         return res;
     }
@@ -202,5 +199,4 @@ map::mdata::operator bool() { return ((hash_map && hash_map->len() > 0) || (fiel
     }
     
     mx &map::operator[](const mx &k) { return (*data)[k]; }
-
 }

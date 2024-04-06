@@ -335,7 +335,7 @@ mx *var::get(str key) {
         return null;
     map::mdata *m = (map::mdata*)mem->origin;
     field *f = m->lookup(key);
-    return f ? (mx*)f->v->origin : null;
+    return f ? (mx*)f->value.mem->origin : null;
 }
 
 /// called from path::read<var>()
@@ -344,9 +344,9 @@ mx var::parse(cstr js, type_t type) {
 }
 
 str var::stringify() const {
-    auto encode_str = [](memory *m) -> str {
-        str res(m->count * 2);
-        char *s = (char*)m->origin;
+    auto encode_str = [](const mx &m) -> str {
+        str res(m.count() * 2);
+        char *s = (char*)m.origin<char>();
         while (*s) {
             if ((*s & 0b10000000) == 0) {
                 if      (*s == '\r') res += "\\r";
@@ -365,20 +365,20 @@ str var::stringify() const {
                 if (i4) {
                     assert(s[1] && s[2] && s[3]);
                     code = int(0b00000111 & s[0]) << 18 |
-                            int(0b00111111 & s[1]) << 12 |
-                            int(0b00111111 & s[2]) <<  6 |
-                            int(0b00111111 & s[3]) <<  0;
+                           int(0b00111111 & s[1]) << 12 |
+                           int(0b00111111 & s[2]) <<  6 |
+                           int(0b00111111 & s[3]) <<  0;
                     s += 4;
                 } else if (i3) {
                     assert(s[1] && s[2]);
                     code = int(0b00001111 & s[0]) << 12 |
-                            int(0b00111111 & s[1]) <<  6 |
-                            int(0b00111111 & s[2]) <<  0;
+                           int(0b00111111 & s[1]) <<  6 |
+                           int(0b00111111 & s[2]) <<  0;
                     s += 3;
                 } else if (i2) {
                     assert(s[1]);
                     code = int(0b00011111 & s[0]) <<  6 |
-                            int(0b00111111 & s[1]) <<  0;
+                           int(0b00111111 & s[1]) <<  0;
                     s += 2;
                 }
                 char buf[32];
@@ -410,9 +410,9 @@ str var::stringify() const {
                 if (vt == typeof(mx) || vt == typeof(map))
                     res += fn(e);
                 else {
-                    memory *smem = e.to_string();
-                    type_t  mt   = smem ? smem->type : null;
-                    if (!smem || smem->type == typeof(null_t))
+                    mx smem = e.to_string();
+                    type_t mt = smem.type();
+                    if (mt == typeof(null_t))
                         res += "null";
                     else if (vt->traits & (traits::integral | traits::realistic))
                         res += smem; /// string of the number, no quotes!
@@ -458,14 +458,14 @@ str var::stringify() const {
             ar += "{";
             size_t n_fields = 0;
             for (field &fx: m.fields()) {
-                str skey = str(fx.k->hold());
+                str skey = str(fx.key.mem->hold());
                 if (n_fields)
                     ar += ",";
                 ar += "\"";
                 ar += skey;
                 ar += "\"";
                 ar += ":";
-                ar += format_v(fx.v);
+                ar += format_v(fx.value);
                 n_fields++;
             }
             ar += "}"; /// needs array output if below doesnt cover

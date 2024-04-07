@@ -169,7 +169,6 @@ struct memory:Memory<none> {
     memory *hold() { return ion::hold(this); }
 
     static memory *raw_alloc(type_t type, size_t sz, size_t count, size_t res);
-    static int raw_alloc_count();
 
     static memory *    alloc(type_t type, size_t count = 1, size_t reserve = 1, raw_t src = null);
            void   *  realloc(size_t res,  bool fill_default);
@@ -304,24 +303,16 @@ struct mx:MX {
     
     mx(std::string s) : mx(memory:: string(s)) { }
 
-    template <typename T>
-    static memory *import(T *addr, size_t count, size_t reserve, bool managed) {
-        memory*     mem = alloc<T>(count, reserve);
-        mem->attrs     |= traits::managed;
-        mem->origin     = addr;
-        return mem;
-    }
-
     /// must move lambda code away from lambda table, and into constructor code gen
     template <typename T>
     memory *copy(T *src, size_t count, size_t reserve) {
         memory*     mem = (memory*)calloc64(1, sizeof(memory));
         mem->count      = count;
-        mem->reserve    = reserve; //math::max(count, reserve);
+        mem->reserve    = math::max(count, reserve);
         mem->refs       = 1;
         mem->type       = typeof(T);
         mem->attrs     |= traits::managed;
-        mem->origin     = (T*)calloc64(math::max(count, reserve), sizeof(T));
+        mem->origin     = (T*)calloc64(mem->reserve, sizeof(T));
         ///
         if constexpr (is_primitive<T>()) {
             memcpy(mem->origin, src, sizeof(T) * count);
@@ -409,17 +400,16 @@ struct mx:MX {
         assert(p);
         type_t t = p->type;
 
-        /// this one shouldnt perform any type conversion yet
         assert((t == value.type() || (t->traits & traits::mx_enum)) || 
                (t->schema && t->schema->bind->data == value.type()));
         
         void *dst = p->member_pointer(mem->origin);
         void *src = value.origin<void>();
         assert(dst);
-
-        bool is_mx = (t->traits & traits::mx_obj) || (t->traits & traits::mx);
         t->f.dtr(dst);
-        is_mx ? t->f.ctr_mem(dst, hold(value.mem)) : t->f.ctr_cp (dst, src);
+        t->f.ctr_cp (dst, src);
+
+        // when freeing, we must perform dtr on the memory
     }
 
    ~mx() { ion::drop(mem); }

@@ -272,8 +272,6 @@ i64 integer_value(memory *mem) {
 memory *drop(memory *mem) {
     if (mem) {
         if (--mem->refs <= 0 && !mem->constant) { /// <= because mx_object does a defer on the actual construction of the container class
-            mem->origin = null;
-            // delete attachment lambda after calling it
             bool managed = mem->attrs & traits::managed;
             if (mem->atts) {
                 for (const attachment &att: mem->atts->elements<attachment>())
@@ -281,8 +279,10 @@ memory *drop(memory *mem) {
                 delete mem->atts;
                 mem->atts = null;
             }
-            if (managed)
+            if (managed) { /// array does not handle this properly on clear
+                mem->clear();
                 free64(mem->origin);
+            }
             if (mem->shape) {
                 delete mem->shape;
                 mem->shape = null;
@@ -438,15 +438,17 @@ size_t  _hash(cstr data, size_t count) {
 
 /// mx-objects are clearable which brings their count to 0 after destruction
 void memory::clear() {
-    alloc_schema *mx  = type->schema;
-    u8           *dst = (u8*)origin;
-    const sz_t    res = math::max(count, reserve);
-    if (mx) {
-        for (size_t i = 0; i < mx->bind_count; i++) { /// count should be called bind_count or something; its too ambiguous with memory
-            context_bind &c  = mx->composition[i];
-            for (size_t ii = 0; ii < count; ii++)
-                c.data->functions->destruct((none*)null, (none*)&dst[c.voffset * res + ii * c.base_sz]);
-        }
+    u8 *src = (u8*)origin;
+    for (size_t ii = 0; ii < count; ii++) {
+        if (type->schema) {
+            sz_t voffset = 0;
+            for (size_t i = 0; i < type->schema->bind_count; i++) {
+                context_bind &c  = type->schema->composition[i];
+                c.data->f.dtr(&src[voffset * reserve + ii * c.base_sz]); /// always make sure reserve is set to valid +value
+                voffset += c.voffset;
+            }
+        } else
+            type->f.dtr(&src[type->base_sz * ii]);
     }
     count = 0;
 }
@@ -487,21 +489,16 @@ memory *memory::symbol (ion::symbol s, type_t ty, i64 id) {
     return stringify(cstr(s), strlen(s), 0, true, ty, id);
 }
 
-static int _raw_alloc_count = 0;
-
 memory *memory::raw_alloc(type_t type, size_t sz, size_t count, size_t res) {
+    if (sz == 0 && type)
+        sz = type->base_sz;
     memory*     mem = (memory*)calloc64(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
     mem->count      = count;
     mem->reserve    = math::max(res, count);
     mem->refs       = 1; /// inc on construction for memory*
     mem->type       = type;
-    mem->origin     = sz ? calloc64(sz, math::max(res, count)) : null; /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
-    _raw_alloc_count++;
+    mem->origin     = sz ? calloc64(res->reserve, sz) : null; /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
     return mem;
-}
-
-int memory::raw_alloc_count() {
-    return _raw_alloc_count;
 }
 
 #ifdef WIN32

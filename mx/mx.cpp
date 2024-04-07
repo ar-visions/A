@@ -51,7 +51,19 @@ mx mx::mix(const mx& b, float f) const {
 
 int mx::compare(const mx& b) const {
     /// compare props here
-    return 0;
+    if (mem && type() == b.type() && mem->count == b.mem->count) {
+        type_t ty = mem->type->src; /// we are using src now to resolve basic type from an Array<something>; typeof(Array<int>) -> src = int
+        size_t cn = mem->count;
+        if (ty->traits & traits::primitive)
+            return memcmp(mem->origin, b.mem->origin, ty->base_sz * cn);
+        else if ((ty->traits & traits::is_mx) || (ty->traits & traits::mx_obj)) {
+            return mem->origin<mx>()->compare(*b->origin<mx>());
+        } else {
+            
+            return 0;
+        }
+    }
+    return mem < b.mem ? -1 : 1;
 }
 
 u64 mx::hash() const {

@@ -405,26 +405,21 @@ struct mx:MX {
 
     void set_meta(cstr cs, mx value) { set_meta(mx(mem_symbol(cs)), value); }
     void set_meta(const mx &key,  const mx &value) {
-        prop *p = lookup(key);
+        prop  *p = lookup(key);
         assert(p);
+        type_t t = p->type;
 
         /// this one shouldnt perform any type conversion yet
-        assert((p->type == value.type() || (p->type->traits & traits::mx_enum)) || 
-               (p->type->schema && p->type->schema->bind->data == value.type()));
+        assert((t == value.type() || (t->traits & traits::mx_enum)) || 
+               (t->schema && t->schema->bind->data == value.type()));
         
-        void *src = p->member_pointer(mem->origin); //
-        assert(src);
+        void *dst = p->member_pointer(mem->origin);
+        void *src = value.origin<void>();
+        assert(dst);
 
-        bool is_mx = p->type->traits & traits::mx_obj;
-
-        bool   is_mx = (p->type->traits & traits::mx_obj) || (p->type->traits & traits::mx);
-        
-        //void  *dst   = is_mx ? p->type->ctr_mem(hold(value.mem)) : p->type->ctr_cp(value.mem->origin);
-
-        if (!is_mx)
-            p->type->functions->assign(null, (none*)src, (none*)value.mem->origin); /// copy primitives and structs
-        else
-            p->type->functions->set_memory((none*)src, (memory*)value.mem); /// quick assignment for mx
+        bool is_mx = (t->traits & traits::mx_obj) || (t->traits & traits::mx);
+        t->f.dtr(dst);
+        is_mx ? t->f.ctr_mem(dst, hold(value.mem)) : t->f.ctr_cp (dst, src);
     }
 
    ~mx() { ion::drop(mem); }
@@ -474,17 +469,7 @@ struct mx:MX {
     bool operator==(const mx &b) const {
         if (mem == b.mem)
             return true;
-    
-        if (mem && type() == b.type() && mem->count == b.mem->count) {
-            type_t ty = mem->type;
-            size_t cn = mem->count;
-            if (ty->traits & traits::primitive)
-                return memcmp(mem->origin, b.mem->origin, ty->base_sz * cn) == 0;
-            else if (ty->functions && ty->functions->compare)
-                assert(false);
-            //    return ty->functions->compare(raw_t(0), mem->origin, b.mem->origin); /// must pass this in; dont change to memory* type, deprecate those
-        }
-        return false;
+        return compare(b) == 0;
     }
 
     bool operator!=(const mx &b)    const { return !operator==(b); }
@@ -1713,7 +1698,7 @@ idata *ident::for_type2() {
         type->f.dtr     = [](void* a) -> void { ((T*)a) -> ~T(); };
         if constexpr (has_ctr_mem <T>::value) type->f.ctr_mem  = [](void* a, memory* mem) -> void { new (a) T(mem); };
         if constexpr (has_ctr_cp  <T>::value) type->f.ctr_cp   = [](void* a, void* b)     -> void { new (a) T(*(const T*)b); };
-        if constexpr (has_ctr_type<T>::value) type->f.ctr_type = [](void* a, memory* mem) -> void { new (a) T(mem, mem->type); };
+        if constexpr (has_ctr_type<T>::value) type->f.ctr_type = [](void* a, memory* mem) -> void { new (a) T(mem, mem->type); }; /// user must implement this ctr
         if constexpr (has_etype   <T>::value) {
             type_t etype = typeof(typename T::etype);
             etype->ref = type; ///

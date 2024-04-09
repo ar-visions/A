@@ -21,8 +21,8 @@ struct completer:mx {
         mx              vdata;
         mutex           mtx;
         bool            completed;
-        array<mx>       l_success;
-        array<mx>       l_failure;
+        array           l_success;
+        array           l_failure;
     };
     mx_object(completer, mx, cdata);
 
@@ -31,7 +31,7 @@ struct completer:mx {
         
         fn_success = [data=data](mx d) { /// should not need a grab and drop; if
             data->completed = true;
-            for (mx &s: data->l_success) {
+            for (mx &s: data->l_success.elements<mx>()) {
                 FnFuture &lambda = s.mem->ref<FnFuture>();
                 lambda(d);
             }
@@ -39,7 +39,7 @@ struct completer:mx {
         
         fn_failure = [data=data](mx d) {
             data->completed = true;
-            for (mx &f: data->l_failure) {
+            for (mx &f: data->l_failure.elements<mx>()) {
                 FnFuture &lambda = f.mem->ref<FnFuture>();
                 lambda(d);
             }
@@ -50,8 +50,8 @@ struct completer:mx {
 /// how do you create a future?  you give it completer memory
 struct future:mx {
     completer::cdata &cd;
-    future (memory*           mem) : mx(mem),         cd(ref<completer::cdata>()) { }
-    future (const completer &comp) : mx(comp.hold()), cd(ref<completer::cdata>()) { }
+    future (memory*           mem) : mx(mem),        cd(mem->ref<completer::cdata>()) { }
+    future (const completer &comp) : mx(hold(comp)), cd(mem->ref<completer::cdata>()) { }
     
     int sync() {
         cd.mtx.lock();
@@ -97,7 +97,7 @@ struct runtime {
     lambda<void(mx)>           on_fail;
     size_t                     count;
     FnProcess				   fn;
-    array<mx>                  results;
+    array                      results;
     std::vector<std::thread>  *threads;       /// todo: unstd when it lifts off ground. experiment complete time to crash and blast in favor of new matrix.
     int                        done      = 0; /// 
     bool                       failure   = false;
@@ -114,7 +114,7 @@ public:
     inline static std::thread      th_manager;
     inline static mutex            mtx_global;
     inline static mutex            mtx_list;
-    inline static doubly<runtime*> procs;
+    inline static doubly           procs;
     inline static int              exit_code = 0;
 
     ///
@@ -129,7 +129,7 @@ public:
                 cycle     = false;
                 num index = 0;
                 ///
-                for (runtime *state: procs) {
+                for (runtime *state: procs.elements<runtime*>()) {
                     state->mtx_self.lock();
                     auto &ps = *state;
                     if (ps.done == ps.threads->size()) {
@@ -168,7 +168,7 @@ public:
         data->mtx_self.lock();
 
         data->failure |= !r;
-        data->results[w] = r;
+        data->results.set<mx>(w, r);
         
         /// wait for completion of one (we coudl combine c check inside but not willing to stress test that atm)
         mtx_global.lock();
@@ -202,7 +202,7 @@ public:
         data->fn = fn;
         if (count) {
             data->count   = count;
-            data->results = array<mx>(count);
+            data->results = array(typeof(mx), count);
         }
     }
     inline bool joining() const { return data->join; }
@@ -230,7 +230,7 @@ struct async {
 
     async& operator=(const async &c);
 
-    array<mx> sync(bool force_stop = false);
+    array sync(bool force_stop = false);
 
     /// await all async processes to complete
     static int await_all();
@@ -248,10 +248,9 @@ struct sync:async {
         async::sync();
     }
 
-    /// call array<S> src -> T conversion
-    template <typename T>
-    operator array<T>() { return async::sync(); }
-    operator      int() { return async::sync(); }
+    /// call Array<S> src -> T conversion
+    operator array() { return async::sync(); }
+    operator   int() { return async::sync(); }
 };
 }
 #endif

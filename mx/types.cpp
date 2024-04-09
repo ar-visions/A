@@ -22,7 +22,7 @@ static void describe_type(memory *mem, cstr name, sz_t sz, u64 traits) {
     type->mem       = mem;
     mem ->type      = type;
     type->name      = name;
-    type->traits    = traits::primitive;
+    type->traits    = traits;
     type->base_sz   = sz;
     type->src       = type;
 }
@@ -53,12 +53,10 @@ ident::ident(bool init) {
     static bool once;
     if (!once) {
         once = true;
-        
         ident::char_t = typeof(char);
         ident::i64_t  = typeof(i64);
         ident::u64_t  = typeof(u64);
         ident::types  = new hashmap(64);
-
         push_type(ident::char_t->mem); /// when hashmap/doubly are invoked, their specialized for_type2 methods should return their info
         push_type(ident::i64_t ->mem);
         push_type(ident::u64_t ->mem);

@@ -12,12 +12,12 @@ mx var::parse_obj(cstr *start, type_t type) {
     map  m_result;
 
     if (!is_map) {
-        void *alloc = type->functions->alloc_new();
+        void *alloc = type->ctr();
         /// if its an mx-based object, we need to get its memory
         if (type->traits & traits::mx_obj) {
             memory *mem = ((mx*)alloc)->mem->hold();
             mx_result = mx(mem);
-            type->functions->del((none*)null, (none*)alloc);
+            type->dtr(alloc);
         } else
             mx_result = memory::wrap(type, alloc, 1);
     }
@@ -78,13 +78,14 @@ mx var::parse_obj(cstr *start, type_t type) {
 }
 
 /// no longer will store compacted data
-mx var::parse_arr(cstr *start, type_t type) {
+mx var::parse_arr(cstr *start, type_t type) { /// array must be a Array<T> type
     type_t   e_type = type ? type->schema->bind->data : null;
-    void *container = null;
+    array *container = null;
     array a_result;
 
     if (type) {
-        container = type->functions->alloc_new();
+        assert(type->traits & traits::typed_array);
+        container = (array *)type->ctr();
     } else
         a_result = array();
 
@@ -98,7 +99,7 @@ mx var::parse_arr(cstr *start, type_t type) {
             *start = cur;
             mx  pv = parse_value(start, e_type);
             if (container)
-                type->functions->push(container, pv.mem);
+                container->push_memory(pv.mem);
             else
                 a_result += pv;
             cur = *start;
@@ -116,8 +117,9 @@ mx var::parse_arr(cstr *start, type_t type) {
     }
     *start = cur;
     if (container) {
-        memory *mem = ((mx*)container)->mem->hold();
-        type->functions->del((none*)null, (none*)container);
+        memory *mem = ((array*)container)->mem->hold();
+        printf("test_array mem 1: %p\n", mem);
+        type->f.dtr(container);
         return mx(mem);
     }
     return a_result;
@@ -149,7 +151,7 @@ mx var::parse_value(cstr *start, type_t type) {
         skip_alpha(start);
         return mx(mx::alloc(&v));
     } else if (first_chr == '"') {
-        assert(!type || (type == typeof(str) || type->functions->from_string));
+        assert(!type || (type == typeof(str) || type->f.str));
         symbol    b64 = "data:application/octet-stream;base64,";
         int      blen = strlen(b64);
         symbol start1 = (symbol)&(*start)[1];
@@ -176,7 +178,7 @@ mx var::parse_value(cstr *start, type_t type) {
         str value = parse_numeric(start, floaty);
         assert(value != "");
 
-        if (floaty) {
+        if ((floaty && !type) || type == typeof(float) || type == typeof(double)) {
             real v = value.real_value<real>();
             if (type) {
                 assert(type == typeof(float) || type == typeof(double));
@@ -187,10 +189,11 @@ mx var::parse_value(cstr *start, type_t type) {
                 return mx::alloc(&v);
             }
             return mx::alloc(&v);
-        } else if (type && (type->traits & traits::mx_enum)) {
-            void *temp = type->functions->from_string(null, value.cs());
+        } else if (type && (type->traits & traits::mx_obj)) {
+            /// handles mx enum, and all other objects that support a conversion function
+            void *temp = type->ctr_mem(value.mem);
             memory *mem = ((mx*)temp)->mem->hold();
-            type->functions->del((none*)null, (none*)temp);
+            type->f.dtr(temp);
             return mem;
         }
 
@@ -206,9 +209,6 @@ mx var::parse_value(cstr *start, type_t type) {
             if (type == typeof(i64))  { i64 vi64 = (i64)v;  return mx::alloc(&vi64); }
             if (type == typeof(u64))  { u64 vu64 = (u64)v;  return mx::alloc(&vu64); }
             if (type == typeof(size_t))  { size_t sz64 = (size_t)v; return mx::alloc(&sz64); }
-
-            if (type == typeof(r32))  { r32 vr32 = (r32)v;  return mx::alloc(&vr32); }
-            if (type == typeof(r64))  { r64 vr64 = (r64)v;  return mx::alloc(&vr64); }
             assert(false);
         }
         return mx::alloc(&v);
@@ -300,16 +300,8 @@ mx var::parse_quoted(cstr *cursor, type_t type) {
         if (type == typeof(Array<u8>)) {
             Array<u8> buffer = base64::decode(cs_result, result.len());
             return buffer;
-        } else {
-            /// must contain a cstr or symbol constructor
-            assert(type->functions->from_string);
-            void *v_result = type->functions->from_string(null, result.cs());
-            if (type->traits & traits::mx_obj) {
-                return ((mx*)v_result)->mem->hold();
-            }
-            return memory::wrap(type, v_result);
-        }
-
+        } else
+            return mx::from_string(result.cs(), type);
     }
     return result;
 }

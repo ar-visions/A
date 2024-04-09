@@ -7,20 +7,23 @@
 
 namespace ion {
 
+template <typename T> inline T cross    (const T &a, const T &b) { return a.cross(b); }
+template <typename T> inline T normalize(const T &a)             { return a.normalize(); }
+template <typename T> inline T dot      (const T &a, const T &b) { return a.dot(b); }
+
 #define vec2_decl(T, t) \
 struct vec2##t { \
     T x, y; \
-    operator bool(); \
     vec2##t(); \
     vec2##t(const vec2##t &v); \
     vec2##t(T x); \
     vec2##t(T x, T y); \
-    vec2##t(cstr s); \
-    vec2##t mix(vec2##t &b, double v); \
     vec2##t(str s); \
-    operator mx(); \
-    double length(); \
-    vec2##t &operator= (vec2##t v); \
+    vec2##t(cstr s); \
+    operator bool() const; \
+    const T &operator[](int i) const; \
+    operator mx() const; \
+    vec2##t &operator= (const vec2##t v); \
     vec2##t operator+ (const vec2##t &b) const; \
     vec2##t operator- (const vec2##t &b) const; \
     vec2##t operator* (const vec2##t &b) const; \
@@ -30,49 +33,74 @@ struct vec2##t { \
     vec2##t &operator += (vec2##t v); \
     vec2##t &operator -= (vec2##t v); \
     vec2##t &operator *= (vec2##t v); \
-    vec2##t &operator /= (vec2##t v); \
+    vec2##t &operator /= (const vec2##t &v); \
     vec2##t &operator *= (T v); \
     vec2##t &operator /= (T v); \
+    vec2##t mix(const vec2##t &b, double v) const; \
+    T dot() const;\
+    T length() const;\
+    T dot(const vec2##t &b) const;\
 }; \
 
 #define vec3_decl(T, t) \
 struct vec3##t { \
     T x, y, z; \
-    operator bool(); \
     vec3##t(); \
+    vec3##t(str s); \
+    vec3##t(cstr s); \
     vec3##t(T x); \
     vec3##t(T x, T y, T z); \
-    vec3##t(cstr s); \
-    operator mx(); \
-    vec3##t mix(vec3##t &b, double v); \
-    vec3##t(str s); \
+    operator bool()                 const; \
+    const T &operator[](int i)      const; \
+    operator mx()                   const; \
+    vec3##t &operator= (const vec3##t v); \
+    vec3##t operator+ (const vec3##t &b) const; \
+    vec3##t operator- (const vec3##t &b) const; \
+    vec3##t operator* (const vec3##t &b) const; \
+    vec3##t operator/ (const vec3##t &b) const; \
+    vec3##t operator* (const T v) const; \
+    vec3##t operator/ (const T v) const; \
+    vec3##t &operator += (const vec3##t &v); \
+    vec3##t &operator -= (const vec3##t &v); \
+    vec3##t &operator *= (const vec3##t &v); \
+    vec3##t &operator /= (const vec3##t &v); \
+    vec3##t &operator *= (T v); \
+    vec3##t &operator /= (T v); \
+    T dot()                         const; \
+    T dot(const vec3##t &b)         const; \
+    T length()                      const; \
+    vec3##t normalize()             const; \
+    vec3##t cross(const vec3##t &b) const; \
+    vec3##t mix  (const vec3##t &b, double v) const; \
 }; \
 
 #define vec4_decl(T, t) \
 struct vec4##t { \
     T x, y, z, w; \
-    operator bool() { return !(x == 0 && y == 0 && z == 0 && w == 0); } \
     vec4##t(); \
-    vec4##t(T x); \
-    vec4##t(T x, T y, T z, T w); { } \
-    vec4##t(cstr s); { } \
-    T &operator[](int i); \
-    operator mx(); \
-    vec4##t mix(vec4##t &b, double v); \
     vec4##t(str s); \
-}; \
-
-#define mat4_decl(T, t) \
-struct mat##t { \
-    vec4 rows[4]; \
-    operator bool(); \
-    mat##t(); \
-    mat##t(T x); \
-    mat##t(T x, T y, T z, T w); { } \
-    mat##t(const &T[16]); \
-    operator mx(); \
-    mat##t mix(mat##t &b, double v); \
-    mat##t(str s); \
+    vec4##t(cstr s); \
+    vec4##t(T x); \
+    vec4##t(T x, T y, T z, T w); \
+    vec4##t &operator= (const vec4##t v); \
+    vec4##t operator+ (const vec4##t &b) const; \
+    vec4##t operator- (const vec4##t &b) const; \
+    vec4##t operator* (const vec4##t &b) const; \
+    vec4##t operator/ (const vec4##t &b) const; \
+    vec4##t operator* (const T v) const; \
+    vec4##t operator/ (const T v) const; \
+    vec4##t &operator += (const vec4##t &v); \
+    vec4##t &operator -= (const vec4##t &v); \
+    vec4##t &operator *= (const vec4##t &v); \
+    vec4##t &operator /= (const vec4##t &v); \
+    vec4##t &operator *= (T v); \
+    vec4##t &operator /= (T v); \
+    operator bool()                         const; \
+    const T &operator[](int i)              const; \
+    operator mx()                           const; \
+    str color()                             const; \
+    T dot(const vec4##t &b)                 const; \
+    vec4##t mix(const vec4##t &b, double v) const; \
 }; \
 
 vec2_decl(float,  f)
@@ -108,9 +136,99 @@ vec4_decl(u32,    u32)
 vec4_decl(i64,    i64)
 vec4_decl(u64,    u64)
 
-mat4_decl(float,  f)
 
-using m44d    = mat44d;
+#define mat44_decl(T, t) \
+struct mat44##t { \
+    vec4##t rows[4]; \
+    mat44##t(); \
+    mat44##t(T x); \
+    mat44##t(str s); \
+    mat44##t(const vec4##t &r0, const vec4##t &r1, const vec4##t &r2, const vec4##t &r3);\
+    mat44##t(T x, T y, T z); \
+    mat44##t(T x, T y, T z, T w); \
+    mat44##t(const vec4##t  &v); \
+    mat44##t(const mat44##t &v); \
+             operator bool() const; \
+    const vec4##t &operator[](int i) const; \
+             operator mx() const; \
+    mat44##t operator*(const mat44##t &b) const; \
+    vec4##t  operator*(const vec4##t  &b) const; \
+    vec3##t  operator*(const vec3##t  &b) const; \
+    mat44##t &operator= (const mat44##t v); \
+    mat44##t &operator *= (const mat44##t &v); \
+    mat44##t mix(const mat44##t &b, double v) const; \
+    static mat44##t perspective(T fov, T aspect, T near, T far);\
+    static mat44##t look_at(const vec3##t &eye, const vec3##t &center, const vec3##t &up);\
+};
+
+mat44_decl(float,   f)
+
+//mat44_decl(double, d)
+//using m44d    = mat44d;
+
 using m44f    = mat44f;
+
+using vec2i   = vec2i32;
+
+struct edge {
+    using vec2 = ion::vec2d;
+    using vec4 = ion::vec4d;
+    using T    = double;
+    vec2 a, b;
+
+    /// returns x-value of intersection of two lines
+    T x(const vec2 &c, const vec2 &d) const;
+    
+    /// returns y-value of intersection of two lines
+    T y(const vec2 &c, const vec2 &d) const;
+    
+    /// returns xy-value of intersection of two lines
+    vec2 xy(const vec2 &c, const vec2 &d) const;
+
+    /// returns x-value of intersection of two lines
+    T x(const edge &e) const;
+    
+    /// returns y-value of intersection of two lines
+    T y(const edge &e) const;
+
+    /// returns xy-value of intersection of two lines (via edge0 and edge1)
+    vec2 xy(const edge &e) const;
+};
+
+
+struct rect {
+    using T = double;
+    using vec2 = ion::vec2d;
+    T x, y, w, h;
+
+    vec2 r_tl = { 0, 0 };
+    vec2 r_tr = { 0, 0 };
+    vec2 r_bl = { 0, 0 };
+    vec2 r_br = { 0, 0 };
+    bool rounded = false;
+
+    rect(T x = 0, T y = 0, T w = 0, T h = 0);
+
+    rect(const vec2 &p0, const vec2 &p1);
+
+    rect  offset(T a)                const;
+    vec2  sz()                       const;
+    vec2  xy()                       const;
+    vec2  center()                   const;
+    bool  contains(const vec2 &p)    const;
+    bool  operator== (const rect &r) const;
+    bool  operator!= (const rect &r) const;
+    rect  operator + (const rect &r) const;
+    rect  operator - (const rect &r) const;
+    rect  operator + (const vec2 &v) const;
+    rect  operator - (const vec2 &v) const;
+    rect  operator * (T        r)    const;
+    rect  operator / (T        r)    const;
+          operator bool()            const;
+
+    void set_rounded(const vec2 &tl, const vec2 &tr, const vec2 &br, const vec2 &bl);
+
+    rect clip(const rect &input) const;
+};
 
 }

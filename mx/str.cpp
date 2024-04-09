@@ -240,7 +240,7 @@ str str::expr(lambda<str(str)> fn) const {
 }
 
 /// format is a user of expr
-str str::format(const array &args) const {
+str str::format(const Array<mx> &args) const {
     return expr([&](str e) -> str {
         size_t index = size_t(e.integer_value());
         if (index >= 0 && index < args.len()) {
@@ -252,7 +252,7 @@ str str::format(const array &args) const {
 }
 
 /// just using cs here, for how i typically use it you could cache the strings
-str str::format(symbol cs, const array &args) {
+str str::format(symbol cs, const Array<mx> &args) {
     return str(cs).format(args);
 }
 

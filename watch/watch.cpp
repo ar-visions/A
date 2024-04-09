@@ -2,7 +2,7 @@
 
 namespace ion {
 
-watch watch::spawn(array<path> paths, array<str> exts, states<path::option> options, watch::fn watch_fn) {
+watch watch::spawn(array paths, array exts, states<path::option> options, watch::fn watch_fn) {
     watch w;
     watch::state &s = *w.data;
 
@@ -15,17 +15,17 @@ watch watch::spawn(array<path> paths, array<str> exts, states<path::option> opti
     async { size_t(1), [ps, options] (runtime *p, int index) -> var { /// give w a ref and copy into lambda
         state& s = *ps; /// was being copied!
         while (!s.canceling) {
-            s.ops = array<path_op>(size_t(32 + s.largest * 2));
+            s.ops = array(typeof(path_op), size_t(32 + s.largest * 2));
             
             /// flag for deletion
-            for (field<path_state> &f: s.path_states) {
-                path_state &ps = f.value;
+            for (field &f: s.path_states.fields()) {
+                path_state &ps = f.value.mem->ref<path_state>();
                 ps->found      = false;
             }
             
             /// populate modified and created
             size_t path_index = 0;
-            for (path &res:s.paths) {
+            for (path &res:s.paths.elements<path>()) {
                 res.resources(s.exts, options, [&](path p) {
                     if (!p.exists())
                         return;
@@ -68,11 +68,12 @@ watch watch::spawn(array<path> paths, array<str> exts, states<path::option> opti
             do {
                 cont = false;
                 /// k = path, v = path_state
-                for (auto &[v,k]: s.path_states) {
-                    if (!v->found) {
+                for (auto &[k,v]: s.path_states.fields()) {
+                    path_state &ps = v.mem->ref<path_state>();
+                    if (!ps->found) {
                         path_op op;
-                        op->path        = v->res;
-                        op->path_index  = v->path_index;
+                        op->path        = ps->res;
+                        op->path_index  = ps->path_index;
                         op->op          = path::op::deleted;
                         ///
                         s.ops += op;

@@ -3537,7 +3537,7 @@ struct states:mx {
     template <typename ET>
     inline assigner<bool> operator[](ET varg) const {
         u64 f = 0;
-        if constexpr (identical<ET, initial<T>>()) {
+        if constexpr (identical<ET, std::initializer_list<T>>()) {
             for (auto &v:varg)
                 f |= to_flag(u32(v));
         } else if constexpr (identical<ET, symbol>()) { /// support states["enum-name"] = true;  this reduces code

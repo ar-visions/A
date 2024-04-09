@@ -41,7 +41,7 @@ async::async(exec command) : async(1, [&](runtime *proc, int i) -> mx {
 
 async::async(lambda<mx(runtime *, int)> fn) : async(1, fn) {}
 
-array<mx> async::sync(bool force_stop) {
+array async::sync(bool force_stop) {
     /// wait for join to complete, set results internal and return
     for (;;) {
         d.mtx.lock();

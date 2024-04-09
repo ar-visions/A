@@ -34,25 +34,25 @@ struct path_state:mx {
 };
 
 struct watch:mx {
-    using fn = lambda<void(bool, array<path_op> &)>;
+    using fn = lambda<void(bool, array &)>; // path_op
 
     struct state {
         bool             safe;
         bool        canceling;
         const int     polling = 1000;
-        array<path>     paths;
+        array           paths;
         states<path::option> options;
         fn           watch_fn;
-        array<path_op>    ops;
+        array             ops; // path_op
         int              iter;
         int           largest;
-        array<str>       exts;
-        map<path_state> path_states;
+        array            exts;
+        map              path_states;
     };
 
     mx_object(watch, mx, state);
 
-    static watch spawn(array<path> paths, array<str> exts, states<path::option> options, watch::fn watch_fn);
+    static watch spawn(array paths, array exts, states<path::option> options, watch::fn watch_fn);
     
     void stop();
 };

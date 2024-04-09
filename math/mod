@@ -1,2 +1,2 @@
 cpp(17)
-dep(mx:mx glm:glm_static)
+dep(mx:mx)

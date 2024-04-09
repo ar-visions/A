@@ -142,8 +142,9 @@ map::mdata::operator bool() { return ((hash_map && hash_map->len() > 0) || (fiel
                 if (found) {
                     str     aval = str(argv[ai + 1]);
                     type_t  type = found->value.mem->type;
-                    mx mstr = type->functions->from_string((none*)null, (cstr)aval.mem->origin);
-                    iargs[key] = mstr;
+                    /// from_string should use const str&
+                    /// 
+                    iargs[key] = mx::from_string((cstr)aval.mem->origin, type); /// static method on mx that performs the busy work of this
                 } else {
                     printf("arg not found: %s\n", key.mem->get<char>(0)); // shouldnt do this dangerous thing with strings
                     return {};
@@ -172,7 +173,7 @@ map::mdata::operator bool() { return ((hash_map && hash_map->len() > 0) || (fiel
 
     bool map::contains(mx key) { return (*data)(key); }
     
-    map::operator bool() { return mx::mem && *data; }
+    map::operator bool() const { return mx::mem && *data; }
 
     /// when a size is specified to map, it engages hash map mode
     map::map(size sz) : map() {

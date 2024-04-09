@@ -7,13 +7,7 @@ path path::cwd() {
     return dir::cwd();
 }
 
-
-memory* path::M::to_string() {
-    static std::string str;
-    str = p.string();
-    return memory::string(str);
-}
-
+path::operator str() { return str(cs(), memory::autolen); }
 
 path::path(str      s) : path() {
     data->p = fs::path((symbol)s.cs());
@@ -304,8 +298,5 @@ array path::matching(array exts) {
     resources(exts, { }, [&](path p) { ret += p; });
     return ret;
 }
-
-path::operator str() { return str(cs(), memory::autolen); }
-
 
 }

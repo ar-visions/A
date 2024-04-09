@@ -309,21 +309,25 @@ struct mx;
 struct MX {
     memory *mem;
     MX(memory* mem) : mem(mem) { }
+    MX(bool   v);
+    MX(u8     v);
+    MX(i8     v);
+    MX(u16    v);
+    MX(i16    v);
+    MX(u32    v);
+    MX(i32    v);
+    MX(u64    v);
+    MX(i64    v);
+    MX(r32    v);
+    MX(r64    v);
+    template <typename T>
+    T &ref() const;
     operator mx &() const;
 };
 
 struct field {
     MX key;
     MX value;
-
-    //memory *k; // renaming so we can spot uses of these and revamp
-    //memory *v;
-
-    //template <typename K>
-    //K   &key();
-
-    //template <typename V>
-    //V &value();
 };
 
 struct ldata {
@@ -345,7 +349,6 @@ struct ldata {
     operator  bool() const { return ifirst != null; }
     bool operator!() const { return ifirst == null; }
 
-    template <typename T>
     void shift(mx* prev_first = null);
 
     /// push by value, return its new instance
@@ -379,28 +382,7 @@ struct ldata {
 
     /// no need for insert before AND after when you can give it the count of the list
     template <typename T>
-    item *insert(num before, T &data, u64 hash = 0) {
-        item *i;
-        if (before == icount) {
-            i = new item { null, ilast, data, hash };
-            if (ilast)
-                ilast->next = i;
-            ilast = i;
-            if (icount == 0)
-                ifirst = i;
-        } else {
-            item *s = get(before);
-            i = new item { s, s->prev, data, hash };
-            if (s->prev) {
-                s->prev->next = i;
-            } else {
-                ifirst = i;
-            }
-            s->prev = i;
-        }
-        icount++;
-        return i;
-    }
+    item *insert(num before, T &data, u64 hash = 0);
 
     size_t    len() { return icount; }
     size_t length() { return icount; }
@@ -508,6 +490,7 @@ struct ldata {
 
 /// maybe just switch to identical ?
 template <typename T> struct is_array  : false_type {};
+template <typename T> struct is_typed_array : false_type {};
 template <typename T> struct is_map    : false_type {};
 template <typename T> struct is_hmap   : false_type {};
 template <typename T> struct is_doubly : false_type {};
@@ -659,14 +642,15 @@ struct traits {
         singleton       = 8,
         lambda          = 16,
         array           = 32,
-        map             = 64,
-        mx              = 128,
-        mx_obj          = 256,
-        init            = 512, /// has an init method
-        mx_enum         = 1024,
-        enum_primitive  = 2048,
-        opaque          = 4096,
-        managed         = 8192
+        typed_array     = 64,
+        map             = 128,
+        mx              = 256,
+        mx_obj          = 512,
+        init            = 1024, /// has an init method
+        mx_enum         = 2048,
+        enum_primitive  = 4096,
+        opaque          = 8192,
+        managed         = 16384
     };
 };
 
@@ -832,6 +816,12 @@ struct str;
 
 #include <mx/meta.hpp>
 
+
+template <typename T>
+T &MX::ref() const {
+    return *mem->get<T>(0);
+}
+
 using fn_t = func<void()>;
 
 struct rand {
@@ -907,29 +897,34 @@ template <typename T>
 T   &ldata::last() const { return *ilast->mem->get<T>(0); }
 
 template <typename T>
-void ldata::shift(mx* prev_first) {
-    assert(ilast);
-    ///
-    item *i = ifirst;
-    bool set_last = ilast == ifirst;
-    ifirst        = ifirst->next;
-    ///
-    if (!ifirst) {
-        ilast = null;
-    } else
-        ifirst->prev = 0;
-    ///
-    icount--;
-    if (prev_first) {
-        *prev_first = *(mx*)&i->mem; // location of mx is the location of memory pointer, not its value
-    }
-    delete i;
-}
-
-template <typename T>
 T &ldata::data(num ix) const {
     assert(ix >= 0 && ix < num(icount));
     return ldata::get(ix)->mem->get<T>();
+}
+
+
+template <typename T>
+item *ldata::insert(num before, T &data, u64 hash) {
+    item *i;
+    if (before == icount) {
+        i = new item { null, ilast, memory::alloc(typeof(T), 1, 1, &data), hash };
+        if (ilast)
+            ilast->next = i;
+        ilast = i;
+        if (icount == 0)
+            ifirst = i;
+    } else {
+        item *s = get(before);
+        i = new item { s, s->prev, memory::alloc(typeof(T), 1, 1, &data), hash };
+        if (s->prev) {
+            s->prev->next = i;
+        } else {
+            ifirst = i;
+        }
+        s->prev = i;
+    }
+    icount++;
+    return i;
 }
 
 template <typename T>
@@ -1078,19 +1073,6 @@ struct utf {
     }
 };
 
-template <typename T>
-u64 hash_value(const T &k) {
-    type_t type = typeof(T);
-    if (type == typeof(i64)  || type == typeof(u64))    return (u64)*(u64*)&k;
-    if (type == typeof(i32)  || type == typeof(u32))    return (u64)*(u32*)&k;
-    if (type == typeof(cstr) || type == typeof(symbol)) return (u64)djb2(cstr(k));
-    assert(type->functions);
-    if (type->functions->hash)
-        return type->functions->hash((none*)&k, 1);
-    assert(false);
-    return 0;
-}
-
 /// probably dont need V mentioned in here; maps can store anything by key
 struct map:mx {
     inline static const size_t default_hash_size = 64;
@@ -1163,9 +1145,13 @@ struct map:mx {
 
     bool contains(mx key);
     
-    operator bool();
+    operator bool() const;
 
-    template <typename K> K &get(const K &k) const { return lookup(k)->value; }
+    template <typename V>
+    V &get(const mx &k) const {
+        field &f = data->fetch(k);
+        return f.value.ref<V>();
+    }
 
     mx_object(map, mx, mdata);
 
@@ -1391,10 +1377,10 @@ struct logger {
         return s;
     }
 
-    inline void fault(mx m, array ar = array { }) { str s = m.to_string(); _print(s, ar, { err }); brexit(); }
-    inline void error(mx m, array ar = array { }) { str s = m.to_string(); _print(s, ar, { err }); brexit(); }
-    inline void print(mx m, array ar = array { }) { str s = m.to_string(); _print(s, ar, { append }); }
-    inline void debug(mx m, array ar = array { }) { str s = m.to_string(); _print(s, ar, { append }); }
+    inline void fault(mx m, Array<mx> ar = Array<mx> { }) { str s = m.to_string(); _print(s, ar, { err }); brexit(); }
+    inline void error(mx m, Array<mx> ar = Array<mx> { }) { str s = m.to_string(); _print(s, ar, { err }); brexit(); }
+    inline void print(mx m, Array<mx> ar = Array<mx> { }) { str s = m.to_string(); _print(s, ar, { append }); }
+    inline void debug(mx m, Array<mx> ar = Array<mx> { }) { str s = m.to_string(); _print(s, ar, { append }); }
 };
 
 /// define a logger for global use; 'console' can certainly be used as delegate in mx or node, for added context

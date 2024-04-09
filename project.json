@@ -2,15 +2,5 @@
     "name":   "mx",
     "version":"dev",
     "import": [
-        {
-            "name":     "glm",
-            "version":  "0.9.9.8",
-            "commit":   "bf71a83",
-            "url":      "https://github.com/g-truc/glm",
-            "cmake": {
-                "args": ["-DBUILD_STATIC_LIBS=%STATIC%", "-DCMAKE_CXX_FLAGS=-Wno-error -Wno-implicit-int-float-conversion"]
-            },
-            "platforms": []
-        }
     ]
 }

@@ -31,24 +31,18 @@ constexpr int num_occurances(const char* cs, char c) {
     using intern = D;\
     static type_t intern_t;\
     D *data;\
-    D  &operator *();\
     D  *operator->();\
-    explicit operator D *();\
-             operator D &();\
     C       &operator=(const C &b);\
-    C::C(memory*  mem);\
-    C::C(mx         o);\
-    C::C();\
-    C::C(D  *data);\
-    C::C(const D  &data);\
+    C(memory*  mem);\
+    C(const mx  &o);\
+    C();\
+    C(D  *data);\
+    C(const D  &data);\
 
 /// for mx_implement
 #define mx_basic_implement(C, B, D) \
     type_t C::intern_t  = typeof(D);\
-    D  &C::operator *() { return *data; }\
     D *C::operator-> () { return  data; }\
-    C::operator D   *() { return  data; }\
-    C::operator D   &() { return *data; }\
     C &C::operator=(const C &b) {\
         if(mx::mem != b.mx::mem) {\
             ion::drop(mx::mem);\
@@ -58,7 +52,7 @@ constexpr int num_occurances(const char* cs, char c) {
         return *this;\
     }\
     C::C(memory*   mem)  : B(mem), data(ion::mdata<D>(mem, 0)) { }\
-    C::C(mx o)           : C(ion::hold(o)) { }\
+    C::C(const mx &o)    : C(ion::hold(o)) { }\
     C::C()               : C(mx::alloc<C>()) { }\
     C::C(D  *data)       : C(mx::wrap<D>(data, 1)) { }\
     C::C(const D  &data) : C(mx::alloc<C>((void*)&data)) { }\
@@ -72,8 +66,6 @@ constexpr int num_occurances(const char* cs, char c) {
     D *data;\
     D  &operator *() { return *data; }\
     D *operator-> () { return  data; }\
-    operator D   *() { return  data; }\
-    operator D   &() { return *data; }\
     C &operator=(const C &b) {\
         if(mx::mem != b.mx::mem) {\
             ion::drop(mx::mem);\
@@ -88,27 +80,11 @@ constexpr int num_occurances(const char* cs, char c) {
     C(D  *data)       : C(mx::wrap<D>(data, 1)) { }\
     C(const D  &data) : C(mx::alloc<C>((void*)&data)) { }\
 
-/// these handle alloc, reference, copy-or-convert
-/// user must implement the constructor themselves, although we declare it here
-/// for mx_declare
-#define mx_convertible_declare(C, B, D) \
-    mx_basic_declare(C, B, D)\
-    static C *_ctr_type(C* addr, memory *mem);\
-    C(type_t type, memory*  mem);\
+#define mx_declare(C, B, D) \
+    mx_basic_declare(C, B, D)
 
-/// for mx_implement
-#define mx_convertible_implement(C, B, D) \
-    mx_basic_implement(C, B, D)\
-
-/// for mx_object
-#define mx_convertible_object(C, B, D) \
-    mx_basic_object(C, B, D)\
-
-#define mx_declare(C, B, D, SECURITY) \
-    mx_##SECURITY##_declare(C, B, D)
-
-#define mx_implement(C, B, D, SECURITY) \
-    mx_##SECURITY##_implement(C, B, D)
+#define mx_implement(C, B, D) \
+    mx_basic_implement(C, B, D)
 
 #define mx_object(C, B, D) \
     mx_basic_object(C, B, D)

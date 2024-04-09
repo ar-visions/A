@@ -95,13 +95,16 @@ bool hashmap::contains(const mx &key) const {
     return hashmap::item(key, null);
 }
 
-static idata hmdata_t {
-    .name    = (cstr)"hmdata",
-    .base_sz = sizeof(hmdata),
-    .traits  = traits::mx_obj | traits::primitive
-};
+static type_t init_hmdata_t() {
+    static idata hmdata_t {
+        .name    = (cstr)"hmdata",
+        .base_sz = sizeof(hmdata),
+        .traits  = traits::mx_obj
+    };
+    return &hmdata_t;
+}
 
-hashmap::hashmap(size_t sz) : mem(memory::alloc(&hmdata_t)), data((hmdata*)mem->origin) {
+hashmap::hashmap(size_t sz) : mem(memory::alloc(init_hmdata_t())), data((hmdata*)mem->origin) {
     data->h_pairs = (bucket*)calloc64(sz, sizeof(bucket)); /// inits from zero
     data->sz = sz;
 }

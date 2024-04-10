@@ -31,6 +31,7 @@ constexpr int num_occurances(const char* cs, char c) {
     using intern = D;\
     static type_t intern_t;\
     D *data;\
+    operator D &() const;\
     D  *operator->();\
     C       &operator=(const C &b);\
     C(memory*  mem);\
@@ -51,6 +52,9 @@ constexpr int num_occurances(const char* cs, char c) {
         }\
         return *this;\
     }\
+    C::operator D &() const {\
+        return *(D *)data;\
+    }\
     C::C(memory*   mem)  : B(mem), data(ion::mdata<D>(mem, 0)) { }\
     C::C(const mx &o)    : C(ion::hold(o)) { }\
     C::C()               : C(mx::alloc<C>()) { }\
@@ -64,6 +68,9 @@ constexpr int num_occurances(const char* cs, char c) {
     using intern = D;\
     static inline type_t intern_t = typeof(D);\
     D *data;\
+    operator D &() const {\
+        return *(D *)data;\
+    }\
     D  &operator *() { return *data; }\
     D *operator-> () { return  data; }\
     C &operator=(const C &b) {\

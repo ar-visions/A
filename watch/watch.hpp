@@ -1,4 +1,4 @@
-/// who throws a way a perfectly good Watch?!
+/// who throws away a perfectly good Watch?!
 #pragma once
 
 #include <mx/mx.hpp>

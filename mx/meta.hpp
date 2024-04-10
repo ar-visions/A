@@ -240,7 +240,7 @@ struct mx:MX {
     using parent_class  = none;
     using context_class = none;
     using intern        = none;
-    static const inline type_t intern_t = null;
+    static inline type_t intern_t = null;
 
     //mx  mix    (const mx& b, float f) const;
     int compare(const mx& b) const;
@@ -410,7 +410,7 @@ struct mx:MX {
         ion::prop *pr    = lookup(key);                    assert(pr);
         void      *src   = pr->member_pointer(mem->origin); assert(src);
         bool       is_mx = (pr->type->traits & traits::mx_obj) || (pr->type->traits & traits::mx);
-        return    (is_mx) ? hold(((mx*)src)->mem) : memory::window(pr->type, src);
+        return    (is_mx) ? ion::hold(((mx*)src)->mem) : memory::window(pr->type, src);
     }
 
     void set_meta(cstr cs, mx value) { set_meta(mx(mem_symbol(cs)), value); }
@@ -428,7 +428,7 @@ struct mx:MX {
         if (t->f.dtr)
             t->f.dtr(dst);
         if ((t->traits & traits::mx) || (t->traits & traits::mx_obj))
-            t->f.ctr_mem(dst, hold(value.mem)); /// issue is we are performing Array<int>& cp with *int
+            t->f.ctr_mem(dst, ion::hold(value.mem)); /// issue is we are performing Array<int>& cp with *int
         else
             t->f.ctr_cp (dst, src); /// issue is we are performing Array<int>& cp with *int
     }
@@ -1116,24 +1116,20 @@ struct array:mx {
         return push(v);
     }
 
-    /// clearing a list reallocates to 1, destructing previous
-    template <typename T>
     void clear() {
-        T *data = array::data<T>();
+        type_t t = mem->type;
+        sz_t sz = t->base_sz;
+        u8 *src = (u8*)mem->origin;
+        assert(t->f.dtr);
         for (int i = 0; i < mem->count; i++) {
-            ((T*)data)[i] . ~T();
+            void* ptr = &src[sz * i];
+            t->f.dtr(ptr);
         }
         mem->count = 0;
     }
 
-    /// destructing a list means it keeps the size
-    template <typename T>
     void destruct() {
-        T *data = array::data<T>();
-        for (int i = 0; i < mem->count; i++) {
-            ((T*)data)[i] . ~T();
-        }
-        mem->count = 0;
+        clear();
     }
 };
 
@@ -1337,7 +1333,7 @@ struct str:mx {
     static char &non_wspace(cstr cs);
 
     str(memory        *mem);
-    str(const mx &o) : str(o.mem) { }
+    str(const mx &o) : str(hold(o.mem)) { }
     str(null_t = null);
     str(char            ch);
     str(size_t          sz);
@@ -1604,16 +1600,7 @@ size_t schema_info(alloc_schema *schema, int depth, B *top, T *p, idata *ctx_typ
             if (schema->bind_count) {
                 context_bind &bind = schema->composition[schema->bind_count - 1 - depth]; /// [ base data ][ mid data ][ top data ]
                 bind.ctx     = ctx_type ? ctx_type : typeof(T);
-                bind.data    = T::intern_t;
-                if (!bind.data) {
-                    /// we avoid doing this on array because that breaks schema population;
-                    /// without having intern_t it does not work on gcc, the types are seen as opaque even when its initialized in module
-                    bind.data = identical<typename T::intern, none>() ? null : T::intern_t;
-                    if (!identical<typename T::intern, none>()) {
-                        int test = 0;
-                        assert(T::intern_t);
-                    }
-                }
+                bind.data    = typeof(typename T::intern);
                 //bind.data    = identical<typename T::intern, none>() ? null : typeof(typename T::intern);
                 bind.base_sz = bind.data ? bind.data->base_sz : 0; /// if array stores a str, it wont store char, so it must be its mx container.  if array stores char, its base sz is char.  if its a struct, same deal
             }
@@ -1838,7 +1825,7 @@ idata *ident::for_type2() {
             schema_populate(type, (T*)null);
         
         if constexpr (registered_instance_meta<T>()) {
-            static T *def = new T();
+             static T *def = new T();
             type->meta    = new doubly { def->meta() }; /// make a reference to this data
             for (prop &p: type->meta->elements<prop>()) {
                 p.offset     = size_t(p.member_addr) - size_t(def);

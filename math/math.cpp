@@ -50,6 +50,10 @@ namespace ion {
     vec2##t &vec2##t::operator /= (const vec2##t &v) { x /= v.x; y /= v.y; return *this; } \
     vec2##t &vec2##t::operator *= (T v) { x *= v; y *= v; return *this; } \
     vec2##t &vec2##t::operator /= (T v) { x /= v; y /= v; return *this; } \
+    vec2##t &vec2##t::operator=(const vec2##t &b) {\
+        memcpy(this, &b, sizeof(vec2##t));\
+        return *this;\
+    }\
 
 #define vec3_impl(T, t) \
     vec3##t::operator bool() const { return !(x == 0 && y == 0 && z == 0); } \
@@ -115,17 +119,23 @@ namespace ion {
     vec3##t &vec3##t::operator /= (const vec3##t &v) { x /= v.x; y /= v.y; z /= v.z; return *this; } \
     vec3##t &vec3##t::operator *= (T v) { x *= v; y *= v; z *= v; return *this; } \
     vec3##t &vec3##t::operator /= (T v) { x /= v; y /= v; z /= v; return *this; } \
+    vec3##t &vec3##t::operator=(const vec3##t &b) {\
+        memcpy(this, &b, sizeof(vec3##t));\
+        return *this;\
+    }\
 
 #define vec4_impl(T, t) \
     using namespace ion;\
-    ion::vec4##t::vec4##t() : x(0), y(0), z(0), w(0) { } \
-    ion::vec4##t::vec4##t(T x) : x(x), y(x), z(x), w(x) { } \
-    ion::vec4##t::vec4##t(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) { } \
-    ion::vec4##t::vec4##t(cstr s) : vec4##t(ion::str(s)) { } \
-    T ion::vec4##t::dot(const vec4##t &b) const {\
+    vec4##t::vec4##t() : x(0), y(0), z(0), w(0) { } \
+    vec4##t::vec4##t(T x) : x(x), y(x), z(x), w(x) { } \
+    vec4##t::vec4##t(const vec3##t &xyz, T w) : x(xyz.x), y(xyz.y), z(xyz.z), w(w) { } \
+    vec4##t::vec4##t(const vec2##t &a, const vec2##t &b) : x(a.x), y(a.y), z(b.x), w(b.y) { } \
+    vec4##t::vec4##t(T x, T y, T z, T w) : x(x), y(y), z(z), w(w) { } \
+    vec4##t::vec4##t(cstr s) : vec4##t(str(s)) { } \
+    T vec4##t::dot(const vec4##t &b) const {\
         return x * b.x + y * b.y + z * b.z + w * b.w;\
     }\
-    ion::vec4##t::vec4##t(ion::str h) { \
+    vec4##t::vec4##t(str h) { \
         size_t sz = h.len(); \
         i32    ir = 0, ig = 0, \
             ib = 0, ia = 255; \
@@ -183,7 +193,7 @@ namespace ion {
             } \
         }\
     } \
-    ion::vec4##t ion::vec4##t::mix(const vec4##t &b, double v) const { \
+    vec4##t vec4##t::mix(const vec4##t &b, double v) const { \
         const vec4##t &a = *this; \
         return vec4##t { \
             T(a.x * (1.0 - v) + b.x * v), \
@@ -192,10 +202,22 @@ namespace ion {
             T(a.w * (1.0 - v) + b.w * v) \
         }; \
     } \
-    ion::vec4##t::operator bool() const { return !(x == 0 && y == 0 && z == 0 && w == 0); } \
-    ion::vec4##t::operator mx() const { return Array<T> { x, y, z, w }; } \
-    const T &ion::vec4##t::operator[](int i) const { return * (&x + i); } \
-    ion::str ion::vec4##t::color() const {\
+    vec4##t::operator bool() const { return !(x == 0 && y == 0 && z == 0 && w == 0); } \
+    vec4##t::operator mx() const { return Array<T> { x, y, z, w }; } \
+    const T &vec4##t::operator[](int i) const { return * (&x + i); } \
+    vec4##t vec4##t::operator+ (const vec4##t &b) const { return vec4##t { T(x + b.x), T(y + b.y), T(z + b.z), T(w + b.w) }; } \
+    vec4##t vec4##t::operator- (const vec4##t &b) const { return vec4##t { T(x - b.x), T(y - b.y), T(z - b.z), T(w - b.w) }; } \
+    vec4##t vec4##t::operator* (const vec4##t &b) const { return vec4##t { T(x * b.x), T(y * b.y), T(z * b.z), T(w * b.w) }; } \
+    vec4##t vec4##t::operator/ (const vec4##t &b) const { return vec4##t { T(x / b.x), T(y / b.y), T(z / b.z), T(w / b.w) }; } \
+    vec4##t vec4##t::operator* (const T v)     const { return vec4##t { T(x * v), T(y * v), T(z * v), T(w * v) }; } \
+    vec4##t vec4##t::operator/ (const T v)     const { return vec4##t { T(x / v), T(y / v), T(z / v), T(w / v) }; } \
+    vec4##t &vec4##t::operator += (const vec4##t &v) { x += v.x; y += v.y; z += v.z; w += v.w; return *this; } \
+    vec4##t &vec4##t::operator -= (const vec4##t &v) { x -= v.x; y -= v.y; z -= v.z; w -= v.w; return *this; } \
+    vec4##t &vec4##t::operator *= (const vec4##t &v) { x *= v.x; y *= v.y; z *= v.z; w *= v.w; return *this; } \
+    vec4##t &vec4##t::operator /= (const vec4##t &v) { x /= v.x; y /= v.y; z /= v.z; w /= v.w; return *this; } \
+    vec4##t &vec4##t::operator *= (T v) { x *= v; y *= v; z *= v; w *= v; return *this; } \
+    vec4##t &vec4##t::operator /= (T v) { x /= v; y /= v; z /= v; w /= v; return *this; } \
+    str vec4##t::color() const {\
         char    res[64];\
         u8      arr[4];\
         real sc;\
@@ -214,18 +236,13 @@ namespace ion {
         }\
         return res;\
     }\
-    vec4##t vec4##t::operator+ (const vec4##t &b) const { return vec4##t { T(x + b.x), T(y + b.y), T(z + b.z), T(w + b.w) }; } \
-    vec4##t vec4##t::operator- (const vec4##t &b) const { return vec4##t { T(x - b.x), T(y - b.y), T(z - b.z), T(w - b.w) }; } \
-    vec4##t vec4##t::operator* (const vec4##t &b) const { return vec4##t { T(x * b.x), T(y * b.y), T(z * b.z), T(w * b.w) }; } \
-    vec4##t vec4##t::operator/ (const vec4##t &b) const { return vec4##t { T(x / b.x), T(y / b.y), T(z / b.z), T(w / b.w) }; } \
-    vec4##t vec4##t::operator* (const T v)     const { return vec4##t { T(x * v), T(y * v), T(z * v), T(w * v) }; } \
-    vec4##t vec4##t::operator/ (const T v)     const { return vec4##t { T(x / v), T(y / v), T(z / v), T(w / v) }; } \
-    vec4##t &vec4##t::operator += (const vec4##t &v) { x += v.x; y += v.y; z += v.z; w += v.w; return *this; } \
-    vec4##t &vec4##t::operator -= (const vec4##t &v) { x -= v.x; y -= v.y; z -= v.z; w -= v.w; return *this; } \
-    vec4##t &vec4##t::operator *= (const vec4##t &v) { x *= v.x; y *= v.y; z *= v.z; w *= v.w; return *this; } \
-    vec4##t &vec4##t::operator /= (const vec4##t &v) { x /= v.x; y /= v.y; z /= v.z; w /= v.w; return *this; } \
-    vec4##t &vec4##t::operator *= (T v) { x *= v; y *= v; z *= v; w *= v; return *this; } \
-    vec4##t &vec4##t::operator /= (T v) { x /= v; y /= v; z /= v; w /= v; return *this; } \
+    vec4##t &vec4##t::operator=(const vec4##t &b) {\
+        memcpy(this, &b, sizeof(vec4##t));\
+        return *this;\
+    }\
+    vec3##t vec4##t::xyz() const {\
+        return vec3##t { x, y, z };\
+    }\
 
 /*
 | 1 - 2y^2 - 2z^2    2xy - 2wz        2xz + 2wy        0 |
@@ -235,62 +252,77 @@ namespace ion {
 */
 #define exp(x,y) pow(x,y)
 
-#define quad_impl(T, t) \
-struct quat { \
-    vec4##t v; \
-    quat(vec3##t axis, T angle) { \
+#define quat_impl(T, t) \
+    quat##t::quat##t() : quat##t(T(1), T(0), T(0), T(0)) { } \
+    quat##t::quat##t(vec3##t axis, T angle) { \
         T h = angle / T(2.0); \
         w = cos(h); \
-        x = axis.x * sin(h); \
-        y = axis.y * sin(h); \
-        z = axis.z * sin(h); \
+        T sh = sin(h); \
+        x = axis.x * sh; \
+        y = axis.y * sh; \
+        z = axis.z * sh; \
     } \
-}; \
+    quat##t::quat##t(T w, T x, T y, T z) { \
+        this->w = w; \
+        this->x = x; \
+        this->y = y; \
+        this->z = z; \
+    } \
+    quat##t &quat##t::operator=(const quat##t &b) {\
+        memcpy(this, &b, sizeof(quat##t));\
+        return *this;\
+    }\
 
-#define mat44_impl2(T, t) \
-    ion::mat44##t::operator bool() const { return rows[3].w > T(0); }; \
+#define mat44_impl(T, t) \
+    ion::mat44##t::operator bool() const { return cols[3].w > T(0); }; \
     ion::mat44##t::mat44##t() : mat44##t(T(1.0)) { } \
     ion::mat44##t::mat44##t(const vec4##t &r0, const vec4##t &r1, const vec4##t &r2, const vec4##t &r3) {\
-        rows[0] = r0;\
-        rows[1] = r1;\
-        rows[2] = r2;\
-        rows[3] = r3;\
+        cols[0] = r0;\
+        cols[1] = r1;\
+        cols[2] = r2;\
+        cols[3] = r3;\
     }\
     ion::mat44##t::mat44##t(str s) : mat44##t() { } \
-    ion::mat44##t::mat44##t(T x, T y, T z, T w) {\
-        rows[0] = vec4##t( (1) - 2*exp(y,2) - 2*exp(z,2), (2*x*y) - (2*w*z),            (2*x*z) + (2*w*y), 0 ) ; \
-        rows[1] = vec4##t( (2*x*y) + (2*w*z),             1 - 2*exp(x, 2) - 2*exp(z,2), (2*y*z) - (2*w*x), 0 ) ; \
-        rows[2] = vec4##t( (2*x*z) - (2*w*y),             (2*y*z + 2*w*x),              1 - 2*exp(x, 2) - 2*exp(y, 2),       0 ) ; \
-        rows[3] = vec4##t( 0, 0, 0, 1 ) ; \
+    ion::mat44##t::mat44##t(const quat##t &q) {\
+        cols[0] = vec4##t( (1) - 2*exp(q.y,2) - 2*exp(q.z,2), (2*q.x*q.y) - (2*q.w*q.z), (2*q.x*q.z) + (2*q.w*q.y), 0 ) ; \
+        cols[1] = vec4##t( (2*q.x*q.y) + (2*q.w*q.z), 1 - 2*exp(q.x, 2) - 2*exp(q.z,2), (2*q.y*q.z) - (2*q.w*q.x), 0 ) ; \
+        cols[2] = vec4##t( (2*q.x*q.z) - (2*q.w*q.y), (2*q.y*q.z + 2*q.w*q.x), 1 - 2*exp(q.x, 2) - 2*exp(q.y, 2), 0 ) ; \
+        cols[3] = vec4##t( 0, 0, 0, 1 ) ; \
     }\
+    ion::mat44##t::mat44##t(T x, T y, T z, T w) { \
+        cols[0].x = x; \
+        cols[1].y = y; \
+        cols[2].z = z; \
+        cols[3].w = w; \
+    } \
     ion::mat44##t::mat44##t(T x, T y, T z) : mat44##t(x, y, z, T(1.0)) { } \
     ion::mat44##t::mat44##t(T v) : mat44##t(v, v, v, v) { } \
     ion::mat44##t::mat44##t(const vec4##t &v) : mat44##t(((vec4##t&)v)[0], v[1], v[2], v[3]) { } \
     ion::mat44##t::mat44##t(const mat44##t &v) { \
-        memcpy((T*)&rows[0][0], (T*)&v[0][0], sizeof(T) * 4 * 4); \
+        memcpy((T*)&cols[0][0], (T*)&v[0][0], sizeof(T) * 4 * 4); \
     } \
-    const ion::vec4##t &ion::mat44##t::operator[](int i) const { return rows[i]; } \
+    const ion::vec4##t &ion::mat44##t::operator[](int i) const { return cols[i]; } \
     ion::mat44##t ion::mat44##t::operator*(const mat44##t &b) const {\
         mat44##t result(T(0));\
         for (int i = 0; i < 4; i++) {\
             for (int j = 0; j < 4; j++) {\
                 T &sum = (T&)result[i][j];\
                 for (int k = 0; k < 4; k++)\
-                    sum += rows[i][k] * b[k][j];\
+                    sum += cols[i][k] * b[k][j];\
             }\
         }\
         return result;\
     }\
-    ion::vec4##t ion::mat44##t::operator*(const vec4##t &b) const {\
+    vec4##t mat44##t::operator*(const vec4##t &b) const {\
         vec4##t result(T(0));\
         for (int i = 0; i < 4; i++) {\
             T &sum = (T&)result[i];\
             for (int j = 0; j < 4; j++)\
-                sum += rows[i][j] * b[j];\
+                sum += cols[i][j] * b[j];\
         }\
         return result;\
     }\
-    ion::vec3##t ion::mat44##t::operator*(const vec3##t &b) const {\
+    vec3##t mat44##t::operator*(const vec3##t &b) const {\
         vec4##t v { b.x, b.y, b.z, T(1.0) };\
         vec4##t r = *this * v;\
         return vec3##t(r.x, r.y, r.z);\
@@ -299,78 +331,106 @@ struct quat { \
         *this = *this * v; \
         return *this; \
     } \
-    ion::mat44##t::operator mx() const { \
+    mat44##t::operator mx() const { \
         return mx::window(this); \
     }\
-    ion::mat44##t mat44##t::mix(const mat44##t &b, double v) const {\
+    mat44##t mat44##t::mix(const mat44##t &b, double v) const {\
         return mat44##t {\
-            rows[0].mix(b.rows[0], v),\
-            rows[1].mix(b.rows[1], v),\
-            rows[2].mix(b.rows[2], v),\
-            rows[3].mix(b.rows[3], v)\
+            cols[0].mix(b.cols[0], v),\
+            cols[1].mix(b.cols[1], v),\
+            cols[2].mix(b.cols[2], v),\
+            cols[3].mix(b.cols[3], v)\
         };\
     } \
-    ion::mat44##t look_at(const vec3##t &eye, const vec3##t &center, const vec3##t &u) {\
-        vec3##t forward = ion::normalize(center - eye);\
-        vec3##t right = ion::normalize(ion::cross(forward, u));\
-        vec3##t up = ion::cross(right, forward);\
-        return mat44##t {\
+    mat44##t mat44##t::make_translation(const vec3##t &v) { \
+        return mat44##t { \
+            vec4##t { T(1), T(0), T(0), v.x  }, \
+            vec4##t { T(0), T(1), T(0), v.y  }, \
+            vec4##t { T(0), T(0), T(1), v.z  }, \
+            vec4##t { T(0), T(0), T(0), T(1) } \
+        }; \
+    } \
+    mat44##t mat44##t::make_scaling(const vec3##t &v) { \
+        return mat44##t { \
+            vec4##t { T(v.x), T(0),   T(0),   T(0) }, \
+            vec4##t { T(0),   T(v.y), T(0),   T(0) }, \
+            vec4##t { T(0),   T(0),   T(v.z), T(0) }, \
+            vec4##t { T(0),   T(0),   T(0),   T(1) } \
+        }; \
+    } \
+    mat44##t mat44##t::translate(const vec3##t &v) const { \
+        return *this * make_translation(v); \
+    } \
+    mat44##t mat44##t::scale(const vec3##t &v) const { \
+        return *this * make_scaling(v); \
+    } \
+    mat44##t mat44##t::look_at(const vec3##t &eye, const vec3##t &center, const vec3##t &u) { \
+        vec3##t forward = ion::normalize(center - eye); \
+        vec3##t right = ion::normalize(ion::cross(forward, u)); \
+        vec3##t up = ion::cross(right, forward); \
+        return mat44##t { \
             vec4##t(right.x,    up.x,    -forward.x,    0),\
             vec4##t(right.y,    up.y,    -forward.y,    0),\
             vec4##t(right.z,    up.z,    -forward.z,    0),\
-            vec4##t(-dot(right, eye), -dot(up, eye),  dot(forward, eye), 1)\
-        };\
-    }\
-    ion::mat44##t perspective(T fov, T aspect, T near, T far) {\
-        T ff = 1 / tan(fov / 2);\
-        T nf = 1 / (near - far);\
-        return mat44##t {\
-            vec4##t(ff / aspect, 0, 0, 0),\
-            vec4##t(0, ff, 0, 0),\
-            vec4##t(0, 0, (far + near) * nf, -1),\
-            vec4##t(0, 0, 2 * far * near * nf, 0)\
-        };\
+            vec4##t(-dot(right, eye), -dot(up, eye),  dot(forward, eye), 1) \
+        }; \
+    } \
+    mat44##t mat44##t::perspective(T fov, T aspect, T near, T far) { \
+        T ff = 1 / tan(fov / 2); \
+        T nf = 1 / (near - far); \
+        return mat44##t { \
+            vec4##t(ff / aspect, 0, 0, 0), \
+            vec4##t(0, ff, 0, 0), \
+            vec4##t(0, 0, -(far + near) * nf, -1), \
+            vec4##t(0, 0, 2 * far * near * nf, 0) \
+        }; \
+    } \
+    mat44##t mat44##t::orthographic(T left, T right, T bottom, T top, T near, T far) { \
+        T rl = T(1) / (right - left); \
+        T tb = T(1) / (top - bottom); \
+        T fn = T(1) / (far - near); \
+        return mat44##t { \
+            vec4##t(T(2) * rl, T(0), T(0), T(0)), \
+            vec4##t(T(0), T(2) * tb, T(0), T(0)), \
+            vec4##t(T(0), T(0), T(-2) * fn, T(0)), \
+            vec4##t(-(right + left) * rl, -(top + bottom) * tb, -(far + near) * fn, T(1)) \
+        }; \
+    } \
+    mat44##t &mat44##t::operator=(const mat44##t &b) {\
+        memcpy(this, &b, sizeof(mat44##t));\
+        return *this;\
     }\
 
 vec2_impl(float,  f)
 vec2_impl(double, d)
-vec2_impl(i8,     i8)
-vec2_impl(u8,     u8)
-vec2_impl(i16,    i16)
-vec2_impl(u16,    u16)
-vec2_impl(i32,    i32)
-vec2_impl(u32,    u32)
-vec2_impl(i64,    i64)
-vec2_impl(u64,    u64)
-
-//ion::vec4d::operator bool() const { return !(x == 0 && y == 0 && z == 0 && w == 0); }
-
-vec4_impl(float,  f)
-vec4_impl(double, d)
-vec4_impl(i8,     i8)
-vec4_impl(u8,     u8)
-vec4_impl(i16,    i16)
-vec4_impl(u16,    u16)
-vec4_impl(i32,    i32)
-vec4_impl(u32,    u32)
-vec4_impl(i64,    i64)
-vec4_impl(u64,    u64)
-
-
+vec2_impl(int,    i)
+vec2_impl(u8,    u8)
 
 vec3_impl(float,  f)
 vec3_impl(double, d)
-vec3_impl(i8,     i8)
-vec3_impl(u8,     u8)
-vec3_impl(i16,    i16)
-vec3_impl(u16,    u16)
-vec3_impl(i32,    i32)
-vec3_impl(u32,    u32)
-vec3_impl(i64,    i64)
-vec3_impl(u64,    u64)
+vec3_impl(int,    i)
+vec3_impl(u8,    u8)
 
-mat44_impl2(float, f)
+vec4_impl(float,  f)
+vec4_impl(double, d)
+vec4_impl(int,    i)
+vec4_impl(u8,    u8)
 
+mat44_impl(float, f)
+quat_impl (float, f)
+
+m44f translate(const m44f &m, const vec3f &b) {
+    return m.translate(b);
+}
+
+m44f scale(const m44f &m, const vec3f &b) {
+    return m.scale(b);
+}
+
+// only use quaternions
+//m44f rotate(const m44f &m, const vec3f &axis, double rads) {
+//    return m.rotate(axis, rads);
+//}
 
 /// returns x-value of intersection of two lines
 double edge::x(const vec2 &c, const vec2 &d) const {
@@ -411,6 +471,7 @@ double edge::y(const edge &e) const {
 vec2d edge::xy(const edge &e) const { return { x(e), y(e) }; }
 
 rect::rect(T x, T y, T w, T h) : x(x), y(y), w(w), h(h) { }
+rect::rect(int x, int y, int w, int h) : x(T(x)), y(T(y)), w(T(w)), h(T(h)) { }
 rect::rect(const vec2 &p0, const vec2 &p1) : x(p0.x), y(p0.y), w(p1.x - p0.x), h(p1.y - p0.y) { }
 
 rect  rect::offset(T a)                const { return { x - a, y - a, w + (a * 2), h + (a * 2) }; }
@@ -427,6 +488,11 @@ rect  rect::operator - (const vec2 &v) const { return { x - v.x, y - v.y, w, h }
 rect  rect::operator * (T        r)    const { return { x * r, y * r, w * r, h * r }; }
 rect  rect::operator / (T        r)    const { return { x / r, y / r, w / r, h / r }; }
       rect::operator bool()            const { return w > 0 && h > 0; }
+
+rect &rect::operator=  (const rect &r) {
+    memcpy(this, &r, sizeof(rect));
+    return *this;
+}
 
 void rect::set_rounded(const vec2 &tl, const vec2 &tr, const vec2 &br, const vec2 &bl) {
     this->r_tl = tl;

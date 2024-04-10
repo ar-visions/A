@@ -1,6 +1,13 @@
 dep(prefix:ci)
 cpp(20)
 
+cxxflags(
+    +@-Wno-writable-strings
+    +@-Wno-pointer-bool-conversion
+    +@-ffunction-sections
+    +@-fdata-sections
+    -@-Wl,--gc-sections)
+
 if (win)
     dep(@libucrt @libvcruntime @libcmt)
     # erroneous warnings about virtual functions we dont have
@@ -8,7 +15,6 @@ if (win)
 else()
     if (clang)
         cxxflags(
-            +-Wno-write-strings
             +-Wno-pointer-bool-conversion
             +-Wno-ambiguous-reversed-operator
             +-Wno-deprecated-volatile

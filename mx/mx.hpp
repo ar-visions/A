@@ -218,6 +218,9 @@ struct item {
     static item *container(memory *&mem) {
         return (item *)((symbol)&mem - sizeof(struct item*) * 2);
     }
+    template <typename T>
+    T &ref() const;
+
 };
 
 /// iterator unique for doubly
@@ -328,6 +331,9 @@ struct MX {
 struct field {
     MX key;
     MX value;
+
+    template <typename V>
+    operator V &() const;
 };
 
 struct ldata {
@@ -465,7 +471,7 @@ struct ldata {
 
     struct literable_items {
         item *ifirst, *ilast;
-        literable_items(item *ifirst, item *last) : ifirst(ifirst), ilast(ilast) { }
+        literable_items(item *ifirst, item *ilast) : ifirst(ifirst), ilast(ilast) { }
         liter_item begin() const { return liter_item{ ifirst }; }
         liter_item   end() const { return liter_item{ null }; }
     };
@@ -524,7 +530,7 @@ struct doubly {
     operator bool() const { return bool(*data); }
 
     template <typename T>
-    T   &operator[](num ix) const { return data->data<T>(ix); }
+    T &get(num ix) const { return data->data<T>(ix); }
 
     template <typename T>
     T   &operator+=(const T &v) { return data->push(v); }
@@ -593,11 +599,14 @@ struct hashmap {
     hashmap& operator=(hashmap &a);
 
     ion::item  *item (const mx &key, bucket **list = null, u64 *phash = null) const;
-    ion::field &fetch(const mx &key);
-    ion::field &fetch(cstr key);
+    field &fetch(const mx &key);
+    field &fetch(cstr key);
 
     mx    &value(const mx &key);
     void   set  (const mx &key, const mx &value);
+
+    template <typename V>
+    V &get(const mx &k);
 
     template <typename K>
     mx &lookup(const K &k) const;
@@ -811,7 +820,6 @@ T *defaults() {
     return  &def_instance;
 }
 
-i64 integer_value(memory *mem);
 struct str;
 
 #include <mx/meta.hpp>
@@ -864,6 +872,11 @@ struct rand {
 struct size;
 
 template <typename T>
+T &item::ref() const {
+    return *mem->get<T>(0);
+}
+
+template <typename T>
 T &ldata::push(const T &v, u64 hash) {
     item *plast = ilast;
     ilast = new item { null, ilast,
@@ -887,19 +900,19 @@ T &ldata::push() {
     ( plast->next = ilast);
     ///
     icount++;
-    return ilast->mem->get<T>();
+    return ilast->ref<T>();
 }
 
 template <typename T>
-T   &ldata::first() const { return *ifirst->mem->get<T>(0); }
+T   &ldata::first() const { return ifirst->ref<T>(); }
 
 template <typename T>
-T   &ldata::last() const { return *ilast->mem->get<T>(0); }
+T   &ldata::last() const { return ilast->ref<T>(); }
 
 template <typename T>
 T &ldata::data(num ix) const {
     assert(ix >= 0 && ix < num(icount));
-    return ldata::get(ix)->mem->get<T>();
+    return ldata::get(ix)->ref<T>();
 }
 
 
@@ -941,6 +954,14 @@ liter<T>::operator T& () const { return *cur->mem->get<T>(0); }
 
 using arg = field;
 using ax  = Array<arg>;
+
+
+template <typename V>
+field::operator V &() const {
+    assert(value.mem);
+    assert(typeof(V) == value.mem->type);
+    return value.ref<V>();
+}
 
 template <typename T>
 T convert_str(const str& s) {
@@ -1101,7 +1122,7 @@ struct map:mx {
         array keys();
 
         // value could be item memory reference
-        template <typename V>
+        /*template <typename V>
         array values() {
             array res { typeof(V), fields->len() };
             for (field &f:fields.elements<field>()) {
@@ -1112,7 +1133,7 @@ struct map:mx {
                     res.push(f.value.mem->get<V>(0));
             }
             return res;
-        }
+        }*/
 
         ldata::literable<field> elements() const;
 
@@ -1128,11 +1149,6 @@ struct map:mx {
     template <typename K>
     array keys() {
         return data->keys(); /// cannot pass K without a phony default arg.
-    }
-
-    template <typename V>
-    array values() {
-        return data->values<V>();
     }
 
     size_t len();
@@ -1355,12 +1371,12 @@ struct logger {
 
 
     public:
-    inline void log(mx m, array ar = {}) {
+    inline void log(mx m, const Array<mx> &ar = {}) {
         str st = m.to_string();
         _print(st, ar, { });
     }
 
-    void test(const bool cond, mx templ = {}, array ar = {}) {
+    void test(const bool cond, mx templ = {}, const Array<mx> &ar = {}) {
         #ifndef NDEBUG
         if (!cond) {
             str st = templ.count() ? templ.to_string() : null;
@@ -1708,6 +1724,13 @@ template <typename K>
 mx &hashmap::lookup(const K &k) const {
     mx key(k);
     return lookup(key);
+}
+
+template <typename V>
+V &hashmap::get(const mx &k) {
+    const mx key(k);
+    ion::field &f = fetch(key);
+    return f.value.ref<V>();
 }
 
 template <typename T>

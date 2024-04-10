@@ -437,14 +437,11 @@ struct has_intern<T, std::void_t<typename T::intern>> : true_type { };
     C::operator D   &() { return *data; }\
     C &C::operator=(const C &b) { mem->type->functions->assign((none*)null, (none*)this, (none*)&b); return *this; }
 
-//
-// C(const C& b) : B(b.mem->hold()), data(mx::data<D>()) { }\
-
 #define mx_object(C, B, D) \
     using parent_class   = B;\
     using context_class  = C;\
     using intern         = D;\
-    static const inline type_t intern_t  = typeof(D);\
+    static inline type_t intern_t  = typeof(D);\
     intern*    data;\
     C(memory*   mem) : B(mem), data(mx::data<D>()) { }\
     C(const C& b)    : C(b.mem->hold()) { }\

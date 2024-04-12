@@ -46,6 +46,7 @@ struct alloc_schema {
     size_t        total_bytes; /// total-allocation-size
     context_bind *composition; /// vector-of-pairs (context and its data struct; better to store the data along with it!)
     context_bind *bind; // this is a pointer to the top bind
+    type_t primary_type() { return bind ? bind->data : null; }
 };
 
 /// these should be vectorized but its not worth it for now
@@ -101,7 +102,7 @@ struct idata {
         std::function<void(void*,void*,void*,double)> mix;
         std::function<void(void*,void*)>   compare;
         std::function<bool(void*)>         boolean;
-        std::function<memory*(void*)>      str;
+        std::function<memory*(void*)>      to_str;
     } f;
 
     symbol_data     *symbols;
@@ -118,7 +119,7 @@ struct idata {
     void   *ctr_str (const str &v);
     void   *ctr_type(memory *mem);
     void   *ctr_cp  (void* b);
-    size_t  size();
+    size_t  data_size();
     memory *lookup(symbol sym);
     memory *lookup(i64 id);
     idata  *meta_lookup() {
@@ -180,6 +181,7 @@ struct memory:Memory<none> {
 
     static memory *raw_alloc(type_t type, size_t sz, size_t count, size_t res);
 
+    static memory *   valloc(type_t type, size_t count, size_t reserve, raw_t src = null);
     static memory *    alloc(type_t type, size_t count = 1, size_t reserve = 1, raw_t src = null);
            void   *  realloc(size_t res,  bool fill_default);
 
@@ -241,7 +243,6 @@ struct mx:MX {
     using parent_class  = none;
     using context_class = none;
     using intern        = none;
-    static inline type_t intern_t = null;
 
     static type_t register_class();
     static type_t register_data();
@@ -661,7 +662,7 @@ mx call(mx lambda, const array &args);
 struct array:mx {
     array(memory*   mem) : mx(mem) { }
     array(const mx   &o) : array(ion::hold(o.mem)) { }
-    array()              : array(mx::alloc<array>(null, 0, 0)) { } /// this must be lazy-alloc'd; generically, if we have a void type, then allocation must be lazy
+    array()              : array(memory::alloc(typeof(array), 0, 0)) { } /// this must be lazy-alloc'd; generically, if we have a void type, then allocation must be lazy
     
     static type_t register_class();
     static type_t register_data();
@@ -676,17 +677,17 @@ struct array:mx {
         }
     }
     array(type_t type, size al, size sz = size(0)) : 
-            array(memory::alloc(type, sz, al)) {
+            array(memory::valloc(type, sz, al)) {
         if (al.count > 1)
             mem->shape = new size(al); /// allocate a shape if there are more than 1 dims
     }
 
     /// constructor for allocating with a space to fill (and construct; this allocation does not run the constructor (if non-primitive) until append)
     /// indexing outside of shape space does cause error
-    array(type_t type, size_t  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
-    array(type_t type,    u32  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
-    array(type_t type,    i32  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
-    array(type_t type,    i64  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
+    array(type_t type, size_t  reserve) : array(memory::valloc(type, 0, size_t(reserve))) { }
+    array(type_t type,    u32  reserve) : array(memory::valloc(type, 0, size_t(reserve))) { }
+    array(type_t type,    i32  reserve) : array(memory::valloc(type, 0, size_t(reserve))) { }
+    array(type_t type,    i64  reserve) : array(memory::valloc(type, 0, size_t(reserve))) { }
 
     type_t element_type() const { return mem->data_type(); }
 
@@ -699,21 +700,6 @@ struct array:mx {
             T &item = *(T*)m_item->origin;
             a->push(item);
         }
-    }
-
-    template <typename T>
-    static array read_file(symbol filename) {
-        std::ifstream file(filename, std::ios::ate | std::ios::binary);
-
-        if (!file.is_open())
-            throw std::runtime_error("failed to open file!");
-
-        size_t byte_sz = (size_t) file.tellg();
-        array result(typeof(T), byte_sz / sizeof(T), byte_sz / sizeof(T));
-        file.seekg(0);
-        file.read((char*)result.data<T>(), byte_sz);
-        file.close();
-        return result;
     }
 
     template <typename T>
@@ -818,7 +804,7 @@ struct array:mx {
         if (mem->count >= alloc_size()) {
             assert(mem->type == typeof(array) || mem->data_type() == typeof(T));
             if (mem->type == typeof(array))
-                mem->type = typeof(T);
+                mem->type = typeof(T); /// we must change the type so we are aware of what the allocation is
             realloc(next_size(mem->count));
         }
         T *data = array::data<T>();
@@ -827,16 +813,23 @@ struct array:mx {
     }
     
     void *push_memory(memory* m) {
+        type_t e_type = element_type();
+        
+        bool has_primary_type = mem->type->schema && mem->type->schema->bind->data->schema && 
+                                                     mem->type->schema->bind->data->schema->bind->data == m->type;
+        assert(m->type == e_type || (e_type->schema && m->type == e_type->schema->bind->data) ||
+               has_primary_type);
+        
         if (mem->count >= alloc_size()) {
-            assert(m->type == typeof(array) || m->data_type() == m->type);
+            if (mem->type == typeof(array))
+                mem->type = m->type;
             realloc(next_size(mem->count));
         }
-        type_t e_type = element_type();
-        assert(m->type == e_type);
-        sz_t type_sz = m->type->base_sz;
+
+        sz_t type_sz = e_type->base_sz;
         u8 *dst = &((u8*)mem->origin)[type_sz * mem->count];
         if ((e_type->traits & traits::mx) || (e_type->traits & traits::mx_obj))
-            e_type->f.ctr_mem(dst, hold(m));
+            e_type->f.ctr_mem(dst, m);
         else
             e_type->f.ctr_cp(dst, m->origin);
         mem->count++;
@@ -848,7 +841,8 @@ struct array:mx {
         T *data = array::data<T>();
         if (mem->count >= alloc_size()) {
             assert(mem->type == typeof(array) || mem->type == typeof(T));
-            mem->type = typeof(T);
+            if (mem->type == typeof(array))
+                mem->type = typeof(T);
             realloc(next_size(mem->count));
         }
         new (&data[mem->count]) T();
@@ -1168,14 +1162,27 @@ template <> struct is_array<array> : true_type { };
 
 template<typename T>
 struct Array:array {
-    const static inline type_t intern_t = typeof(T); 
     using parent_class   = array;
     using context_class  = Array;
     using intern         = T;
     T* window;
 
-    static type_t register_class() { return typeof(Array<T>); }
+    static type_t register_class() { return typeof(Array); }
     static type_t register_data()  { return typeof(T); }
+
+    static Array<T> read_file(symbol filename) {
+        std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+        if (!file.is_open())
+            throw std::runtime_error("failed to open file!");
+
+        size_t byte_sz = (size_t) file.tellg();
+        Array<T> result(byte_sz / sizeof(T), byte_sz / sizeof(T));
+        file.seekg(0);
+        file.read((char*)result.data<T>(), byte_sz);
+        file.close();
+        return result;
+    }
 
     void realloc(size s_to) override {
         array::realloc(s_to);
@@ -1184,8 +1191,8 @@ struct Array:array {
     Array(memory*     mem) : array(mem), window((T*)mem->origin) { }
     Array(const mx     &o) : Array(hold(o.mem)) { }
     Array(const array &ar) : Array(hold(ar.mem)) { }
-    Array(sz_t sz, sz_t count = 0) : array(typeof(T), sz, count) { }
-    Array()                : array(memory::alloc(typeof(Array), 0, 1)) { }
+    Array(sz_t sz, sz_t count = 0) : Array(memory::alloc(typeof(Array), count, sz)) { }
+    Array()                : Array(memory::alloc(typeof(Array), 0, 1)) { }
     Array(std::initializer_list<T> a) : Array() {
         for (auto v: a) {
             push(v);
@@ -1206,18 +1213,6 @@ template <typename T> struct is_typed_array<Array<T>> : true_type { };
 
 ///
 struct ex:mx {
-    inline static const type_t intern_t = null;
-    static bool matches(symbol a, symbol b, int len) {
-        for (int i = 0; i < len; i++) {
-            if (!a[i] || !b[i])
-                return false;
-            if (a[i] == b[i] || (a[i] == '-' && b[i] == '_') ||
-                                (b[i] == '-' && a[i] == '_'))
-                continue;
-            return false;
-        }
-        return true;
-    }
     ///
     template <typename C>
     ex(memory *m, C *inst) : mx(m) {
@@ -1226,7 +1221,7 @@ struct ex:mx {
 
     /// called in construction by enum class
     template <typename C>
-    static typename C::etype convert(mx raw, symbol S, C *p) {
+    static typename C::etype convert(mx raw, ion::symbol S, C *p) {
         type_t type = typeof(C);
         ex::initialize((C*)null, (typename C::etype)0, S, type);
         mx psym;
@@ -1234,7 +1229,7 @@ struct ex:mx {
             char  *d = raw.get<char>();
             /// in json, the enum can sometimes be given in "23124" form; no enum begins with a numeric so we can handle this
             if (d[0] == '-' || isdigit(*d)) {
-                std::string str = (symbol)d;
+                std::string str = (ion::symbol)d;
                 i64 num = (i64)std::stoi(str);
                 psym = type->symbols->ids.lookup(num);
             } else {
@@ -1246,7 +1241,7 @@ struct ex:mx {
                 for (memory *mem: type->symbols->list.elements<memory*>()) {
                     if (raw.mem->count > mem->count)
                         continue;
-                    if (matches((symbol)mem->origin, (symbol)d, raw.mem->count))
+                    if (matches((ion::symbol)mem->origin, (ion::symbol)d, raw.mem->count))
                         return (typename C::etype)mem->id;
                 }
             }
@@ -1279,6 +1274,9 @@ struct ex:mx {
     ex(E v, C *inst) : ex(alloc<E>(&v), this) { }
 
     ex(memory *mem) : mx(mem) {}
+
+    static bool matches(symbol a, symbol b, int len);
+    ion::symbol symbol();
 };
 
 /// useful for constructors that deal with ifstream
@@ -1367,6 +1365,7 @@ struct str:mx {
     str(symbol cs, size_t len = memory::autolen, size_t rs = 0);
     str(std::string s);
     str(std::ifstream &in);
+    str(cstr cs);
 
     /// static methods
     static str combine(const str sa, const str sb);
@@ -1479,18 +1478,8 @@ struct str:mx {
             ///
             if (len() > 0) {
                 while ((end = index_of(s_delim, int(start))) != -1) {
-                    int test1 = 0;
-                    test1++;
                     str  mm = mid(start, int(end - start));
-                    
-                    int test2 = 0;
-                    test2++;
-
                     result += mm;
-
-                    int test3 = 0;
-                    test3++;
-
                     start   = end + delim_len;
                 }
                 result += mid(start);
@@ -1549,7 +1538,7 @@ struct str:mx {
 };
 
 template <typename C, typename E>
-E ex::initialize(C *p, E v, symbol names, type_t ty) {
+E ex::initialize(C *p, E v, ion::symbol names, type_t ty) {
     /// names should support normal enum syntax like abc = 2, abc2 = 4, abc3, abc4; we can infer what C++ does to its values
     /// get this value from raw.origin (symbol) instead of the S
     if (ty->secondary_init) return v;
@@ -1782,8 +1771,8 @@ idata *ident::for_type2() {
             type->f.ctr_type = [](void* a, memory* mem)  -> void { new (a) T(mem, mem->type); }; /// user must implement this ctr
         if constexpr (has_bool    <T>)
             type->f.boolean  = [](void* a)               -> bool { return bool(*(T*)a); };
-        if constexpr (has_str     <T>)
-            type->f.str      = [](void* a)               -> memory* { str r(*(T*)a); return hold(a); };
+        if constexpr (has_str     <T>) /// this is a to_string
+            type->f.to_str   = [](void* a)               -> memory* { str r(*(T*)a); return hold(a); };
         
         if constexpr (has_mix     <T>::value)
             type->f.mix      = [](void* a, void *b, void *c, double f) -> void {

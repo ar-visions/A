@@ -97,6 +97,27 @@ MX::operator mx&() const {
     return *(mx*)(this);
 }
 
+
+bool ex::matches(ion::symbol a, ion::symbol b, int len) {
+    for (int i = 0; i < len; i++) {
+        if (!a[i] || !b[i])
+            return false;
+        if (a[i] == b[i] || (a[i] == '-' && b[i] == '_') ||
+                            (b[i] == '-' && a[i] == '_'))
+            continue;
+        return false;
+    }
+    return true;
+}
+
+ion::symbol ex::symbol() {
+    i32 v = *mem->get<i32>(0);
+    memory *mem_symbol = mem->type->lookup(i64(v));
+    if (!mem_symbol) printf("symbol: mem is null for value %d\n", (int)v);
+    assert(mem_symbol);
+    return (char*)mem_symbol->origin;
+}
+
 //mx mx::mix(const mx& b, float f) const {
 //    /// interpolate props here
 //    return mx();
@@ -149,9 +170,8 @@ mx mx::from_string(cstr cs, type_t type) {
         /// enums handle this by implementing ctr_type (generic conversion)
         bool mx_based = (type->traits & traits::mx_obj);
         sz_t len = strlen(cs);
-        static memory *dont_hold = memory::raw_alloc(typeof(char), 0, len, len+1); /// memory* can be passed to const mx&
-        void *alloc = type->f.str(dont_hold); // it needs to be of type_t
-        assert(dont_hold->refs == 1); /// this one should never have its ref count change from 1
+        str value(cs);
+        void *alloc = type->ctr_str(value);
         memory *mem;
         if (mx_based) {
             mem = hold(((mx*)alloc)->mem);
@@ -197,22 +217,22 @@ mx mx::to_string() const {
         memory *res = type->ref->lookup(u64(iraw));
         return res;
     }
-    else if (type->f.str) {
+    else if (type->f.to_str) {
         memory *res;
         /// perform memory contruct because
         /// we dont always have full context in mx
         if (type->traits & traits::mx_obj) {
             void *temp = type->ctr_mem(hold(mem));
-            res = type->f.str(temp);
+            res = type->f.to_str(temp);
             type->dtr(temp);
         } else {
-            res = type->f.str(mem->origin);
+            res = type->f.to_str(mem->origin);
         }
         return res;
     }
-    else if (type->schema && type->schema->bind->data->f.str) {
+    else if (type->schema && type->schema->bind->data->f.to_str) {
         /// should assert the schema count is 1
-        return type->schema->bind->data->f.str(mem->origin);
+        return type->schema->bind->data->f.to_str(mem->origin);
     }
     
     else if (type == typeof(char))
@@ -341,7 +361,7 @@ size_t length(std::ifstream& in) {
     return to_end - base;
 }
 
-size_t idata::size() {
+size_t idata::data_size() {
     return schema ? schema->total_bytes : base_sz;
 }
 
@@ -494,7 +514,7 @@ attachment *memory::find_attachment(ion::symbol id) {
 }
 
 void *memory::realloc(size_t alloc_reserve, bool fill_default) {
-    size_t          type_sz   = type->size(); /// size of actual data consumed -- we dont use functions that are emitted from array<T> we use T in vector form (which they are already)
+    size_t          type_sz   = type->data_size(); /// size of actual data consumed -- we dont use functions that are emitted from array<T> we use T in vector form (which they are already)
     u8             *dst       = (u8*)calloc64(alloc_reserve, type_sz);
     u8             *src       = (u8*)origin;
     const sz_t      src_res   = reserve;
@@ -502,7 +522,6 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
     const bool      prim      = !type->schema || (type->traits & (traits::primitive | traits::opaque)) != 0;
     const sz_t      res       = alloc_reserve;
 
-    /// if single primitive, it can be mem copied.  otherwise this is interleaved vector
     if (prim) {
         memcpy(dst, src, type_sz * mn);
     } else {
@@ -630,13 +649,18 @@ void usleep(__int64 usec) {
 }
 #endif
 
-memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
+/// cannot perform alloc of str of count X without it inlaying the data.
+/// we dont want this for array use-case; so we will need to revisit the schema
+/// wrapping it worked fine; HOWEVER that creates a lot of code bloat.
+
+/// this functions the same as Array<type>; meant for general use in array
+memory *memory::valloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
     if (type->singleton)
         return ion::hold(type->singleton);
     
-    size_t  type_sz = type->size(); /// this is the 'data size', should name the function just that; if the type has no schema the data size is its own size
+    size_t  data_sz = type->base_sz; /// valloc uses base_sz, alloc uses the data within; it may be useful to rename 'alloc' to 'object'
     sz_t    res = math::max(count, reserve);
-    memory *mem = memory::raw_alloc(type, type_sz, count, res);
+    memory *mem = memory::raw_alloc(type, data_sz, count, res);
 
     if (type->traits & traits::singleton)
         type->singleton = mem;
@@ -646,10 +670,10 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
     if (count > 0) {
         if (primitive) {
             if (v_src)
-                memcpy(mem->origin, v_src, type_sz * count);
+                memcpy(mem->origin, v_src, data_sz * count);
             else if (type->f.ctr) {
                 for (size_t ii = 0; ii < count; ii++) {
-                    u8 *dst = &((u8*)mem->origin)[type_sz * ii];
+                    u8 *dst = &((u8*)mem->origin)[data_sz * ii];
                     type->f.ctr(dst);
                 }
             }
@@ -662,17 +686,72 @@ memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
                 if (bind.data->traits & traits::primitive) {
                     if (v_src) {
                         u8 *src = &((u8*)v_src)[bind.voffset * res];
-                        memcpy(dst, src, type_sz * count); /// better to do this over the entire vector when we can, for primitive-structs
+                        memcpy(dst, src, data_sz * count); /// better to do this over the entire vector when we can, for primitive-structs
                     }
                 } else {
                     if (v_src) {
                         assert (bind.data->f.ctr_cp);
                         u8 *src = &((u8*)v_src)[bind.voffset * res];
                         for (size_t ii = 0; ii < count; ii++)
-                            bind.data->f.ctr_cp(&dst[ii * type_sz], &src[ii * type_sz]);
+                            bind.data->f.ctr_cp(&dst[ii * data_sz], &src[ii * data_sz]);
                     } else if (bind.data->f.ctr)
                         for (size_t ii = 0; ii < count; ii++)
-                            bind.data->f.ctr(&dst[ii * type_sz]);
+                            bind.data->f.ctr(&dst[ii * data_sz]);
+                }
+            }
+        } else {
+            if (v_src)
+                type->f.ctr_cp(mem->origin, v_src);
+            else if (type->f.ctr)
+                type->f.ctr(mem->origin);
+        }
+    }
+    return mem;
+}
+
+memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
+    if (type->singleton)
+        return ion::hold(type->singleton);
+    
+    size_t  data_sz = type->data_size(); /// this is the 'data size', should name the function just that; if the type has no schema the data size is its own size
+    sz_t    res = math::max(count, reserve);
+    memory *mem = memory::raw_alloc(type, data_sz, count, res);
+
+    if (type->traits & traits::singleton)
+        type->singleton = mem;
+    bool primitive = (type->traits & traits::primitive);
+
+    /// if allocating a schema-based object (mx being first user of this)
+    if (count > 0) {
+        if (primitive) {
+            if (v_src)
+                memcpy(mem->origin, v_src, data_sz * count);
+            else if (type->f.ctr) {
+                for (size_t ii = 0; ii < count; ii++) {
+                    u8 *dst = &((u8*)mem->origin)[data_sz * ii];
+                    type->f.ctr(dst);
+                }
+            }
+        } else if (type->schema) {
+            /// if schema-copy-construct (call cpctr for each data type in composition)
+            for (size_t i = 0; i < type->schema->bind_count; i++) {
+                context_bind &bind = type->schema->composition[i];
+                if (!bind.data) continue;
+                u8 *dst = &((u8*)mem->origin)[bind.voffset * res];
+                if (bind.data->traits & traits::primitive) {
+                    if (v_src) {
+                        u8 *src = &((u8*)v_src)[bind.voffset * res];
+                        memcpy(dst, src, data_sz * count); /// better to do this over the entire vector when we can, for primitive-structs
+                    }
+                } else {
+                    if (v_src) {
+                        assert (bind.data->f.ctr_cp);
+                        u8 *src = &((u8*)v_src)[bind.voffset * res];
+                        for (size_t ii = 0; ii < count; ii++)
+                            bind.data->f.ctr_cp(&dst[ii * data_sz], &src[ii * data_sz]);
+                    } else if (bind.data->f.ctr)
+                        for (size_t ii = 0; ii < count; ii++)
+                            bind.data->f.ctr(&dst[ii * data_sz]);
                 }
             }
         } else {
@@ -767,7 +846,7 @@ memory *get_string(type_t type, raw_t data, str &name) {
     prop   *p;
     u8     *p_value = get_member_address(type, data, name, p);
     assert(p_value);
-    memory *m       = p->type->f.str(p_value);
+    memory *m       = p->type->f.to_str(p_value);
     return  m;
 }
 

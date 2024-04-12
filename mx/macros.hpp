@@ -39,7 +39,6 @@ constexpr int num_occurances(const char* cs, char c) {
     C(memory*  mem);\
     C(const mx  &o);\
     C();\
-    C(D  *data);\
     C(const D  &data);\
 
 /// for mx_implement
@@ -62,7 +61,6 @@ constexpr int num_occurances(const char* cs, char c) {
     C::C(memory*   mem)  : B(mem), data(ion::mdata<D>(mem, 0)) { }\
     C::C(const mx &o)    : C(ion::hold(o)) { }\
     C::C()               : C(mx::alloc<C>()) { }\
-    C::C(D  *data)       : C(mx::wrap<D>(data, 1)) { }\
     C::C(const D  &data) : C(mx::alloc<C>((void*)&data)) { }\
 
 /// for mx_object
@@ -90,7 +88,6 @@ constexpr int num_occurances(const char* cs, char c) {
     C(memory*   mem)  : B(mem), data(ion::mdata<D>(mem, 0)) { }\
     C(mx o)           : C(ion::hold(o)) { }\
     C()               : C(mx::alloc<C>()) { }\
-    C(D  *data)       : C(mx::wrap<D>(data, 1)) { }\
     C(const D  &data) : C(mx::alloc<C>((void*)&data)) { }\
 
 #define mx_declare(C, B, D) \
@@ -114,17 +111,11 @@ constexpr int num_occurances(const char* cs, char c) {
         inline static type_t intern_t;\
         static type_t  register_data()    { return typeof(etype); }\
         static type_t  register_class()   { return typeof(C); }\
-        static memory* lookup(symbol sym) { return typeof(C)->lookup(sym); }\
+        static memory* lookup(ion::symbol sym) { return typeof(C)->lookup(sym); }\
         static memory* lookup(i64     id) { return typeof(C)->lookup(id);  }\
         static doubly &symbols() { return typeof(C)->symbols->list; }\
         inline static const int count = num_args(__VA_ARGS__);\
         inline static const str raw   = str_args(__VA_ARGS__);\
-        ion::symbol symbol() {\
-            memory *mem = typeof(C)->lookup(i64(value));\
-            if (!mem) printf("symbol: mem is null for value %d\n", (int)value);\
-            assert(mem);\
-            return (char*)mem->origin;\
-        }\
         str name() { return (char*)symbol(); }\
         struct memory *to_string() { return typeof(C)->lookup(i64(value)); }\
         C(enum etype t = etype::D):ex(initialize(this,             t, (ion::symbol)raw.cs(), typeof(C)), this), value(*get<enum etype>()) { }\
@@ -173,7 +164,6 @@ constexpr int num_occurances(const char* cs, char c) {
         static doubly &symbols() { return typeof(C)->symbols->list; }\
         inline static const int count = num_args(__VA_ARGS__);\
         inline static const str raw   = str_args(__VA_ARGS__);\
-        ion::symbol symbol();\
         str name();\
         memory *to_string();\
         C(enum etype t = etype::D);\
@@ -209,12 +199,6 @@ struct W##Wrapper {\
 };\
 type_t  C::register_data()    { return typeof(etype); }\
 type_t  C::register_class()   { return typeof(C); }\
-ion::symbol C::symbol() {\
-    memory *mem = typeof(C)->lookup(i64(value));\
-    if (!mem) printf("symbol: mem is null for value %d\n", (int)value);\
-    assert(mem);\
-    return (char*)mem->origin;\
-}\
 str C::name() { return (char*)symbol(); }\
 memory *C::to_string() { return typeof(C)->lookup(i64(value)); }\
 C::C(enum etype t)           :ex(initialize(this,             t, (ion::symbol)raw.cs(), typeof(C)), this), value(*get<enum etype>()) { }\

@@ -184,6 +184,7 @@ str::str(double f64, int n) : str(memory::string(string_from_real(f64, n))) { }
 str::str(symbol cs, size_t len, size_t rs) : str(cstring((cstr)cs, len, rs)) { }
 //str::str(cstr   cs, size_t len, size_t rs) : str(cstring(      cs, len, rs)) { }
 str::str(std::string s) : str(cstr(s.c_str()), s.length()) { }
+str::str(cstr cs) : str(cstring((cstr)cs, memory::autolen, 0)) { }
 
 cstr str::cs() const { return cstr(data); }
 

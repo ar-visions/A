@@ -226,6 +226,7 @@ struct item {
 /// iterator unique for doubly
 struct liter_item {
     item* cur;
+    liter_item(item *cur) : cur(cur) { }
     ///
     liter_item& operator++() { cur = cur->next; return *this; }
     liter_item& operator--() { cur = cur->prev; return *this; }
@@ -241,6 +242,11 @@ struct liter_item {
 struct liter_item_hash:liter_item {
     u64   hash;
     using LT = liter_item;
+    liter_item_hash(item *cur, u64 hash) : liter_item(cur), hash(hash) {
+        while (LT::cur && (LT::cur->hash != hash))
+            LT::cur = LT::cur->next;
+    }
+
     ///
     liter_item_hash& operator++() {
         do { LT::cur = LT::cur->next; } while (LT::cur && LT::cur->hash != hash);
@@ -480,8 +486,8 @@ struct ldata {
         u64 hash;
         literable_items_hash(item *ifirst, item *ilast, u64 hash) :
             literable_items(ifirst, ilast), hash(hash) { }
-        liter_item_hash begin() const { return liter_item_hash { literable_items::ifirst }; }
-        liter_item_hash   end() const { return liter_item_hash { null }; }
+        liter_item_hash begin() const { return liter_item_hash { literable_items::ifirst, hash }; }
+        liter_item_hash   end() const { return liter_item_hash { null, 0 }; }
     };
 
     template <typename T>
@@ -606,8 +612,7 @@ struct hashmap {
     template <typename V>
     V &get(const mx &k);
 
-    template <typename K>
-    mx &lookup(const K &k) const;
+    mx lookup(const mx &k) const;
 
     bool contains(cstr str) const;
     bool contains(const mx& key) const;
@@ -1721,12 +1726,6 @@ T *memory::set(size_t index, const T &v) {
         assert(index == 0);
         return (T*)origin + index;
     }
-}
-
-template <typename K>
-mx &hashmap::lookup(const K &k) const {
-    mx key(k);
-    return lookup(key);
 }
 
 template <typename V>

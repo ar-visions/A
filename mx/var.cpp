@@ -118,7 +118,6 @@ mx var::parse_arr(cstr *start, type_t type) { /// array must be a Array<T> type
     *start = cur;
     if (container) {
         memory *mem = ((array*)container)->mem->hold();
-        printf("test_array mem 1: %p\n", mem);
         type->f.dtr(container);
         return mx(mem);
     }
@@ -151,7 +150,7 @@ mx var::parse_value(cstr *start, type_t type) {
         skip_alpha(start);
         return mx(mx::alloc(&v));
     } else if (first_chr == '"') {
-        assert(!type || (type == typeof(str) || type->f.str));
+        assert(!type || (type == typeof(str) || type->f.ctr_str));
         symbol    b64 = "data:application/octet-stream;base64,";
         int      blen = strlen(b64);
         symbol start1 = (symbol)&(*start)[1];

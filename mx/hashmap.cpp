@@ -17,11 +17,17 @@ item* hashmap::item(const mx &key, bucket **list, u64 *phash) const {
     const bucket &hist = (*data)[k];
     if (list) *list = (bucket*)&hist;
     for (ion::item &fi: hist.items(hash)) {
+        assert(fi.hash == hash);
         ion::field &f = *(ion::field*)fi.mem->origin;
         if ((const mx &)f.key == key)
             return &fi;
     }
     return null;
+}
+
+mx hashmap::lookup(const mx &key) const {
+    ion::item *fi = item(key, null, null);
+    return fi ? mx(hold(fi->mem->get<ion::field>(0)->value.mem)) : mx();
 }
 
 /// always creates a field with fetch
@@ -33,6 +39,8 @@ field &hashmap::fetch(const mx &key) {
     if (!fi) {
         list->push(ion::field { ion::hold(key), null }, hash); /// we iterate with a filter on hash id in doubly
         f = &list->last<ion::field>();
+        //ion::item  *fi2  = item(key, &list, &hash);
+        //assert(fi2);
     } else {
         f = fi->mem->get<ion::field>(0);
     }
@@ -57,7 +65,7 @@ mx &hashmap::operator[](const mx &key) {
 
 mx &hashmap::value(const mx &key) {
     ion::item  *fi = item(key);
-    ion::field *f  = (ion::field*)fi->mem->origin;
+    ion::field *f  = fi ? (ion::field*)fi->mem->origin : null;
     return f ? (mx &)f->value : *defaults<mx>();
 }
 

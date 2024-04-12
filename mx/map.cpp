@@ -46,8 +46,8 @@ size_t    map::mdata::count(const mx &k) {
         size_t res = 0;
         for (field &f:fields.elements<field>()) {
             memory *a = f.key.mem;
-            assert(a->type->size() == b->type->size());
-            if (a == b || (a->count == b->count && memcmp(a->origin, b->origin, a->count * a->type->size()) == 0)) // think of new name instead of type_* ; worse yet is handle base types in type
+            assert(a->type == b->type);
+            if (a == b || (a->count == b->count && memcmp(a->origin, b->origin, a->count * a->type->data_size()) == 0)) // think of new name instead of type_* ; worse yet is handle base types in type
                 res++;
         }
         return res;

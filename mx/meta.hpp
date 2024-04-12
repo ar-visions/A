@@ -226,6 +226,7 @@ struct memory:Memory<none> {
     template <typename T>
     T *set(size_t index, const T& data);
 
+    type_t data_type() const;
     raw_t typed_data(type_t data_type, size_t index) const;
 };
 
@@ -242,11 +243,17 @@ struct mx:MX {
     using intern        = none;
     static inline type_t intern_t = null;
 
+    static type_t register_class();
+    static type_t register_data();
+
     //mx  mix    (const mx& b, float f) const;
     int compare(const mx& b) const;
     
     mx  to_string() const;
     u64 hash()      const;
+
+    template <typename T>
+    static mx move(const T &v);
 
     static mx   from_string(cstr cs, type_t type = null);
 
@@ -305,6 +312,10 @@ struct mx:MX {
     /// T is context, not always the data type.  sometimes it is for simple cases, but not in context -> data 
     template <typename T>
     static inline memory *alloc(void *cp, size_t count = 1, size_t reserve = 1, T *ph = null) {
+        /// deal with string from the macro-based constructor
+        if constexpr (identical<T, char>()) {
+            reserve = math::max(reserve, count + 1);
+        }
         return memory::alloc(typeof(T), count, reserve, raw_t(cp));
     }
 
@@ -362,10 +373,10 @@ struct mx:MX {
 
     prop *lookup(mx key) const {
         if (key.is_const() && mem->type->schema) {
-            doubly *meta = (doubly*)mem->type->schema->bind->data->meta;
+            doubly *meta = (doubly*)mem->data_type()->meta;
             if (meta)
                 for (prop &p: meta->elements<prop>()) {
-                    if ((memory*)key.mem == p.key) 
+                    if (mx(key) == p.key) 
                         return &p;
                 }
         }
@@ -471,7 +482,7 @@ struct mx:MX {
     memory *quantum()               const { return (mem->refs == 1) ? mem : mem->copy(); }
 
     bool is_string() const {
-        return mem->type == typeof(char) || (mem->type->schema && mem->type->schema->bind->data == typeof(char));
+        return mem->data_type() == typeof(char);
     }
 
     size_t count() const { return mem ? mem->count : 0;    }
@@ -652,6 +663,11 @@ struct array:mx {
     array(const mx   &o) : array(ion::hold(o.mem)) { }
     array()              : array(mx::alloc<array>(null, 0, 0)) { } /// this must be lazy-alloc'd; generically, if we have a void type, then allocation must be lazy
     
+    static type_t register_class();
+    static type_t register_data();
+    /// there is no default data type for generic array, as we dont want to swap out default allocations for the users data
+    /// as such we need to handle this
+
     template <typename T>
     array(std::initializer_list<T> args) : array() { //  size_t(args.size()) -- doesnt work with the pre-alloc; find out why.
         for (auto &v:args) {
@@ -672,7 +688,7 @@ struct array:mx {
     array(type_t type,    i32  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
     array(type_t type,    i64  reserve) : array(memory::alloc(type, 0, size_t(reserve))) { }
 
-    type_t element_type() const { return mem->type->schema ? mem->type->schema->bind->data : mem->type; }
+    type_t element_type() const { return mem->data_type(); }
 
     template <typename T>
     static void pushv(array *a, memory *m_item) {
@@ -799,16 +815,22 @@ struct array:mx {
     /// push an element, return its reference
     template <typename T>
     T &push(const T &v) {
-        if (mem->count >= alloc_size())
+        if (mem->count >= alloc_size()) {
+            assert(mem->type == typeof(array) || mem->data_type() == typeof(T));
+            if (mem->type == typeof(array))
+                mem->type = typeof(T);
             realloc(next_size(mem->count));
+        }
         T *data = array::data<T>();
         new ((T*)&data[mem->count]) T(v);
         return (T&)data[mem->count++];
     }
     
     void *push_memory(memory* m) {
-        if (mem->count >= alloc_size())
+        if (mem->count >= alloc_size()) {
+            assert(m->type == typeof(array) || m->data_type() == m->type);
             realloc(next_size(mem->count));
+        }
         type_t e_type = element_type();
         assert(m->type == e_type);
         sz_t type_sz = m->type->base_sz;
@@ -824,8 +846,11 @@ struct array:mx {
     template <typename T>
     T &push() {
         T *data = array::data<T>();
-        if (mem->count >= alloc_size())
+        if (mem->count >= alloc_size()) {
+            assert(mem->type == typeof(array) || mem->type == typeof(T));
+            mem->type = typeof(T);
             realloc(next_size(mem->count));
+        }
         new (&data[mem->count]) T();
         return data[mem->count++];
     }
@@ -838,8 +863,11 @@ struct array:mx {
         size_t usz = size_t(mem->count);
         size_t rsv = size_t(mem->reserve);
 
-        if (usz + push_count > rsv)
+        if (usz + push_count > rsv) {
+            assert(mem->type == typeof(array) || mem->type == typeof(T));
+            mem->type = typeof(T);
             realloc(usz + push_count);
+        }
         
         if constexpr (is_primitive<T>()) {
             memcpy(&data[usz], pv, sizeof(T) * push_count);
@@ -870,8 +898,11 @@ struct array:mx {
     static array empty() { return array(typeof(T), size_t(1)); }
 
     void reserve_size(size sz) {
-        if (mem->reserve < sz)
+        if (mem->reserve < sz) {
+            /// must have a type set!
+            assert(mem->type != typeof(array));
             realloc(sz); // this was fill-default before, not for reserve so thats a bug
+        }
     }
 
     void set_size(size_t sz) {
@@ -1142,6 +1173,10 @@ struct Array:array {
     using context_class  = Array;
     using intern         = T;
     T* window;
+
+    static type_t register_class() { return typeof(Array<T>); }
+    static type_t register_data()  { return typeof(T); }
+
     void realloc(size s_to) override {
         array::realloc(s_to);
         window = mx::get<T>(0);
@@ -1302,10 +1337,11 @@ struct str:mx {
     };
     
     //using intern = char;
-    inline static const type_t intern_t = typeof(char);
+    //inline static const type_t intern_t = typeof(char);
+
     using char_t = unsigned short;
 
-    cstr data;
+    mx_declare(str, mx, char);
 
     operator std::string();
 
@@ -1323,8 +1359,14 @@ struct str:mx {
     static str parse_quoted(cstr *cursor, size_t max_len = 0);
 
     str(i64 value, u8 base, int width);
-
     str(utf16 d);
+    str(null_t);
+    str(size_t sz);
+    str(float          f32, int n = 6);
+    str(double         f64, int n = 6);
+    str(symbol cs, size_t len = memory::autolen, size_t rs = 0);
+    str(std::string s);
+    str(std::ifstream &in);
 
     /// static methods
     static str combine(const str sa, const str sb);
@@ -1332,29 +1374,11 @@ struct str:mx {
     /// skip to next non-whitespace
     static char &non_wspace(cstr cs);
 
-    str(memory        *mem);
-    str(const mx &o) : str(hold(o.mem)) { }
-    str(null_t = null);
-    str(char            ch);
-    str(size_t          sz);
-    
-    //str(std::ifstream  &in) : str((memory*)null) { }
-    str(std::ifstream &in);
-
     static void code_to_utf8(int code, char *output);
 
     static str from_code(int code);
 
     static str from_integer(i64 i);
-
-    str(float          f32, int n = 6);
-    str(double         f64, int n = 6);
-
-    /// no more symbol usage in str. thats garbage
-    str(symbol cs, size_t len = memory::autolen, size_t rs = 0);
-    str(cstr   cs, size_t len = memory::autolen, size_t rs = 0);
-    str(std::string s);
-    str(const str &s);
 
     cstr cs() const;
 
@@ -1444,7 +1468,7 @@ struct str:mx {
     ///
     template <typename L>
     array split(L delim) const {
-        array  result;
+        array  result(typeof(str), 16);
         size_t start = 0;
         size_t end   = 0;
         cstr   pc    = (cstr)data;
@@ -1455,8 +1479,18 @@ struct str:mx {
             ///
             if (len() > 0) {
                 while ((end = index_of(s_delim, int(start))) != -1) {
+                    int test1 = 0;
+                    test1++;
                     str  mm = mid(start, int(end - start));
+                    
+                    int test2 = 0;
+                    test2++;
+
                     result += mm;
+
+                    int test3 = 0;
+                    test3++;
+
                     start   = end + delim_len;
                 }
                 result += mid(start);
@@ -1520,7 +1554,8 @@ E ex::initialize(C *p, E v, symbol names, type_t ty) {
     /// get this value from raw.origin (symbol) instead of the S
     if (ty->secondary_init) return v;
     ty->secondary_init = true;
-    array   sp = str((cstr)names).split(", ");
+    str snames = str((cstr)names);
+    array   sp = snames.split(", ");
     int      c = (int)sp.len();
     i64   next = 0;
 
@@ -1600,7 +1635,7 @@ size_t schema_info(alloc_schema *schema, int depth, B *top, T *p, idata *ctx_typ
             if (schema->bind_count) {
                 context_bind &bind = schema->composition[schema->bind_count - 1 - depth]; /// [ base data ][ mid data ][ top data ]
                 bind.ctx     = ctx_type ? ctx_type : typeof(T);
-                bind.data    = typeof(typename T::intern);
+                bind.data    = T::register_data(); // this is defined in module and has access to the data class
                 //bind.data    = identical<typename T::intern, none>() ? null : typeof(typename T::intern);
                 bind.base_sz = bind.data ? bind.data->base_sz : 0; /// if array stores a str, it wont store char, so it must be its mx container.  if array stores char, its base sz is char.  if its a struct, same deal
             }
@@ -1612,6 +1647,12 @@ size_t schema_info(alloc_schema *schema, int depth, B *top, T *p, idata *ctx_typ
     }
     return 0;
 }
+
+template <typename T>
+mx mx::move(const T &v) {
+    return memory::alloc(typeof(T), 1, 1, (void*)&v);
+}
+
 
 /// scan schema info from struct from design-time info, then populate and sum up the total bytes along with the primary binding
 template <typename T>
@@ -1742,7 +1783,7 @@ idata *ident::for_type2() {
         if constexpr (has_bool    <T>)
             type->f.boolean  = [](void* a)               -> bool { return bool(*(T*)a); };
         if constexpr (has_str     <T>)
-            type->f.str      = [](void* a)               -> memory* { return hold(str(*(T*)a).mem); };
+            type->f.str      = [](void* a)               -> memory* { str r(*(T*)a); return hold(a); };
         
         if constexpr (has_mix     <T>::value)
             type->f.mix      = [](void* a, void *b, void *c, double f) -> void {

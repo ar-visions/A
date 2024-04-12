@@ -105,7 +105,7 @@ str str::combine(const str sa, const str sb) {
     ///
     size_t    ac = sa.count();
     size_t    bc = sb.count();
-    str       sc = sa.copy(((ac + bc) + 64) * 2);
+    str       sc = sa.copy(((ac + bc) + 64) + math::max(sa.reserve(), sb.reserve()) * 2); /// needs to retain a reserve from the greater of either
     cstr      cp = (cstr)sc.data;
     ///
     memcpy(&cp[ac], bp, bc);
@@ -121,9 +121,7 @@ char &str::non_wspace(cstr cs) {
     return *sc;
 }
 
-str::str(memory *mem) : mx(mem->type == typeof(null_t) ? alloc<char>(null, 0, 16) : mem), data(mx::get<char>(0)) { }
 str::str(null_t)      : str(alloc<char>(null, 0, 16))      { }
-str::str(char   ch)   : str(alloc<char>(null, 1, 2))       { *data = ch; }
 str::str(size_t sz)   : str(alloc<char>(null, 0, sz + 1))  { }
 
 str::str(std::ifstream &in) : str(alloc<char>(null, 0, ion::length(in) + 1)) {
@@ -183,12 +181,9 @@ str str::from_integer(i64 i) { return str(memory::string(std::to_string(i))); }
 
 str::str(float  f32, int n) : str(memory::string(string_from_real(f32, n))) { }
 str::str(double f64, int n) : str(memory::string(string_from_real(f64, n))) { }
-
-/// no more symbol usage in str. thats garbage
 str::str(symbol cs, size_t len, size_t rs) : str(cstring((cstr)cs, len, rs)) { }
-str::str(cstr   cs, size_t len, size_t rs) : str(cstring(      cs, len, rs)) { }
+//str::str(cstr   cs, size_t len, size_t rs) : str(cstring(      cs, len, rs)) { }
 str::str(std::string s) : str(cstr(s.c_str()), s.length()) { }
-str::str(const str &s)  : str(s.mem->hold()) { }
 
 cstr str::cs() const { return cstr(data); }
 
@@ -309,7 +304,8 @@ str &str::operator+= (const char b) {
         memcpy(&data[mem->count], &b, 1); /// when you think of data size changes, think of updating the count. [/mops-away]
         data[++mem->count] = 0;
     } else {
-        *this = combine(*this, str(b));
+        char v[2] = { b, 0 };
+        *this = combine(*this, str((symbol)v));
     }
     return *this;
 }

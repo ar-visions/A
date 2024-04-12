@@ -504,7 +504,6 @@ template <typename T> struct is_doubly : false_type {};
 struct doubly {
     using intern = ldata;
     using parent_class = none;
-    static inline type_t intern_t = null;
 
     memory *mem;
     ldata *data;
@@ -586,7 +585,6 @@ struct hmdata {
 struct hashmap {
     using intern = hmdata; // MX<context-here> not <data-here>
     using parent_class = none;
-    static inline type_t intern_t = null;
     memory *mem;
     hmdata *data;
 
@@ -1169,6 +1167,11 @@ struct map:mx {
         return f.value.ref<V>();
     }
 
+    void set(const mx &k, const mx &v) const {
+        field &f = data->fetch(k);
+        f.value = v;
+    }
+
     mx_object(map, mx, mdata);
 
     /// when a size is specified to map, it engages hash map mode
@@ -1186,8 +1189,8 @@ struct map:mx {
 
     template <typename K>
     mx &operator[](K k) {
-        u64 hash = hash_value(k);
-        return (*data)[hash];
+        field &f = data->fetch(k);
+        return f.value;
     }
 };
 

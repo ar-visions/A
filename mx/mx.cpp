@@ -22,6 +22,14 @@ MX::MX(i64    v)    : MX(memory::alloc(typeof(i64),  1, 1, &v)) { }
 MX::MX(r32    v)    : MX(memory::alloc(typeof(r32),  1, 1, &v)) { }
 MX::MX(r64    v)    : MX(memory::alloc(typeof(r64),  1, 1, &v)) { }
 
+type_t mx::register_class() { return typeof(mx); }
+type_t mx::register_data()  { return null; }
+
+type_t array::register_class() { return typeof(array); }
+type_t array::register_data()  { return null; }
+
+mx_implement(str, mx, char)
+
 void ldata::shift(mx* prev_first) {
     assert(ilast);
     ///
@@ -111,8 +119,10 @@ int mx::compare(const mx& b) const {
 
 mx mx::from_string(cstr cs, type_t type) {
     assert(type);
-    /// u/i 8 -> 64
-    if (type->traits & traits::integral) {
+    
+    if (type == typeof(str)) {
+        return str(cs);
+    } else if (type->traits & traits::integral) { /// u/i 8 -> 64
         if (type == typeof(bool)) {
             std::string s = std::string(cs);
             std::transform(s.begin(), s.end(), s.begin(),
@@ -139,8 +149,8 @@ mx mx::from_string(cstr cs, type_t type) {
         /// enums handle this by implementing ctr_type (generic conversion)
         bool mx_based = (type->traits & traits::mx_obj);
         sz_t len = strlen(cs);
-        static memory *dont_hold = memory::raw_alloc(typeof(char), 0, len, len+1);
-        void *alloc = type->ctr_type(dont_hold);
+        static memory *dont_hold = memory::raw_alloc(typeof(char), 0, len, len+1); /// memory* can be passed to const mx&
+        void *alloc = type->f.str(dont_hold); // it needs to be of type_t
         assert(dont_hold->refs == 1); /// this one should never have its ref count change from 1
         memory *mem;
         if (mx_based) {
@@ -168,7 +178,7 @@ u64 mx::hash() const {
 
 /// we cannot call the to_string on (this; if we are a direct type, the virtual would be used)
 mx mx::to_string() const {
-    type_t type = mem->type->schema ? mem->type->schema->bind->data : mem->type;
+    type_t type = mem->data_type();
 
     if      (type == typeof(i8) ) return memory::string(std::to_string(*(i8*)  mem->origin));
     else if (type == typeof(i16)) return memory::string(std::to_string(*(i16*) mem->origin));
@@ -300,6 +310,10 @@ void* calloc64(size_t count, size_t size) {
     memset(ptr, 0, total_bytes);
     return ptr;
 #endif
+}
+
+type_t memory::data_type() const {
+    return type->schema ? type->schema->bind->data : type;
 }
 
 raw_t memory::typed_data(type_t dtype, size_t index) const {
@@ -492,10 +506,13 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
     if (prim) {
         memcpy(dst, src, type_sz * mn);
     } else {
+        bool none = true;
         for (size_t i = 0; i < type->schema->bind_count; i++) {
             context_bind &c  = type->schema->composition[i];
             if (!c.data) continue;
             const bool data_prim = !c.data->schema || (c.data->traits & (traits::primitive | traits::opaque)) != 0;
+            if (none)
+                none = mn == 0;
             for (size_t ii = 0; ii < mn; ii++) {
                 if (data_prim) {
                     memcpy(&dst[c.voffset * res + ii * c.base_sz], &src[c.voffset * src_res + ii * c.base_sz], c.base_sz);
@@ -505,6 +522,7 @@ void *memory::realloc(size_t alloc_reserve, bool fill_default) {
                 }
             }
         }
+        assert(!none);
     }
     /// this controls the 'count' which is in-effect the constructed count.  if we are not constructing, no updating count
     if (fill_default) {

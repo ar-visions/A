@@ -1,12 +1,19 @@
 dep(prefix:ci)
 cpp(20)
 
+#cxxflags(
+#    +@-Wno-writable-strings
+#    +@-Wno-pointer-bool-conversion
+#    +@-ffunction-sections
+#    +@-fdata-sections)
+
+#if(NOT DEBUG)
+#    cxxflags(-@-Wl,--gc-sections)
+#endif()
+
 cxxflags(
     +@-Wno-writable-strings
-    +@-Wno-pointer-bool-conversion
-    +@-ffunction-sections
-    +@-fdata-sections
-    -@-Wl,--gc-sections)
+    +@-Wno-pointer-bool-conversion)
 
 if (win)
     dep(@libucrt @libvcruntime @libcmt)

@@ -66,6 +66,7 @@ namespace ion {
     T vec3##t::dot(const vec3##t &b) const {\
         return x * b.x + y * b.y + z * b.z;\
     }\
+    T vec3##t::dot() const { return T(x*x) + T(y*y) + T(z*z); }\
     vec3##t vec3##t::cross(const vec3##t &b) const {\
         return vec3##t {\
             T((double(y) * b.z) - (double(z) * b.y)),\
@@ -73,7 +74,6 @@ namespace ion {
             T((double(x) * b.y) - (double(y) * b.x))\
         };\
     }\
-    T vec3##t::dot() const { return T(x*x) + T(y*y) + T(z*z); }\
     T vec3##t::length() const { return std::sqrt(dot()); }\
     vec3##t vec3##t::normalize() const {\
         double len = std::sqrt(dot());\
@@ -364,25 +364,24 @@ namespace ion {
     mat44##t mat44##t::scale(const vec3##t &v) const { \
         return *this * make_scaling(v); \
     } \
-    mat44##t mat44##t::look_at(const vec3##t &eye, const vec3##t &center, const vec3##t &u) { \
-        vec3##t forward = ion::normalize(center - eye); \
-        vec3##t right = ion::normalize(ion::cross(forward, u)); \
-        vec3##t up = ion::cross(right, forward); \
+    mat44##t mat44##t::look_at(const vec3##t &eye, const vec3##t &center, const vec3##t &up) { \
+        vec3##t f = ion::normalize(center - eye); \
+        vec3##t s = ion::normalize(ion::cross(f, up)); \
+        vec3##t u = ion::cross(s, f); \
         return mat44##t { \
-            vec4##t(right.x,    up.x,    -forward.x,    0),\
-            vec4##t(right.y,    up.y,    -forward.y,    0),\
-            vec4##t(right.z,    up.z,    -forward.z,    0),\
-            vec4##t(-dot(right, eye), -dot(up, eye),  dot(forward, eye), 1) \
+            vec4##t(s.x,    u.x,    -f.x,    0),\
+            vec4##t(s.y,    u.y,    -f.y,    0),\
+            vec4##t(s.z,    u.z,    -f.z,    0),\
+            vec4##t(-s.dot(eye), -u.dot(eye),  f.dot(eye), 1) \
         }; \
     } \
     mat44##t mat44##t::perspective(T fov, T aspect, T near, T far) { \
         T ff = 1 / tan(fov / 2); \
-        T nf = 1 / (near - far); \
         return mat44##t { \
             vec4##t(ff / aspect, 0, 0, 0), \
             vec4##t(0, ff, 0, 0), \
-            vec4##t(0, 0, -(far + near) * nf, -1), \
-            vec4##t(0, 0, 2 * far * near * nf, 0) \
+            vec4##t(0, 0, -((far + near) / (far - near)), -1), \
+            vec4##t(0, 0, -((2.f * far * near) / (far - near)), 0) \
         }; \
     } \
     mat44##t mat44##t::orthographic(T left, T right, T bottom, T top, T near, T far) { \

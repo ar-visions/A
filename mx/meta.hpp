@@ -289,7 +289,7 @@ struct mx:MX {
     }
 
     sz_t total_size() {
-        return count() * mem->type->base_sz;
+        return count() * mem->type->data_size();
     }
     
     sz_t reserve() { return math::max(mem->reserve, mem->count); }
@@ -540,8 +540,12 @@ struct mx:MX {
 
             /// primitive array boolean
             if (ty->traits & traits::primitive) {
+                if (ty->traits & traits::enum_primitive) {
+                    int *v = mem->get<int>(0);
+                    return *v > 0;
+                }
                 /// if mem->count == 1 and reserve is 0, we can assume these are singular
-                if (mem->count == 1 && mem->reserve == 0) {
+                /*if (mem->count == 1 && mem->reserve == 0) {
                     for (int i = 0; i < ty->base_sz; i++) {
                         /// ambiguous between single instance vs array
                         /// todo: fix this case; an array of int with a value of 0 inside of it should still be truthy
@@ -551,7 +555,8 @@ struct mx:MX {
                             return true;
                     }
                     return false;
-                }
+                }*/
+
                 /// used for array data; an array of count > 0 is by default, truthy
                 return mem->count > 0;
             }
@@ -704,6 +709,9 @@ struct array:mx {
 
     template <typename T>
     T *data() const {
+        assert(typeof(T) == mem->type || typeof(T) == mem->data_type() || /// array sets its type to the type you have elements for
+            (sizeof(T) == mem->type->base_sz && (mem->type->traits & traits::primitive)) ||  /// sometimes we may cast u32 as i32
+            (sizeof(T) == mem->data_type()->base_sz && (mem->data_type()->traits & traits::primitive))); /// sometimes we do that in an Array<u32>
         return (T*)mem->origin;
     }
 
@@ -917,7 +925,8 @@ struct array:mx {
     int index_of(const T &v) const {
         T *data = array::data<T>();
         for (size_t i = 0; i < mem->count; i++) {
-            if (((T*)data)[i] == (T&)v)
+            const T& av = ((T*)data)[i];
+            if (av == v)
                 return int(i);
         }
         return -1;
@@ -1787,6 +1796,10 @@ idata *ident::for_type2() {
             etype->ref = type; ///
             etype->traits |= traits::enum_primitive;
             //type->ref = etype; // they reference each other
+        }
+        if constexpr (std::is_array<T>::value) {
+            type->traits |= traits::primitive_array;
+            type->ref = typeof(typename std::remove_extent<T>::type);
         }
         if constexpr (!identical<mx, T>() && ion::inherits<mx, T>())
             type->parent = typeof(typename T::parent_class);

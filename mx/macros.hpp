@@ -125,7 +125,7 @@ constexpr int num_occurances(const char* cs, char c) {
         C(mx  mraw):C(ex::convert(mraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
         C(ion::symbol sym):C(ex::convert(sym, (ion::symbol)C::raw.cs(), (C*)null)) { }\
         C(memory* mem):C(mx(mem)) { }\
-        inline  operator etype() { return value; }\
+        operator etype() const { return value; }\
         C &operator=(const C &b) {\
             if(mx::mem != b.mx::mem) {\
                 ion::drop(mx::mem);\
@@ -134,18 +134,18 @@ constexpr int num_occurances(const char* cs, char c) {
             }\
             return *this;\
         }\
-        bool    operator== (enum etype v) { return value == v; }\
-        bool    operator== (ion::symbol v) {\
+        bool    operator== (const enum etype &v) const { return value == v; }\
+        bool    operator== (ion::symbol v) const {\
             if (!mem && !v)\
                 return true;\
             memory *m = lookup(v);\
             return (int)m->id == (int)value;\
         }\
-        bool    operator!= (enum etype v) { return value != v; }\
-        bool    operator>  (C &b)       { return value >  b.value; }\
-        bool    operator<  (C &b)       { return value <  b.value; }\
-        bool    operator>= (C &b)       { return value >= b.value; }\
-        bool    operator<= (C &b)       { return value <= b.value; }\
+        bool    operator!= (const enum etype &v) const { return value != v; }\
+        bool    operator>  (const C &b)          const { return value >  b.value; }\
+        bool    operator<  (const C &b)          const { return value <  b.value; }\
+        bool    operator>= (const C &b)          const { return value >= b.value; }\
+        bool    operator<= (const C &b)          const { return value <= b.value; }\
         explicit operator int() const   { return int(value); }\
         explicit operator i64() const   { return i64(value); }\
         operator str()         { return symbol(); }\
@@ -173,15 +173,15 @@ constexpr int num_occurances(const char* cs, char c) {
         C(mx  mraw);\
         C(ion::symbol sym);\
         C(memory* mem);\
-        operator etype();\
+        operator etype() const;\
         C&      operator=  (const C &b);\
-        bool    operator== (enum etype v);\
-        bool    operator== (ion::symbol v);\
-        bool    operator!= (enum etype v);\
-        bool    operator>  (C &b);\
-        bool    operator<  (C &b);\
-        bool    operator>= (C &b);\
-        bool    operator<= (C &b);\
+        bool    operator== (const enum etype &v)  const;\
+        bool    operator== (ion::symbol v)        const;\
+        bool    operator!= (const enum etype &v)  const;\
+        bool    operator>  (const C &b)           const;\
+        bool    operator<  (const C &b)           const;\
+        bool    operator>= (const C &b)           const;\
+        bool    operator<= (const C &b)           const;\
         explicit operator int() const;\
         explicit operator i64() const;\
         operator str();\
@@ -208,7 +208,7 @@ C::C(str sraw):C(ex::convert(sraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
 C::C(mx  mraw):C(ex::convert(mraw, (ion::symbol)C::raw.cs(), (C*)null)) { }\
 C::C(ion::symbol sym):C(ex::convert(sym, (ion::symbol)C::raw.cs(), (C*)null)) { }\
 C::C(memory* mem):C(mx(mem)) { }\
-C::operator etype() { return value; }\
+C::operator etype() const { return value; }\
 C &C::operator=(const C &b) {\
     if(mx::mem != b.mx::mem) {\
         ion::drop(mx::mem);\
@@ -217,18 +217,18 @@ C &C::operator=(const C &b) {\
     }\
     return *this;\
 }\
-bool    C::operator== (enum etype v) { return value == v; }\
-bool    C::operator== (ion::symbol v) {\
+bool    C::operator== (const enum etype &v) const { return value == v; }\
+bool    C::operator== (ion::symbol v) const {\
     if (!mem && !v)\
         return true;\
     memory *m = lookup(v);\
     return (int)m->id == (int)value;\
 }\
-bool    C::operator!= (enum etype v) { return value != v; }\
-bool    C::operator>  (C &b)       { return value >  b.value; }\
-bool    C::operator<  (C &b)       { return value <  b.value; }\
-bool    C::operator>= (C &b)       { return value >= b.value; }\
-bool    C::operator<= (C &b)       { return value <= b.value; }\
+bool    C::operator!= (const enum etype &v) const { return value != v; }\
+bool    C::operator>  (const C &b) const       { return value >  b.value; }\
+bool    C::operator<  (const C &b) const      { return value <  b.value; }\
+bool    C::operator>= (const C &b) const      { return value >= b.value; }\
+bool    C::operator<= (const C &b) const      { return value <= b.value; }\
 C::operator int() const   { return int(value); }\
 C::operator i64() const   { return i64(value); }\
 C::operator str() const   { return symbol(); }\

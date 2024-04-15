@@ -662,7 +662,8 @@ struct traits {
         mx_enum         = 2048,
         enum_primitive  = 4096,
         opaque          = 8192,
-        managed         = 16384
+        managed         = 16384,
+        primitive_array = 32768
     };
 };
 
@@ -896,7 +897,7 @@ T &ldata::push(const T &v, u64 hash) {
 template <typename T>
 T &ldata::push() {
     item *plast = ilast;
-        ilast = new item { null, ilast }; /// default-construction on data
+        ilast = new item { null, ilast, memory::alloc(typeof(T)) }; /// default-construction on data
     ///
     (!ifirst) ? 
     ( ifirst      = ilast) : 
@@ -1605,7 +1606,7 @@ protected:
     static mx parse_obj(cstr *start, type_t type);
     static mx parse_arr(cstr *start, type_t type);
     static void skip_alpha(cstr *start);
-    static mx parse_value(cstr *start, type_t type);
+    static mx parse_value(cstr *start, type_t type, mx field);
     static str parse_numeric(cstr * cursor, bool &floaty);
     static mx parse_quoted(cstr *cursor, type_t type);
     static char ws(cstr *cursor);

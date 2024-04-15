@@ -7,9 +7,13 @@
 
 namespace ion {
 
+// this gets the type from the x value on a type T
+template<typename T>
+using vtype = typename std::decay<decltype(std::declval<T>().x)>::type;
+
 template <typename T> inline T cross    (const T &a, const T &b) { return a.cross(b); }
 template <typename T> inline T normalize(const T &a)             { return a.normalize(); }
-template <typename T> inline T dot      (const T &a, const T &b) { return a.dot(b); }
+template <typename T> inline vtype<T> dot(const T &a, const T &b) { return a.dot(b); }
 
 #define vec2_decl(T, t) \
 struct vec2##t { \

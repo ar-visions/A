@@ -55,7 +55,7 @@ mx var::parse_obj(cstr *start, type_t type) {
 
         /// parse value at newly listed mx value in field, upon requesting it
         *start   = cur;
-        mx value = parse_value(start, chosen_t);
+        mx value = parse_value(start, chosen_t, field);
         if (is_map)
             m_result[field] = value;
         else
@@ -97,7 +97,7 @@ mx var::parse_arr(cstr *start, type_t type) { /// array must be a Array<T> type
     else {
         for (;;) {
             *start = cur;
-            mx  pv = parse_value(start, e_type);
+            mx  pv = parse_value(start, e_type, mx());
             if (container)
                 container->push_memory(pv.mem);
             else
@@ -131,7 +131,7 @@ void var::skip_alpha(cstr *start) {
     *start = cur;
 }
 
-mx var::parse_value(cstr *start, type_t type) {
+mx var::parse_value(cstr *start, type_t type, mx field) {
     char first_chr = **start;
     bool numeric   =   first_chr == '-' || isdigit(first_chr);
 
@@ -166,7 +166,8 @@ mx var::parse_value(cstr *start, type_t type) {
             ulong sz = ftell(f);
             u8   *b  = (u8*)malloc(sz);
             fseek(f, 0, SEEK_SET);
-            assert(fread(b, 1, sz, f) == sz);
+            bool read = fread(b, 1, sz, f) == sz;
+            assert(read);
             ret = memory::wrap(typeof(u8), b, sz, true);
         } else
             ret = parse_quoted(start, is_b64 ? typeof(Array<u8>) : type); /// this updates the start cursor
@@ -331,7 +332,7 @@ mx *var::get(str key) {
 
 /// called from path::read<var>()
 mx var::parse(cstr js, type_t type) {
-    return parse_value(&js, type);
+    return parse_value(&js, type, mx());
 }
 
 str var::stringify() const {

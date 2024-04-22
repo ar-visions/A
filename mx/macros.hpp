@@ -236,3 +236,12 @@ C::C(const W##Wrapper &r):C((enum etype)(int)r.value) { }\
 W##Wrapper C::convert() {\
     return W##Wrapper((W)(int)value);\
 }
+
+
+
+
+
+
+
+
+

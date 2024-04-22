@@ -522,6 +522,9 @@ struct doubly {
             data->push(v);
     }
 
+    static type_t register_class();
+    static type_t register_data();
+
     template <typename T>
     ldata::literable<T> elements() const { return data->elements<T>(); }
 

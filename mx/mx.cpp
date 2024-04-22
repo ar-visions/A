@@ -28,6 +28,9 @@ type_t mx::register_data()  { return null; }
 type_t array::register_class() { return typeof(array); }
 type_t array::register_data()  { return null; }
 
+type_t doubly::register_class() { return typeof(ldata); }
+type_t doubly::register_data()  { return null; }
+
 mx_implement(str, mx, char)
 
 void ldata::shift(mx* prev_first) {

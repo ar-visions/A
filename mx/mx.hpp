@@ -318,6 +318,8 @@ struct mx;
 struct MX {
     memory *mem;
     MX(memory* mem) : mem(mem) { }
+    MX(null_t n);
+    MX(symbol v);
     MX(bool   v);
     MX(u8     v);
     MX(i8     v);

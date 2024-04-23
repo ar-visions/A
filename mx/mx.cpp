@@ -10,6 +10,8 @@
 
 namespace ion {
 
+MX::MX(symbol s)    : MX(memory::stringify((cstr)s, memory::autolen, 0, true, typeof(char))) { }
+MX::MX(null_t n)    : MX(memory::alloc(typeof(null_t))) { }
 MX::MX(bool   v)    : MX(memory::alloc(typeof(bool), 1, 1, &v)) { }
 MX::MX(u8     v)    : MX(memory::alloc(typeof(u8),   1, 1, &v)) { }
 MX::MX(i8     v)    : MX(memory::alloc(typeof(i8),   1, 1, &v)) { }

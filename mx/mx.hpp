@@ -885,6 +885,14 @@ T &item::ref() const {
 
 template <typename T>
 T &ldata::push(const T &v, u64 hash) {
+    if constexpr (identical<T, field>()) {
+        /// get hash from T
+        if (hash == 0) {
+            field &fv = *(field*)&v;
+            mx mx_key = mx(hold(fv.key));
+            hash = mx_key.hash();
+        }
+    }
     item *plast = ilast;
     ilast = new item { null, ilast,
         memory::alloc(typeof(T), 1, 1, (raw_t)&v), hash };

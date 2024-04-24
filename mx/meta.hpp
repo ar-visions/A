@@ -19,18 +19,18 @@ struct ident {
     template <typename T>
     static idata* for_type();
 
-    template <typename T>
-    static idata* for_type2();
+    template <typename T, typename CL=none>
+    static idata* for_type2(void *MPTR = nullptr, sz_t MPTR_SZ = 0);
 
     ident(memory* mem) : mem(mem) { }
     ident(bool init);
     static void init();
 };
 
-template <> idata *ident::for_type2<null_t>();
-template <> idata *ident::for_type2<char>();
-template <> idata *ident::for_type2<i64>();
-template <> idata *ident::for_type2<u64>();
+template <> idata *ident::for_type2<null_t>(void*, sz_t);
+template <> idata *ident::for_type2<char>  (void*, sz_t);
+template <> idata *ident::for_type2<i64>   (void*, sz_t);
+template <> idata *ident::for_type2<u64>   (void*, sz_t);
 
 memory *mem_symbol(symbol cs, type_t ty = typeof(char), i64 id = 0);
 
@@ -95,6 +95,7 @@ struct idata {
 
         std::function<void(void*)>         dtr;
         std::function<void(void*)>         ctr;
+        std::function<memory*(void*, memory**, int)> call; /// for methods
         std::function<void(void*,memory*)> ctr_mem;  /// for mx objects (assign from memory)
         std::function<void(void*,memory*)> ctr_type; /// for mx objects (copy convert)
         std::function<void(void*,const str &)> ctr_str; /// for mx objects (copy convert)
@@ -148,11 +149,16 @@ struct prop {
     type_t  parent_type;
     raw_t   init_value; /// value obtained after constructed on the parent type
     str    *s_key;
-    
-    prop() : key(null), member_addr(0), offset(0), type(null) { }
+    bool    is_method; /// make sure we dont enumerate the data on methods
+
+    prop() : key(null), member_addr(0), offset(0), type(null), is_method(false) { }
 
     template <typename M>
-    prop(symbol name, const M &member) : key(mem_symbol(name)), member_addr((size_t)&member), type(typeof(M)) { }
+    prop(symbol name, const M &member) : key(mem_symbol(name)), member_addr((size_t)&member), type(typeof(M)), is_method(false) { }
+    
+    template <typename M, typename CL>
+    prop(symbol name, const M &member, const CL* inst) : 
+        key(mem_symbol(name)), member_addr((size_t)&member), type(signatureof(CL, M, member_addr, sizeof(member))), is_method(true) { }
 
     template <typename M>
     M &member_ref(void *m) { return *(M *)handle_t(&cstr(m)[offset]); }
@@ -1719,7 +1725,7 @@ template<typename T>
 struct has_ctr_str<T, std::enable_if_t<std::is_constructible<T, const str&>::value>> : std::true_type {};
 
 /// converts T&, T* [const], to T
-template <typename T>
+template <typename T, bool isMemberFunctionPointer = std::is_member_function_pointer<T>::value>
 struct pure_type_ {
     using type = typename std::remove_pointer<
         typename std::remove_reference<
@@ -1727,13 +1733,35 @@ struct pure_type_ {
         >::type
     >::type;
 };
+
+template <typename T>
+struct pure_type_<T, true> {
+    using type = T;  // Just pass the type through unchanged
+};
+
 template <typename T>
 using pure_type = typename pure_type_<T>::type;
 
 void register_type(memory *mem, const std::string &sig, sz_t sz, u64 traits);
 
-template <typename TT>
-idata *ident::for_type2() {
+// template to extract information from a member function pointer
+template<typename T>
+struct member_fn;
+
+template<typename R, typename C, typename... Args>
+struct member_fn<R(C::*)(Args...)> {
+    using r_type = R;
+    static constexpr std::size_t n_args = sizeof...(Args); // Number of arguments
+
+    template<std::size_t N>
+    struct argument {
+        static_assert(N < n_args, "Error: invalid parameter index.");
+        using type = typename std::tuple_element<N, std::tuple<Args...>>::type;
+    };
+};
+
+template <typename TT, typename CL>
+idata *ident::for_type2(void *MPTR, size_t MPTR_SZ) {
     ident::init();
     using T = pure_type<TT>;
     static type_t type; if (type) return type; /// assert the name and traits are set
@@ -1762,7 +1790,45 @@ idata *ident::for_type2() {
                  (has_etype<T>::value ? traits::mx_enum   : 0) |
                  (is_obj              ? traits::mx_obj    : 0);
 
-    if constexpr (!is_lambda<T>()) {
+    if constexpr (std::is_member_function_pointer<T>::value) {
+        /// we will assume non-void returns here:
+        if constexpr (member_fn<T>::n_args == 2) {
+            str (CL::*member_func1)(int, str);
+            assert(sizeof(member_func1) == MPTR_SZ);
+            memcpy((void*)&member_func1, (void*)MPTR, MPTR_SZ);
+            
+            
+
+            std::cout << "before: MPTR address: " << MPTR << ", Expected size: " << sizeof(member_func1) << ", Actual size: " << MPTR_SZ << std::endl;
+            std::cout << "before: Function pointer address (copied): " << &member_func1 << std::endl;
+            std::cout << "before: Function pointer value (copied): " << (void*&)member_func1 << std::endl;
+            CL inst1;
+            mx result = (inst1.*member_func1)(1, str("test1"));
+
+            u8 MPTR_MEM[1024];
+            memcpy(MPTR_MEM, MPTR, MPTR_SZ);
+
+            type->f.call = [MPTR_MEM, MPTR_SZ](void* inst, memory ** args, int n_args) -> memory* {
+                assert(n_args == member_fn<T>::n_args);
+                using A0 = typename member_fn<T>::argument<0>::type;
+                using A1 = typename member_fn<T>::argument<1>::type;
+                using R  = typename member_fn<T>::r_type;
+                A0 a0 = mx(hold(args[0])); // <- convert mx to the arg type?
+                A1 a1 = mx(hold(args[1])); // <- and for 2nd arg
+                CL *obj = (CL*)inst; /// casting void from our generic lambda to CL*
+
+                R (CL::*member_func)(A0, A1);
+                assert(sizeof(member_func) == MPTR_SZ);
+                memcpy((void*)&member_func, (void*)MPTR_MEM, MPTR_SZ);
+
+                std::cout << "after: MPTR address: " << (void*)&MPTR_MEM[0] << ", Expected size: " << sizeof(member_func) << ", Actual size: " << MPTR_SZ << std::endl;
+                std::cout << "after: Function pointer address (copied): " << &member_func << std::endl;
+                std::cout << "after: Function pointer value (copied): " << (void*&)member_func << std::endl;
+                mx result = (obj->*member_func)(a0, a1);
+                return hold(result.mem);
+            };
+        }
+    } else if constexpr (!is_lambda<T>()) {
         //type->f.mix     = (!identical<T, mx>() && has_mix<T>    ::value);
         //type->f.compare = (!identical<T, mx>() && has_compare<T>::value);
         
@@ -1869,17 +1935,19 @@ idata *ident::for_type2() {
         
         if constexpr (registered_instance_meta<T>()) {
              static T *def = new T();
-            type->meta    = new doubly { def->meta() }; /// make a reference to this data
+            type->meta    = new doubly(def->meta()); /// make a reference to this data
             for (prop &p: type->meta->elements<prop>()) {
-                p.offset     = size_t(p.member_addr) - size_t(def);
+                p.offset     = p.is_method ? 0 : (size_t(p.member_addr) - size_t(def));
                 p.s_key      = new str(ion::hold(p.key));
                 p.parent_type = type; /// we need to store what type it comes from, as we dont always have this context
 
                 /// this use-case is needed for user interfaces without css defaults
-                u8 *prop_def = &(((u8*)def)[p.offset]);
-                p.init_value = calloc64(1, p.type->base_sz);
-                if (p.type->f.ctr_cp)
-                    p.type->f.ctr_cp(p.init_value, prop_def);
+                if (!p.is_method) {
+                    u8 *prop_def = &(((u8*)def)[p.offset]);
+                    p.init_value = calloc64(1, p.type->base_sz);
+                    if (p.type->f.ctr_cp)
+                        p.type->f.ctr_cp(p.init_value, prop_def);
+                }
             }
             delete def;
             prop_map *pmap = new prop_map(size_t(16));

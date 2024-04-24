@@ -21,7 +21,8 @@ constexpr int num_occurances(const char* cs, char c) {
 #define infinite_loop() { for (;;) { usleep(1000); } }
 
 //#define typeof(T)   (ident::for_type<T>())
-#define typeof(T)   (ident::for_type2<T>())
+#define typeof(T)         (ident::for_type2<T>())
+#define signatureof(CL,M,MPTR,MPTR_SZ) (ident::for_type2<M,CL>((void*)MPTR,MPTR_SZ))
 //#define typeof(T) ((idata*)null)
 
 /// for mx_declare

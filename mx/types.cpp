@@ -64,7 +64,7 @@ ident::ident(bool init) {
 }
 
 template <>
-idata *ident::for_type2<null_t>() {
+idata *ident::for_type2<null_t>(void*, sz_t) {
     static type_t type; if (type) return type;
     memory *mem = primitive_type("std::nullptr_t", sizeof(null_t));
     type = mem->type;
@@ -72,7 +72,7 @@ idata *ident::for_type2<null_t>() {
 }
 
 template <>
-idata *ident::for_type2<char>() {
+idata *ident::for_type2<char>(void*, sz_t) {
     static type_t type; if (type) return type;
     memory *mem = primitive_type("char", sizeof(char));
     type = mem->type;
@@ -80,7 +80,7 @@ idata *ident::for_type2<char>() {
 }
 
 template <>
-idata *ident::for_type2<i64>() {
+idata *ident::for_type2<i64>(void*, sz_t) {
     static type_t type; if (type) return type;
     memory *mem = primitive_type("long long", sizeof(i64));
     type = mem->type;
@@ -88,7 +88,7 @@ idata *ident::for_type2<i64>() {
 }
 
 template <>
-idata *ident::for_type2<u64>() {
+idata *ident::for_type2<u64>(void*, sz_t) {
     static type_t type; if (type) return type;
     memory *mem = primitive_type("unsigned long long", sizeof(u64));
     type = mem->type;

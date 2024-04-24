@@ -1183,6 +1183,8 @@ struct map:mx {
     template <typename V>
     V &get(const mx &k) const {
         field &f = data->fetch(k);
+        assert(f.value.mem);
+        assert(f.value.mem->type == typeof(V));
         return f.value.ref<V>();
     }
 

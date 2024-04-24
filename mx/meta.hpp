@@ -152,7 +152,7 @@ struct prop {
     prop() : key(null), member_addr(0), offset(0), type(null) { }
 
     template <typename M>
-    prop(symbol name, M &member) : key(mem_symbol(name)), member_addr((size_t)&member), type(typeof(M)) { }
+    prop(symbol name, const M &member) : key(mem_symbol(name)), member_addr((size_t)&member), type(typeof(M)) { }
 
     template <typename M>
     M &member_ref(void *m) { return *(M *)handle_t(&cstr(m)[offset]); }
@@ -1809,7 +1809,7 @@ idata *ident::for_type2() {
         using traits     = lambda_traits<T>;
         using args_t     = typename traits::arg_types;
         using rtype      = typename traits::return_type;
-        if constexpr (false)
+        //if constexpr (false)
         if constexpr (allowed_types<args_t>::value && (identical<void, rtype>() || is_convertible<rtype, mx>()))
             type->generic_lambda = new GenericLambda([type=type](void* ldata, const array &args) -> mx {
                 ///

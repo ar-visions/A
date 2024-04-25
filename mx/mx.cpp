@@ -284,8 +284,8 @@ str convert_str<str>(const str& s) {
     return s;
 }
 
-/// can call invoke, call, etc
-mx call(mx lambda, const array &args) {
+/// todo: it has a string conversion implementation now; should be mx-based
+mx call(const mx &lambda, const Array<mx> &args) {
     type_t lt = lambda.type();
     /// there are things that disallow generic lambda production and thats the use of pointers and references
     /// with these functions the return type can be void or it can be convertible to mx
@@ -293,6 +293,34 @@ mx call(mx lambda, const array &args) {
     /// at the moment it still creates it but that should change
     assert(lt->generic_lambda);
     mx result = (*lt->generic_lambda)(lambda.mem->origin, args);
+    return result;
+}
+
+mx mx::method(const str &name, const Array<mx> &args) {
+    type_t type = mem->type;
+    prop *pr = null;
+
+    /// we may iterate through schema as well
+    for (prop& p: mem->type->meta->elements<prop>()) {
+        if (p.is_method && *p.s_key == name) {
+            pr = &p;
+            break;
+        }
+    }
+
+    if (pr) {
+        /// Array<T> is not defined at the point where our function table is defined, so we construct a memory* array
+        /// all holds are barred
+        assert(pr->type->f.call);
+        int n_args = args.count();
+        memory **mem_args = (memory**)calloc(n_args, sizeof(memory*));
+        for (int a = 0; a < n_args; a++)
+            mem_args[a] = args[a].mem;
+        /// if we do conversion that should be done here, as that would expand on templates too much!
+        pr->type->f.call((void*)this, mem_args, n_args);
+        free(mem_args);
+    }
+
     return result;
 }
 

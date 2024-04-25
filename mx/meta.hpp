@@ -245,10 +245,16 @@ template <typename T> T* mdata(memory *mem, size_t index) { return mem ? mem->ge
 mx mix_wrap(mx* obj, mx* other, float factor);
 int compare_wrap(mx* a, mx* b);
 
+template <typename T>
+struct Array;
+struct str;
+
 struct mx:MX {
     using parent_class  = none;
     using context_class = none;
     using intern        = none;
+
+    mx method(const str &name, const Array<mx> &args);
 
     static type_t register_class();
     static type_t register_data();
@@ -667,8 +673,6 @@ lambda<R(Args...)>::lambda(CL* cl, F fn) {
     using args_t     = typename traits::arg_types;
     data->lfn = new fdata([=](Args... args) { return (cl->*fn)(std::forward<Args>(args)...); });
 }
-
-mx call(mx lambda, const array &args);
 
 struct array:mx {
     array(memory*   mem) : mx(mem) { }
@@ -1224,7 +1228,7 @@ struct Array:array {
 template <typename T> struct is_array<Array<T>> : true_type { };
 template <typename T> struct is_typed_array<Array<T>> : true_type { };
 
-
+mx call(const mx &obj, const Array<mx> &args);
 
 ///
 struct ex:mx {

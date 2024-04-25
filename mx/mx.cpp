@@ -298,29 +298,38 @@ mx call(const mx &lambda, const Array<mx> &args) {
 
 mx mx::method(const str &name, const Array<mx> &args) {
     type_t type = mem->type;
-    prop *pr = null;
+    method_data *method = null;
 
     /// we may iterate through schema as well
     for (prop& p: mem->type->meta->elements<prop>()) {
-        if (p.is_method && *p.s_key == name) {
-            pr = &p;
+        if (p.type->method && *p.s_key == name) {
+            method = p.type->method;
             break;
         }
     }
-
-    if (pr) {
-        /// Array<T> is not defined at the point where our function table is defined, so we construct a memory* array
-        /// all holds are barred
-        assert(pr->type->f.call);
+    mx result;
+    if (method) {
         int n_args = args.count();
+        assert(n_args == method->arg_count);
+
         memory **mem_args = (memory**)calloc(n_args, sizeof(memory*));
+        for (int a = 0; a < n_args; a++) {
+            memory  *src = args[a].mem;
+            memory *&dst = mem_args[a];
+            idata *atype = method->args[a];
+            if (src->type != atype) {
+                mx  m(hold(src));
+                str st = m.to_string();
+                mx  conv = mx::from_string(st.data, atype);
+                dst = hold(conv.mem);
+            } else
+                dst = hold(src);
+        }
+        method->call((void*)this, mem_args, n_args);
         for (int a = 0; a < n_args; a++)
-            mem_args[a] = args[a].mem;
-        /// if we do conversion that should be done here, as that would expand on templates too much!
-        pr->type->f.call((void*)this, mem_args, n_args);
+            drop(mem_args[a]);
         free(mem_args);
     }
-
     return result;
 }
 

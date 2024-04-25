@@ -77,6 +77,13 @@ using PushFn = void(*)(void*, void*); /// Array<T>* dst, T* src
 
 using GenericLambda = fun<mx(void*, const array &)>;
 
+struct method_data {
+    struct idata** args;
+    struct idata*  r_type;
+    int arg_count;
+    std::function<memory*(void*, memory**, int)> call; /// for methods
+};
+
 ///
 struct idata {
     memory          *mem;     /// origin memory
@@ -88,14 +95,11 @@ struct idata {
     doubly          *meta;    /// properties
     prop_map        *meta_map; // prop_map
     alloc_schema    *schema;  /// primitives dont need this one -- used by array and map for type aware contents, also any mx-derrived object containing data will populate this polymorphically
-    
-    struct f_table {
-        //bool mix;     /// mix op allowed (these are virtual, so performing that takes just mx expression on the addresses)
-        //bool compare; /// compare op allowed
+    method_data     *method;
 
+    struct f_table {
         std::function<void(void*)>         dtr;
         std::function<void(void*)>         ctr;
-        std::function<memory*(void*, memory**, int)> call; /// for methods
         std::function<void(void*,memory*)> ctr_mem;  /// for mx objects (assign from memory)
         std::function<void(void*,memory*)> ctr_type; /// for mx objects (copy convert)
         std::function<void(void*,const str &)> ctr_str; /// for mx objects (copy convert)
@@ -1795,47 +1799,93 @@ idata *ident::for_type2(void *MPTR, size_t MPTR_SZ) {
                  (is_obj              ? traits::mx_obj    : 0);
 
     if constexpr (std::is_member_function_pointer<T>::value) {
-        /// we will assume non-void returns here:
-        if constexpr (member_fn<T>::n_args == 2) {
-            str (CL::*member_func1)(int, str);
-            assert(sizeof(member_func1) == MPTR_SZ);
-            memcpy((void*)&member_func1, (void*)MPTR, MPTR_SZ);
-            
-            
+        using R = typename member_fn<T>::r_type;
+        type->method = new method_data {
+            .args      = (idata**)calloc(member_fn<T>::n_args, sizeof(idata*)),
+            .r_type    = typeof(R),
+            .arg_count = member_fn<T>::n_args
+        };
 
-            std::cout << "before: MPTR address: " << MPTR << ", Expected size: " << sizeof(member_func1) << ", Actual size: " << MPTR_SZ << std::endl;
-            std::cout << "before: Function pointer address (copied): " << &member_func1 << std::endl;
-            std::cout << "before: Function pointer value (copied): " << (void*&)member_func1 << std::endl;
-            CL inst1;
-            mx result = (inst1.*member_func1)(1, str("test1"));
+        #define member_init(...) \
+            CL *obj = (CL*)inst; \
+            R (CL::*member_func)(__VA_ARGS__); \
+            assert(sizeof(member_func) == MPTR_SZ); \
+            memcpy((void*)&member_func, (void*)MPTR_MEM, MPTR_SZ); \
+            mx result;
 
-            u8 MPTR_MEM[1024];
-            memcpy(MPTR_MEM, MPTR, MPTR_SZ);
-
-            type->f.call = [MPTR_MEM, MPTR_SZ](void* inst, memory ** args, int n_args) -> memory* {
-                assert(n_args == member_fn<T>::n_args);
-                using A0 = typename member_fn<T>::argument<0>::type;
-                using A1 = typename member_fn<T>::argument<1>::type;
-                using R  = typename member_fn<T>::r_type;
-                A0 a0 = mx(hold(args[0])); // <- convert mx to the arg type?
-                A1 a1 = mx(hold(args[1])); // <- and for 2nd arg
-                CL *obj = (CL*)inst; /// casting void from our generic lambda to CL*
-
-                R (CL::*member_func)(A0, A1);
-                assert(sizeof(member_func) == MPTR_SZ);
-                memcpy((void*)&member_func, (void*)MPTR_MEM, MPTR_SZ);
-
-                std::cout << "after: MPTR address: " << (void*)&MPTR_MEM[0] << ", Expected size: " << sizeof(member_func) << ", Actual size: " << MPTR_SZ << std::endl;
-                std::cout << "after: Function pointer address (copied): " << &member_func << std::endl;
-                std::cout << "after: Function pointer value (copied): " << (void*&)member_func << std::endl;
-                mx result = (obj->*member_func)(a0, a1);
-                return hold(result.mem);
+        #define member_call(...) \
+            if constexpr (identical<R, void>()) \
+                (obj->*member_func)(__VA_ARGS__); \
+            else \
+                result = (obj->*member_func)(__VA_ARGS__); \
+            return hold(result.mem);
+        
+        u8 MPTR_MEM[1024];
+        memcpy(MPTR_MEM, MPTR, MPTR_SZ);
+        if constexpr (member_fn<T>::n_args == 0) {
+            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, memory ** args, int n_args) -> memory* {
+                member_init()
+                member_call()
             };
         }
+        else if constexpr (member_fn<T>::n_args == 1) {
+            using A0 = typename member_fn<T>::argument<0>::type;
+            type->method->args[0] = typeof(A0);
+            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, memory ** args, int n_args) -> memory* {
+                A0 a0 = mx(hold(args[0]));
+                member_init(A0)
+                member_call(a0)
+            };
+        }
+        else if constexpr (member_fn<T>::n_args == 2) {
+            using A0 = typename member_fn<T>::argument<0>::type;
+            using A1 = typename member_fn<T>::argument<1>::type;
+            type->method->args[0] = typeof(A0);
+            type->method->args[1] = typeof(A1);
+            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, memory ** args, int n_args) -> memory* {
+                A0 a0 = mx(hold(args[0]));
+                A1 a1 = mx(hold(args[1]));
+                member_init(A0, A1)
+                member_call(a0, a1)
+            };
+        }
+        else if constexpr (member_fn<T>::n_args == 3) {
+            using A0 = typename member_fn<T>::argument<0>::type;
+            using A1 = typename member_fn<T>::argument<1>::type;
+            using A2 = typename member_fn<T>::argument<2>::type;
+            type->method->args[0] = typeof(A0);
+            type->method->args[1] = typeof(A1);
+            type->method->args[2] = typeof(A2);
+            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, memory ** args, int n_args) -> memory* {
+                A0 a0 = mx(hold(args[0]));
+                A1 a1 = mx(hold(args[1]));
+                A2 a2 = mx(hold(args[2]));
+                member_init(A0, A1, A2)
+                member_call(a0, a1, a2)
+            };
+        }
+        else if constexpr (member_fn<T>::n_args == 4) {
+            using A0 = typename member_fn<T>::argument<0>::type;
+            using A1 = typename member_fn<T>::argument<1>::type;
+            using A2 = typename member_fn<T>::argument<2>::type;
+            using A3 = typename member_fn<T>::argument<3>::type;
+            type->method->args[0] = typeof(A0);
+            type->method->args[1] = typeof(A1);
+            type->method->args[2] = typeof(A2);
+            type->method->args[3] = typeof(A3);
+            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, memory ** args, int n_args) -> memory* {
+                A0 a0 = mx(hold(args[0]));
+                A1 a1 = mx(hold(args[1]));
+                A2 a2 = mx(hold(args[2]));
+                A3 a3 = mx(hold(args[3]));
+                member_init(A0, A1, A2, A3)
+                member_call(a0, a1, a2, a3)
+            };
+        }
+        else {
+            static_assert("implement more args");
+        }
     } else if constexpr (!is_lambda<T>()) {
-        //type->f.mix     = (!identical<T, mx>() && has_mix<T>    ::value);
-        //type->f.compare = (!identical<T, mx>() && has_compare<T>::value);
-        
         if constexpr (std::is_class<T>::value && std::is_default_constructible<T>::value)
             type->f.ctr     = [](void* a)                -> void { new (a) T(); };
         if constexpr (has_ctr_str<T>::value)
@@ -1865,7 +1915,6 @@ idata *ident::for_type2(void *MPTR, size_t MPTR_SZ) {
             type_t etype = typeof(typename T::etype);
             etype->ref = type; ///
             etype->traits |= traits::enum_primitive;
-            //type->ref = etype; // they reference each other
         }
         if constexpr (std::is_array<T>::value) {
             type->traits |= traits::primitive_array;

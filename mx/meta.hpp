@@ -258,7 +258,8 @@ struct mx:MX {
     using context_class = none;
     using intern        = none;
 
-    mx method(const str &name, const Array<mx> &args);
+    template <typename T>
+    static mx method(T& any, const str &name, const Array<mx> &args);
 
     static type_t register_class();
     static type_t register_data();
@@ -1559,6 +1560,45 @@ struct str:mx {
     str trim() const;
     size_t reserve() const;
 };
+
+
+template <typename T>
+mx mx::method(T& obj, const str &name, const Array<mx> &args) {
+    type_t type = typeof(T);
+    method_data *method = null;
+
+    /// we may iterate through schema as well; it makes sense for methods to be defined on context or non-mx objects, though.
+    for (prop& p: type->meta->elements<prop>()) {
+        if (p.type->method && *p.s_key == name) {
+            method = p.type->method;
+            break;
+        }
+    }
+    mx result;
+    if (method) {
+        int n_args = args.count();
+        assert(n_args == method->arg_count);
+
+        memory **mem_args = (memory**)calloc(n_args, sizeof(memory*));
+        for (int a = 0; a < n_args; a++) {
+            memory  *src = args[a].mem;
+            memory *&dst = mem_args[a];
+            idata *atype = method->args[a];
+            if (src->type != atype) {
+                mx  m(hold(src));
+                str st = m.to_string();
+                mx  conv = mx::from_string(st.data, atype);
+                dst = hold(conv.mem);
+            } else
+                dst = hold(src);
+        }
+        method->call((void*)&obj, mem_args, n_args);
+        for (int a = 0; a < n_args; a++)
+            drop(mem_args[a]);
+        free(mem_args);
+    }
+    return result;
+}
 
 template <typename C, typename E>
 E ex::initialize(C *p, E v, ion::symbol names, type_t ty) {

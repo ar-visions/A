@@ -296,43 +296,6 @@ mx call(const mx &lambda, const Array<mx> &args) {
     return result;
 }
 
-mx mx::method(const str &name, const Array<mx> &args) {
-    type_t type = mem->type;
-    method_data *method = null;
-
-    /// we may iterate through schema as well
-    for (prop& p: mem->type->meta->elements<prop>()) {
-        if (p.type->method && *p.s_key == name) {
-            method = p.type->method;
-            break;
-        }
-    }
-    mx result;
-    if (method) {
-        int n_args = args.count();
-        assert(n_args == method->arg_count);
-
-        memory **mem_args = (memory**)calloc(n_args, sizeof(memory*));
-        for (int a = 0; a < n_args; a++) {
-            memory  *src = args[a].mem;
-            memory *&dst = mem_args[a];
-            idata *atype = method->args[a];
-            if (src->type != atype) {
-                mx  m(hold(src));
-                str st = m.to_string();
-                mx  conv = mx::from_string(st.data, atype);
-                dst = hold(conv.mem);
-            } else
-                dst = hold(src);
-        }
-        method->call((void*)this, mem_args, n_args);
-        for (int a = 0; a < n_args; a++)
-            drop(mem_args[a]);
-        free(mem_args);
-    }
-    return result;
-}
-
 logger console;
 
 void free64(void* ptr) {

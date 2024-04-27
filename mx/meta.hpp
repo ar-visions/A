@@ -105,8 +105,9 @@ struct idata {
         std::function<void(void*,const str &)> ctr_str; /// for mx objects (copy convert)
         std::function<void(void*,void*)>   ctr_cp;
         std::function<void(void*,void*,void*,double)> mix;
-        std::function<void(void*,void*)>   compare;
+        std::function<int(void*,void*)>    compare;
         std::function<bool(void*)>         boolean;
+        std::function<u64(void*)>          hash;
         std::function<memory*(void*)>      to_str;
     } f;
 
@@ -1490,8 +1491,8 @@ struct str:mx {
 
     ///
     template <typename L>
-    array split(L delim) const {
-        array  result(typeof(str), 16);
+    Array<str> split(L delim) const {
+        Array<str> result(16);
         size_t start = 0;
         size_t end   = 0;
         cstr   pc    = (cstr)data;
@@ -1533,8 +1534,8 @@ struct str:mx {
     iter<char> begin();
     iter<char>   end();
 
-    array split(symbol s) const;
-    array split();
+    Array<str> split(symbol s) const;
+    Array<str> split();
 
     enum index_base {
         forward,
@@ -1752,6 +1753,11 @@ struct has_compare : std::false_type {};
 template <typename T>
 struct has_compare<T, std::void_t<decltype(&T::compare)>> : std::true_type {};
 
+template <typename T, typename = void>
+struct has_hash : std::false_type {};
+template <typename T>
+struct has_hash<T, std::void_t<decltype(&T::hash)>> : std::true_type {};
+
 template<typename T, typename = void>
 struct has_ctr_mem : std::false_type {};
 template<typename T>
@@ -1942,15 +1948,29 @@ idata *ident::for_type2(void *MPTR, size_t MPTR_SZ) {
             type->f.boolean  = [](void* a)               -> bool { return bool(*(T*)a); };
         if constexpr (has_str     <T>) /// this is a to_string
             type->f.to_str   = [](void* a)               -> memory* { str r(*(T*)a); return hold(a); };
+       
+
         
         if constexpr (has_mix     <T>::value)
             type->f.mix      = [](void* a, void *b, void *c, double f) -> void {
                 *(T*)c = ((T*)a)->mix(*(T*)b, f);
             };
-        if constexpr (has_compare <T>::value)
-            type->f.compare  = [](void* a, void *b) -> int {
-                return ((T*)a)->compare(*(T*)b);
-            };
+        
+        /// just so we dont spend time constructing context objects, we put these methods on the data structure
+        /// edge case is still primitive data in case of array, but that can be handled in mx generic
+        if constexpr (ion::inherits<mx, T>()) {
+            using I = typename T::intern;
+            if constexpr (has_hash    <I>::value)
+                type->f.hash     = [](void* a) -> u64 { return ((I*)a)->hash(); };
+            if constexpr (has_compare <I>::value)
+                type->f.compare  = [](void* a, void *b) -> int { return ((I*)a)->compare(*(I*)b); };
+        } else {
+            if constexpr (has_hash    <T>::value)
+                type->f.hash     = [](void* a) -> u64 { return ((T*)a)->hash(); };
+            if constexpr (has_compare <T>::value)
+                type->f.compare  = [](void* a, void *b) -> int { return ((T*)a)->compare(*(T*)b); };
+        }
+
         if constexpr (has_etype   <T>::value) {
             type_t etype = typeof(typename T::etype);
             etype->ref = type; ///

@@ -76,6 +76,7 @@ idata *ident::for_type2<char>(void*, sz_t) {
     static type_t type; if (type) return type;
     memory *mem = primitive_type("char", sizeof(char));
     type = mem->type;
+    type->traits |= traits::integral;
     return type;
 }
 
@@ -84,6 +85,7 @@ idata *ident::for_type2<i64>(void*, sz_t) {
     static type_t type; if (type) return type;
     memory *mem = primitive_type("long long", sizeof(i64));
     type = mem->type;
+    type->traits |= traits::integral;
     return type;
 }
 
@@ -92,6 +94,7 @@ idata *ident::for_type2<u64>(void*, sz_t) {
     static type_t type; if (type) return type;
     memory *mem = primitive_type("unsigned long long", sizeof(u64));
     type = mem->type;
+    type->traits |= traits::integral;
     return type;
 }
 

@@ -131,8 +131,8 @@ ion::symbol ex::symbol() {
 int mx::compare(const mx& b) const {
     if (mem && type() == b.type() && mem->count == b.mem->count) {
         type_t ty = mem->type->src; /// we are using src now to resolve basic type from an Array<something>; typeof(Array<int>) -> src = int
-        if ((ty->traits & traits::mx) || (ty->traits & traits::mx_obj)) {
-            return origin<mx>()->compare(*b.origin<mx>());
+        if (ty->f.compare) {
+            return ty->f.compare(mem->origin, b.mem->origin);
         } else {
             size_t cn = mem->count;
             assert(ty->traits & traits::primitive);
@@ -197,7 +197,12 @@ u64 mx::hash() const {
     if (type == ident::char_t) return (u64)djb2(cstr(k));
     if (type == typeof(i64)   || type == typeof(u64))    return (u64)*(u64*)k;
     if (type == typeof(i32)   || type == typeof(u32))    return (u64)*(u32*)k;
-    console.fault("implement hash in context for data: %s", { str(type->name) });
+    if (type->f.hash) {
+        u64 hash = type->f.hash(k);
+        return hash;
+    }
+
+    console.fault("implement hash in context for data: {0}", { str(type->name) });
     return 0;
 }
 

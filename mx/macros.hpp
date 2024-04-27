@@ -71,11 +71,9 @@ constexpr int num_occurances(const char* cs, char c) {
     using intern = D;\
     static inline type_t intern_t;\
     D *data;\
-    operator D &() const {\
-        return *(D *)data;\
-    }\
-    D  &operator *() { return *data; }\
-    D *operator-> () { return  data; }\
+    operator D &() const { return *(D *)data; }\
+    D  &operator *() const { return *data; }\
+    D *operator-> () const { return  data; }\
     C &operator=(const C &b) {\
         if(mx::mem != b.mx::mem) {\
             ion::drop(mx::mem);\

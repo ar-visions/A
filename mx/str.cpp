@@ -445,8 +445,8 @@ str str::mid(num start, num len) const {
 iter<char>   str::begin() { return { data, 0 }; }
 iter<char>   str::end()   { return { data, size_t(byte_len()) }; }
 
-array str::split(symbol s) const { return split(str(s)); }
-array str::split() { /// common split, if "abc, and 123", result is "abc", "and", "123"}
+Array<str> str::split(symbol s) const { return split(str(s)); }
+Array<str> str::split() { /// common split, if "abc, and 123", result is "abc", "and", "123"}
     array result;
     str   chars(mem->count + 1);
     ///

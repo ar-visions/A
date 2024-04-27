@@ -831,6 +831,9 @@ T *defaults() {
 
 struct str;
 
+static constexpr uint64_t FNV_PRIME    = 0x100000001b3;
+static constexpr uint64_t OFFSET_BASIS = 0xcbf29ce484222325;
+
 #include <mx/meta.hpp>
 
 
@@ -1640,6 +1643,71 @@ protected:
 
     template <typename T>
     var(const T b) : mx(alloc(&b)) { }
+
+    var operator+(const var &b) const {
+        type_t at =   mem->data_type();
+        type_t bt = b.mem->data_type();
+        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((mx&)*this)        + i64((mx&)b);
+        if (at == typeof(double) && bt == typeof(i64))    return double(double((mx&)*this) + i64((mx&)b));
+        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((mx&)*this) + double((mx&)b));
+        if (at == typeof(double) && bt == typeof(double)) return double(double((mx&)*this) + double((mx&)b));
+        if (at == typeof(char)   && bt == typeof(char))   return str(     str((mx&)*this)  +    str((mx&)b));
+        assert(false);
+        return var();
+    }
+
+    var operator-(const var &b) const {
+        type_t at =   mem->data_type();
+        type_t bt = b.mem->data_type();
+        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((mx&)*this)        - i64((mx&)b);
+        if (at == typeof(double) && bt == typeof(i64))    return double(double((mx&)*this) - i64((mx&)b));
+        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((mx&)*this) - double((mx&)b));
+        if (at == typeof(double) && bt == typeof(double)) return double(double((mx&)*this) - double((mx&)b));
+        assert(false);
+        return var();
+    }
+
+    var operator*(const var &b) const {
+        type_t at =   mem->data_type();
+        type_t bt = b.mem->data_type();
+        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((mx&)*this)        * i64((mx&)b);
+        if (at == typeof(double) && bt == typeof(i64))    return double(double((mx&)*this) * i64((mx&)b));
+        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((mx&)*this) * double((mx&)b));
+        if (at == typeof(double) && bt == typeof(double)) return double(double((mx&)*this) * double((mx&)b));
+        assert(false);
+        return var();
+    }
+
+    var operator/(const var &b) const {
+        type_t at =   mem->data_type();
+        type_t bt = b.mem->data_type();
+        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((mx&)*this)        / i64((mx&)b);
+        if (at == typeof(double) && bt == typeof(i64))    return double(double((mx&)*this) / i64((mx&)b));
+        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((mx&)*this) / double((mx&)b));
+        if (at == typeof(double) && bt == typeof(double)) return double(double((mx&)*this) / double((mx&)b));
+        assert(false);
+        return var();
+    }
+
+    var operator&&(const var &b) const {
+        if (bool((mx&)*this) && bool((mx&)b))
+            return true;
+        return false;
+    }
+
+    var operator||(const var &b) const {
+        if (bool((mx&)*this)) return *this;
+        if (bool((mx&)    b)) return b;
+        return var();
+    }
+
+    var operator^(const var &b) const {
+        bool ba = bool((mx&)*this);
+        bool bb = bool((mx&)b);
+        if ((ba ^ bb) == false) return var();
+        if (ba) return *this;
+        return b;
+    }
 
     // abstract between array and map based on the type
     template <typename KT>

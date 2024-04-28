@@ -973,7 +973,7 @@ liter<T>::operator T& () const { return *cur->mem->get<T>(0); }
 //V &field::value() { return *v->get<V>(); }
 
 using arg = field;
-using ax  = Array<arg>;
+//using ax  = Array<arg>;
 
 
 template <typename V>
@@ -1640,6 +1640,7 @@ protected:
     var();
     var(mx b);
     var(map m);
+    var(memory* mem) : mx(mem) { }
 
     template <typename T>
     var(const T b) : mx(alloc(&b)) { }

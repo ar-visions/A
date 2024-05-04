@@ -10,11 +10,11 @@
 
 namespace ion {
 
-A_impl(str, string)
-A_impl(Field, field)
-A_impl(List, list)
-A_impl(Item, item)
-A_impl(Hash, hashmap)
+A_impl(str, String)
+A_impl(field, Field)
+A_impl(list, List)
+A_impl(item, Item)
+A_impl(hashmap, Hashmap)
 
 u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
     const u8* bytes = (const u8*)data;
@@ -110,7 +110,7 @@ id *primitive_type(symbol name, sz_t sz) {
     return type;
 }
 
-M symbolize(cstr cs, id* type = typeof(string), i32 id = 0) {
+M symbolize(cstr cs, id* type = typeof(String), i32 id = 0) {
     if (!type->symbols)
         type->symbols = new symbols2;
 
@@ -131,8 +131,8 @@ prop::prop(const prop &ref) {
     is_method   = ref.is_method;
 }
 
-string* prop::to_string() {
-    return (string*)(key ? key->a_str->hold() : null);
+String* prop::to_string() {
+    return (String*)(key ? key->a_str->hold() : null);
 }
 
 int Pointer::compare(const M& b) const {
@@ -148,13 +148,13 @@ void *prop::member_pointer(void *M) { return (void *)handle_t(&cstr(M)[offset]);
 
 symbol prop::name() const { return key->symbol(); }
 
-int string::compare(const M &arg) const {
-    string *b = arg.get<string>();
+int String::compare(const M &arg) const {
+    String *b = arg.get<String>();
     return strcmp(chars, b->chars);
 }
 
 
-arr *string::split(string *v) const {
+arr *String::split(String *v) const {
     arr  *res    = new arr(length + 1);
     char *start  = chars;
     char *scan   = chars;
@@ -166,7 +166,7 @@ arr *string::split(string *v) const {
             if (*scan == 0 || strncmp(scan, sp, sp_len) == 0) {
                 int str_len = (int)(size_t)(scan - start);
                 if (str_len)
-                    res->push(new string(start, str_len));
+                    res->push(new String(start, str_len));
                 scan += sp_len;
                 start = scan;
                 if (*scan == 0) break;
@@ -177,8 +177,8 @@ arr *string::split(string *v) const {
     return res;
 }
 
-string *string::format(arr *args) {
-    string   *res = new string(length + 1 + args->len() * 128);
+String *String::format(arr *args) {
+    String   *res = new String(length + 1 + args->len() * 128);
     char   *start = chars;
     char     *end = start + length;
     for (;*start;) {
@@ -221,72 +221,72 @@ string *string::format(arr *args) {
     return res;
 }
 
-string *field::to_string() {
+String *Field::to_string() {
     return str("{0}, {1}");
 }
 
 
-item* hashmap::find_item(const M &key, list **h_list, u64 *phash) {
+Item* Hashmap::find_item(const M &key, List **h_list, u64 *phash) {
     const u64 hash = hash_value((M&)key);
     const u64 k    = hash % sz;
     if (phash) *phash = hash;
-    list &hist = list_for_key(k);
-    if (h_list) *h_list = (list*)&hist;
-    for (item *fi: hist.items(hash)) {
+    List &hist = list_for_key(k);
+    if (h_list) *h_list = (List*)&hist;
+    for (Item *fi: hist.items(hash)) {
         assert(fi->hash() == hash);
-        field *f = fi->element.get<field>();
+        Field *f = fi->element.get<Field>();
         if (f->key == key)
             return fi;
     }
     return null;
 }
 
-M hashmap::lookup(const M &key) {
-    item *fi = find_item(key, null, null);
+M Hashmap::lookup(const M &key) {
+    Item *fi = find_item(key, null, null);
     if (!fi)
         return M();
-    field *f = fi->element.get<field>();
+    Field *f = fi->element.get<Field>();
     return f->value;
 }
 
 /// always creates a field with fetch
-field *hashmap::fetch(const M &key) {
-    list  *h_list = null;
+Field *Hashmap::fetch(const M &key) {
+    List  *h_list = null;
     u64     hash = 0;
-    item  *fi   = find_item(key, &h_list, &hash);
-    field *f    = null;
+    Item  *fi   = find_item(key, &h_list, &hash);
+    Field *f    = null;
     if (!fi) {
-        f = new field(key, null);
-        item* i = h_list->push(f); /// we iterate with a filter on hash id in doubly
-        i->peer = list->push(f);
+        f = new Field(key, null);
+        Item* i = h_list->push(f); /// we iterate with a filter on hash id in doubly
+        i->peer = items->push(f);
         count++;
     } else {
-        f = fi->element.get<field>();
+        f = fi->element.get<Field>();
     }
     return f;
 }
 
-M &hashmap::value(const M &key) {
-    field *f = fetch(key);
+M &Hashmap::value(const M &key) {
+    Field *f = fetch(key);
     return f->value;
 }
 
-M &hashmap::operator[](const M &key) {
-    field *f = fetch(key);
+M &Hashmap::operator[](const M &key) {
+    Field *f = fetch(key);
     return f->value;
 }
 
-void hashmap::set(const M &key, const M &value) {
-    field *f = fetch(key);
+void Hashmap::set(const M &key, const M &value) {
+    Field *f = fetch(key);
     if (value.a != f->value.a)
         f->value = value;
 }
 
-bool hashmap::remove(const M &key) {
-    list *h_list = null;
-    item *fi     = find_item(key, &h_list);
+bool Hashmap::remove(const M &key) {
+    List *h_list = null;
+    Item *fi     = find_item(key, &h_list);
     if (fi && h_list) {
-        list->remove(fi->peer); /// weak ref, no drop needed
+        List->remove(fi->peer); /// weak ref, no drop needed
         h_list->remove(fi);
         count--;
         return true;
@@ -294,13 +294,13 @@ bool hashmap::remove(const M &key) {
     return false;
 }
 
-bool hashmap::contains(const M &key) {
-    return hashmap::find_item(key, null);
+bool Hashmap::contains(const M &key) {
+    return Hashmap::find_item(key, null);
 }
 
-hashmap::hashmap(int sz) : A() {
-    h_fields = new list[sz];
-    list     = new list;
+Hashmap::Hashmap(int sz) : A() {
+    h_fields = new List[sz];
+    items    = new List;
     count    = 0;
     this->sz = sz;
 }
@@ -312,7 +312,7 @@ M M::get(const M& o, const M& prop) {
     assert(type->meta);
     Hash &meta = *type->meta;
     assert(meta->len() > 0);
-    field *f = meta->fetch(prop);
+    Field *f = meta->fetch(prop);
     assert(f);
     prop &pr = f->value; /// performs a type-check
     u8 *member_ptr = &ptr[pr.offset];
@@ -354,8 +354,8 @@ id::id(bool init) {
         id::char_t = typeof(char);
         id::i64_t  = typeof(i64);
         id::u64_t  = typeof(u64);
-        id::types  = new hashmap(64);
-        push_type(id::char_t); /// when hashmap/doubly are invoked, their specialized for_type2 methods should return their info
+        id::types  = new Hashmap(64);
+        push_type(id::char_t); /// when Hashmap/doubly are invoked, their specialized for_type2 methods should return their info
         push_type(id::i64_t);
         push_type(id::u64_t);
     }
@@ -413,7 +413,7 @@ num &size::operator[](size_t index) const {
 
 size &size::zero() { memset(values, 0, sizeof(values)); return *this; }
 
-            size::operator num() const { return     area();  }
+size::operator num() const { return     area();  }
 size::operator  i8() const { return  i8(area()); }
 size::operator  u8() const { return  u8(area()); }
 size::operator i16() const { return i16(area()); }

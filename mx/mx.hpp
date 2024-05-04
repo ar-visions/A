@@ -430,14 +430,14 @@ struct id {
         std::function<void(void*)>         dtr;
         std::function<void*(void*)>        ctr;
         std::function<void*(void*, struct A*)>    ctr_mem;  /// for mx objects (assign from memory)
-        std::function<void*(void*, struct string *)> ctr_str; /// for mx objects (copy convert)
+        std::function<void*(void*, struct String *)> ctr_str; /// for mx objects (copy convert)
         std::function<void*(void*,void*)>  ctr_cp;
         std::function<void(void*,void*,void*,double)> mix;
         std::function<bool(void*)>         boolean;
         std::function<u64(void*)>          hash;
         std::function<int(void*,void*)>    compare;
         std::function<struct M*(void*)>    m_ref;
-        std::function<struct string*(void*)> to_str;
+        std::function<struct String*(void*)> to_str;
     } f;
 
     struct symbols  *symbols;
@@ -450,7 +450,7 @@ struct id {
     void   *ctr();
     void    dtr(void* alloc);
     void   *ctr_mem (A *mem);
-    void   *ctr_str (struct string *v);
+    void   *ctr_str (struct String *v);
     void   *ctr_cp  (void* b);
     size_t  data_size();
     template <typename TT, typename CL=none>
@@ -492,7 +492,7 @@ struct prop {
 
     symbol name() const ;
 
-    struct string* to_string();
+    struct String* to_string();
 };
 
 struct A { /// runtime of silver-lang
@@ -510,14 +510,14 @@ struct A { /// runtime of silver-lang
         console.fault("implement compare() for type {0}", { str(type->name) });
         return -1;
     }
-    virtual struct string *to_string() {
+    virtual struct String *to_string() {
         console.fault("implement to_string() for type {0}", { str(type->name) });
         return null;
     }
     virtual ~A() { }
 };
 
-/// intentionally different from string
+/// intentionally different from String
 struct symbol:A {
     i32   id;
     int   len;
@@ -537,29 +537,32 @@ struct symbol:A {
 
 template <typename T, typename = void> struct has_to_string : false_type { };
 template <typename T>
-struct has_to_string<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().to_string()), string*>>> : true_type { };
+struct has_to_string<T, std::enable_if_t<std::is_same_v<decltype(std::declval<T>().to_string()), String*>>> : true_type { };
 
 template <typename T>
-struct vector;
+struct Vector; /// A-type
+
+template <typename T>
+struct vector; /// U-type
 
 struct M;
 
-using arr = vector<M>;
+using array = vector<M>; /// array will facilitate what we did before
 
 /// always working on string theory..
-struct string:A {
+struct String:A {
     char *chars;
     int   length;
     int   alloc;
 
-    string(int size = 64) : A(typeof(string)) {
+    String(int size = 64) : A(typeof(String)) {
         chars = new char[size];
         alloc = size;
         length = 0;
         chars[0] = 0;
     }
 
-    string(const char v) : A(typeof(string)) {
+    String(const char v) : A(typeof(String)) {
         length = 1;
         alloc  = 2;
         chars  = new char[2];
@@ -567,7 +570,7 @@ struct string:A {
         chars[length] = 0;
     }
 
-    string(const char *v, int v_len = -1) : A(typeof(string)) {
+    String(const char *v, int v_len = -1) : A(typeof(String)) {
         length = v_len == -1 ? strlen(v) : v_len;
         alloc = 64;
         while (alloc < length)
@@ -577,33 +580,33 @@ struct string:A {
         chars[length] = 0;
     }
 
-    static string *input(int size) {
-        string *str = new string(size);
+    static String *input(int size) {
+        String *str = new String(size);
         fgets(str->chars, size, stdin);
         return str;
     }
 
-    string *format(arr *args);
+    String *format(arr *args);
 
-    string(char *v, int v_len = -1) : string((const char *)v, v_len) { }
+    String(char *v, int v_len = -1) : String((const char *)v, v_len) { }
 
-    arr *split(string *v) const;
+    arr *split(String *v) const;
 
-    int index_of(string *s) const {
+    int index_of(String *s) const {
         char *f = strstr(chars, s->chars);
         s->drop();
         return f ? (int)(size_t)(f - chars) : -1;
     }
 
-    string *mid(int start, int slen = -1) const {
+    String *mid(int start, int slen = -1) const {
         if (start < 0)
             start = start + length;
         int mid_len = slen >= 0 ? slen : (length - start + (slen + 1));
         assert(mid_len >= 0);
-        return new string(&chars[start], mid_len);
+        return new String(&chars[start], mid_len);
     }
 
-    string *trim() const {
+    String *trim() const {
         int offset = 0;
         while (chars[offset] == ' ') {
             offset++;
@@ -613,7 +616,7 @@ struct string:A {
             if (chars[offset + slen - 1] != ' ')
                 break;
         }
-        return new string(&chars[offset], slen);
+        return new String(&chars[offset], slen);
     }
 
     char &operator[](int i) const {
@@ -638,10 +641,10 @@ struct string:A {
     }
 
     void append(char v)                { append(&v, 1); }
-    void append(string* v)             { append(v->chars, v->length); v->drop(); }
+    void append(String* v)             { append(v->chars, v->length); v->drop(); }
     void operator += (char          v) { append(&v, 1); }
     void operator += (const char*   v) { append(v, strlen(v)); }
-    void operator += (string* v)       { append(v->chars, v->length); v->drop(); }
+    void operator += (String* v)       { append(v->chars, v->length); v->drop(); }
 
     explicit operator        cstr() const { return chars; }
     explicit operator ion::symbol() const { return ion::symbol(chars); }
@@ -658,8 +661,8 @@ struct string:A {
 
     int len() const { return length; }
 
-    string* to_string() override {
-        return (string*)hold();
+    String* to_string() override {
+        return (String*)hold();
     }
 
     u64 hash() {
@@ -694,7 +697,7 @@ struct Value:A {
         return 0;
     }
 
-    string *to_string() {
+    String *to_string() {
         char buf[128];
         if constexpr (identical<T, bool>()) {
             strcpy(buf, value ? "true" : "false");
@@ -707,7 +710,7 @@ struct Value:A {
         } else {
             printf("non-A type %s needs to_string\n", value_type->name);
         }
-        return new string((ion::symbol)buf);
+        return new String((ion::symbol)buf);
     }
 
     operator bool() const { return bool(value); }
@@ -730,17 +733,14 @@ struct Pointer:A {
             return A::h = type->f.hash(ptr);
         return A::h = (u64)ptr;
     }
-    string *to_string() {
+    String *to_string() {
         if (type->f.to_str)
             return type->f.to_str(ptr);
         char buf[128];
         snprintf(buf, sizeof(buf), "%s/%p", type->name, ptr);
-        return new string(buf);
+        return new String(buf);
     }
 };
-
-template <typename T>
-struct Vector;
 
 struct M {
     union {
@@ -754,7 +754,7 @@ struct M {
         Value<i8>   *v_i8;
         Value<bool> *v_bool;
         Pointer     *v_pointer;
-        string      *a_str;
+        String      *a_str;
         symbol     *a_symbol;
         A           *a;
     };
@@ -772,7 +772,7 @@ struct M {
     M(ion::symbol sym);
     M(cstr   str) : M((ion::symbol)str) { }
     M(A       *a) : a(a) { } /// this lets us pass around actual dynamically allocated A classes
-    M(string  *a) : a(a) { } /// this lets us pass around actual dynamically allocated A classes
+    M(String  *a) : a(a) { } /// this lets us pass around actual dynamically allocated A classes
     M(const M& b) : a(b.a ? b.a->hold() : null) { }
     template <typename T>
     M(const T& any) {
@@ -800,8 +800,8 @@ struct M {
     static M from_string(cstr cs, id* type) {
         assert(type);
         
-        if (type == typeof(string)) {
-            return new string(cs);
+        if (type == typeof(String)) {
+            return new String(cs);
         } else if (type->traits & traits::integral) { /// u/i 8 -> 64
             if (type == typeof(bool)) {
                 std::string s = std::string(cs);
@@ -828,7 +828,7 @@ struct M {
         } else {
             bool mx_based = (type->traits & traits::mx_obj);
             sz_t len = strlen(cs);
-            string *value = new string(cs);
+            String *value = new String(cs);
             void *alloc = type->f.ctr_str(null, value);
             if (mx_based) {
                 value->drop();
@@ -920,14 +920,14 @@ struct M {
     }
 
     ion::symbol symbol() const {
-        if (a && a->type == typeof(string))
+        if (a && a->type == typeof(String))
             return a_str    ? ion::symbol(a_str->chars)   : ion::symbol(null);
         else if (a && a->type == typeof(symbol))
             return a_symbol ? ion::symbol(a_symbol->name) : ion::symbol(null);
         return null;
     }
 
-    string *to_string() {
+    String *to_string() {
         return a->to_string();
     }
 };
@@ -950,25 +950,22 @@ int Value<T>::compare(const struct M &ref) const {
 
 template <typename T> struct is_vector : false_type {};
 
-struct ilist:A {
+struct iList:A {
     protected:
     int count;
     public:
-    ilist(id *type) : A(type) { count = 0; }
+    iList(id *type) : A(type) { count = 0; }
     virtual void remove(int index, int amount = 1) = 0;
     //virtual void push(const M &v) = 0; -- these abstract classes arent very useful; some of the list require M, some are T type; you cannot do that here.
     //virtual M pop() = 0;
     virtual void clear() = 0;
 };
 
-#include <tapestry/iterators.hpp>
+#include <mx/iterators.hpp>
 
 template <typename T>
-struct Vector;
-
-template <typename T>
-struct vector:ilist {
-    friend Vector<T>;
+struct Vector:iList {
+    friend vector<T>;
 
     private:
     T  *elements;
@@ -976,14 +973,14 @@ struct vector:ilist {
     int count;
 
     public:
-    vector(int reserve = 32) : ilist(typeof(vector)) {
+    Vector(int reserve = 32) : iList(typeof(Vector)) {
         alloc = 0;
         count = 0;
         elements = null;
         resize(reserve);
     }
 
-    vector(std::initializer_list<T> list) : vector() {
+    Vector(std::initializer_list<T> list) : Vector() {
         for (auto i: list)
             push(i);
     }
@@ -1064,29 +1061,29 @@ struct vector:ilist {
     explicit operator bool() const { return count > 0; }
 };
 
-template <typename T> struct is_vector<vector<T>> : true_type { };
+template <typename T> struct is_vector<Vector<T>> : true_type { };
 
 
-struct list:ilist {
-    item* first;
-    item* last;
-    list() : ilist(null) {
+struct List:iList {
+    Item* first;
+    Item* last;
+    List() : iList(null) {
         first = null;
         last  = null;
         count = 0;
     }
     //template <typename T>
-    list(std::initializer_list<M> list) : list() {
-        for (auto i: list)
+    List(std::initializer_list<M> args) : List() {
+        for (auto i: args)
             push(i);
     }
     void clear() {
         while (last)
             remove(last);
     }
-    void remove(item *i) {
-        item *inext = i->next;
-        item *iprev = i->prev;
+    void remove(Item *i) {
+        Item *inext = i->next;
+        Item *iprev = i->prev;
         if (inext) inext->prev = iprev;
         if (iprev) iprev->next = inext;
         if (first == i) first  = inext;
@@ -1097,11 +1094,11 @@ struct list:ilist {
     void remove(int index, int amount = 1) {
         int f = 0;
         bool found = false;
-        for (item *i = first; i; i = i->next) {
+        for (Item *i = first; i; i = i->next) {
             if (index == f++) {
                 for (int ii = 0; ii < amount; ii++) {
                     assert(i);
-                    item *inext = i->next;
+                    Item *inext = i->next;
                     remove(i);
                     i = inext;
                 }
@@ -1111,8 +1108,8 @@ struct list:ilist {
         }
         assert(found);
     }
-    item *push(const M &v) {
-        item *i = new item(v);
+    Item *push(const M &v) {
+        Item *i = new Item(v);
         i->h = ((M&)v).hash();
         if (last) {
             last->next = i;
@@ -1126,7 +1123,7 @@ struct list:ilist {
     M pop() {
         assert(last);
         M res = last->element;
-        item *ilast = last;
+        Item *ilast = last;
         last  = last->prev;
         if (!last)
             first = 0;
@@ -1150,12 +1147,12 @@ struct list:ilist {
 };
 
 /// never use directly, like all A-classes
-struct field:A {
+struct Field:A {
     M key;
     M value; /// these are more debuggable than simple A* pointers
     public:
-    field() : A(typeof(field)) { }
-    field(const M& k, const M& v) : field() {
+    Field() : A(typeof(Field)) { }
+    Field(const M& k, const M& v) : Field() {
         key   = k;
         value = v;
     }
@@ -1163,7 +1160,7 @@ struct field:A {
         if (A::h) return A::h;
         return A::h = key.hash();
     }
-    string *to_string() override;
+    String *to_string() override;
     operator bool() const { return key.a != null; }
 };
 
@@ -1226,7 +1223,7 @@ Lambda<R(Args...)>::Lambda(F&& fn) {
 }
 
 struct str {
-    A_decl(str, string)
+    A_decl(str, String)
     operator         cstr() const { return        cstr(*data); }
     ion::symbol    symbol() const { return ion::symbol(*data); }
     operator       double() const { return      double(*data); }
@@ -1234,14 +1231,14 @@ struct str {
     char &operator[](int i) const { return (*data)[i]; }
 };
 
-struct Field {
-    A_decl(Field, field)
+struct field {
+    A_decl(field, Field)
 };
 
-struct List {
-    A_decl(List,  list)
+struct list {
+    A_decl(list,  List)
 
-    List(std::initializer_list<M> list) : A_forward(list, list)
+    List(std::initializer_list<M> args) : A_forward(List, args)
 };
 
 struct Item {
@@ -1249,30 +1246,30 @@ struct Item {
 };
 
 template <typename T>
-struct Vector {
+struct vector {
     private:
-    struct vector<T>* data;
+    struct avector<T>* data;
     public:
-    using intern = vector<T>;
+    using intern = avector<T>;
 
-    Vector()                : data(new vector<T>())             A_type(vector<T>)
-    Vector(vector<T>* data) : data((vector<T>*)data)            A_type(vector<T>)
-    Vector(const M& ref)    : data((vector<T>*)(ref.a->hold())) A_type(vector<T>)
-    Vector(M& ref)          : Vector((const M&)ref)             { }
-    Vector(const Vector &b) : data((vector<T>*)b.data->hold())  { }
-    Vector(Vector &b)       : Vector((Vector &)b)               { }
-    Vector(int size)        : data(new vector<T>(size))         A_type(vector<T>)
+    vector()                : data(new avector<T>())             A_type(avector<T>)
+    vector(avector<T>* data) : data((avector<T>*)data)            A_type(avector<T>)
+    vector(const M& ref)    : data((avector<T>*)(ref.a->hold())) A_type(avector<T>)
+    vector(M& ref)          : vector((const M&)ref)             { }
+    vector(const vector &b) : data((avector<T>*)b.data->hold())  { }
+    vector(vector &b)       : vector((vector &)b)               { }
+    vector(int size)        : data(new avector<T>(size))         A_type(avector<T>)
 
-    Vector(std::initializer_list<T> args) : Vector(args.size()) {
+    vector(std::initializer_list<T> args) : vector(args.size()) {
         for (auto a: args)
             data->push(a);
     }
 
     //template <typename... Arg>
-    //Vector(Arg&&... arg) : data(new vector<T>(std::forward<Arg>(arg)...)) A_type(vector<T>)
+    //vector(Arg&&... arg) : data(new avector<T>(std::forward<Arg>(arg)...)) A_type(avector<T>)
 
-    Vector& operator += (const T& v) { (*data) += v;     return *this; }
-    Vector& operator -= (int  index) { (*data) -= index; return *this; }
+    vector& operator += (const T& v) { (*data) += v;     return *this; }
+    vector& operator -= (int  index) { (*data) -= index; return *this; }
 
     iterator<T> begin() const { return data->begin(); }
     iterator<T>   end() const { return data->end(); }
@@ -1284,9 +1281,9 @@ struct Vector {
     operator bool() const { return data->len() > 0; }
     operator M() const { return M((A*)data->hold()); }
     
-    vector<T>* operator->() const { return data; }
-    operator vector<T>*() const { return (vector<T>*)data->hold(); }
-    Vector &operator=(const Vector &b) {
+    avector<T>* operator->() const { return data; }
+    operator avector<T>*() const { return (avector<T>*)data->hold(); }
+    vector &operator=(const vector &b) {
         if (data != b.data) {
             data->drop();
             data = b.data->hold();
@@ -1294,7 +1291,7 @@ struct Vector {
         return *this;
     }
 
-    ~Vector() {
+    ~vector() {
         data->drop();
     }
 
@@ -1315,9 +1312,9 @@ M::M(const i16    &i) : v_i16(new Value<i16>(i))    { a->type = typeof(Value<i16
 M::M(const u8     &i) : v_u8 (new Value<u8 >(i))    { a->type = typeof(Value<u8>); }
 M::M(const i8     &i) : v_i8 (new Value<i8 >(i))    { a->type = typeof(Value<i8>); }
 M::M(const char   &i) : v_u8 (new Value<u8>((u8)i)) { a->type = typeof(Value<u8>); }
-M::M(ion::symbol sym) : a_str(new string(sym)) { a->type = typeof(string);    }
+M::M(ion::symbol sym) : a_str(new String(sym)) { a->type = typeof(String);    }
 
-struct hashmap:A {
+struct Hashmap:A {
     private:
     list *h_fields;
     list *list;
@@ -1352,26 +1349,26 @@ struct hashmap:A {
         count++;
     }
     
-    ~hashmap() {
+    ~Hashmap() {
         delete h_fields;
         delete list;
     }
 
-    hashmap(int sz = 32);
-    //hashmap(std::initializer_list<field> a) : hashmap(a.size() > 0 ? a.size() : 32) {
+    Hashmap(int sz = 32);
+    //Hashmap(std::initializer_list<Field> a) : Hashmap(a.size() > 0 ? a.size() : 32) {
     //    for (auto &v: a)
     //        push(v);
     //}
 
     template<typename... Fields>
-    hashmap(const Field& first, Fields&&... fields) : hashmap(32) {
+    Hashmap(const Field& first, Fields&&... fields) : Hashmap(32) {
         push(first);
-        // expand pack and push each field
+        // expand pack and push each Field
         (push(fields), ...);
     }
 
     item     *item(const M &key, list **list = null, u64 *phash = null);
-    field   *fetch(const M &key); /// we use field here, because fetch is internal to hash and we store field; any user who accepts a return value can contain it in a User type
+    Field   *fetch(const M &key); /// we use Field here, because fetch is internal to hash and we store Field; any user who accepts a return value can contain it in a User type
     M        &value(const M &key);
     void        set(const M &key, const M &value);
 
@@ -1396,13 +1393,11 @@ struct hashmap:A {
     list_iterable_items_hash items(u64 hash) const { return list->items(hash); }
 };
 
-struct Hash {
-    A_decl(Hash, hashmap)
+struct hashmap {
+    A_decl(hashmap, Hashmap)
 
     template<typename... Fields>
-    Hash(const Field& first, Fields&&... fields) : data(new hashmap(first, std::forward<Fields>(fields)...)) {
-        data->type = typeof(hashmap);
-    }
+    hashmap(const Field& first, Fields&&... fields) : data(new Hashmap(first, std::forward<Fields>(fields)...)) { }
 
     void set(const M& key, const M& val) {
         data->set(key, val);
@@ -1418,7 +1413,7 @@ struct logger {
     inline static Lambda<void(M)> service;
 
     protected:
-    static void _print(const str &st, const Vector<M> &ar) {
+    static void _print(const str &st, const vector<M> &ar) {
         static std::mutex mtx;
         mtx.lock();
         str msg = st->format(ar);
@@ -1430,11 +1425,11 @@ struct logger {
     }
 
     public:
-    inline void log(const M& msg, const Vector<M> &ar = {}) {
+    inline void log(const M& msg, const vector<M> &ar = {}) {
         _print(((M&)msg).to_string(), ar);
     }
 
-    void test(const bool cond, const M& str = {}, const Vector<M> &ar = {}) {
+    void test(const bool cond, const M& str = {}, const vector<M> &ar = {}) {
         #ifndef NDEBUG
         if (!cond) {
             _print(((M&)str).to_string(), ar);
@@ -1444,13 +1439,13 @@ struct logger {
     }
 
     static str input() {
-        return string::input(1024);
+        return String::input(1024);
     }
 
-    inline void fault(const M& msg, const Vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); brexit(); }
-    inline void error(const M& msg, const Vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); brexit(); }
-    inline void print(const M& msg, const Vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); }
-    inline void debug(const M& msg, const Vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); }
+    inline void fault(const M& msg, const vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); brexit(); }
+    inline void error(const M& msg, const vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); brexit(); }
+    inline void print(const M& msg, const vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); }
+    inline void debug(const M& msg, const vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); }
 };
 
 extern logger console;
@@ -1586,7 +1581,7 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
             type->f.ctr      = [](void *a) -> void* { if (a) new (a) T(); else a = (void*)new T(); return a; };
         
         if constexpr (has_ctr_str<K>::value)
-            type->f.ctr_str  = [](void* a, string *v) -> void* { str sv((A*)v); if (a) new (a) T(sv); else a = (void*)new T(sv); return a; };
+            type->f.ctr_str  = [](void* a, String *v) -> void* { str sv((A*)v); if (a) new (a) T(sv); else a = (void*)new T(sv); return a; };
         
         if constexpr (!std::is_trivially_destructible<T>::value)
             type->f.dtr      = [](void* a) -> void { ((T*)a) -> ~T(); };
@@ -1601,7 +1596,7 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
             type->f.boolean  = [](void* a) -> bool { return bool(*(T*)a); };
 
         if constexpr (has_to_string<T>())
-            type->f.to_str   = [](void* a) -> string* { return ((T*)a)->to_string(); };
+            type->f.to_str   = [](void* a) -> String* { return ((T*)a)->to_string(); };
 
         if constexpr (has_hash<T>())
             type->f.hash     = [](void* a) -> u64 { return ((T*)a)->hash(); };
@@ -1637,7 +1632,7 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
         if constexpr ((inherits<A, T>() || !has_intern<T>()) && registered_instance_meta<T>()) {
             static T *def = new T();
             List mlist = def->meta();
-            type->meta = new Hash(16);
+            type->meta = new hashmap(16);
             for (M &element: mlist->elements<M>()) {
                 prop &pr = element;
                 pr.offset = pr.is_method ? 0 : (size_t(pr.member_addr) - size_t(def));
@@ -1657,7 +1652,7 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
     return (id*)type;
 }
 
-M symbolize(cstr cs, id* type = typeof(string), i32 id = 0);
+M symbolize(cstr cs, id* type = typeof(String), i32 id = 0);
 
 struct E:Value<i32> {
     static int convert(M raw, ion::symbol S, id* type) {
@@ -1665,7 +1660,7 @@ struct E:Value<i32> {
         M sym;
         if (raw.type() == typeof(symbol))
             return raw.a_symbol->id;
-        if (raw.type() == typeof(string)) {
+        if (raw.type() == typeof(String)) {
             str raw_str = raw;
             /// in json, the enum can sometimes be given in "23124" form; no enum begins with a numeric so we can handle this
             if (raw_str[0] == '-' || isdigit(raw_str[0])) {
@@ -1676,7 +1671,7 @@ struct E:Value<i32> {
             }
             if (!sym) {
                 /// if lookup fails, compare by the number of chars given
-                for (symbol &f: type->symbols->list->elements<symbol>()) { /// changing this from str to a field (so we may have the id on symbols)
+                for (symbol &f: type->symbols->list->elements<symbol>()) { /// changing this from str to a Field (so we may have the id on symbols)
                     if (raw_str->len() != f.len)
                         continue;
                     if (matches((ion::symbol)f.name, (ion::symbol)raw_str, raw_str->len()))
@@ -1702,13 +1697,13 @@ struct E:Value<i32> {
         if (type->secondary_init) return v;
         type->secondary_init = true;
         str snames = str(names);
-        arr     *sp = snames->split(new string(", "));
+        arr     *sp = snames->split(new String(", "));
         int       c = sp->len();
         i32    next = 0;
-        string   *e = new string("=");
+        String   *e = new String("=");
         int       i = 0;
-        for (string &s: *sp) {
-            num idx = s.index_of((string*)e->hold());
+        for (String &s: *sp) {
+            num idx = s.index_of((String*)e->hold());
             if (idx >= 0) {
                 str sym = s.mid(0, idx);
                 sym = sym->trim();
@@ -1750,15 +1745,15 @@ struct E:Value<i32> {
         return (ion::symbol)mem_symbol;
     }
 
-    string *to_string() override { return type->symbols->by_value[i32(value)].a_str; }
+    String *to_string() override { return type->symbols->by_value[i32(value)].a_str; }
 };
 
 template <typename T>
-M M::method(T& obj, const str &name, const Vector<M> &args) {
+M M::method(T& obj, const str &name, const vector<M> &args) {
     id* type = typeof(T);
     if (type->intern)
         type = type->intern;
-    field *f = (*type->meta)->fetch(name);
+    Field *f = (*type->meta)->fetch(name);
     assert(f);
     prop &pr = f->value;
     method_info *method = pr.type->method;
@@ -1775,7 +1770,7 @@ M M::method(T& obj, const str &name, const Vector<M> &args) {
             id *atype = method->args[a];
             if (src.a->type != atype) {
                 M   msrc(src.a->hold());
-                string *st = msrc.to_string();
+                String *st = msrc.to_string();
                 M   conv = M::from_string(st->chars, atype);
                 st->drop();
                 dst = M(conv.a->hold());
@@ -1794,31 +1789,31 @@ enums(EnumTest, undefined,
     undefined, one, two, three, four)
 
 template <typename T, const size_t SZ>
-struct buffer:A {
+struct Buffer:A {
     T      values[SZ];
     size_t count;
-    buffer(id* type = typeof(buffer)) : A(type), count(0) { }
-    buffer(std::initializer_list<T> args) : buffer() {
+    Buffer(id* type = typeof(Buffer)) : A(type), count(0) { }
+    Buffer(std::initializer_list<T> args) : Buffer() {
         assert(args.size() < SZ);
         for (auto a: args)
             values[count++] = a;
     }
 };
 
-struct size:buffer<num, 16> {
-    using base = buffer<num, 16>;
+struct Size:Buffer<num, 16> {
+    using base = Buffer<num, 16>;
 
-    size(num        sz = 0);
-    size(null_t           );
-    size(size_t         sz);
-    size(i8             sz);
-    size(u8             sz);
-    size(i16            sz);
-    size(u16            sz);
-    size(i32            sz);
-    size(u32            sz);
+    Size(num        sz = 0);
+    Size(null_t           );
+    Size(size_t         sz);
+    Size(i8             sz);
+    Size(u8             sz);
+    Size(i16            sz);
+    Size(u16            sz);
+    Size(i32            sz);
+    Size(u32            sz);
 
-    size(std::initializer_list<num> args);
+    Size(std::initializer_list<num> args);
 
     size_t    x() const;
     size_t    y() const;
@@ -1827,24 +1822,24 @@ struct size:buffer<num, 16> {
     num    area() const;
     size_t dims() const;
 
-    void assert_index(const size &b) const;
+    void assert_index(const Size &b) const;
 
     bool operator==(size_t b) const;
     bool operator!=(size_t b) const;
-    bool operator==(size &sb) const;
-    bool operator!=(size &sb) const;
+    bool operator==(Size &sb) const;
+    bool operator!=(Size &sb) const;
     
     void   operator++(int);
     void   operator--(int);
-    size  &operator+=(size_t sz);
-    size  &operator-=(size_t sz);
+    Size  &operator+=(size_t sz);
+    Size  &operator-=(size_t sz);
 
     num &operator[](size_t index) const;
 
-    size &zero();
+    Size &zero();
 
     template <typename T>
-    size_t operator()(T *addr, const size &index) {
+    size_t operator()(T *addr, const Size &index) {
         size_t i = index_value(index);
         return addr[i];
     }
@@ -1863,18 +1858,18 @@ struct size:buffer<num, 16> {
 
     num &operator[](num i);
 
-    size &operator=(i8   i);
-    size &operator=(u8   i);
-    size &operator=(i16  i);
-    size &operator=(u16  i);
-    size &operator=(i32  i);
-    size &operator=(u32  i);
-    size &operator=(i64  i);
-    size &operator=(u64  i);
+    Size &operator=(i8   i);
+    Size &operator=(u8   i);
+    Size &operator=(i16  i);
+    Size &operator=(u16  i);
+    Size &operator=(i32  i);
+    Size &operator=(u32  i);
+    Size &operator=(i64  i);
+    Size &operator=(u64  i);
 
-    size &operator=(const size b);
+    Size &operator=(const Size b);
 
-    size_t index_value(const size &index) const;
+    size_t index_value(const Size &index) const;
 };
 
 struct str;
@@ -1922,7 +1917,7 @@ struct utf16:mx {
 
 	utf16(size_t sz);
 	utf16(char *input);
-    
+
     utf16(symbol s);
     utf16(ion::wstr input, size_t len);
 
@@ -2069,8 +2064,6 @@ struct rand {
 
     static bool coin(seq& s = global) { return uniform(0.0, 1.0) >= 0.5; }
 };
-
-struct size;
 
 using arg = field;
 //using ax  = Array<arg>;
@@ -2241,7 +2234,7 @@ struct states:mx {
         }
     }
 
-    memory *string() const {
+    memory *String() const {
         if (!data->bits)
             return memory::symbol("null");
 
@@ -2328,10 +2321,10 @@ static void brexit() {
 }
 
 /// use char as base.
-struct path:mx {
+struct Path:A {
     inline static std::error_code ec;
 
-    using Fn = lambda<void(path)>;
+    using Fn = lambda<void(Path*)>;
 
     enums(option, recursion,
          recursion, no_sym_links, no_hidden, use_git_ignores);
@@ -2339,17 +2332,13 @@ struct path:mx {
     enums(op, none,
          none, deleted, modified, created);
 
-    static path cwd();
+    static Path* cwd();
 
-    struct M {
-        fs::path p;
-        memory* to_string();
-    };
+    fs::path p;
+    String* to_string();
 
-    mx_basic(path);
-
-    path(str      s);
-    path(symbol  cs);
+    Path(str      s);
+    Path(symbol  cs);
 
     template <typename T> T     read(symbol subpath = null) const;
     template <typename T> bool write(T input) const;
@@ -2370,39 +2359,39 @@ struct path:mx {
     bool          exists() const;
     bool          is_dir() const;
     bool        make_dir() const;
-    path remove_filename();
+    Path* remove_filename();
     bool    has_filename() const;
-    path            link() const;
+    Path*            link() const;
     bool         is_file() const;
     char             *cs() const;
     str             ext () const;
     str             ext4() const;
-    path            file() const;
-    bool     copy(path to) const;
+    Path*            file() const;
+    bool     copy(Path* to) const;
     
-    path &assert_file();
+    Path* &assert_file();
 
     /// create an alias; if successful return its location
-    path  link(path alias) const;
+    Path*  link(Path* alias) const;
 
     /// operators
     operator        bool()         const;
     operator         str()         const;
-    path          parent()         const;
-    path operator / (path       s) const;
-    path operator / (symbol     s) const;
-    path operator / (const str& s) const;
-    path relative   (path    from) const;
-    bool  operator==(path&      b) const;
-    bool  operator!=(path&      b) const;
+    Path*         parent()         const;
+    Path*operator / (Path*       s) const;
+    Path*operator / (symbol     s) const;
+    Path*operator / (const str& s) const;
+    Path*relative   (Path*    from) const;
+    bool  operator==(Path&      b) const;
+    bool  operator!=(Path&      b) const;
     bool  operator==(symbol     b) const;
     bool  operator!=(symbol     b) const;
     operator str();
     operator cstr() const;
 
     /// methods
-    static path uid(path b);
-    static path  format(str t, array args);
+    static Path *uid(path b);
+    static Path *format(str t, array args);
     int64_t modified_at() const;
     bool read(size_t bs, lambda<void(symbol, size_t)> fn);
     bool append(const array &bytes);
@@ -2514,6 +2503,7 @@ struct base64 {
     }
 };
 
+/// var should inherit from M
 struct var:mx {
 protected:
     void push(mx v);

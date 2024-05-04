@@ -10,296 +10,505 @@
 
 namespace ion {
 
-MX::MX(symbol s)    : MX(memory::stringify((cstr)s, memory::autolen, 0, true, typeof(char))) { }
-MX::MX(null_t n)    : MX(memory::alloc(typeof(null_t))) { }
-MX::MX(bool   v)    : MX(memory::alloc(typeof(bool), 1, 1, &v)) { }
-MX::MX(u8     v)    : MX(memory::alloc(typeof(u8),   1, 1, &v)) { }
-MX::MX(i8     v)    : MX(memory::alloc(typeof(i8),   1, 1, &v)) { }
-MX::MX(u16    v)    : MX(memory::alloc(typeof(u16),  1, 1, &v)) { }
-MX::MX(i16    v)    : MX(memory::alloc(typeof(i16),  1, 1, &v)) { }
-MX::MX(u32    v)    : MX(memory::alloc(typeof(u32),  1, 1, &v)) { }
-MX::MX(i32    v)    : MX(memory::alloc(typeof(i32),  1, 1, &v)) { }
-MX::MX(u64    v)    : MX(memory::alloc(typeof(u64),  1, 1, &v)) { }
-MX::MX(i64    v)    : MX(memory::alloc(typeof(i64),  1, 1, &v)) { }
-MX::MX(r32    v)    : MX(memory::alloc(typeof(r32),  1, 1, &v)) { }
-MX::MX(r64    v)    : MX(memory::alloc(typeof(r64),  1, 1, &v)) { }
+A_impl(str, string)
+A_impl(Field, field)
+A_impl(List, list)
+A_impl(Item, item)
+A_impl(Hash, hashmap)
 
-type_t mx::register_class() { return typeof(mx); }
-type_t mx::register_data()  { return null; }
-
-type_t array::register_class() { return typeof(array); }
-type_t array::register_data()  { return null; }
-
-type_t doubly::register_class() { return typeof(ldata); }
-type_t doubly::register_data()  { return null; }
-
-mx_implement(str, mx, char)
-
-void ldata::shift(mx* prev_first) {
-    assert(ilast);
-    ///
-    item *i = ifirst;
-    bool set_last = ilast == ifirst;
-    ifirst        = ifirst->next;
-    ///
-    if (!ifirst) {
-        ilast = null;
-    } else
-        ifirst->prev = 0;
-    ///
-    icount--;
-    if (prev_first) {
-        *prev_first = *(mx*)&i->mem; // location of mx is the location of memory pointer, not its value
+u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
+    const u8* bytes = (const u8*)data;
+    for (size_t i = 0; i < length; ++i) {
+        hash ^= bytes[i];  // xor bottom with current byte
+        hash *= FNV_PRIME; // multiply by FNV prime
     }
-    delete i;
+    return hash;
 }
 
-void ident::init() {
-    static ident* id_types;
-    if (!id_types) id_types = new ident(true);
-}
+static cstr parse_fn(const std::string &cn);
 
-void *idata::alloc() {
-    void *alloc = calloc(1, base_sz);
-    return alloc;
-}
+static void describe_type(memory *mem, cstr name, sz_t sz, u64 traits);
 
-void *idata::ctr() {
-    void *alloc = this->alloc();
-    f.ctr(alloc);
-    return alloc;
-}
+static void push_type(id *type);
 
-void idata::dtr(void* alloc) {
-    f.dtr(alloc);
-}
+void register_type2(id *type, const std::string &sig, sz_t sz, u64 traits);
 
-void *idata::ctr_str(const str &v) {
-    void *alloc = this->alloc();
-    f.ctr_str(alloc, v);
-    return alloc;
-}
-
-void *idata::ctr_mem(memory *mem) {
-    void *alloc = this->alloc();
-    f.ctr_mem(alloc, mem);
-    return alloc;
-}
-
-void *idata::ctr_type(memory *mem) {
-    void *alloc = this->alloc();
-    f.ctr_type(alloc, mem);
-    return alloc;
-}
-
-void *idata::ctr_cp(void *b) {
-    void *alloc = this->alloc();
-    f.ctr_cp(alloc, b);
-    return alloc;
-}
-
-MX::operator mx&() const {
-    return *(mx*)(this);
-}
-
-
-bool ex::matches(ion::symbol a, ion::symbol b, int len) {
-    for (int i = 0; i < len; i++) {
-        if (!a[i] || !b[i])
-            return false;
-        if (a[i] == b[i] || (a[i] == '-' && b[i] == '_') ||
-                            (b[i] == '-' && a[i] == '_'))
-            continue;
-        return false;
-    }
-    return true;
-}
-
-ion::symbol ex::symbol() {
-    i32 v = *mem->get<i32>(0);
-    memory *mem_symbol = mem->type->lookup(i64(v));
-    if (!mem_symbol) printf("symbol: mem is null for value %d\n", (int)v);
-    assert(mem_symbol);
-    return (char*)mem_symbol->origin;
-}
-
-//mx mx::mix(const mx& b, float f) const {
-//    /// interpolate props here
-//    return mx();
-//}
-
-int mx::compare(const mx& b) const {
-    if (mem && type() == b.type() && mem->count == b.mem->count) {
-        type_t ty = mem->type->src; /// we are using src now to resolve basic type from an Array<something>; typeof(Array<int>) -> src = int
-        if (ty->f.compare) {
-            return ty->f.compare(mem->origin, b.mem->origin);
-        } else {
-            size_t cn = mem->count;
-            assert(ty->traits & traits::primitive);
-
-            return memcmp(mem->origin, b.mem->origin, ty->base_sz * cn);
-        }
-    }
-    return mem < b.mem ? -1 : 1;
-}
-
-mx mx::from_string(cstr cs, type_t type) {
-    assert(type);
-    
-    if (type == typeof(str)) {
-        return str(cs);
-    } else if (type->traits & traits::integral) { /// u/i 8 -> 64
-        if (type == typeof(bool)) {
-            std::string s = std::string(cs);
-            std::transform(s.begin(), s.end(), s.begin(),
-                [](unsigned char c){ return std::tolower(c); });
-            return new bool(s == "true" || s == "1" || s == "tru" || s == "yes");
-        }
-        else if (type == typeof(u32))    return mx(   u32(std::stoi(cs)));
-        else if (type == typeof(i32))    return mx(   i32(std::stoi(cs)));
-        else if (type == typeof(u64))    return mx(   u64(std::stoi(cs)));
-        else if (type == typeof(i64))    return mx(   i64(std::stoi(cs)));
-        else if (type == typeof(u16))    return mx(   u16(std::stoi(cs)));
-        else if (type == typeof(i16))    return mx(   i16(std::stoi(cs)));
-        else if (type == typeof(u8))     return mx(    u8(std::stoi(cs)));
-        else if (type == typeof(i8))     return mx(    i8(std::stoi(cs)));
-        console.fault("unknown numeric conversion");
-        return mx();
-    /// float / double
-    } else if (type->traits & traits::realistic) {
-        if (type == typeof(float))       return mx( float(std::stod(cs)));
-        else if (type == typeof(double)) return mx(double(std::stod(cs)));
-        console.fault("unknown real type conversion");
-        return mx();
-    } else {
-        /// enums handle this by implementing ctr_type (generic conversion)
-        bool mx_based = (type->traits & traits::mx_obj);
-        sz_t len = strlen(cs);
-        str value(cs);
-        void *alloc = type->ctr_str(value);
-        memory *mem;
-        if (mx_based) {
-            mem = hold(((mx*)alloc)->mem);
-            type->f.dtr(alloc);
-        } else {
-            mem = memory::raw_alloc(type, 0, 1, 0);
-            mem->origin = alloc;
-        }
-        return mem;
-    }
-}
-
-u64 mx::hash() const {
-    if (!mem) return 0;
-    type_t type = mem->type;
-    void*  k    = mem->origin;
-    if (k == null) return 0;
-    if (type == ident::char_t) return (u64)djb2(cstr(k));
-    if (type == typeof(i64)   || type == typeof(u64))    return (u64)*(u64*)k;
-    if (type == typeof(i32)   || type == typeof(u32))    return (u64)*(u32*)k;
-    if (type->f.hash) {
-        u64 hash = type->f.hash(k);
-        return hash;
-    }
-
-    console.fault("implement hash in context for data: {0}", { str(type->name) });
-    return 0;
-}
-
-/// we cannot call the to_string on (this; if we are a direct type, the virtual would be used)
-mx mx::to_string() const {
-    type_t type = mem->data_type();
-
-    if      (type == typeof(i8) ) return memory::string(std::to_string(*(i8*)  mem->origin));
-    else if (type == typeof(i16)) return memory::string(std::to_string(*(i16*) mem->origin));
-    else if (type == typeof(i32)) return memory::string(std::to_string(*(i32*) mem->origin));
-    else if (type == typeof(i64)) return memory::string(std::to_string(*(i64*) mem->origin));
-    else if (type == typeof(u8) ) return memory::string(std::to_string(*(u8*)  mem->origin));
-    else if (type == typeof(u16)) return memory::string(std::to_string(*(u16*) mem->origin));
-    else if (type == typeof(u32)) return memory::string(std::to_string(*(u32*) mem->origin));
-    else if (type == typeof(u64)) return memory::string(std::to_string(*(u64*) mem->origin));
-    else if (type == typeof(r32)) return memory::string(std::to_string(*(r32*) mem->origin));
-    else if (type == typeof(r64)) return memory::string(std::to_string(*(r64*) mem->origin));
-    else if (type == typeof(bool))return memory::string(std::to_string(*(bool*)mem->origin));
-
-    else if  ((type->traits & traits::enum_primitive) && type->ref) {
-        int iraw = *(int*)mem->origin;
-        memory *res = type->ref->lookup(u64(iraw));
-        return res;
-    }
-    else if (type->f.to_str) {
-        memory *res;
-        /// perform memory contruct because
-        /// we dont always have full context in mx
-        if (type->traits & traits::mx_obj) {
-            void *temp = type->ctr_mem(hold(mem));
-            res = type->f.to_str(temp);
-            type->dtr(temp);
-        } else {
-            res = type->f.to_str(mem->origin);
-        }
-        return res;
-    }
-    else if (type->schema && type->schema->bind->data->f.to_str) {
-        /// should assert the schema count is 1
-        return type->schema->bind->data->f.to_str(mem->origin);
-    }
-    
-    else if (type == typeof(char))
-        return ion::hold(mem);
-    
-    static char buf[128];
-    const int l = snprintf(buf, sizeof(buf), "%s/%p", type->name, (void*)mem);
-    return memory::stringify(cstr(buf), l);
-}
-
-/// cstr operator overload
-str operator+(cstr cs, str rhs) { return str(cs) + rhs; }
-
-item& liter_item::operator *     () const { return *cur; }
-
-      liter_item::operator item& () const { return *cur; }
-
-void ldata::pop(mx *prev) {
-    assert(icount);
-    if (prev)
-       *prev = ion::hold(ilast->mem);
-    remove(-1);
-}
-
-
-doubly::doubly(memory* mem) : mem(mem), data(mem->get<ldata>(0)) { }
-
-doubly::doubly() : doubly(memory::alloc(typeof(ldata))) { }
-
-doubly::doubly(const doubly &ref) : doubly(ion::hold(ref.mem)) { }
-
-doubly::~doubly() {
-    ion::drop(mem);
-}
-
-item   *ldata::first_item() const { return ifirst; }
-item   *ldata:: last_item() const { return ilast; }
-
-mx     &ldata::  first_mx() const { return *(mx*)&ifirst->mem; }
-mx     &ldata::   last_mx() const { return *(mx*)&ilast ->mem; }
+static id *primitive_type(symbol name, sz_t sz);
 
 template <>
-str convert_str<str>(const str& s) {
-    return s;
+id *id::for_type<null_t>(void*, size_t) {
+    static id* type; if (type) return type;
+    type = primitive_type("std::nullptr_t", sizeof(null_t));
+    return type;
 }
 
-/// todo: it has a string conversion implementation now; should be mx-based
-mx call(const mx &lambda, const Array<mx> &args) {
-    type_t lt = lambda.type();
-    /// there are things that disallow generic lambda production and thats the use of pointers and references
-    /// with these functions the return type can be void or it can be convertible to mx
-    /// if the return type falls outside of that, no generic lambda can be called
-    /// at the moment it still creates it but that should change
-    assert(lt->generic_lambda);
-    mx result = (*lt->generic_lambda)(lambda.mem->origin, args);
+template <>
+id *id::for_type<char>(void*, sz_t) {
+    static id* type; if (type) return type;
+    type = primitive_type("char", sizeof(char));
+    type->traits |= traits::integral;
+    return type;
+}
+
+template <>
+id *id::for_type<i64>(void*, sz_t) {
+    static id* type; if (type) return type;
+    type = primitive_type("long long", sizeof(i64));
+    type->traits |= traits::integral;
+    return type;
+}
+
+template <>
+id *id::for_type<u64>(void*, sz_t) {
+    static id* type; if (type) return type;
+    type = primitive_type("unsigned long long", sizeof(u64));
+    type->traits |= traits::integral;
+    return type;
+}
+
+
+cstr parse_fn(const std::string &cn) {
+    std::string      st = "with TT = ";
+    std::string      en = ";";
+    num		         p  = cn.find(st) + st.length();
+    num              ln = cn.find(en, p) - p;
+    std::string      nm = cn.substr(p, ln);
+    auto             sp = nm.find(' ');
+    std::string  s_name = (sp != std::string::npos) ? nm.substr(sp + 1) : nm;
+    num ns = s_name.find("ion::");
+    if (ns >= 0 && s_name.substr(0, ns) != "std")
+        s_name = s_name.substr(ns + 5);
+    cstr  name = util::copy(s_name.c_str());
+    return name;
+}
+
+void describe_type(id *type, cstr name, sz_t sz, u64 traits) {
+    type->name      = name;
+    type->traits    = traits;
+    type->base_sz   = sz;
+    type->src       = type;
+}
+
+void push_type(id *type) {
+    M key(type->name);
+    M value(M::pointer(type));
+    id::types->set(key, value);
+}
+
+void register_type(id *type, const std::string &sig, sz_t sz, u64 traits) {
+    std::string copy = sig;
+    cstr name = parse_fn(sig);
+    describe_type(type, name, sz, traits);
+    push_type(type);
+}
+
+/// these are called before registration, by ident::init
+id *primitive_type(symbol name, sz_t sz) {
+    id *type = new id();
+    memset(type, 0, sizeof(id));
+    describe_type(type, (cstr)name, sz, traits::primitive);
+    return type;
+}
+
+M symbolize(cstr cs, id* type = typeof(string), i32 id = 0) {
+    if (!type->symbols)
+        type->symbols = new symbols2;
+
+    M name(cs);
+    type->symbols->by_name[name] = id;
+    type->symbols->by_value[id]  = name;
+    type->symbols->list += new asymbol(name.symbol(), id);
+    return name;
+}
+
+prop::prop(const prop &ref) {
+    key         = ref.key ? new M(*ref.key) : null;
+    member_addr = ref.member_addr;
+    offset      = ref.offset;
+    type        = ref.type;
+    parent_type = ref.parent_type;
+    init_value  = ref.init_value;
+    is_method   = ref.is_method;
+}
+
+string* prop::to_string() {
+    return (string*)(key ? key->a_str->hold() : null);
+}
+
+int Pointer::compare(const M& b) const {
+    if (type->f.compare)
+        return type->f.compare(ptr, b.v_pointer->ptr);
+    return (size_t)ptr - (size_t)b.v_pointer->ptr;
+}
+
+prop::prop() : key(null), member_addr(0), offset(0), type(null), is_method(false) { }
+
+
+void *prop::member_pointer(void *M) { return (void *)handle_t(&cstr(M)[offset]); }
+
+symbol prop::name() const { return key->symbol(); }
+
+int string::compare(const M &arg) const {
+    string *b = arg.get<string>();
+    return strcmp(chars, b->chars);
+}
+
+
+arr *string::split(string *v) const {
+    arr  *res    = new arr(length + 1);
+    char *start  = chars;
+    char *scan   = chars;
+    char *sp     = v->chars;
+    int   sp_len = v->len();
+    assert(sp_len > 0);
+    if (length > 0)
+        for (;;) {
+            if (*scan == 0 || strncmp(scan, sp, sp_len) == 0) {
+                int str_len = (int)(size_t)(scan - start);
+                if (str_len)
+                    res->push(new string(start, str_len));
+                scan += sp_len;
+                start = scan;
+                if (*scan == 0) break;
+            } else
+                scan++;
+        }
+    v->drop();
+    return res;
+}
+
+string *string::format(arr *args) {
+    string   *res = new string(length + 1 + args->len() * 128);
+    char   *start = chars;
+    char     *end = start + length;
+    for (;*start;) {
+        char *f = strstr(start, "{");
+        if (f) {
+            if (f[1] != '{') {
+                res->append(start, (int)(size_t)(f - start));
+                char *s = &f[1];
+                char *number_start = s;
+                for (; *s && *s != '}'; s++)
+                    assert(isdigit(*s));
+                assert(*s == '}');
+                int   number_len = (int)(size_t)(s - number_start);
+                char *number     = new char[number_len + 1];
+                memcpy(number, number_start, number_len);
+                number[number_len] = 0;
+                int n = atoi(number);
+                assert(n >= 0 && n < args->len());
+                delete[] number;
+                M &a  = args->get(n);
+                M str = a.to_string();
+                if (str.a_str) {
+                    char *a_start = str.a_str->chars;
+                    char *a_end   = str.a_str->chars + str.a_str->length;
+                    res->append(a_start, (int)(size_t)(a_end - a_start));
+                } else {
+                    res->append("null", 4);
+                }
+                start = f + 1 + number_len + 1;
+            } else {
+                res->append(start, (int)(size_t)(f - start) + 1);
+                start += 2;
+            }
+        } else {
+            res->append(start, (int)(size_t)(end - start));
+            break;
+        }
+    }
+    args->drop();
+    return res;
+}
+
+string *field::to_string() {
+    return str("{0}, {1}");
+}
+
+
+item* hashmap::find_item(const M &key, list **h_list, u64 *phash) {
+    const u64 hash = hash_value((M&)key);
+    const u64 k    = hash % sz;
+    if (phash) *phash = hash;
+    list &hist = list_for_key(k);
+    if (h_list) *h_list = (list*)&hist;
+    for (item *fi: hist.items(hash)) {
+        assert(fi->hash() == hash);
+        field *f = fi->element.get<field>();
+        if (f->key == key)
+            return fi;
+    }
+    return null;
+}
+
+M hashmap::lookup(const M &key) {
+    item *fi = find_item(key, null, null);
+    if (!fi)
+        return M();
+    field *f = fi->element.get<field>();
+    return f->value;
+}
+
+/// always creates a field with fetch
+field *hashmap::fetch(const M &key) {
+    list  *h_list = null;
+    u64     hash = 0;
+    item  *fi   = find_item(key, &h_list, &hash);
+    field *f    = null;
+    if (!fi) {
+        f = new field(key, null);
+        item* i = h_list->push(f); /// we iterate with a filter on hash id in doubly
+        i->peer = list->push(f);
+        count++;
+    } else {
+        f = fi->element.get<field>();
+    }
+    return f;
+}
+
+M &hashmap::value(const M &key) {
+    field *f = fetch(key);
+    return f->value;
+}
+
+M &hashmap::operator[](const M &key) {
+    field *f = fetch(key);
+    return f->value;
+}
+
+void hashmap::set(const M &key, const M &value) {
+    field *f = fetch(key);
+    if (value.a != f->value.a)
+        f->value = value;
+}
+
+bool hashmap::remove(const M &key) {
+    list *h_list = null;
+    item *fi     = find_item(key, &h_list);
+    if (fi && h_list) {
+        list->remove(fi->peer); /// weak ref, no drop needed
+        h_list->remove(fi);
+        count--;
+        return true;
+    }
+    return false;
+}
+
+bool hashmap::contains(const M &key) {
+    return hashmap::find_item(key, null);
+}
+
+hashmap::hashmap(int sz) : A() {
+    h_fields = new list[sz];
+    list     = new list;
+    count    = 0;
+    this->sz = sz;
+}
+
+
+M M::get(const M& o, const M& prop) {
+    id   *type = o.a->type == typeof(Pointer) ? o.v_pointer->type     : o.a->type;
+    u8   *ptr  = o.a->type == typeof(Pointer) ? (u8*)o.v_pointer->ptr : (u8*)o.a;
+    assert(type->meta);
+    Hash &meta = *type->meta;
+    assert(meta->len() > 0);
+    field *f = meta->fetch(prop);
+    assert(f);
+    prop &pr = f->value; /// performs a type-check
+    u8 *member_ptr = &ptr[pr.offset];
+    assert(pr.type->f.m_ref);
+    M* ref = pr.type->f.m_ref(member_ptr);
+    M cp = *ref;
+    delete ref;
+    return cp;
+}
+
+void M::set(const M& o, const M& prop, const M& value) {
+    M ref = M::get(o, prop);
+    assert(ref.a->type == typeof(Pointer));
+    /// check if value is a Value<T>
+    /// that is for user types, primitives, misc structs (non-A)
+    if (value.a->type->traits & traits::value) {
+        /// values are copy constructed
+        id*  value_type =  value.v_i32->value_type;
+        void* value_ptr = &value.v_i32->value; /// will be the same for any value
+        assert(value_type == ref.v_pointer->type);
+        if (ref.v_pointer->type->f.dtr)
+            ref.v_pointer->type->f.dtr(ref.v_pointer->ptr);
+        ref.v_pointer->type->f.ctr_cp(ref.v_pointer->ptr, value_ptr);
+    } else {
+
+    }
+}
+
+void id::init() {
+    static id* id_types;
+    if (!id_types) id_types = new id(true);
+}
+
+
+id::id(bool init) {
+    static bool once;
+    if (!once) {
+        once = true;
+        id::char_t = typeof(char);
+        id::i64_t  = typeof(i64);
+        id::u64_t  = typeof(u64);
+        id::types  = new hashmap(64);
+        push_type(id::char_t); /// when hashmap/doubly are invoked, their specialized for_type2 methods should return their info
+        push_type(id::i64_t);
+        push_type(id::u64_t);
+    }
+}
+
+
+size::size(num            sz) : buffer(typeof(size)) { memset(values, 0, sizeof(values)); values[0] = sz; count = 1; }
+size::size(null_t           ) : size(num(0))  { }
+size::size(size_t         sz) : size(num(sz)) { }
+size::size(i8             sz) : size(num(sz)) { }
+size::size(u8             sz) : size(num(sz)) { }
+size::size(i16            sz) : size(num(sz)) { }
+size::size(u16            sz) : size(num(sz)) { }
+size::size(i32            sz) : size(num(sz)) { }
+size::size(u32            sz) : size(num(sz)) { }
+
+size::size(std::initializer_list<num> args) : buffer(typeof(size)) {
+    size_t i = 0;
+    for (auto &v: args)
+        values[i++] = v;
+    count = args.size();
+}
+
+size_t size::   x() const { return values[0];    }
+size_t size::   y() const { return values[1];    }
+size_t size::   z() const { return values[2];    }
+size_t size::   w() const { return values[3];    }
+num    size::area() const {
+    num v = (count < 1) ? 0 : 1;
+    for (size_t i = 0; i < count; i++)
+        v *= values[i];
+    return v;
+}
+size_t size::dims() const { return count; }
+
+void size::assert_index(const size &b) const {
+    assert(count == b.count);
+    for (size_t i = 0; i < count; i++)
+        assert(b.values[i] >= 0 && values[i] > b.values[i]);
+}
+
+bool size::operator==(size_t b) const { return  area() ==  b; }
+bool size::operator!=(size_t b) const { return  area() !=  b; }
+bool size::operator==(size &sb) const { return count == sb.count && memcmp(values, sb.values, count * sizeof(num)) == 0; }
+bool size::operator!=(size &sb) const { return !operator==(sb); }
+
+void   size::operator++(int)          { values[count - 1] ++; }
+void   size::operator--(int)          { values[count - 1] --; }
+size  &size::operator+=(size_t sz)    { values[count - 1] += sz; return *this; }
+size  &size::operator-=(size_t sz)    { values[count - 1] -= sz; return *this; }
+
+num &size::operator[](size_t index) const {
+    return (num&)values[index];
+}
+
+size &size::zero() { memset(values, 0, sizeof(values)); return *this; }
+
+            size::operator num() const { return     area();  }
+size::operator  i8() const { return  i8(area()); }
+size::operator  u8() const { return  u8(area()); }
+size::operator i16() const { return i16(area()); }
+size::operator u16() const { return u16(area()); }
+size::operator i32() const { return i32(area()); }
+size::operator u32() const { return u32(area()); }
+//explicit size::operator i64() const { return i64(area()); }
+size::operator u64() const { return u64(area()); }
+size::operator r32() const { return r32(area()); }
+size::operator r64() const { return r64(area()); }
+
+num  &size::operator[](num i) { return values[i]; }
+
+size &size::operator=(i8   i) { *this = size(i); return *this; }
+size &size::operator=(u8   i) { *this = size(i); return *this; }
+size &size::operator=(i16  i) { *this = size(i); return *this; }
+size &size::operator=(u16  i) { *this = size(i); return *this; }
+size &size::operator=(i32  i) { *this = size(i); return *this; }
+size &size::operator=(u32  i) { *this = size(i); return *this; }
+size &size::operator=(i64  i) { *this = size(i); return *this; }
+size &size::operator=(u64  i) { *this = size(i64(i)); return *this; }
+
+size &size::operator=(const size b) {
+    memcpy(values, b.values, sizeof(values));
+    count = b.count;
+    return *this;
+}
+
+size_t size::index_value(const size &index) const {
+    size &shape = (size &)*this;
+    assert_index(index);
+    num result = 0;
+    for (size_t i = 0; i < count; i++) {
+        num vdim = index.values[i];
+        for (size_t si = i + 1; si < count; si++)
+            vdim *= shape.values[si];
+        
+        result += vdim;
+    }
     return result;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 logger console;
 
@@ -342,48 +551,12 @@ void* calloc64(size_t count, size_t size) {
 #endif
 }
 
-type_t memory::data_type() const {
-    return type->schema ? type->schema->bind->data : type;
-}
-
-raw_t memory::typed_data(type_t dtype, size_t index) const {
-    sz_t res = math::max(reserve, count);
-    //static type_t mx_t  = typeof(mx);
-    alloc_schema *schema = type->schema;
-    if (dtype != type && schema) {
-        sz_t voffset = 0;
-        for (size_t i = 0; i < schema->bind_count; i++) {
-            context_bind &c = schema->composition[i];
-            if (c.data == dtype) return (raw_t)&cstr(origin)[voffset * res + c.data->base_sz * index];
-            voffset += c.voffset;
-        }
-        console.fault("type not found in schema: {0}", { str(dtype->name) });
-        return (raw_t)null;
-    } else
-        return (raw_t)(cstr(origin) + dtype->base_sz * index);
-}
-
 size_t length(std::ifstream& in) {
     std::streamsize base = in.tellg();
     in.seekg(0, std::ios::end);
     std::streamsize to_end = in.tellg();
     in.seekg(base);
     return to_end - base;
-}
-
-size_t idata::data_size() {
-    return schema ? schema->total_bytes : base_sz;
-}
-
-memory *idata::lookup(symbol sym) {
-    u64 hash   = djb2(cstr(sym));
-    mx  symbol = symbols ? symbols->djb2.lookup(hash) : mx();
-    return symbol ? ion::hold(symbol) : null;
-}
-
-memory *idata::lookup(i64 id) {
-    mx symbol = symbols ? symbols->ids.lookup(id) : null;
-    return symbol ? ion::hold(symbol) : null;
 }
 
 int snprintf(cstr str, size_t size, const char *format, ...) {
@@ -404,54 +577,7 @@ int snprintf(cstr str, size_t size, const char *format, ...) {
     return n;
 }
 
-i64 integer_value(memory *mem) {
-    symbol   c = mdata<char>(mem, 0);
-    bool blank = c[0] == 0;
-    while (isalpha(*c))
-        c++;
-    return blank ? i64(0) : i64(strtol(c, nullptr, 10));
-}
-
-memory *drop(memory *mem) {
-    if (mem) {
-        if (--mem->refs <= 0 && !mem->constant) { /// <= because mx_object does a defer on the actual construction of the container class
-            bool managed = mem->attrs & traits::managed;
-            if (mem->atts) {
-                for (const attachment &att: mem->atts->elements<attachment>())
-                    att.release();
-                delete mem->atts;
-                mem->atts = null;
-            }
-            if (managed) { /// array does not handle this properly on clear
-                mem->clear();
-                free64(mem->origin);
-            }
-            if (mem->shape) {
-                delete mem->shape;
-                mem->shape = null;
-            }
-            free64(mem);
-        }
-        return mem;
-    } else
-        return null;
-}
-
-memory *hold(memory *mem) {
-    if (mem)
-        mem->refs++;
-    return mem;
-}
-
-memory* hold(const MX &o) {
-    return hold(o.mem);
-}
-memory* drop(const MX &o) {
-    return drop(o.mem);
-}
-
 #ifdef _WIN32
-
 struct timeval {
     long tv_sec;
     long tv_usec;
@@ -476,10 +602,7 @@ int gettimeofday(struct timeval* tp, struct timezone* tzp) {
     tp->tv_usec = (long)(system_time.wMilliseconds * 1000);
     return 0;
 }
-
 #endif
-
-
 
 void wait_until(u64 to) {
     for (i64 t = microseconds(); t < to; t = microseconds()) {
@@ -505,146 +628,6 @@ u64 microseconds() {
 	return uint64_t(time.tv_sec) * 1000 * 1000 + time.tv_usec;
 }
 
-/// attach arbs to memory (uses a pointer)
-attachment *memory::attach(ion::symbol id, void *data, func<void()> release) {
-    if (!atts)
-         atts = new doubly();
-    doubly &a = *atts;
-    a->push(attachment {id, data, release});
-    return &a->last<attachment>();
-}
-
-attachment *memory::find_attachment(ion::symbol id) {
-    if (!atts) return nullptr;
-    /// const char * symbol should work fine for the cases used
-    for (attachment &att:atts->elements<attachment>())
-        if (id == att.id)
-            return &att;
-    return nullptr;
-}
-
-void *memory::realloc(size_t alloc_reserve, bool fill_default) {
-    size_t          type_sz   = type->data_size(); /// size of actual data consumed -- we dont use functions that are emitted from array<T> we use T in vector form (which they are already)
-    u8             *dst       = (u8*)calloc64(alloc_reserve, type_sz);
-    u8             *src       = (u8*)origin;
-    const sz_t      src_res   = reserve;
-    size_t          mn        = math::min(alloc_reserve, count);
-    const bool      prim      = !type->schema || (type->traits & (traits::primitive | traits::opaque)) != 0;
-    const sz_t      res       = alloc_reserve;
-
-    if (prim) {
-        memcpy(dst, src, type_sz * mn);
-    } else {
-        bool none = true;
-        for (size_t i = 0; i < type->schema->bind_count; i++) {
-            context_bind &c  = type->schema->composition[i];
-            if (!c.data) continue;
-            const bool data_prim = !c.data->schema || (c.data->traits & (traits::primitive | traits::opaque)) != 0;
-            if (none)
-                none = mn == 0;
-            for (size_t ii = 0; ii < mn; ii++) {
-                if (data_prim) {
-                    memcpy(&dst[c.voffset * res + ii * c.base_sz], &src[c.voffset * src_res + ii * c.base_sz], c.base_sz);
-                } else {
-                    c.data->f.ctr_cp(&dst[c.voffset * res + ii * c.base_sz], &src[c.voffset * src_res + ii * c.base_sz]); /// copy prior data
-                    c.data->f.dtr   (&src[c.voffset * src_res + ii * c.base_sz]); /// destruct prior data
-                }
-            }
-        }
-        assert(!none);
-    }
-    /// this controls the 'count' which is in-effect the constructed count.  if we are not constructing, no updating count
-    if (fill_default) {
-        count = alloc_reserve;
-        if (!prim) {
-            for (size_t i = 0; i < type->schema->bind_count; i++) {
-                context_bind &c  = type->schema->composition[i];
-                if (!(c.data->traits & traits::primitive))
-                    for (size_t ii = mn; ii < alloc_reserve; ii++)
-                        c.data->f.ctr(&dst[c.voffset * res + ii * c.base_sz]);
-            }
-        }
-    }
-    free64(origin);
-    origin  = raw_t(dst);
-    reserve = alloc_reserve;
-    return origin;
-}
-
-/// put primitive conversions here, and mx.hpp needs the declarations
-memory *_to_string(cstr data) {
-    return memory::stringify(data, memory::autolen, 0, false);
-}
-
-size_t  _hash(cstr data, size_t count) {
-    return djb2(data, count);
-}
-
-/// mx-objects are clearable which brings their count to 0 after destruction
-void memory::clear() {
-    u8 *src = (u8*)origin;
-    for (size_t ii = 0; ii < count; ii++) {
-        if (type->schema) {
-            sz_t voffset = 0;
-            for (size_t i = 0; i < type->schema->bind_count; i++) {
-                context_bind &c  = type->schema->composition[i];
-                c.data->f.dtr(&src[voffset * reserve + ii * c.base_sz]); /// always make sure reserve is set to valid +value
-                voffset += c.voffset;
-            }
-        } else
-            type->f.dtr(&src[type->base_sz * ii]);
-    }
-    count = 0;
-}
-
-memory *memory::stringify(cstr cs, size_t len, size_t rsv, bool constant, type_t ctype, i64 id) {
-    ion::symbol sym = (ion::symbol)(cs ? cs : "");
-    if (constant) {
-        if(!ctype->symbols)
-            ctype->symbols = new symbol_data { };
-        u64  h_sym = djb2(cstr(sym));
-        mx &m = ctype->symbols->djb2[h_sym];
-        if (!m) {
-            size_t ln = (len == memory::autolen) ? strlen(sym) : len; /// like auto-wash
-            m.mem = memory::alloc(typeof(char), ln, ln + 1, raw_t(sym));
-            m.mem->id = id;
-            m.mem->id    = id;
-            m.mem->attrs = attr::constant;
-            ctype->symbols->ids[id] = m.mem; /// was not hashing by id, it was the djb2 again (incorrect)
-            //ctype->symbol_djb2[h_sym] = m; 'redundant due to the setting of the memory*& (which [] operator always inserts item)
-            ctype->symbols->list->push(m);
-        }
-        return ion::hold(m);
-    } else {
-        size_t     ln = (len == memory::autolen) ? strlen(sym) : len;
-        size_t     al = (rsv >= (ln + 1)) ? rsv : (ln + 1);
-        memory*   mem = memory::alloc(typeof(char), ln, al, raw_t(sym));
-        mem->id       = id;
-        cstr  start   = mem->get<char>(0);
-        start[ln]     = 0;
-        return mem;
-    }
-}
-
-memory *memory::string (std::string s) { return stringify(cstr(s.c_str()), s.length(), 0, false, typeof(char), 0); }
-memory *memory::cstring(cstr s)        { return stringify(cstr(s),         strlen(s),  0, false, typeof(char), 0); }
-
-memory *memory::symbol (ion::symbol s, type_t ty, i64 id) {
-    return stringify(cstr(s), strlen(s), 0, true, ty, id);
-}
-
-memory *memory::raw_alloc(type_t type, size_t sz, size_t count, size_t res) {
-    if (sz == 0 && type)
-        sz = type->base_sz;
-    memory*     mem = (memory*)calloc64(1, sizeof(memory)); /// there was a 16 multiplier prior.  todo: add address sanitizer support with appropriate clang stuff
-    mem->count      = count;
-    mem->reserve    = math::max(res, count);
-    mem->refs       = 1; /// inc on construction for memory*
-    mem->type       = type;
-    mem->origin     = sz ? calloc64(mem->reserve, sz) : null; /// was doing inline origin.  its useful prior to realloc but adds complexity; can add back when optimizing
-    return mem;
-}
-
 #ifdef WIN32
 void usleep(__int64 usec) {
     HANDLE timer; 
@@ -659,127 +642,6 @@ void usleep(__int64 usec) {
 }
 #endif
 
-/// cannot perform alloc of str of count X without it inlaying the data.
-/// we dont want this for array use-case; so we will need to revisit the schema
-/// wrapping it worked fine; HOWEVER that creates a lot of code bloat.
-
-/// this functions the same as Array<type>; meant for general use in array
-memory *memory::valloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
-    if (type->singleton)
-        return ion::hold(type->singleton);
-    
-    size_t  data_sz = type->base_sz; /// valloc uses base_sz, alloc uses the data within; it may be useful to rename 'alloc' to 'object'
-    sz_t    res = math::max(count, reserve);
-    memory *mem = memory::raw_alloc(type, data_sz, count, res);
-
-    if (type->traits & traits::singleton)
-        type->singleton = mem;
-    bool primitive = (type->traits & traits::primitive);
-
-    /// if allocating a schema-based object (mx being first user of this)
-    if (count > 0) {
-        if (primitive) {
-            if (v_src)
-                memcpy(mem->origin, v_src, data_sz * count);
-            else if (type->f.ctr) {
-                for (size_t ii = 0; ii < count; ii++) {
-                    u8 *dst = &((u8*)mem->origin)[data_sz * ii];
-                    type->f.ctr(dst);
-                }
-            }
-        } else if (type->schema) {
-            /// if schema-copy-construct (call cpctr for each data type in composition)
-            for (size_t i = 0; i < type->schema->bind_count; i++) {
-                context_bind &bind = type->schema->composition[i];
-                if (!bind.data) continue;
-                u8 *dst = &((u8*)mem->origin)[bind.voffset * res];
-                if (bind.data->traits & traits::primitive) {
-                    if (v_src) {
-                        u8 *src = &((u8*)v_src)[bind.voffset * res];
-                        memcpy(dst, src, data_sz * count); /// better to do this over the entire vector when we can, for primitive-structs
-                    }
-                } else {
-                    if (v_src) {
-                        assert (bind.data->f.ctr_cp);
-                        u8 *src = &((u8*)v_src)[bind.voffset * res];
-                        for (size_t ii = 0; ii < count; ii++)
-                            bind.data->f.ctr_cp(&dst[ii * data_sz], &src[ii * data_sz]);
-                    } else if (bind.data->f.ctr)
-                        for (size_t ii = 0; ii < count; ii++)
-                            bind.data->f.ctr(&dst[ii * data_sz]);
-                }
-            }
-        } else {
-            if (v_src)
-                type->f.ctr_cp(mem->origin, v_src);
-            else if (type->f.ctr)
-                type->f.ctr(mem->origin);
-        }
-    }
-    return mem;
-}
-
-memory *memory::alloc(type_t type, size_t count, size_t reserve, raw_t v_src) {
-    if (type->singleton)
-        return ion::hold(type->singleton);
-    
-    size_t  data_sz = type->data_size(); /// this is the 'data size', should name the function just that; if the type has no schema the data size is its own size
-    sz_t    res = math::max(count, reserve);
-    memory *mem = memory::raw_alloc(type, data_sz, count, res);
-
-    if (type->traits & traits::singleton)
-        type->singleton = mem;
-    bool primitive = (type->traits & traits::primitive);
-
-    /// if allocating a schema-based object (mx being first user of this)
-    if (count > 0) {
-        if (primitive) {
-            if (v_src)
-                memcpy(mem->origin, v_src, data_sz * count);
-            else if (type->f.ctr) {
-                for (size_t ii = 0; ii < count; ii++) {
-                    u8 *dst = &((u8*)mem->origin)[data_sz * ii];
-                    type->f.ctr(dst);
-                }
-            }
-        } else if (type->schema) {
-            /// if schema-copy-construct (call cpctr for each data type in composition)
-            for (size_t i = 0; i < type->schema->bind_count; i++) {
-                context_bind &bind = type->schema->composition[i];
-                if (!bind.data) continue;
-                u8 *dst = &((u8*)mem->origin)[bind.voffset * res];
-                if (bind.data->traits & traits::primitive) {
-                    if (v_src) {
-                        u8 *src = &((u8*)v_src)[bind.voffset * res];
-                        memcpy(dst, src, data_sz * count); /// better to do this over the entire vector when we can, for primitive-structs
-                    }
-                } else {
-                    if (v_src) {
-                        assert (bind.data->f.ctr_cp);
-                        u8 *src = &((u8*)v_src)[bind.voffset * res];
-                        for (size_t ii = 0; ii < count; ii++)
-                            bind.data->f.ctr_cp(&dst[ii * data_sz], &src[ii * data_sz]);
-                    } else if (bind.data->f.ctr)
-                        for (size_t ii = 0; ii < count; ii++)
-                            bind.data->f.ctr(&dst[ii * data_sz]);
-                }
-            }
-        } else {
-            if (v_src)
-                type->f.ctr_cp(mem->origin, v_src);
-            else if (type->f.ctr)
-                type->f.ctr(mem->origin);
-        }
-    }
-    return mem;
-}
-
-memory *memory::copy(size_t reserve) {
-    memory *a   = this;
-    memory *res = alloc(a->type, a->count, reserve, a->origin);
-    return  res;
-}
-
 bool chdir(std::string c) {
 #if defined(_WIN32)
     utf16 ws(c.c_str());
@@ -792,72 +654,6 @@ bool chdir(std::string c) {
     }
     return true;
 #endif
-}
-
-memory* mem_symbol(ion::symbol cs, type_t ty, i64 id) {
-    return memory::symbol(cs, ty, id);
-}
-
-void *mem_origin(memory *mem) {
-    return mem->origin;
-}
-
-memory *cstring(cstr cs, size_t len, size_t reserve, bool is_constant) {
-    ident::init();
-    return memory::stringify(cs, len, 0, is_constant, typeof(char), 0);
-}
-
-u8* get_member_address(type_t type, raw_t data, str &name, prop *&rprop) {
-    if (type->meta && type->meta_map) {
-        mx sym = name.symbolize();
-        mx p = type->meta_map->lookup(sym);
-        if (p) { /// gets prop position for this struct data
-            rprop = (prop *)p.mem->origin;
-            u8 *p_value = &(((u8*)data)[rprop->offset]);
-            return p_value;
-        }
-    }
-    return null;
-}
-
-/// find schema-bound meta property from memory and field
-u8* property_find(void *origin, type_t type, str &name, prop *&rprop) {
-    u8  *pos = (u8*)origin;
-    type_t t =      type;
-    assert(name.len() > 0);
-    if (t->schema)
-        for (int i = 0; i < t->schema->bind_count; i++) {
-            context_bind &c = t->schema->composition[i];
-            prop*    member = null;
-            u8*      addr   = get_member_address(c.data, pos, name, member);
-            if (addr) {
-                rprop = member;
-                return addr;
-            }
-            pos += c.data->base_sz;
-        }
-    rprop = null;
-    return null;
-}
-
-raw_t mx::find_prop_value(str name, prop *&rprop) {
-    return property_find(mem->origin, mem->type, name, rprop);
-}
-
-bool get_bool(type_t type, raw_t data, str &name) {
-    prop  *p;
-    u8    *p_value = get_member_address(type, data, name, p);
-    assert(p_value);
-    bool   result  = p->type->f.boolean(p_value);
-    return result;
-}
-
-memory *get_string(type_t type, raw_t data, str &name) {
-    prop   *p;
-    u8     *p_value = get_member_address(type, data, name, p);
-    assert(p_value);
-    memory *m       = p->type->f.to_str(p_value);
-    return  m;
 }
 
 }

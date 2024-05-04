@@ -3,16 +3,16 @@
 namespace ion {
 
 static cstr parse_fn(const std::string &cn) {
-    std::string      st = is_win() ? "<"  : "T =";
-    std::string      en = is_win() ? ">(" : "]";
+    std::string      st = "with T = ";
+    std::string      en = ";";
     num		         p  = cn.find(st) + st.length();
     num              ln = cn.find(en, p) - p;
     std::string      nm = cn.substr(p, ln);
     auto             sp = nm.find(' ');
     std::string  s_name = (sp != std::string::npos) ? nm.substr(sp + 1) : nm;
-    num ns = s_name.find("::");
+    num ns = s_name.find("ion::");
     if (ns >= 0 && s_name.substr(0, ns) != "std")
-        s_name = s_name.substr(ns + 2);
+        s_name = s_name.substr(ns + 5);
     cstr  name = util::copy(s_name.c_str());
     return name;
 }

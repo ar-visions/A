@@ -2073,7 +2073,7 @@ struct rand {
 struct size;
 
 using arg = field;
-using ax  = Array<arg>;
+//using ax  = Array<arg>;
 
 struct io:mx {
     struct Source {
@@ -2538,6 +2538,7 @@ protected:
     var();
     var(mx b);
     var(map m);
+    var(memory* mem) : mx(mem) { }
 
     template <typename T>
     var(const T b) : mx(alloc(&b)) { }

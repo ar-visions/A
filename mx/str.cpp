@@ -24,94 +24,13 @@ str str::escape(str chars, char esc) {
     return res;
 }
 
-/// \\ = \ ... \x = \x
-str str::parse_quoted(cstr *cursor, size_t max_len) {
-    ///
-    cstr first = *cursor;
-    if (*first != '"')
-        return "";
-    ///
-    bool last_slash = false;
-    cstr start     = ++(*cursor);
-    cstr s         = start;
-    ///
-    for (; *s != 0; ++s) {
-        if (*s == '\\')
-            last_slash = true;
-        else if (*s == '"' && !last_slash)
-            break;
-        else
-            last_slash = false;
-    }
-    if (*s == 0)
-        return "";
-    ///
-    size_t len = (size_t)(s - start);
-    if (max_len > 0 && len > max_len)
-        return "";
-    ///
-    *cursor = &s[1];
-    str result = "";
-    for (int i = 0; i < int(len); i++)
-        result += start[i];
-    ///
-    return result;
-}
 
-str::str(i64 value, u8 base, int width) : str(size_t(256)) {
-    if (base < 2 || base > 36)
-        fprintf(stderr, "str: base should be between 2 and 36\n");
-    
-    char  buffer[8 * sizeof(int) + 1];
-    char* ptr = &buffer[sizeof(buffer) - 1];
-    *ptr = '\0';
-
-    do {
-        int digit = value % base;
-        value /= base;
-        *--ptr = "0123456789abcdefghijklmnopqrstuvwxyz"[abs(digit)];
-    } while (value != 0);
-
-    if (value < 0) {
-        *--ptr = '-';
-    }
-
-    int length = strlen(ptr);
-    if (width) {
-        int padding = width - length;
-        if (padding > 0) {
-            memmove(ptr + padding, ptr, length + 1);  // Include null terminator
-            memset(ptr, '0', padding);
-            length += padding;
-        }
-    }
-    
-    strcpy(data, ptr);
-    mem->count = length;
-}
 
 str::str(utf16 d) : str(d.len()) { /// utf8 is a doable object but a table must be lazy loaded at best
     for (int i = 0; i < d.len(); i++)
         data[i] = d[i] <= 255 ? d[i] : '?';
 }
 
-/// static methods
-str str::combine(const str sa, const str sb) {
-    cstr       ap = (cstr)sa.data;
-    cstr       bp = (cstr)sb.data;
-    ///
-    if (!ap) return sb.copy();
-    if (!bp) return sa.copy();
-    ///
-    size_t    ac = sa.count();
-    size_t    bc = sb.count();
-    str       sc = sa.copy(((ac + bc) + 64) + math::max(sa.reserve(), sb.reserve()) * 2); /// needs to retain a reserve from the greater of either
-    cstr      cp = (cstr)sc.data;
-    ///
-    memcpy(&cp[ac], bp, bc);
-    sc.mem->count = ac + bc;
-    return sc;
-}
 
 /// skip to next non-whitespace, this could be 
 char &str::non_wspace(cstr cs) {
@@ -132,24 +51,24 @@ str::str(std::ifstream &in) : str(alloc<char>(null, 0, ion::length(in) + 1)) {
 void str::code_to_utf8(int code, char *output) {
     if (code > 128) {
         // If codePage is greater than 128, convert it to UTF-8
-        // For simplicity, this example handles only characters up to 0x7FF.
+        // only characters up to 0x7FF
         if (code <= 0x7FF) {
             output[0] = 0xC0 | (code >> 6);
             output[1] = 0x80 | (code & 0x3F);
             output[2] = '\0';
         }  else if (code <= 0x7FF) {
-            // Handle 2-byte UTF-8 encoding
+            // 2-byte UTF-8 encoding
             output[0] = 0xC0 | ((code >> 6) & 0x1F);
             output[1] = 0x80 | (code & 0x3F);
             output[2] = '\0';
         } else if (code <= 0xFFFF) {
-            // Handle 3-byte UTF-8 encoding
+            // 3-byte UTF-8 encoding
             output[0] = 0xE0 | ((code >> 12) & 0x0F);
             output[1] = 0x80 | ((code >> 6) & 0x3F);
             output[2] = 0x80 | (code & 0x3F);
             output[3] = '\0';
         } else if (code <= 0x10FFFF) {
-            // Handle 4-byte UTF-8 encoding
+            // 4-byte UTF-8 encoding
             output[0] = 0xF0 | ((code >> 18) & 0x07);
             output[1] = 0x80 | ((code >> 12) & 0x3F);
             output[2] = 0x80 | ((code >> 6) & 0x3F);
@@ -166,14 +85,15 @@ void str::code_to_utf8(int code, char *output) {
     }
 }
 
-str str::from_code(int code) {
-    str s { size_t(32) };
+String String::from_code(int code) {
+    String s = new String(16);
     if (code < 128)
-        s[0] = code;
+        s += char(code);
     else {
-        code_to_utf8(code, s.data);
+        char buf[32]
+        code_to_utf8(code, buf);
+        s += buf;
     }
-    s.mem->count = strlen(s.data);
     return s;
 }
 

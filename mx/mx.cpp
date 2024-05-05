@@ -16,6 +16,40 @@ A_impl(list, List)
 A_impl(item, Item)
 A_impl(hashmap, Hashmap)
 
+
+String::String(i64 value, u8 base, int width) : String(256) {
+    if (base < 2 || base > 36)
+        fprintf(stderr, "str: base should be between 2 and 36\n");
+    
+    char  buffer[8 * sizeof(int) + 1];
+    char* ptr = &buffer[sizeof(buffer) - 1];
+    *ptr = '\0';
+
+    do {
+        int digit = value % base;
+        value /= base;
+        *--ptr = "0123456789abcdefghijklmnopqrstuvwxyz"[abs(digit)];
+    } while (value != 0);
+
+    if (value < 0) {
+        *--ptr = '-';
+    }
+
+    int length = strlen(ptr);
+    if (width) {
+        int padding = width - length;
+        if (padding > 0) {
+            memmove(ptr + padding, ptr, length + 1);  // include null
+            memset(ptr, '0', padding);
+            length += padding;
+        }
+    }
+    
+    strcpy(data, ptr);
+    mem->count = length;
+}
+
+
 u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
     const u8* bytes = (const u8*)data;
     for (size_t i = 0; i < length; ++i) {

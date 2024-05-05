@@ -580,6 +580,8 @@ struct String:A {
         chars[length] = 0;
     }
 
+    String(i64 value, u8 base, int width);
+
     static String *input(int size) {
         String *str = new String(size);
         fgets(str->chars, size, stdin);

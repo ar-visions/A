@@ -15,54 +15,53 @@ struct exec:str {
     }
 };
 
-/// 
-struct completer:mx {
-    struct cdata {
-        mx              vdata;
-        mutex           mtx;
-        bool            completed;
-        array           l_success;
-        array           l_failure;
-    };
-    mx_object(completer, mx, cdata);
+using FnFuture = Lambda<void(M)>;
 
-    completer(lambda<void(mx)>& fn_success,
-              lambda<void(mx)>& fn_failure) : completer() {
+/// 
+struct Completer:A {
+    M               vdata;
+    mutex           mtx;
+    bool            completed;
+    array           l_success;
+    array           l_failure;
+
+    Completer() : A(typeof(Completer)) { }
+
+    Completer(lambda<void(M)>& fn_success,
+              lambda<void(M)>& fn_failure) : Completer() {
         
-        fn_success = [data=data](mx d) { /// should not need a grab and drop; if
-            data->completed = true;
-            for (mx &s: data->l_success.elements<mx>()) {
-                FnFuture &lambda = s.mem->ref<FnFuture>();
-                lambda(d);
-            }
+        fn_success = [this](M arg) {
+            completed = true;
+            for (FnFuture &fn: l_success)
+                fn(arg);
         };
         
-        fn_failure = [data=data](mx d) {
-            data->completed = true;
-            for (mx &f: data->l_failure.elements<mx>()) {
-                FnFuture &lambda = f.mem->ref<FnFuture>();
-                lambda(d);
-            }
+        fn_failure = [this](M arg) {
+            completed = true;
+            for (FnFuture &fn: l_failure)
+                fn(arg);
         };
     }
 };
 
+struct completer {
+    A_decl(completer, Completer)
+};
+
 /// how do you create a future?  you give it completer memory
-struct future:mx {
-    completer::cdata &cd;
-    future (memory*           mem) : mx(mem),        cd(mem->ref<completer::cdata>()) { }
-    future (const completer &comp) : mx(hold(comp)), cd(mem->ref<completer::cdata>()) { }
+struct Future:A {
+    completer cd;
+    Future (completer cd) : A(typeof(Future)), cd(cd) { }
     
     int sync() {
-        cd.mtx.lock();
+        cd->mtx.lock();
         mutex mtx;
         if (!cd.completed) {
             mtx.lock();
             void *v_mtx = &mtx;
             FnFuture fn = [v_mtx] (mx) { ((mutex*)v_mtx)->unlock(); };
-            mx mx_fn = fn.mem->hold();
-            cd.l_success.push(mx_fn);
-            cd.l_failure.push(mx_fn);
+            cd->l_success->push(fn);
+            cd->l_failure->push(fn);
         }
         cd.mtx.unlock();
         mtx.lock();
@@ -70,42 +69,31 @@ struct future:mx {
     };
 
     ///
-    future& then(FnFuture fn) {
+    Future& then(const FnFuture& fn) {
         cd.mtx.lock();
-        cd.l_success += fn.mem->hold();
+        cd.l_success += fn;
         cd.mtx.unlock();
         return *this;
     }
 
     ///
-    future& except(FnFuture fn) {
+    Future& except(const FnFuture& fn) {
         cd.mtx.lock();
-        cd.l_failure += fn.mem->hold();
+        cd.l_failure += fn;
         cd.mtx.unlock();
         return *this;
     }
 };
 
-struct runtime;
-typedef lambda<mx(runtime*, int)> FnProcess;
-
-typedef std::condition_variable ConditionV;
-struct runtime {
-    memory                    *handle;   /// handle on rt memory
-    mutex                      mtx_self; /// output the memory address of this mtx.
-    lambda<void(mx)>           on_done;  /// not the same prototype as FnFuture, just as a slight distinguisher we dont need to do a needless non-conversion copy
-    lambda<void(mx)>           on_fail;
-    size_t                     count;
-    FnProcess				   fn;
-    array                      results;
-    std::vector<std::thread>  *threads;       /// todo: unstd when it lifts off ground. experiment complete time to crash and blast in favor of new matrix.
-    int                        done      = 0; /// 
-    bool                       failure   = false;
-    bool                       join      = false;
-    bool                       stop      = false; /// up to the user to implement this effectively.  any given service isnt going to stop without first checking
+struct future {
+    A_decl(future, Future)
 };
 
-struct process:mx {
+struct Proc;
+typedef lambda<M(Proc*, int)> FnProcess;
+
+typedef std::condition_variable ConditionV;
+struct Proc:A {
 protected:
     inline static bool init;
     
@@ -114,98 +102,36 @@ public:
     inline static std::thread      th_manager;
     inline static mutex            mtx_global;
     inline static mutex            mtx_list;
-    inline static doubly           procs;
+    inline static list             procs;
     inline static int              exit_code = 0;
 
-    ///
-    mx_object(process, mx, runtime);
+    mutex                      mtx_self; /// output the memory address of this mtx.
+    lambda<void(M)>            on_done;  /// not the same prototype as FnFuture, just as a slight distinguisher we dont need to do a needless non-conversion copy
+    lambda<void(M)>            on_fail;
+    size_t                     count;
+    FnProcess				   fn;
+    array                      results;
+    std::vector<std::thread>  *threads;       /// todo: unstd when it lifts off ground. experiment complete time to crash and blast in favor of new matrix.
+    int                        done      = 0; /// 
+    bool                       failure   = false;
+    bool                       join      = false;
+    bool                       stop      = false; /// up to the user to implement this effectively.  any given service isnt going to stop without first checking
 
-    static inline void manager() {
-        std::unique_lock<mutex> lock(mtx_list);
-        for (bool quit = false; !quit;) {
-            cv_cleanup.wait(lock);
-            bool cycle    = false;
-            do {
-                cycle     = false;
-                num index = 0;
-                ///
-                for (runtime *state: procs.elements<runtime*>()) {
-                    state->mtx_self.lock();
-                    auto &ps = *state;
-                    if (ps.done == ps.threads->size()) {
-                        ps.mtx_self.unlock();
-                        lock.unlock();
-
-                        /// join threads
-                        for (auto &t: *(ps.threads))
-                            t.join();
-                        
-                        /// manage process
-                        ps.mtx_self.lock();
-                        ps.join = true;
-
-                        /// 
-                        procs->remove(index); /// remove -1 should return the one on the end, if it exists; this is a bool result not some integer of index to treat as.
-                       (procs->len() == 0) ?
-                            (quit = true) : (cycle = true);
-                        lock.lock();
-                        ps.mtx_self.unlock();
-                        break;
-                    }
-                    index++;
-                    ps.mtx_self.unlock();
-                }
-            } while (cycle);
-            /// dont unlock here because of the implicit behaviour of condition_variable
-        }
-        lock.unlock();
-    }
-
-    static void run(runtime *rt, int w) {
-        runtime *data = rt;
-        /// run (fn) the work (p) on this thread (i)
-        mx r = data->fn(data, w);
-        data->mtx_self.lock();
-
-        data->failure |= !r;
-        data->results.set<mx>(w, r);
-        
-        /// wait for completion of one (we coudl combine c check inside but not willing to stress test that atm)
-        mtx_global.lock();
-        bool im_last = (++data->done >= data->count);
-        mtx_global.unlock();
-
-        /// if all complete, notify condition var after calling completer/failure methods
-        if (im_last) {
-            if (data->on_done) {
-                if (data->failure)
-                    data->on_fail(data->results);
-                else
-                    data->on_done(data->results);
-            }
-            mtx_global.lock();
-            cv_cleanup.notify_all();
-            mtx_global.unlock();
-        }
-        data->mtx_self.unlock();
-
-        /// wait for job set to complete
-        for (; data->done != data->count;)
-            yield();
-    }
-    ///
-    process(size_t count, FnProcess fn) : process(alloc<process>()) {
+    Proc(size_t count, FnProcess fn) : A(typeof(Proc)), fn(fn), count(count), results(array(count)) {
         if(!init) {
             init       = true;
             th_manager = std::thread(manager);
         }
-        data->fn = fn;
-        if (count) {
-            data->count   = count;
-            data->results = array(typeof(mx), count);
-        }
     }
-    inline bool joining() const { return data->join; }
+
+    static void manager();
+    static void  thread(Proc *data, int w);
+    void            run(Proc *data, int w);
+    bool        joining() const { return join; }
+};
+
+struct proc {
+    A_decl(proc, Proc)
 };
 
 /// async is out of sync with the other objects.
@@ -213,7 +139,7 @@ struct async {
     ///
     struct delegation {
         process         proc;
-        mx              results;
+        M               results;
         mutex           mtx; /// could be copy ctr
     } d;
 

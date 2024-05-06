@@ -22,22 +22,22 @@ namespace ion {
         }; \
     } \
     vec2##t::vec2##t(str s) {               \
-        Array<str>  v  = s.split();         \
-        size_t     len = v.length();        \
+        vector<M>   v  = s->split();        \
+        size_t     len = v->len();          \
         if (len == 1) {                     \
-            x = T(v[0].real_value<real>()); \
+            x = T(real(str(v[0])));         \
             y = x;                          \
         }                                   \
         else if (len == 2) {                \
-            x = T(v[0].real_value<real>()); \
-            y = T(v[1].real_value<real>()); \
+            x = T(real(str(v[0])));         \
+            y = T(real(str(v[1])));         \
         } else {                            \
             assert(false);                  \
         }                                   \
     }                                       \
     const T &vec2##t::operator[](int i) const { return * (&x + i); } \
     vec2##t::operator bool() const { return !(x == 0 && y == 0); } \
-    vec2##t::operator mx() const { return array { x, y }; } \
+    vec2##t::operator M() const { return vector { x, y }; } \
     vec2##t vec2##t::operator+ (const vec2##t &b) const { return vec2##t { T(x + b.x), T(y + b.y) }; } \
     vec2##t vec2##t::operator- (const vec2##t &b) const { return vec2##t { T(x - b.x), T(y - b.y) }; } \
     vec2##t vec2##t::operator* (const vec2##t &b) const { return vec2##t { T(x * b.x), T(y * b.y) }; } \
@@ -61,7 +61,7 @@ namespace ion {
     vec3##t::vec3##t(T x) : x(x), y(x), z(x) { } \
     vec3##t::vec3##t(T x, T y, T z) : x(x), y(y), z(z) { } \
     vec3##t::vec3##t(cstr s) : vec3##t(str(s)) { } \
-    vec3##t::operator mx() const { return Array<T> { x, y, z }; } \
+    vec3##t::operator M() const { return vector<T> { x, y, z }; } \
     const T &vec3##t::operator[](int i) const { return * (&x + i); } \
     T vec3##t::dot(const vec3##t &b) const {\
         return x * b.x + y * b.y + z * b.z;\
@@ -92,17 +92,17 @@ namespace ion {
         }; \
     } \
     vec3##t::vec3##t(str s) { \
-        Array<str> v = s.split(); \
-        size_t len = v.length(); \
+        vector<M> v = s->split(); \
+        size_t len = v->len(); \
         if (len == 1) { \
-            x = T(v[0].real_value<real>()); \
+            x = T(real(str(v[0]))); \
             y = x; \
             z = x; \
         } \
         else if (len == 3) { \
-            x = T(v[0].real_value<real>()); \
-            y = T(v[1].real_value<real>()); \
-            z = T(v[2].real_value<real>()); \
+            x = T(real(str(v[0]))); \
+            y = T(real(str(v[1]))); \
+            z = T(real(str(v[2]))); \
         } else { \
             assert(false); \
         } \
@@ -136,7 +136,7 @@ namespace ion {
         return x * b.x + y * b.y + z * b.z + w * b.w;\
     }\
     vec4##t::vec4##t(str h) { \
-        size_t sz = h.len(); \
+        size_t sz = h->len(); \
         i32    ir = 0, ig = 0, \
             ib = 0, ia = 255; \
         if (sz && h[0] == '#') { \
@@ -175,19 +175,19 @@ namespace ion {
                 w = T(ia) / T(255.0); \
             } \
         } else if (sz && (h[0] == '-' || (h[0] >= '0' && h[0] <= 9))) { \
-            ion::Array<ion::str> v = h.split(); \
-            size_t len = v.length(); \
+            vector<M> v = h->split(); \
+            size_t len = v->len(); \
             if (len == 1) { \
-                x = T(v[0].real_value<real>()); \
+                x = T(real(str(v[0]))); \
                 y = x; \
                 z = x; \
                 w = x; \
             } \
             else if (len == 4) { \
-                x = T(v[0].real_value<real>()); \
-                y = T(v[1].real_value<real>()); \
-                z = T(v[2].real_value<real>()); \
-                w = T(v[3].real_value<real>()); \
+                x = T(real(str(v[0]))); \
+                y = T(real(str(v[1]))); \
+                z = T(real(str(v[2]))); \
+                w = T(real(str(v[3]))); \
             } else { \
                 assert(false); \
             } \
@@ -203,7 +203,7 @@ namespace ion {
         }; \
     } \
     vec4##t::operator bool() const { return !(x == 0 && y == 0 && z == 0 && w == 0); } \
-    vec4##t::operator mx() const { return Array<T> { x, y, z, w }; } \
+    vec4##t::operator M() const { return vector<T> { x, y, z, w }; } \
     const T &vec4##t::operator[](int i) const { return * (&x + i); } \
     vec4##t vec4##t::operator+ (const vec4##t &b) const { return vec4##t { T(x + b.x), T(y + b.y), T(z + b.z), T(w + b.w) }; } \
     vec4##t vec4##t::operator- (const vec4##t &b) const { return vec4##t { T(x - b.x), T(y - b.y), T(z - b.z), T(w - b.w) }; } \
@@ -331,8 +331,8 @@ namespace ion {
         *this = *this * v; \
         return *this; \
     } \
-    mat44##t::operator mx() const { \
-        return mx::window(this); \
+    mat44##t::operator M() const { \
+        return M::pointer(this, false); \
     }\
     mat44##t mat44##t::mix(const mat44##t &b, double v) const {\
         return mat44##t {\

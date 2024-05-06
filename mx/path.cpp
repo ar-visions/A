@@ -3,21 +3,28 @@
 
 namespace ion {
 
-path path::cwd() {
-    return dir::cwd();
+Path::Path() : A(typeof(Path)) { }
+
+String* Path::to_string() {
+    std::string str = p.string();
+    return new String(str.c_str(), str.length());
 }
 
-path::operator str() { return str(cs(), memory::autolen); }
-
-path::path(str      s) : path() {
-    data->p = fs::path((symbol)s.cs());
+Path *Path::cwd() {
+    return path(dir::cwd());
 }
 
-path::path(symbol  cs) : path() {
-    data->p = fs::path(cs);
+Path::operator str() { return str(cs()); }
+
+Path::Path(str s) : Path() {
+    p = fs::path((symbol)s->cs());
 }
 
-bool path::get_modified_date(struct tm *res) {
+Path::Path(symbol cs) : Path() {
+    p = fs::path(cs);
+}
+
+bool Path::get_modified_date(struct tm *res) {
     const char* filename = cs();
     struct stat file_stat;
 
@@ -32,14 +39,15 @@ bool path::get_modified_date(struct tm *res) {
     return true;
 }
 
-str path::get_modified_string() {
+str Path::get_modified_string() {
     str result(size_t(128));
     struct tm gm_time;
     ///
     if (get_modified_date(&gm_time)) {
         // RFC 1123 format (used with http)
-        if (strftime(result.data, result.reserve(), "%a, %d %b %Y %H:%M:%S GMT", &gm_time) == 0)
+        if (strftime(result->chars, 128, "%a, %d %b %Y %H:%M:%S GMT", &gm_time) == 0)
             fprintf(stderr, "strftime failed\n");
+        result->length = strlen(result->chars);
     }
     return result;
 }
@@ -47,7 +55,7 @@ str path::get_modified_string() {
 
 /// utility for knowing if you are trying to go up beyond a relative dir
 /// without any dir analysis is more reduced
-bool path::backwards(cstr cs) {
+bool Path::backwards(cstr cs) {
     cstr v = cs;
     if (v[0] == '/') v++;
     double b = 0;
@@ -74,113 +82,129 @@ bool path::backwards(cstr cs) {
     return b < 0;
 }
 
-fs::path *path::pdata() const {
-    return &data->p;
+fs::path *Path::pdata() const {
+    return (fs::path*)&p;
 }
 
-str path::mime_type() {
-    mx e = ext().mid(1).symbolize();
-    static path data = "data/mime-type.json";
-    static map  js   =  data.read<var>();
-    field      *find = js->lookup(e);
-    return find ? ion::hold(find->value) : ion::hold(js["default"]);
+str Path::mime_type() {
+    str ext_str = ext()->mid(1);
+    M e = symbolize(ext_str->cs());
+    static Path *data = new Path("data/mime-type.json");
+    static map  js   =  data->read<var>();
+    Field      *find = js->lookup(e);
+    return find ? find->value : js["default"];
 }
 
-str  path::           stem() const { return !pdata()->empty() ? str(pdata()->stem().string()) : str(null);    }
-bool path::     remove_all() const { std::error_code ec;          return fs::remove_all(*pdata(), ec); }
-bool path::         remove() const { std::error_code ec;          return fs::remove(*pdata(), ec); }
-bool path::      is_hidden() const { auto st = pdata()->stem().string(); return st.length() > 0 && st[0] == '.'; }
-bool path::         exists() const {                              return fs::exists(*pdata()); }
-bool path::         is_dir() const {                              return fs::is_directory(*pdata()); }
-bool path::       make_dir() const { std::error_code ec;          return !pdata()->empty() ? fs::create_directories(*pdata(), ec) : false; }
-path path::remove_filename()       {
+str  Path::stem() const {
+    if (!pdata()->empty()) {
+        std::string stem_str = pdata()->stem().string();
+        return stem_str;
+    }
+    return str();
+}
+
+bool Path::     remove_all() const { std::error_code ec;          return fs::remove_all(*pdata(), ec); }
+bool Path::         remove() const { std::error_code ec;          return fs::remove(*pdata(), ec); }
+bool Path::      is_hidden() const { auto st = pdata()->stem().string(); return st.length() > 0 && st[0] == '.'; }
+bool Path::         exists() const {                              return fs::exists(*pdata()); }
+bool Path::         is_dir() const {                              return fs::is_directory(*pdata()); }
+bool Path::       make_dir() const { std::error_code ec;          return !pdata()->empty() ? fs::create_directories(*pdata(), ec) : false; }
+Path *Path::remove_filename()       {
     fs::path p = pdata()->remove_filename();
-    return path(p.string().c_str());
+    return new Path(p.string().c_str());
 }
-bool path::   has_filename() const { return pdata()->has_filename(); }
-path path::           link() const { return fs::is_symlink(*pdata()) ? path(pdata()->string().c_str()) : path(); }
-bool path::        is_file() const { return !fs::is_directory(*pdata()) && fs::is_regular_file(*pdata()); }
+bool Path::   has_filename() const { return pdata()->has_filename(); }
+Path *Path::          link() const { return fs::is_symlink(*pdata()) ? new Path(pdata()->string().c_str()) : new Path(); }
+bool Path::        is_file() const { return !fs::is_directory(*pdata()) && fs::is_regular_file(*pdata()); }
 
-char *path::cs() const {
+char *Path::cs() const {
     static std::string static_thing;
     static_thing = pdata()->string();
     return (char*)static_thing.c_str();
 }
 
-path::operator cstr() const {
+Path::operator cstr() const {
     return cstr(cs());
 }
 
-str  path::       ext () const { return str(pdata()->extension().string()); }
-str  path::       ext4() const { return pdata()->extension().string(); }
-path path::       file() const { return fs::is_regular_file(*pdata()) ? path(cs()) : path(); }
-bool path::copy(path to) const {
+str   Path::       ext () const { return str(pdata()->extension().string()); }
+str   Path::       ext4() const { return pdata()->extension().string(); }
+Path* Path::       file() const { return fs::is_regular_file(*pdata()) ? new Path(cs()) : new Path(); }
+bool Path::copy(Path *_to) const {
+    path to(_to->hold());
     assert(!pdata()->empty());
     assert(exists());
-    if (!to.exists())
-        (to.has_filename() ?
-            to.remove_filename() : to).make_dir();
-
+    if (!to->exists())
+        (to->has_filename() ?
+            path(to->remove_filename()) : to)->make_dir();
     std::error_code ec;
-    path p = to.is_dir() ? to / path(str(pdata()->filename().string())) : to;
-    fs::copy(*pdata(), *p.pdata(), ec);
+    path p = to->is_dir() ? to / str(pdata()->filename().string()) : to;
+    fs::copy(*pdata(), *p->pdata(), ec);
+    _to->drop();
     return ec.value() == 0;
 }
 
-path &path::assert_file() {
+Path* Path::assert_file() {
     assert(fs::is_regular_file(*pdata()) && exists());
-    return *this;
+    return this;
 }
 
 /// create an alias; if successful return its location
-path path::link(path alias) const {
+Path* Path::link(Path* alias) const {
     fs::path &ap = *pdata();
-    fs::path &bp = *alias.pdata();
+    fs::path &bp = *alias->pdata();
     if (ap.empty() || bp.empty())
         return {};
     std::error_code ec;
     is_dir() ? fs::create_directory_symlink(ap, bp) : fs::create_symlink(ap, bp, ec);
-    return fs::exists(bp) ? alias : path();
+    if (fs::exists(bp))
+        return (Path*)alias;
+    alias->drop();
+    return new Path();
 }
 
 /// operators
-path::operator bool()         const {
+Path::operator bool() const {
     return cs()[0];
 }
 
-path::operator str() const { return str(cs()); }
+Path::operator str() const { return str(cs()); }
 
-path          path::parent()         const {
+Path* Path::parent()         const {
     std::string s = pdata()->parent_path().string();
-    return  s.c_str();
+    return new Path(s.c_str());
 }
 
-path path::operator / (path       s) const { return path((*pdata() / *s.pdata()).string().c_str()); }
-path path::operator / (symbol     s) const { return path((*pdata() /  s).string().c_str()); }
-path path::operator / (const str& s) const { return path((*pdata() / fs::path(s.data)).string().c_str()); }
-path path::relative   (path    from) const { return path(fs::relative(*pdata(), *from.pdata()).string().c_str()); }
 
-bool  path::operator==(path&      b) const { return  *pdata() == *b.pdata(); }
-bool  path::operator!=(path&      b) const { return !(operator==(b)); }
+Path* Path::operator / (Path*      s) const { return path((*pdata() / *s->pdata()).string().c_str()); }
+Path* Path::operator / (symbol     s) const { return path((*pdata() /  s).string().c_str()); }
+Path* Path::operator / (const str& s) const { return path((*pdata() / fs::path(s->cs())).string().c_str()); }
+Path* Path::relative   (Path*   from) const { return path(fs::relative(*pdata(), *from->pdata()).string().c_str()); }
 
-bool  path::operator==(symbol     b) const { return *pdata() == b; }
-bool  path::operator!=(symbol     b) const { return !(operator==(b)); }
+bool  Path::operator==(Path&      b) const { return  *pdata() == *b.pdata(); }
+bool  Path::operator!=(Path&      b) const { return !(operator==(b)); }
+
+bool  Path::operator==(symbol     b) const { return *pdata() == b; }
+bool  Path::operator!=(symbol     b) const { return !(operator==(b)); }
 
 ///
-path path::uid(path b) {
-    auto rand = [](num i) -> str { return rand::uniform('a', 'z'); };
+Path* Path::uid(Path* b) {
     fs::path p { };
-    do { p = fs::path(str::fill(6, rand)); }
-    while (fs::exists(*b.pdata() / p));
+    do {
+        str r(8);
+        for (int i = 0; i < 6; i++)
+            r += rand::uniform('a', 'z');
+        p = fs::path(r);
+    } while (fs::exists(*b->pdata() / p));
     std::string s = p.string();
-    return  s.c_str();
+    return new Path(s.c_str());
 }
 
-path  path::format(str t, array args) {
-    return t.format(args);
+Path*  Path::format(str t, array args) {
+    return new Path(t->format(args));
 }
 
-int64_t path::modified_at() const {
+int64_t Path::modified_at() const {
     using namespace std::chrono_literals;
     std::string ps = pdata()->string();
     auto        wt = fs::last_write_time(*pdata());
@@ -188,7 +212,7 @@ int64_t path::modified_at() const {
     return int64_t(ms);
 }
 
-bool path::read(size_t bs, lambda<void(symbol, size_t)> fn) {
+bool Path::read(size_t bs, lambda<void(symbol, size_t)> fn) {
     cstr  buf = new char[bs];
     fs::path *pdata = this->pdata();
     try {
@@ -209,14 +233,13 @@ bool path::read(size_t bs, lambda<void(symbol, size_t)> fn) {
     return true;
 }
 
-bool path::append(const array &bytes) {
-    assert(bytes.type() == typeof(u8));
+bool Path::append(const vector<u8> &bytes) {
     fs::path *pdata = this->pdata();
     try {
-        size_t sz = bytes.len();
+        size_t sz = bytes->len();
         std::ofstream f(*pdata, std::ios::out | std::ios::binary | std::ios::app);
         if (sz)
-            f.write((symbol)bytes.data<u8>(), sz);
+            f.write((symbol)bytes->data(), sz);
     } catch (std::ofstream::failure e) {
         std::cerr << "read failure on resource: " << pdata->string() << std::endl;
     }
@@ -224,14 +247,16 @@ bool path::append(const array &bytes) {
 }
 
 /// visual studio code should use this
-bool path::same_as  (path b) const { std::error_code ec; return fs::equivalent(*pdata(), *b.pdata(), ec); }
+bool Path::same_as  (Path* b) const { std::error_code ec; return fs::equivalent(*pdata(), *b->pdata(), ec); }
 
-void path::resources(array exts, states<option> states, Fn fn) {
+void Path::resources(array exts, states<option> states, Fn fn) {
     fs::path *pdata     = this->pdata();
     bool use_gitignore	= states[ option::use_git_ignores ];
     bool recursive		= states[ option::recursion       ];
     bool no_hidden		= states[ option::no_hidden       ];
-    array ignore        = states[ option::use_git_ignores ] ? path((*pdata / ".gitignore").string().c_str()).read<str>().split("\n") : array();
+    array ignore        = states[ option::use_git_ignores ] ?
+        array(path((*pdata / ".gitignore").string().c_str())->read<str>()->split("\n")) :
+        array();
     lambda<void(path)> res;
     map        fetched_dir;  /// this is temp and map needs a hash lambdas pronto
     fs::path   parent   = *pdata; /// parent relative to the git-ignore index; there may be multiple of these things.
@@ -239,18 +264,18 @@ void path::resources(array exts, states<option> states, Fn fn) {
     ///
     res = [&](path a) {
         auto fn_filter = [&](ion::path p) -> bool {
-            str      ext = p.ext4();
-            bool proceed = (!exts || exts.contains(ext)) ? (!no_hidden || !is_hidden()) : false;
+            str      ext = p->ext4();
+            bool proceed = (!exts || exts->contains(ext)) ? (!no_hidden || !is_hidden()) : false;
 
             /// proceed if proceeding, and either not using git ignore,
             /// or the file passes the git ignore collection of patterns
             if (proceed && use_gitignore) {
                 path    pp = path(parent.string().c_str());
-                path   rel = pp.relative(p); // original parent, not resource parent
+                path   rel = pp->relative(p); // original parent, not resource parent
                 str   srel = rel;
                 ///
-                for (str& i: ignore.elements<str>())
-                    if (i && srel.has_prefix(i)) {
+                for (String& i: ignore)
+                    if (i && srel->has_prefix(i)) {
                         proceed = false;
                         break;
                     }
@@ -265,27 +290,27 @@ void path::resources(array exts, states<option> states, Fn fn) {
         };
 
         /// directory of resources
-        if (a.is_dir()) {
-            if (!no_hidden || !a.is_hidden())
-                for (fs::directory_entry e: fs::directory_iterator(*a.pdata())) {
+        if (a->is_dir()) {
+            if (!no_hidden || !a->is_hidden())
+                for (fs::directory_entry e: fs::directory_iterator(*a->pdata())) {
                     std::string str = e.path().string();
                     path p  = str.c_str();
-                    path li = p.link();
+                    path li = p->link();
                     //if (li)
                     //    continue;
                     path pp = li ? li : p;
-                    if (recursive && pp.is_dir()) {
-                        if (fetched_dir.lookup(mx(pp)))
+                    if (recursive && pp->is_dir()) {
+                        if (fetched_dir->fetch(pp))
                             return;
-                        fetched_dir[pp] = mx(true);
+                        fetched_dir[pp] = M(true);
                         res(pp);
                     }
                     ///
-                    if (pp.is_file())
+                    if (pp->is_file())
                         fn_filter(pp);
                 }
         } /// single resource
-        else if (a.exists())
+        else if (a->exists())
             fn_filter(a);
     };
     std::string str = pdata->string();
@@ -293,8 +318,8 @@ void path::resources(array exts, states<option> states, Fn fn) {
     return res(sym);
 }
 
-array path::matching(array exts) {
-    auto ret = array();
+array Path::matching(array exts) {
+    array ret;
     resources(exts, { }, [&](path p) { ret += p; });
     return ret;
 }

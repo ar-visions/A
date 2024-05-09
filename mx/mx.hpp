@@ -61,9 +61,6 @@
 namespace ion {
 
 #define A_decl(U, _A_) \
-    private: \
-    void init_type() { ((A*)data)->type = typeof(_A_); } \
-    public: \
     struct _A_* data; \
     using intern = _A_;\
     U(const M& ref); \
@@ -73,22 +70,21 @@ namespace ion {
     U(const U &b); \
     U(U &b); \
     U(); \
-    template <typename... Arg> \
-    U(Arg&&... arg) : data(new _A_(std::forward<Arg>(arg)...)) { init_type(); } \
-    template <typename T> U& operator *= (const T& v) { (*data) *= v; return *this; }\
-    template <typename T> U& operator /= (const T& v) { (*data) /= v; return *this; }\
-    template <typename T> U& operator += (const T& v) { (*data) += v; return *this; }\
-    template <typename T> U& operator -= (const T& v) { (*data) -= v; return *this; }\
-    template <typename T> U  operator *  (const T& v) { return (*data) * v; }\
-    template <typename T> U  operator /  (const T& v) { return (*data) / v; }\
-    template <typename T> U  operator +  (const T& v) { return (*data) + v; }\
-    template <typename T> U  operator -  (const T& v) { return (*data) - v; }\
-    template <typename T> bool  operator >  (const T& v) { return (*data) >  v; }\
-    template <typename T> bool  operator <  (const T& v) { return (*data) <  v; }\
-    template <typename T> bool  operator >= (const T& v) { return (*data) >= v; }\
-    template <typename T> bool  operator <= (const T& v) { return (*data) <= v; }\
-    template <typename T> bool  operator == (const T& v) { return (*data) == v; }\
-    template <typename T> bool  operator != (const T& v) { return (*data) != v; }\
+    \
+    template <typename... Args> \
+    using FirstIsU = std::is_same<U, std::decay_t<std::tuple_element_t<0, std::tuple<Args...>>>>; \
+    \
+    template <typename... Args> \
+    using NotCopy = std::enable_if_t<sizeof...(Args) != 1 || !FirstIsU<Args...>::value, int>; \
+    \
+    template <typename... Arg, NotCopy<Arg...> = 0> \
+    U(Arg&&... arg) : data(new _A_(std::forward<Arg>(arg)...)) { } \
+    bool operator==(const M& b) const; \
+    bool operator!=(const M& b) const; \
+    bool operator> (const M& b) const; \
+    bool operator< (const M& b) const; \
+    bool operator>=(const M& b) const; \
+    bool operator<=(const M& b) const; \
     explicit operator bool() const; \
     operator M() const; \
     _A_* operator->() const; \
@@ -98,13 +94,19 @@ namespace ion {
    ~U(); \
 
 #define A_impl(U, _A_) \
-    U::U(const M& ref)    : data((_A_*)(ref.a->hold())) { init_type(); } \
+    U::U(const M& ref)    : data((_A_*)(ref.a->hold())) { } \
     U::U(M& ref)          : U((const M&)ref) { } \
-    U::U(A* data)         : data((_A_*)data) { init_type(); } \
-    U::U(_A_* data)       : data((_A_*)data) { init_type(); } \
+    U::U(A* data)         : data((_A_*)data) { } \
+    U::U(_A_* data)       : data((_A_*)data) { } \
     U::U(const U &b)      : data((_A_*)b.data->hold()) { } \
     U::U(U &b)            : U((const U&)b) { } \
     U::U()                : data(new _A_())  { data->type = typeof(_A_); } \
+    bool U::operator==(const M& b) const { return data->compare(b) == 0; } \
+    bool U::operator!=(const M& b) const { return data->compare(b) != 0; } \
+    bool U::operator> (const M& b) const { return data->compare(b) >  0; } \
+    bool U::operator< (const M& b) const { return data->compare(b) <  0; } \
+    bool U::operator>=(const M& b) const { return data->compare(b) >= 0; } \
+    bool U::operator<=(const M& b) const { return data->compare(b) <= 0; } \
     _A_* U::operator->   () const { return data; } \
          U::operator _A_*() const { return (_A_*)(data ? data->hold() : null); } \
          U::operator _A_&() const { return *data; } \
@@ -120,25 +122,14 @@ namespace ion {
     U::~U() { data->drop(); } \
 
 #define A_struct(U, _A_) \
-    private: \
-    void init_type() { ((A*)data)->type = typeof(_A_); } \
-    public: \
     struct _A_* data; \
     using intern = _A_;\
     template <typename... Arg> \
-    U(Arg&&... arg) : data(new _A_(std::forward<Arg>(arg)...)) { init_type(); } \
-    template <typename TT> U& operator *= (const TT& v) { (*data) *= v; return *this; }\
-    template <typename TT> U& operator /= (const TT& v) { (*data) /= v; return *this; }\
-    template <typename TT> U& operator += (const TT& v) { (*data) += v; return *this; }\
-    template <typename TT> U& operator -= (const TT& v) { (*data) -= v; return *this; }\
-    template <typename TT> U  operator *  (const TT& v) { return (*data) * v; }\
-    template <typename TT> U  operator /  (const TT& v) { return (*data) / v; }\
-    template <typename TT> U  operator +  (const TT& v) { return (*data) + v; }\
-    template <typename TT> U  operator -  (const TT& v) { return (*data) - v; }\
-    U(const M& ref)    : data((_A_*)(ref.a->hold())) { init_type(); } \
+    U(Arg&&... arg) : data(new _A_(std::forward<Arg>(arg)...)) { } \
+    U(const M& ref)    : data((_A_*)(ref.a->hold())) { } \
     U(M& ref)          : U((const M&)ref) { } \
-    U(A* data)         : data((_A_*)data) { init_type(); } \
-    U(_A_* data)       : data((_A_*)data) { init_type(); } \
+    U(A* data)         : data((_A_*)data) { } \
+    U(_A_* data)       : data((_A_*)data) { } \
     U(const U &b)      : data((_A_*)b.data->hold()) { } \
     U(U &b)            : U((const U&)b) { } \
     U()                : data(new _A_())  { data->type = typeof(_A_); } \
@@ -177,10 +168,10 @@ namespace ion {
         inline static const int count  = num_args(__VA_ARGS__); \
         inline static const str raw   = str_args(__VA_ARGS__); \
         str name() { return (char*)symbol(); } \
-        ion::symbol symbol() { return data->type->symbols->by_value[value]; } \
+        ion::symbol symbol() { return data->type->symbols->by_value[M(value)]; } \
         C(enum etype t = etype::D):data(new E(E::initialize(t, (ion::symbol)raw, typeof(C)))), value(t) { init_type(); } \
         C(int t)                  :C((enum etype)t) { } \
-        C(const str &sraw)       :C(E::convert(sraw, (ion::symbol)raw, typeof(C))) { } \
+        C(const str &sraw)        :C(E::convert(sraw, (ion::symbol)raw, typeof(C))) { } \
         C(const M &mraw)          :C(E::convert(mraw, (ion::symbol)raw, typeof(C))) { } \
         C(ion::symbol sym)        :C(E::convert(sym,  (ion::symbol)raw, typeof(C))) { } \
         C(E* mem)                 :data((E*)mem->hold()) { } \
@@ -463,6 +454,8 @@ struct id {
     struct hashmap  *meta; // prop_map
     method_info     *method;
 
+    static bool initialized;
+
     id() { }
 
     id(bool);
@@ -524,11 +517,11 @@ struct prop {
 
     prop() ;
 
-    template <typename M>
-    prop(symbol name, const M &member) ;
+    template <typename MEM>
+    prop(ion::symbol name, const MEM &member) ;
     
-    template <typename M, typename CL>
-    prop(symbol name, const M &member, const CL* inst) ;
+    template <typename MEM, typename CL>
+    prop(ion::symbol name, const MEM &member, const CL* inst) ;
 
     prop(const prop &ref);
 
@@ -537,7 +530,7 @@ struct prop {
 
     void *member_pointer(void *m) ;
 
-    symbol name() const ;
+    ion::symbol name() const ;
 
     struct String* to_string();
 };
@@ -604,6 +597,12 @@ struct math {
     template <typename T> static inline T round(T v)           { return std::round(v);  }
 };
 
+template <typename T>
+struct lambda;
+
+template <typename R, typename... Args>
+struct lambda<R(Args...)>;
+
 /// always working on string theory..
 struct String:A {
     char *chars;
@@ -612,11 +611,17 @@ struct String:A {
 
     static String* from_code(int code);
 
-    String(int size = 64);
+    String(null_t = null) : A(typeof(String)) {
+        chars = null;
+        alloc = 0;
+        length = 0;
+    }
+    String(int size);
     String(const char v);
     String(const char *v, int v_len = -1);
     String(i64 value, u8 base, int width);
     String(const UTF16& u);
+    String(const M& m);
     String(std::ifstream &in);
 
     int reserve() const { return alloc; }
@@ -642,8 +647,8 @@ struct String:A {
     explicit operator            bool() const;
     bool   operator!()                  const;
     String*operator+(const String &sb)  const;
-    String *operator+=(const String &b);
-
+    String *operator += (const String& v);
+    
     String *combine(const String& b) const;
 
     operator std::string();
@@ -680,7 +685,8 @@ struct String:A {
     bool matches(const String& input) const;
     bool has_prefix(const String& i) const;
 
-    String *format(const array &args);
+    String* interpolate(lambda<String*(const char *)>);
+    String* format(const array &args);
 
     String(char *v, int v_len = -1) : String((const char *)v, v_len) { }
 
@@ -735,10 +741,7 @@ struct String:A {
     }
 
     void append(char v)                { append(&v, 1); }
-    void append(String* v)             { append(v->chars, v->length); v->drop(); }
-    void operator += (char          v) { append(&v, 1); }
-    void operator += (const char*   v) { append(v, strlen(v)); }
-    void operator += (String* v)       { append(v->chars, v->length); v->drop(); }
+    void append(const String& v)       { append(v.chars, v.length); }
 
     explicit operator        cstr() const { return chars; }
     explicit operator ion::symbol() const { return ion::symbol(chars); }
@@ -777,6 +780,7 @@ template <typename T>
 struct Value:A {
     id *value_type;
     T value;
+    using value_t = T;
 
     Value(const T& v) : A(typeof(Value)), value(v), value_type(typeof(T)) { }
 
@@ -821,7 +825,12 @@ struct Pointer:A {
     bool  managed;
     Pointer(id* type, void *ptr, bool managed) : A(null), type(type), ptr(ptr), managed(managed) { }
     ~Pointer() {
-        if (managed) free(ptr);
+        if (managed) {
+            if (type->f.del)
+                type->f.del(ptr);
+            else
+                free(ptr);
+        }
     }
     int compare(const M& b) const override;
     u64 hash() {
@@ -838,6 +847,27 @@ struct Pointer:A {
     }
 };
 
+struct U { struct A* a; };
+
+/// this constructs without forwarding from a U class, and should be less ambiguous
+template <typename AType, typename... Args>
+static A* Alloc(Args&&... args) {
+    static_assert(inherits<A, AType>(), "Alloc is used to allocate U+A-types only");
+    U* u = (U*)calloc(1, sizeof(U) + sizeof(A));
+    u->a = &u[1];
+    new (u->a) AType(std::forward<Args>(args)...);
+    return (AType*)u->a;
+}
+
+template <typename AType>
+static void Free(A* a) {
+    static_assert(inherits<A, AType>(), "Free is used to free U+A-types only");
+    U* u = (U*)((u8*)a - sizeof(U));
+    assert(u->a == a);
+    ((AType*)(u->a)) -> ~AType();
+}
+
+///
 struct M {
     union {
         Value<u64>  *v_u64;
@@ -1001,7 +1031,18 @@ struct M {
     }
 
     template <typename T>
+    operator T*() const {
+        if (!a) return (T*)null;
+        if (a->type == typeof(Pointer)) { /// can handle non-A inheritance
+            assert(v_pointer->type == typeof(T)); /// inheritance check not supported here since it requires an alias protocol on the class
+            return (T*)v_pointer->ptr;
+        }
+        return &static_cast<T&>(*this);
+    }
+
+    template <typename T>
     operator T&() const {
+        assert(a);
         if (a->type == typeof(Pointer)) { /// can handle non-A inheritance
             assert(v_pointer->type == typeof(T)); /// inheritance check not supported here since it requires an alias protocol on the class
             return *(T*)v_pointer->ptr;
@@ -1038,7 +1079,7 @@ struct M {
     }
 
     String *to_string() {
-        return a->to_string();
+        return a ? a->to_string() : null;
     }
 };
 
@@ -1061,6 +1102,7 @@ struct Item:A {
     Item() : A() {
         next = 0;
         prev = 0;
+        peer = 0;
     }
     Item(const M &e) : Item() {
         element = (M&)e;
@@ -1074,12 +1116,13 @@ struct Item:A {
 
 #include <mx/iterators.hpp>
 
-template <typename M>
-prop::prop(symbol name, const M &member) : key(new M(name)), member_addr((size_t)&member), type(typeof(M)), is_method(false) { }
+template <typename MEM>
+prop::prop(ion::symbol name, const MEM &member) : key(new M(name)), member_addr((size_t)&member), type(typeof(MEM)), is_method(false) { }
 
-template <typename M, typename CL>
-prop::prop(symbol name, const M &member, const CL* inst) : 
-    key(new M(name)), member_addr((size_t)&member), type(signatureof(CL, M, member_addr, sizeof(member))), is_method(true) { }
+
+template <typename MEM, typename CL>
+prop::prop(ion::symbol name, const MEM &member, const CL* inst) : 
+    key(new M(name)), member_addr((size_t)&member), type(signatureof(CL, MEM, member_addr, sizeof(member))), is_method(true) { }
 
 template <typename T>
 T &prop::member_ref(void *m) { return *(T *)handle_t(&cstr(m)[offset]); }
@@ -1169,15 +1212,24 @@ struct Vector:iList {
 
     void remove(int index, int amount = 1) {
         assert(count >= (index + amount));
+        if constexpr (std::is_copy_constructible<T>::value) {
+            int w = index;
+            for (int i = index + amount; i < count; i++)
+                elements[w++] = elements[i];
 
-        int w = index;
-        for (int i = index + amount; i < count; i++)
-            elements[w++] = elements[i];
+            while (w < count)
+                elements[w++].~T();
 
-        while (w < count)
-            elements[w++].~T();
+            count -= amount;
+        }
+    }
 
-        count -= amount;
+    template <typename... Args>
+    void emplace(Args&&... args) {
+        if (alloc == count)
+            resize(alloc << 1);
+        
+        new (&elements[count++]) T(std::forward<Args>(args)...);
     }
 
     void push(const T &v) {
@@ -1210,8 +1262,9 @@ struct Vector:iList {
         assert(sz >= count);
         alloc = sz;
         T *n = (T*)calloc(alloc, sizeof(T));
-        for (int i = 0; i < count; i++)
-            new (&n[i]) T(*(const T*)&elements[i]);
+        if constexpr (std::is_copy_constructible<T>::value)
+            for (int i = 0; i < count; i++)
+                new (&n[i]) T(*(const T*)&elements[i]);
         free(elements);
         elements = n;
     }
@@ -1257,6 +1310,9 @@ struct List:iList {
     List(std::initializer_list<M> args) : List() {
         for (auto i: args)
             push(i);
+    }
+    int len() const {
+        return count;
     }
     void clear() {
         while (last)
@@ -1393,7 +1449,7 @@ template <typename R, typename... Args>
 template <typename F>
 lambda<R(Args...)>::lambda(F&& fn) {
     if constexpr (ion::inherits<lambda, F>() || is_lambda<std::remove_reference_t<F>>::value) {
-        data = fn.data->hold();
+        data = (ltype*)fn.data->hold();
     } else {
         if constexpr (std::is_invocable_r_v<R, F, Args...>) {
             data = new Lambda<R(Args...)>();
@@ -1407,14 +1463,15 @@ lambda<R(Args...)>::lambda(F&& fn) {
 
 struct str {
     A_decl(str, String)
-    operator         cstr() const { return        cstr(*data); }
-    ion::symbol    symbol() const { return ion::symbol(*data); }
-    operator       double() const { return      double(*data); }
-    operator        float() const { return       float(*data); }
-    operator          i64() const { return         i64(*data); }
-    operator  std::string() const { return std::string(data->chars); };
-    char &operator[](int i) const { return (*data)[i]; }
-    //str operator+(const str &b) const { return data->combine(b); }
+    operator             cstr() const { return        cstr(*data); }
+    ion::symbol        symbol() const { return ion::symbol(*data); }
+    operator           double() const { return      double(*data); }
+    operator            float() const { return       float(*data); }
+    operator              i64() const { return         i64(*data); }
+    operator      std::string() const { return std::string(data->chars); };
+    char&     operator[](int i) const { return (*data)[i];         }
+    str operator+  (const String& v) const { return data->combine(v);  }
+    void operator+=(const String& v) const { data->append((String&)v); }
 };
 
 struct field {
@@ -1428,22 +1485,23 @@ struct list {
 
     Iterator<M> begin() const { return data->first; }
     Iterator<M>   end() const { return null; }
+
+    void operator+=(const M& b) const { (*data) += b; }
 };
 
 template <typename T>
 struct vector {
     private:
-    struct Vector<T>* data;
     public:
+    struct Vector<T>* data;
     using intern = Vector<T>;
 
-    vector()                : data(new Vector<T>())             A_type(Vector<T>)
-    vector(Vector<T>* data) : data((Vector<T>*)data)            A_type(Vector<T>)
-    vector(const M& ref)    : data((Vector<T>*)(ref.a->hold())) A_type(Vector<T>)
+    vector()                : data(new Vector<T>())             { }
+    vector(Vector<T>* data) : data((Vector<T>*)data)            { }
+    vector(const M& ref)    : data((Vector<T>*)(ref.a->hold())) { }
     vector(M& ref)          : vector((const M&)ref)             { }
     vector(const vector &b) : data((Vector<T>*)b.data->hold())  { }
-    vector(vector &b)       : vector((vector &)b)               { }
-    vector(int size)        : data(new Vector<T>(size))         A_type(Vector<T>)
+    vector(int size)        : data(new Vector<T>(size))         { }
 
     vector(std::initializer_list<T> args) : vector(args.size()) {
         for (auto a: args)
@@ -1486,21 +1544,6 @@ struct vector {
     }
 };
 
-/// type is not set on these primitive structs; we dont construct them ourselves, and the macro generally does this
-/// the exception is here, in the M generics. for all uses of A-type, we set their type
-M::M(const u64    &i) : v_u64(new Value<u64>(i))    { a->type = typeof(Value<u64>); }
-M::M(const i64    &i) : v_i64(new Value<i64>(i))    { a->type = typeof(Value<i64>); }
-M::M(const u32    &i) : v_u32(new Value<u32>(i))    { a->type = typeof(Value<u32>); }
-M::M(const i32    &i) : v_i32(new Value<i32>(i))    { a->type = typeof(Value<i32>); }
-M::M(const u16    &i) : v_u16(new Value<u16>(i))    { a->type = typeof(Value<u16>); }
-M::M(const i16    &i) : v_i16(new Value<i16>(i))    { a->type = typeof(Value<i16>); }
-M::M(const u8     &i) : v_u8 (new Value<u8 >(i))    { a->type = typeof(Value<u8>); }
-M::M(const i8     &i) : v_i8 (new Value<i8 >(i))    { a->type = typeof(Value<i8>); }
-M::M(const r64    &i) : v_r64(new Value<r64>(i))    { a->type = typeof(Value<r64>); }
-M::M(const r32    &i) : v_r32(new Value<r32>(i))    { a->type = typeof(Value<r32>); }
-M::M(const char   &i) : v_u8 (new Value<u8>((u8)i)) { a->type = typeof(Value<u8>); }
-M::M(ion::symbol sym) : a_str(new String(sym)) { a->type = typeof(String);    }
-
 template <typename T> struct is_map : false_type {};
 
 struct Hashmap:A {
@@ -1539,7 +1582,7 @@ struct Hashmap:A {
     }
     
     ~Hashmap() {
-        delete h_fields;
+        delete[] h_fields;
         delete ordered;
     }
 
@@ -1597,8 +1640,10 @@ struct hashmap {
 
     M &operator[](const M &key) { return (*data)[key]; }
 
-    M &operator[](i64 key) { return (*data)[key]; }
-    M &operator[](i32 key) { return (*data)[key]; }
+    //M &operator[](i64 key) { return (*data)[key]; }
+    //M &operator[](i32 key) { return (*data)[key]; }
+
+    static hashmap args(int argc, cstr *argv, hashmap &def);
 
     Iterator<M> begin() const {
         return data->begin();
@@ -1649,20 +1694,6 @@ struct logger {
 };
 
 extern logger console;
-
-u64 A::hash() {
-    console.fault("implement hash() for type {0}", { str(type->name) });
-    return 0;
-}
-int A::compare(const M &ref) const {
-    console.fault("implement compare() for type {0}", { str(type->name) });
-    return -1;
-}
-
-String *A::to_string() {
-    console.fault("implement to_string() for type {0}", { str(type->name) });
-    return null;
-}
 
 struct symbols {
     hashmap   by_name  { };
@@ -1771,7 +1802,8 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
 
     if constexpr (has_intern<T>())
         type->intern = id::for_type<typename T::intern>(MPTR, MPTR_SZ);
-    
+    if constexpr (is_value<T>())
+        type->ref = id::for_type<typename T::value_t>(MPTR, MPTR_SZ);
     if constexpr (std::is_member_function_pointer<T>::value) {
         using R = typename member_fn<T>::r_type;
         type->method = new method_info {
@@ -1875,7 +1907,7 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
         
         type->f.del = [](void* a) -> void { if (a) delete (T*)a; };
 
-        if constexpr (has_constructor<T, A*>::value)
+        if constexpr (std::is_class<T>::value && has_constructor<T, A*>::value)
             type->f.ctr_mem  = [](void *a, A* mem) -> void* { if (a) new (a) T(mem); else a = (void*)new T(mem); return a; };
         
         if constexpr (std::is_copy_constructible<T>::value)
@@ -1954,7 +1986,7 @@ struct E:Value<i32> {
             /// in json, the enum can sometimes be given in "23124" form; no enum begins with a numeric so we can handle this
             if (raw_str[0] == '-' || isdigit(raw_str[0])) {
                 i32 id   = (i32)i64(raw_str);
-                sym      = type->symbols->by_value[id];
+                sym      = type->symbols->by_value[M(id)];
             } else {
                 sym      = type->symbols->by_name[raw];
             }
@@ -1969,10 +2001,10 @@ struct E:Value<i32> {
             }
         } else if (raw.type() == typeof(i32) || raw.type() == type->ref) { // make sure ref is set
             i32   id = i32(raw);
-            sym      = type->symbols->by_value[id];
+            sym      = type->symbols->by_value[M(id)];
         } else if (raw.type() == typeof(i64)) {
             i32   id = i32(i64(raw));
-            sym      = type->symbols->by_value[id];
+            sym      = type->symbols->by_value[M(id)];
         }
         if (!sym) {
             printf("symbol: %s, raw: %s\n", S, (ion::symbol)raw);
@@ -2026,13 +2058,13 @@ struct E:Value<i32> {
         assert(type == typeof(Value<i32>));
         i32 v = value;
         assert(type->symbols);
-        M mem_symbol = type->symbols->by_value[v];
+        M mem_symbol = type->symbols->by_value[M(v)];
         if (!mem_symbol) printf("symbol: mem is null for value %d\n", (int)v);
         assert(mem_symbol);
         return (ion::symbol)mem_symbol;
     }
 
-    String *to_string() override { return type->symbols->by_value[i32(value)].a_str; }
+    String *to_string() override { return type->symbols->by_value[M(value)].a_str; }
 };
 
 template <typename T>
@@ -2072,9 +2104,6 @@ M M::method(T& obj, const str &name, const vector<M> &args) {
     return result;
 }
 
-enums(EnumTest, undefined,
-    undefined, one, two, three, four)
-
 template <typename T, const size_t SZ>
 struct Buffer:A {
     T      values[SZ];
@@ -2113,8 +2142,8 @@ struct Size:Buffer<num, 16> {
 
     bool operator==(size_t b) const;
     bool operator!=(size_t b) const;
-    bool operator==(Size &sb) const;
-    bool operator!=(Size &sb) const;
+    bool operator==(const Size &sb) const;
+    bool operator!=(const Size &sb) const;
     
     void   operator++(int);
     void   operator--(int);
@@ -2145,18 +2174,11 @@ struct Size:Buffer<num, 16> {
 
     num &operator[](num i);
 
-    Size &operator=(i8   i);
-    Size &operator=(u8   i);
-    Size &operator=(i16  i);
-    Size &operator=(u16  i);
-    Size &operator=(i32  i);
-    Size &operator=(u32  i);
-    Size &operator=(i64  i);
-    Size &operator=(u64  i);
-
-    Size &operator=(const Size b);
-
     size_t index_value(const Size &index) const;
+};
+
+struct size {
+    A_decl(size, Size)
 };
 
 struct str;
@@ -2403,7 +2425,7 @@ public:
 };
 
 template <typename T>
-struct states:A {
+struct States:A {
     type_t type;
     u64    bits;
 
@@ -2412,8 +2434,10 @@ struct states:A {
         return (v < 0) ? ((u64(1) << u64(63)) >> u64(-v)) : (u64(1) << u64(v));
     }
 
+    States() : A(typeof(States)) { }
+
     /// initial states with initial list of values
-    states(std::initializer_list<T> args) : states() {
+    States(std::initializer_list<T> args) : States() {
         for (auto  v:args) {
             i64 ord = i64(v); /// from an enum type (best to support sign)
             u64 fla = to_flag(ord);
@@ -2477,6 +2501,15 @@ struct states:A {
             f = to_flag(i32(varg));
         
         return (bits & f) == f;
+    }
+};
+
+template <typename T>
+struct states {
+    A_struct(states, States<T>)
+    template <typename ET>
+    bool operator[](const ET &varg) const {
+        return (*data)[varg];
     }
 };
 
@@ -2552,6 +2585,10 @@ struct Path:A {
     str             ext4() const;
     Path*            file() const;
     bool     copy(Path* to) const;
+    str          string() const {
+        std::string s = p.string();
+        return str(s.c_str(), s.length());
+    }
     
     Path* assert_file();
 
@@ -2562,14 +2599,14 @@ struct Path:A {
     operator        bool()         const;
     operator         str()         const;
     Path*         parent()         const;
-    Path*operator / (Path*       s) const;
-    Path*operator / (symbol     s) const;
-    Path*operator / (const str& s) const;
+    Path*operator / (const Path& s) const;
+    Path*operator / (symbol      s) const;
+    Path*operator / (const str&  s) const;
     Path*relative   (Path*    from) const;
-    bool  operator==(Path&      b) const;
-    bool  operator!=(Path&      b) const;
-    bool  operator==(symbol     b) const;
-    bool  operator!=(symbol     b) const;
+    bool  operator==(const Path& b) const;
+    bool  operator!=(const Path& b) const;
+    bool  operator==(symbol      b) const;
+    bool  operator!=(symbol      b) const;
     operator str();
     operator cstr() const;
 
@@ -2586,6 +2623,8 @@ struct Path:A {
 
 struct path {
     A_decl(path, Path)
+    path operator / (const path& b) { return (*data) / (Path&)b; }
+    operator str() { return *data; }
 };
 
 using path_t = path;
@@ -2633,7 +2672,7 @@ struct base64 {
 
     static str encode(symbol data, size_t len) {
         umap<size_t, size_t> &enc = enc_map();
-        size_t p_len = ((len + 2) / 3) * 4;
+        int p_len = ((len + 2) / 3) * 4;
         str encoded(p_len + 1);
 
         u8    *e = (u8 *)encoded.data;
@@ -2716,7 +2755,7 @@ protected:
 
     /// default constructor constructs map
     var();
-    var(M b);
+    var(const M& b);
     var(map m);
     var(A* mem) : M(mem) { }
 
@@ -2726,11 +2765,13 @@ protected:
     var operator+(const var &b) const {
         type_t at =   a->type;
         type_t bt = b.a->type;
+        if (at->ref) at = at->ref;
+        if (bt->ref) bt = bt->ref;
         if (at == typeof(i64)    && bt == typeof(i64))    return    i64((M&)*this)        + i64((M&)b);
         if (at == typeof(double) && bt == typeof(i64))    return double(double((M&)*this) + i64((M&)b));
         if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((M&)*this) + double((M&)b));
         if (at == typeof(double) && bt == typeof(double)) return double(double((M&)*this) + double((M&)b));
-        if (at == typeof(char)   && bt == typeof(char))   return str(     str((M&)*this)  +    str((M&)b));
+        if (at == typeof(String) && bt == typeof(String)) return str(     str((M&)*this)  +    str((M&)b));
         assert(false);
         return var();
     }
@@ -2738,6 +2779,8 @@ protected:
     var operator-(const var &b) const {
         type_t at =   a->type;
         type_t bt = b.a->type;
+        if (at->ref) at = at->ref;
+        if (bt->ref) bt = bt->ref;
         if (at == typeof(i64)    && bt == typeof(i64))    return    i64((M&)*this)        - i64((M&)b);
         if (at == typeof(double) && bt == typeof(i64))    return double(double((M&)*this) - i64((M&)b));
         if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((M&)*this) - double((M&)b));
@@ -2749,6 +2792,8 @@ protected:
     var operator*(const var &b) const {
         type_t at =   a->type;
         type_t bt = b.a->type;
+        if (at->ref) at = at->ref;
+        if (bt->ref) bt = bt->ref;
         if (at == typeof(i64)    && bt == typeof(i64))    return    i64((M&)*this)        * i64((M&)b);
         if (at == typeof(double) && bt == typeof(i64))    return double(double((M&)*this) * i64((M&)b));
         if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((M&)*this) * double((M&)b));
@@ -2760,6 +2805,8 @@ protected:
     var operator/(const var &b) const {
         type_t at =   a->type;
         type_t bt = b.a->type;
+        if (at->ref) at = at->ref;
+        if (bt->ref) bt = bt->ref;
         if (at == typeof(i64)    && bt == typeof(i64))    return    i64((M&)*this)        / i64((M&)b);
         if (at == typeof(double) && bt == typeof(i64))    return double(double((M&)*this) / i64((M&)b));
         if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((M&)*this) / double((M&)b));

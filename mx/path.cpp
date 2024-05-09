@@ -40,7 +40,7 @@ bool Path::get_modified_date(struct tm *res) {
 }
 
 str Path::get_modified_string() {
-    str result(size_t(128));
+    str result(128);
     struct tm gm_time;
     ///
     if (get_modified_date(&gm_time)) {
@@ -90,7 +90,8 @@ str Path::mime_type() {
     str ext_str = ext()->mid(1);
     M e = symbolize(ext_str->cs());
     static Path *data = new Path("data/mime-type.json");
-    static map  js   =  data->read<var>();
+    static var  vmap = data->read<var>();
+    static map  js   = vmap.a->hold();
     Field      *find = js->lookup(e);
     return find ? find->value : js["default"];
 }
@@ -98,7 +99,7 @@ str Path::mime_type() {
 str  Path::stem() const {
     if (!pdata()->empty()) {
         std::string stem_str = pdata()->stem().string();
-        return stem_str;
+        return str(stem_str.c_str(), stem_str.length());
     }
     return str();
 }
@@ -127,8 +128,14 @@ Path::operator cstr() const {
     return cstr(cs());
 }
 
-str   Path::       ext () const { return str(pdata()->extension().string()); }
-str   Path::       ext4() const { return pdata()->extension().string(); }
+str   Path::       ext () const {
+    std::string s = pdata()->extension().string();
+    return str(s.c_str(), s.length());
+}
+str   Path::       ext4() const {
+    return ext();
+}
+
 Path* Path::       file() const { return fs::is_regular_file(*pdata()) ? new Path(cs()) : new Path(); }
 bool Path::copy(Path *_to) const {
     path to(_to->hold());
@@ -138,7 +145,7 @@ bool Path::copy(Path *_to) const {
         (to->has_filename() ?
             path(to->remove_filename()) : to)->make_dir();
     std::error_code ec;
-    path p = to->is_dir() ? to / str(pdata()->filename().string()) : to;
+    path p = to->is_dir() ? to / ext() : to;
     fs::copy(*pdata(), *p->pdata(), ec);
     _to->drop();
     return ec.value() == 0;
@@ -176,16 +183,16 @@ Path* Path::parent()         const {
 }
 
 
-Path* Path::operator / (Path*      s) const { return path((*pdata() / *s->pdata()).string().c_str()); }
+Path* Path::operator / (const Path&s) const { return path((*pdata() / *s.pdata()).string().c_str()); }
 Path* Path::operator / (symbol     s) const { return path((*pdata() /  s).string().c_str()); }
 Path* Path::operator / (const str& s) const { return path((*pdata() / fs::path(s->cs())).string().c_str()); }
 Path* Path::relative   (Path*   from) const { return path(fs::relative(*pdata(), *from->pdata()).string().c_str()); }
 
-bool  Path::operator==(Path&      b) const { return  *pdata() == *b.pdata(); }
-bool  Path::operator!=(Path&      b) const { return !(operator==(b)); }
+bool  Path::operator==(const Path& b) const { return  *pdata() == *b.pdata(); }
+bool  Path::operator!=(const Path& b) const { return !(operator==(b)); }
 
-bool  Path::operator==(symbol     b) const { return *pdata() == b; }
-bool  Path::operator!=(symbol     b) const { return !(operator==(b)); }
+bool  Path::operator==(symbol      b) const { return *pdata() == b; }
+bool  Path::operator!=(symbol      b) const { return !(operator==(b)); }
 
 ///
 Path* Path::uid(Path* b) {
@@ -193,7 +200,7 @@ Path* Path::uid(Path* b) {
     do {
         str r(8);
         for (int i = 0; i < 6; i++)
-            r += rand::uniform('a', 'z');
+            r->append(rand::uniform('a', 'z'));
         p = fs::path(r);
     } while (fs::exists(*b->pdata() / p));
     std::string s = p.string();

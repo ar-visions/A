@@ -10,12 +10,62 @@
 
 namespace ion {
 
-A_impl(str, String)
-A_impl(utf16, UTF16)
-A_impl(field, Field)
-A_impl(list, List)
-A_impl(item, Item)
+A_impl(utf16,   UTF16)
+A_impl(str,     String)
+A_impl(path,    Path)
+A_impl(field,   Field)
+A_impl(list,    List)
+A_impl(item,    Item)
 A_impl(hashmap, Hashmap)
+
+String::String(const M& m) : String() {
+    assert(m.a->type == typeof(String));
+    alloc  = m.a_str->length + 1;
+    chars  = new char[alloc];
+    memcpy(chars, m.a_str->chars, alloc);
+    length = m.a_str->length;
+}
+
+map map::args(int argc, cstr *argv, map &def) {
+    map iargs;
+    for (int ai = 0; ai < argc; ai++) {
+        cstr ps = argv[ai];
+        ///
+        if (ps[0] == '-') {
+            bool   is_single = ps[1] != '-';
+            M key = str(&ps[is_single ? 1 : 2]);
+            Field* found;
+            if (is_single) {
+                for (Field &df: def) {
+                    symbol s = df.key.symbol();
+                    if (ps[1] == s[0]) {
+                        found = &df;
+                        break;
+                    }
+                }
+            } else
+                found = def->lookup(key);
+            ///
+            if (found) {
+                str     aval = str(argv[ai + 1]);
+                type_t  type = found->value.type();
+                /// from_string should use const str&
+                iargs[key] = M::from_string(aval, type); /// static method on mx that performs the busy work of this
+            } else {
+                printf("arg not found: %s\n", key.symbol()); // shouldnt do this dangerous thing with strings
+                return {};
+            }
+        }
+    }
+    
+    /// return results in order of defaults, with default value given
+    map res;
+    for (Field &df: def) {
+        Field *ov = iargs->lookup(df.key);
+        res[df.key] = ov ? ov->value : df.value;
+    }
+    return res;
+}
 
 int length(std::ifstream& in);
 
@@ -33,7 +83,7 @@ M var::parse_obj(cstr *start, type_t type) {
     map  map_result;
 
     if (!is_map) {
-        void *alloc = type->ctr();
+        void *alloc = type->f.ctr(null);
         if (type->traits & traits::mx_obj) {
             mx_result = M((A*)alloc);
         } else
@@ -103,7 +153,7 @@ M var::parse_arr(cstr *start, type_t type) { /// array must be a Array<T> type
 
     if (type) {
         assert(type->traits & traits::typed_array);
-        container = (array *)type->ctr();
+        container = (array *)type->f.ctr(null);
     } else
         a_result = array();
 
@@ -197,7 +247,7 @@ M var::parse_value(cstr *start, type_t type, const M& field) {
     } else if (numeric) {
         bool floaty;
         str value = parse_numeric(start, floaty);
-        assert(value != "");
+        assert(value);
 
         if ((floaty && !type) || type == typeof(float) || type == typeof(double)) {
             double v = double(value);
@@ -223,7 +273,7 @@ M var::parse_value(cstr *start, type_t type, const M& field) {
             if (type == typeof(u32))    { u32 vu32 = (u32)v;  return vu32; }
             if (type == typeof(i64))    { i64 vi64 = (i64)v;  return vi64; }
             if (type == typeof(u64))    { u64 vu64 = (u64)v;  return vu64; }
-            if (type == typeof(size_t)) { size_t sz64 = (size_t)v; return sz64; }
+            if (type == typeof(size_t)) { size_t sz64 = (size_t)v; return M((i64)sz64); }
             assert(false);
         }
         return v;
@@ -269,8 +319,8 @@ M var::parse_quoted(cstr *cursor, type_t type) {
     if (type == typeof(Vector<u8>)) {
         cstr start = *cursor; /// no quote
         *cursor = strchr(*cursor, '"');
-        size_t len = std::distance(start, *cursor);
-        result = str(size_t(len));
+        int len = std::distance(start, *cursor);
+        result = str(len);
         memcpy(result->chars, start, len);
         result->length = len;
         result->chars[len] = 0;
@@ -296,7 +346,7 @@ M var::parse_quoted(cstr *cursor, type_t type) {
                 break;
             }
             if (!last_slash)
-                result += ch;
+                result->append(ch);
         }
         *cursor = &start[read];
     }
@@ -347,12 +397,12 @@ str var::stringify() const {
         char *s = m->chars;
         while (*s) {
             if ((*s & 0b10000000) == 0) {
-                if      (*s == '\r') res += "\\r";
-                else if (*s == '\n') res += "\\n";
-                else if (*s == '\"') res += "\\\"";
-                else if (*s ==    8) res += "\\b";
-                else if (*s ==    9) res += "\\t";
-                else if (*s == 0x0C) res += "\\f";
+                if      (*s == '\r') res->append("\\r");
+                else if (*s == '\n') res->append("\\n");
+                else if (*s == '\"') res->append("\\\"");
+                else if (*s ==    8) res->append("\\b");
+                else if (*s ==    9) res->append("\\t");
+                else if (*s == 0x0C) res->append("\\f");
                 else res += *s;
                 s++;
             } else {
@@ -436,10 +486,11 @@ str var::stringify() const {
                 size_t n_fields = 0;
                 for (prop &p: *meta) {
                     M value = M::get(i, p.key);//ion::hold(skey));
+                    str key_str = p.key->to_string();
                     if (n_fields)
                         ar += ",";
                     ar += "\"";
-                    ar += p.key->to_string();
+                    ar += key_str;
                     ar += "\"";
                     ar += ":";
                     ar += format_v(value);
@@ -484,8 +535,8 @@ str var::stringify() const {
 }
 
 /// default constructor constructs map
-var::var()      : M(new Map()) { } /// var poses as different classes.
-var::var(M b)   : M(b) { }
+var::var() : M(new Map()) { } /// var poses as different classes.
+var::var(const M& b) : M(b) { }
 var::var(map m) : M(m) { }
 
 M var::json(M i, type_t type) {
@@ -502,6 +553,7 @@ M var::json(M i, type_t type) {
 }
 
 String *var::to_string() {
+    if (!a) return new String("null");
     String* s = a->to_string();
     return s; //stringify(); /// output should be ref count of 1.
 }
@@ -722,19 +774,21 @@ String* String::from_code(int code) {
 
 String::operator std::string() { return std::string(chars); }
 
+//String::String(null_t) : String() { }
+
 String::String(const UTF16& u) : String(u.length) { /// utf8 is a doable object but a table must be lazy loaded at best
     for (int i = 0; i < u.length; i++)
         chars[i] = u.chars[i] <= 255 ? char(u.chars[i]) : '?';
 }
 
-String::String(int size) : A(typeof(String)) {
+String::String(int size) : String() {
     chars = new char[size];
     alloc = size;
     length = 0;
     chars[0] = 0;
 }
 
-String::String(const char v) : A(typeof(String)) {
+String::String(const char v) : String() {
     length = 1;
     alloc  = 2;
     chars  = new char[2];
@@ -742,12 +796,12 @@ String::String(const char v) : A(typeof(String)) {
     chars[length] = 0;
 }
 
-String::String(const char *v, int v_len) : A(typeof(String)) {
+String::String(const char *v, int v_len) : String() {
     length = v_len == -1 ? strlen(v) : v_len;
     alloc = 64;
-    while (alloc < length)
+    while (alloc <= length)
         alloc <<= 1;
-    chars = new char[64];
+    chars = new char[alloc];
     memcpy(chars, v, length);
     chars[length] = 0;
 }
@@ -1083,7 +1137,7 @@ M symbolize(cstr cs, id* type, i32 id) {
 
     M name(cs);
     type->symbols->by_name[name] = id;
-    type->symbols->by_value[id]  = name;
+    type->symbols->by_value[M(id)]  = name;
     type->symbols->list += new Symbol(name.symbol(), id);
     return name;
 }
@@ -1157,17 +1211,17 @@ Vector<M> *String::split(const String &v) const {
                 int str_len = (int)(size_t)(scan - start);
                 if (str_len)
                     res->push(new String(start, str_len));
+                if (*scan == 0) break;
                 scan += sp_len;
                 start = scan;
-                if (*scan == 0) break;
             } else
                 scan++;
         }
     return res;
 }
 
-String *String::format(const array &args) {
-    String   *res = new String(length + 1 + args->len() * 128);
+String* String::interpolate(lambda<String*(const char *)> fn) {
+    String   *res = new String(1024 + length * 4);
     char   *start = chars;
     char     *end = start + length;
     for (;*start;) {
@@ -1177,26 +1231,23 @@ String *String::format(const array &args) {
                 res->append(start, (int)(size_t)(f - start));
                 char *s = &f[1];
                 char *number_start = s;
-                for (; *s && *s != '}'; s++)
-                    assert(isdigit(*s));
+                for (; *s && *s != '}'; s++) {}
+                    //assert(isdigit(*s));
                 assert(*s == '}');
+                
                 int   number_len = (int)(size_t)(s - number_start);
                 char *number     = new char[number_len + 1];
                 memcpy(number, number_start, number_len);
                 number[number_len] = 0;
-                int n = atoi(number);
-                assert(n >= 0 && n < args->len());
+                String *interp = fn((const char *)number);
                 delete[] number;
-                M &arg = args[n];
-                M str  = arg.to_string();
-                if (str.a_str) {
-                    char *a_start = str.a_str->chars;
-                    char *a_end   = str.a_str->chars + str.a_str->length;
-                    res->append(a_start, (int)(size_t)(a_end - a_start));
-                } else {
-                    res->append("null", 4);
-                }
+    
+                char *a_start = interp->chars;
+                char *a_end   = interp->chars + interp->length;
+                res->append(a_start, (int)(size_t)(a_end - a_start));
+
                 start = f + 1 + number_len + 1;
+                interp->drop();
             } else {
                 res->append(start, (int)(size_t)(f - start) + 1);
                 start += 2;
@@ -1206,8 +1257,17 @@ String *String::format(const array &args) {
             break;
         }
     }
-    args->drop();
     return res;
+}
+
+String *String::format(const array &args) {
+    return interpolate([&](const char* input) -> String* {
+        int n = atoi(input);
+        assert(n >= 0 && n < args->len());
+        M &arg = args[n];
+        M s    = arg.to_string();
+        return s.a_str ? (String*)s.a_str->hold() : new String("null");
+    });
 }
 
 String *Field::to_string() {
@@ -1221,11 +1281,12 @@ Item* Hashmap::find_item(const M &key, List **h_list, u64 *phash) {
     if (phash) *phash = hash;
     List &hist = list_for_key(k);
     if (h_list) *h_list = (List*)&hist;
-    for (Field &f: hist) {
+    for (Item* i = hist.first; i; i = i->next) {
+        Field &f = i->element;
         if (f.key.hash() != hash)
             continue;
         if (f.key == key)
-            return f.value;
+            return i;
     }
     return null;
 }
@@ -1294,14 +1355,42 @@ Hashmap::Hashmap(int sz) : A() {
     this->sz = sz;
 }
 
+u64 A::hash() {
+    console.fault("implement hash() for type {0}", { str(type->name) });
+    return 0;
+}
+int A::compare(const M &ref) const {
+    console.fault("implement compare() for type {0}", { str(type->name) });
+    return -1;
+}
 
-M M::get(const M& o, const M& prop) {
+String *A::to_string() {
+    console.fault("implement to_string() for type {0}", { str(type->name) });
+    return null;
+}
+
+/// type is not set on these primitive structs; we dont construct them ourselves, and the macro generally does this
+/// the exception is here, in the M generics. for all uses of A-type, we set their type
+M::M(const u64    &i) : v_u64(new Value<u64>(i))    { a->type = typeof(Value<u64>); }
+M::M(const i64    &i) : v_i64(new Value<i64>(i))    { a->type = typeof(Value<i64>); }
+M::M(const u32    &i) : v_u32(new Value<u32>(i))    { a->type = typeof(Value<u32>); }
+M::M(const i32    &i) : v_i32(new Value<i32>(i))    { a->type = typeof(Value<i32>); }
+M::M(const u16    &i) : v_u16(new Value<u16>(i))    { a->type = typeof(Value<u16>); }
+M::M(const i16    &i) : v_i16(new Value<i16>(i))    { a->type = typeof(Value<i16>); }
+M::M(const u8     &i) : v_u8 (new Value<u8 >(i))    { a->type = typeof(Value<u8>); }
+M::M(const i8     &i) : v_i8 (new Value<i8 >(i))    { a->type = typeof(Value<i8>); }
+M::M(const r64    &i) : v_r64(new Value<r64>(i))    { a->type = typeof(Value<r64>); }
+M::M(const r32    &i) : v_r32(new Value<r32>(i))    { a->type = typeof(Value<r32>); }
+M::M(const char   &i) : v_u8 (new Value<u8>((u8)i)) { a->type = typeof(Value<u8>); }
+M::M(ion::symbol sym) : a_str(new String(sym)) { a->type = typeof(String);    }
+
+M M::get(const M& o, const M& key) {
     id   *type = o.a->type == typeof(Pointer) ? o.v_pointer->type     : o.a->type;
     u8   *ptr  = o.a->type == typeof(Pointer) ? (u8*)o.v_pointer->ptr : (u8*)o.a;
     assert(type->meta);
     hashmap &meta = *type->meta;
     assert(meta->len() > 0);
-    Field *f = meta->fetch(prop);
+    Field *f = meta->fetch(key);
     assert(f);
     prop &pr = f->value; /// performs a type-check
     u8 *member_ptr = &ptr[pr.offset];
@@ -1312,8 +1401,8 @@ M M::get(const M& o, const M& prop) {
     return cp;
 }
 
-void M::set(const M& o, const M& prop, const M& value) {
-    M ref = M::get(o, prop);
+void M::set(const M& o, const M& key, const M& value) {
+    M ref = M::get(o, key);
     assert(ref.a->type == typeof(Pointer));
     /// check if value is a Value<T>
     /// that is for user types, primitives, misc structs (non-A)
@@ -1336,103 +1425,91 @@ void id::init() {
 }
 
 
+bool id::initialized;
+
 id::id(bool init) {
     static bool once;
     if (!once) {
         once = true;
+        id::initialized = false;
+        id::types  = new hashmap(64);
         id::char_t = typeof(String);
         id::i64_t  = typeof(i64);
         id::u64_t  = typeof(u64);
-        id::types  = new Hashmap(64);
         push_type(id::char_t); /// when Hashmap/doubly are invoked, their specialized for_type2 methods should return their info
         push_type(id::i64_t);
         push_type(id::u64_t);
+        id::initialized = true;
     }
 }
 
+Size::Size(num            sz) : Buffer(typeof(Size)) { memset(values, 0, sizeof(values)); values[0] = sz; count = 1; }
+Size::Size(null_t           ) : Size(num(0))  { }
+Size::Size(size_t         sz) : Size(num(sz)) { }
+Size::Size(i8             sz) : Size(num(sz)) { }
+Size::Size(u8             sz) : Size(num(sz)) { }
+Size::Size(i16            sz) : Size(num(sz)) { }
+Size::Size(u16            sz) : Size(num(sz)) { }
+Size::Size(i32            sz) : Size(num(sz)) { }
+Size::Size(u32            sz) : Size(num(sz)) { }
 
-size::size(num            sz) : buffer(typeof(size)) { memset(values, 0, sizeof(values)); values[0] = sz; count = 1; }
-size::size(null_t           ) : size(num(0))  { }
-size::size(size_t         sz) : size(num(sz)) { }
-size::size(i8             sz) : size(num(sz)) { }
-size::size(u8             sz) : size(num(sz)) { }
-size::size(i16            sz) : size(num(sz)) { }
-size::size(u16            sz) : size(num(sz)) { }
-size::size(i32            sz) : size(num(sz)) { }
-size::size(u32            sz) : size(num(sz)) { }
-
-size::size(std::initializer_list<num> args) : buffer(typeof(size)) {
+Size::Size(std::initializer_list<num> args) : Buffer(typeof(Size)) {
     size_t i = 0;
     for (auto &v: args)
         values[i++] = v;
     count = args.size();
 }
 
-size_t size::   x() const { return values[0];    }
-size_t size::   y() const { return values[1];    }
-size_t size::   z() const { return values[2];    }
-size_t size::   w() const { return values[3];    }
-num    size::area() const {
+size_t Size::   x() const { return values[0];    }
+size_t Size::   y() const { return values[1];    }
+size_t Size::   z() const { return values[2];    }
+size_t Size::   w() const { return values[3];    }
+num    Size::area() const {
     num v = (count < 1) ? 0 : 1;
     for (size_t i = 0; i < count; i++)
         v *= values[i];
     return v;
 }
-size_t size::dims() const { return count; }
+size_t Size::dims() const { return count; }
 
-void size::assert_index(const size &b) const {
+void Size::assert_index(const Size &b) const {
     assert(count == b.count);
     for (size_t i = 0; i < count; i++)
         assert(b.values[i] >= 0 && values[i] > b.values[i]);
 }
 
-bool size::operator==(size_t b) const { return  area() ==  b; }
-bool size::operator!=(size_t b) const { return  area() !=  b; }
-bool size::operator==(size &sb) const { return count == sb.count && memcmp(values, sb.values, count * sizeof(num)) == 0; }
-bool size::operator!=(size &sb) const { return !operator==(sb); }
+bool Size::operator==(size_t b) const { return  area() ==  b; }
+bool Size::operator!=(size_t b) const { return  area() !=  b; }
+bool Size::operator==(const Size &sb) const { return count == sb.count && memcmp(values, sb.values, count * sizeof(num)) == 0; }
+bool Size::operator!=(const Size &sb) const { return !operator==(sb); }
 
-void   size::operator++(int)          { values[count - 1] ++; }
-void   size::operator--(int)          { values[count - 1] --; }
-size  &size::operator+=(size_t sz)    { values[count - 1] += sz; return *this; }
-size  &size::operator-=(size_t sz)    { values[count - 1] -= sz; return *this; }
+void   Size::operator++(int)          { values[count - 1] ++; }
+void   Size::operator--(int)          { values[count - 1] --; }
+Size  &Size::operator+=(size_t sz)    { values[count - 1] += sz; return *this; }
+Size  &Size::operator-=(size_t sz)    { values[count - 1] -= sz; return *this; }
 
-num &size::operator[](size_t index) const {
+num &Size::operator[](size_t index) const {
     return (num&)values[index];
 }
 
-size &size::zero() { memset(values, 0, sizeof(values)); return *this; }
+Size &Size::zero() { memset(values, 0, sizeof(values)); return *this; }
 
-size::operator num() const { return     area();  }
-size::operator  i8() const { return  i8(area()); }
-size::operator  u8() const { return  u8(area()); }
-size::operator i16() const { return i16(area()); }
-size::operator u16() const { return u16(area()); }
-size::operator i32() const { return i32(area()); }
-size::operator u32() const { return u32(area()); }
+Size::operator num() const { return     area();  }
+Size::operator  i8() const { return  i8(area()); }
+Size::operator  u8() const { return  u8(area()); }
+Size::operator i16() const { return i16(area()); }
+Size::operator u16() const { return u16(area()); }
+Size::operator i32() const { return i32(area()); }
+Size::operator u32() const { return u32(area()); }
 //explicit size::operator i64() const { return i64(area()); }
-size::operator u64() const { return u64(area()); }
-size::operator r32() const { return r32(area()); }
-size::operator r64() const { return r64(area()); }
+Size::operator u64() const { return u64(area()); }
+Size::operator r32() const { return r32(area()); }
+Size::operator r64() const { return r64(area()); }
 
-num  &size::operator[](num i) { return values[i]; }
+num  &Size::operator[](num i) { return values[i]; }
 
-size &size::operator=(i8   i) { *this = size(i); return *this; }
-size &size::operator=(u8   i) { *this = size(i); return *this; }
-size &size::operator=(i16  i) { *this = size(i); return *this; }
-size &size::operator=(u16  i) { *this = size(i); return *this; }
-size &size::operator=(i32  i) { *this = size(i); return *this; }
-size &size::operator=(u32  i) { *this = size(i); return *this; }
-size &size::operator=(i64  i) { *this = size(i); return *this; }
-size &size::operator=(u64  i) { *this = size(i64(i)); return *this; }
-
-size &size::operator=(const size b) {
-    memcpy(values, b.values, sizeof(values));
-    count = b.count;
-    return *this;
-}
-
-size_t size::index_value(const size &index) const {
-    size &shape = (size &)*this;
+size_t Size::index_value(const Size &index) const {
+    Size &shape = (Size &)*this;
     assert_index(index);
     num result = 0;
     for (size_t i = 0; i < count; i++) {
@@ -1444,6 +1521,8 @@ size_t size::index_value(const size &index) const {
     }
     return result;
 }
+
+A_impl(size, Size)
 
 
 

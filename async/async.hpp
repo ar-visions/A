@@ -15,7 +15,7 @@ struct exec:str {
     }
 };
 
-using FnFuture = Lambda<void(M)>;
+using FnFuture = lambda<void(M)>;
 
 /// 
 struct Completer:A {
@@ -42,6 +42,8 @@ struct Completer:A {
                 fn(arg);
         };
     }
+
+    operator bool() { return l_success->len() > 0; }
 };
 
 struct completer {
@@ -51,38 +53,42 @@ struct completer {
 /// how do you create a future?  you give it completer memory
 struct Future:A {
     completer cd;
-    Future (completer cd) : A(typeof(Future)), cd(cd) { }
+
+    Future() : A(typeof(Future)) { }
+    Future(completer cd) : A(typeof(Future)), cd(cd) { }
     
     int sync() {
         cd->mtx.lock();
         mutex mtx;
-        if (!cd.completed) {
+        if (!cd->completed) {
             mtx.lock();
             void *v_mtx = &mtx;
-            FnFuture fn = [v_mtx] (mx) { ((mutex*)v_mtx)->unlock(); };
+            FnFuture fn = [v_mtx] (M arg) { ((mutex*)v_mtx)->unlock(); };
             cd->l_success->push(fn);
             cd->l_failure->push(fn);
         }
-        cd.mtx.unlock();
+        cd->mtx.unlock();
         mtx.lock();
         return 0;
     };
 
     ///
     Future& then(const FnFuture& fn) {
-        cd.mtx.lock();
-        cd.l_success += fn;
-        cd.mtx.unlock();
+        cd->mtx.lock();
+        cd->l_success += fn;
+        cd->mtx.unlock();
         return *this;
     }
 
     ///
     Future& except(const FnFuture& fn) {
-        cd.mtx.lock();
-        cd.l_failure += fn;
-        cd.mtx.unlock();
+        cd->mtx.lock();
+        cd->l_failure += fn;
+        cd->mtx.unlock();
         return *this;
     }
+
+    operator bool() { return bool(cd); }
 };
 
 struct future {
@@ -108,16 +114,18 @@ public:
     mutex                      mtx_self; /// output the memory address of this mtx.
     lambda<void(M)>            on_done;  /// not the same prototype as FnFuture, just as a slight distinguisher we dont need to do a needless non-conversion copy
     lambda<void(M)>            on_fail;
-    size_t                     count;
+    int                        count;
     FnProcess				   fn;
     array                      results;
-    std::vector<std::thread>  *threads;       /// todo: unstd when it lifts off ground. experiment complete time to crash and blast in favor of new matrix.
+    vector<std::thread>        threads;
     int                        done      = 0; /// 
     bool                       failure   = false;
     bool                       join      = false;
     bool                       stop      = false; /// up to the user to implement this effectively.  any given service isnt going to stop without first checking
 
-    Proc(size_t count, FnProcess fn) : A(typeof(Proc)), fn(fn), count(count), results(array(count)) {
+    Proc() : A(typeof(Proc)), fn(fn), count(count) { }
+
+    Proc(int count, FnProcess fn) : A(typeof(Proc)), fn(fn), count(count), results(array(count)), threads(count) {
         if(!init) {
             init       = true;
             th_manager = std::thread(manager);
@@ -126,8 +134,10 @@ public:
 
     static void manager();
     static void  thread(Proc *data, int w);
-    void            run(Proc *data, int w);
+    void            run(int w);
     bool        joining() const { return join; }
+
+    operator bool() { return count > 0; }
 };
 
 struct proc {
@@ -138,7 +148,7 @@ struct proc {
 struct async {
     ///
     struct delegation {
-        process         proc;
+        proc            ps;
         M               results;
         mutex           mtx; /// could be copy ctr
     } d;
@@ -146,7 +156,7 @@ struct async {
     async();
     
     /// n processes
-    async(size_t, FnProcess);
+    async(int, FnProcess);
 
     /// path to execute, we dont host a bunch of environment vars. ar.
     async(exec);
@@ -167,7 +177,7 @@ struct async {
 
 /// sync just performs sync on construction
 struct sync:async {
-    sync(size_t count, FnProcess fn) : async(count, fn) {
+    sync(int count, FnProcess fn) : async(count, fn) {
         async::sync();
     }
     sync(exec p) : async(p) {

@@ -12,48 +12,58 @@
 
 namespace ion {
 ///
-struct path_op:mx {
-    struct M {
-        ion::path path;
-        size_t    path_index;
-        path::op  op;
-    };
-    mx_object(path_op, mx, M);
-    bool operator==(path::op op) const { return op == data->op; }
+struct PathOp:A {
+    ion::path path;
+    size_t    path_index;
+    Path::op  op;
+    bool operator==(const Path::op &op) const { return this->op == op; }
+    operator bool() { return path; }
+    PathOp() : A(typeof(PathOp)) { }
 };
 
-struct path_state:mx {
-    struct state {
-        path        res;
-        size_t      path_index;
-        i64         modified;
-        bool        found;
-        void reset() { found = false; }
-    };
-    mx_object(path_state, mx, state)
+struct path_op {
+    A_decl(path_op, PathOp)
 };
 
-struct watch:mx {
+struct PathState:A {
+    path        res;
+    size_t      path_index;
+    i64         modified;
+    bool        found;
+    void reset() { found = false; }
+    operator bool() { return res; }
+    PathState() : A(typeof(PathState)) { }
+};
+
+struct path_state {
+    A_decl(path_state, PathState)
+};
+
+struct Watch:A {
     using fn = lambda<void(bool, array &)>; // path_op
 
-    struct state {
-        bool             safe;
-        bool        canceling;
-        const int     polling = 1000;
-        array           paths;
-        states<path::option> options;
-        fn           watch_fn;
-        array             ops; // path_op
-        int              iter;
-        int           largest;
-        array            exts;
-        map              path_states;
-    };
+    bool             safe;
+    bool        canceling;
+    const int     polling = 1000;
+    array           paths;
+    states<Path::option> options;
+    fn           watch_fn;
+    array             ops; // path_op
+    int              iter;
+    int           largest;
+    array            exts;
+    map              path_states;
 
-    mx_object(watch, mx, state);
-
-    static watch spawn(array paths, array exts, states<path::option> options, watch::fn watch_fn);
+    static Watch* spawn(array paths, array exts, states<Path::option> options, Watch::fn watch_fn);
     
     void stop();
+
+    operator bool() { return !canceling; }
+    Watch() : A(typeof(Watch)) { }
 };
+
+struct watch {
+    A_decl(watch, Watch)
+};
+
 }

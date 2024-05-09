@@ -7,7 +7,7 @@ A_impl(future,    Future)
 A_impl(completer, Completer)
 A_impl(proc,      Proc)
 
-static void Proc::manager() {
+void Proc::manager() {
     std::unique_lock<mutex> lock(mtx_list);
     for (bool quit = false; !quit;) {
         cv_cleanup.wait(lock);
@@ -18,13 +18,14 @@ static void Proc::manager() {
             ///
             for (Proc &ps: procs) {
                 ps.mtx_self.lock();
-                if (ps.done == ps.threads->size()) {
+                int len = ps.threads->len();
+                if (ps.done == len) {
                     ps.mtx_self.unlock();
                     lock.unlock();
 
                     /// join threads
-                    for (auto &t: *(ps.threads))
-                        t.join();
+                    for (int i = 0; i < len; i++)
+                        ps.threads[i].join();
                     
                     /// manage process
                     ps.mtx_self.lock();
@@ -47,17 +48,17 @@ static void Proc::manager() {
     lock.unlock();
 }
 
-static void Proc::thread(Proc* data, int w) {
+void Proc::thread(Proc* data, int w) {
     data->run(w);
 }
 
 void Proc::run(int w) {
     /// run (fn) the work (p) on this thread (i)
-    M r = fn(data, w);
+    M r = fn(this, w);
     mtx_self.lock();
 
     failure |= !r;
-    results.set<M>(w, r);
+    results[w] = r;
     
     /// wait for completion of one (we coudl combine c check inside but not willing to stress test that atm)
     mtx_global.lock();
@@ -86,22 +87,18 @@ void Proc::run(int w) {
 async::async() { }
 
 async &async::operator=(const async &b) {
-    d.proc = b.d.proc;
+    d.ps = b.d.ps;
     return *this;
 }
 
-async::async(size_t count, FnProcess fn) : async() {
-    std::unique_lock<std::mutex> lock(process::mtx_list);
+async::async(int count, FnProcess fn) : async() {
+    std::unique_lock<std::mutex> lock(Proc::mtx_list);
     
     /// create empty results [dynamic] vector [we need to couple the count into process, or perhaps bring it into async]
-    d.proc   = proc { count, fn };
-    Proc &ps = d.proc;
-    
-    /// measure d.proc.rt address here
-    ps.threads = new std::vector<std::thread>();
-    ps.threads->reserve(count);
-    for (size_t i = 0; i < count; i++)
-        ps.threads->emplace_back(std::thread(Proc::thread, ps, int(i)));
+    d.ps     = proc { count, fn };
+    Proc &ps = d.ps;
+    for (int i = 0; i < count; i++)
+        ps.threads->emplace(std::thread(Proc::thread, &ps, i));
     
     Proc::procs->push(&ps);
 }
@@ -110,8 +107,8 @@ async::async(exec command) : async(1, [&](Proc &ps, int i) -> M {
     console.log("shell > {0}", { command });
     
     char cmd[256];
-    snprintf(cmd, 256, "%s > stdout.txt", command.cs());
-    int exit_code = int(std::system(command.cs()));
+    snprintf(cmd, 256, "%s > stdout.txt", command->cs());
+    int exit_code = int(std::system(command->cs()));
 
     if (exit_code != 0)
         std::cout << std::ifstream("stdout.txt").rdbuf();
@@ -119,48 +116,47 @@ async::async(exec command) : async(1, [&](Proc &ps, int i) -> M {
     return exit_code;
 }) { }
 
-async::async(lambda<M(Process*, int)> fn) : async(1, fn) {}
+async::async(lambda<M(Proc*, int)> fn) : async(1, fn) {}
 
 array async::sync(bool force_stop) {
     /// wait for join to complete, set results internal and return
     for (;;) {
         d.mtx.lock();
-        d.proc->stop = force_stop;
-        if (d.proc.joining()) {
+        d.ps->stop = force_stop;
+        if (d.ps->joining()) {
             d.mtx.unlock();
             break;
         }
         d.mtx.unlock();
         yield();
     }
-    return d.proc->results;
+    return d.ps->results;
 }
 
 /// await all async processes to complete
 int async::await_all() {
     for (;;) {
-        process::mtx_global.lock();
-        if (!process::procs->len()) {
-            process::mtx_global.unlock();
+        Proc::mtx_global.lock();
+        if (!Proc::procs->len()) {
+            Proc::mtx_global.unlock();
             break;
         }
-        process::mtx_global.unlock();
+        Proc::mtx_global.unlock();
         sleep(u64(1000));
     }
-    process::th_manager.join();
-    return process::exit_code;
+    Proc::th_manager.join();
+    return Proc::exit_code;
 }
 
 /// return future for this async
 async::operator future() {
     lambda<void(M)>   s, f;
     completer    c = { s, f };
-    assert( d.proc);
-    assert(!d.proc->on_done);
-    d.proc->on_done = [s, f](M v) {
+    assert(!d.ps->on_done);
+    d.ps->on_done = [s, f](M v) {
         s(v);
     };
-    d.proc->on_fail = [s, f](M v) {
+    d.ps->on_fail = [s, f](M v) {
         f(v);
     };
     return future(c);

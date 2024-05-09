@@ -2,41 +2,42 @@
 
 namespace ion {
 
-watch watch::spawn(array paths, array exts, states<path::option> options, watch::fn watch_fn) {
-    watch w;
-    watch::state &s = *w.data;
+A_impl(path_op, PathOp)
+A_impl(path_state, PathState)
+A_impl(watch, Watch)
 
-    s.paths       = paths;
-    s.watch_fn    = watch_fn;
-    s.exts        = exts;
-    s.options     = options;
-    state*     ps = w.data;
+Watch* Watch::spawn(array paths, array exts, states<Path::option> options, Watch::fn watch_fn) {
+    Watch* s = new Watch();
+    s->paths       = paths;
+    s->watch_fn    = watch_fn;
+    s->exts        = exts;
+    s->options     = options;
     ///
-    async { size_t(1), [ps, options] (runtime *p, int index) -> var { /// give w a ref and copy into lambda
-        state& s = *ps; /// was being copied!
+    async { size_t(1), [ps=s, options] (Proc *p, int index) -> var { /// give w a ref and copy into lambda
+        Watch& s = *ps;
         while (!s.canceling) {
-            s.ops = array(typeof(path_op), size_t(32 + s.largest * 2));
+            s.ops = array(32 + s.largest * 2);
             
             /// flag for deletion
-            for (field &f: s.path_states.fields()) {
-                path_state &ps = f.value.mem->ref<path_state>();
+            for (Field &f: s.path_states) {
+                path_state  ps = f.value;
                 ps->found      = false;
             }
             
             /// populate modified and created
             size_t path_index = 0;
-            for (path &res:s.paths.elements<path>()) {
-                res.resources(s.exts, options, [&](path p) {
-                    if (!p.exists())
+            for (path res:s.paths) {
+                res->resources(s.exts, options, [&](path p) {
+                    if (!p->exists())
                         return;
                     str       key = p;
-                    i64     mtime = p.modified_at();
+                    i64     mtime = p->modified_at();
                     ///
-                    if (s.path_states->count(key) == 0) {
+                    if (!s.path_states->contains(key)) {
                         path_op op;
                         op->path            = p;
                         op->path_index      = path_index;
-                        op->op              = (s.iter == 0) ? path::op::none : path::op::created;
+                        op->op              = (s.iter == 0) ? Path::op::none : Path::op::created;
                         s.ops              += op;
                         ///
                         path_state st;
@@ -47,16 +48,16 @@ watch watch::spawn(array paths, array exts, states<path::option> options, watch:
                         ///
                         s.path_states[key]  = st;
                     } else {
-                        auto &ps            = s.path_states[key].ref<path_state::state>();
-                        ps.found            = true;
-                        if (ps.modified != mtime) {
+                        path_state  ps      = s.path_states[key];
+                        ps->found           = true;
+                        if (ps->modified != mtime) {
                             path_op op;
                             op->path        = p;
                             op->path_index  = path_index;
-                            op->op          = path::op::modified;
+                            op->op          = Path::op::modified;
                             ///
                             s.ops          += op;
-                            ps.modified     = mtime;
+                            ps->modified    = mtime;
                         }
                     }
                 });
@@ -68,16 +69,16 @@ watch watch::spawn(array paths, array exts, states<path::option> options, watch:
             do {
                 cont = false;
                 /// k = path, v = path_state
-                for (auto &[k,v]: s.path_states.fields()) {
-                    path_state &ps = v.mem->ref<path_state>();
+                for (Field &f: s.path_states) {
+                    path_state ps = f.value;
                     if (!ps->found) {
                         path_op op;
                         op->path        = ps->res;
                         op->path_index  = ps->path_index;
-                        op->op          = path::op::deleted;
+                        op->op          = Path::op::deleted;
                         ///
                         s.ops += op;
-                        s.path_states->remove(k);
+                        s.path_states->remove(f.key);
                         cont = true;
                         break;
                     }
@@ -85,7 +86,7 @@ watch watch::spawn(array paths, array exts, states<path::option> options, watch:
             } while (cont);
             
             /// notify user if ops
-            size_t sz = s.ops.len();
+            size_t sz = s.ops->len();
             if (sz)
                 s.watch_fn(s.iter == 0, s.ops);
             
@@ -102,18 +103,18 @@ watch watch::spawn(array paths, array exts, states<path::option> options, watch:
         return null;
     }};
     /// wait for 1 iteration before returning
-    while (s.iter == 0) {
+    while (s->iter == 0) {
         usleep(1000);
-        if (s.safe)
+        if (s->safe)
             break;
     }
-    return w;
+    return s;
 }
 
-void watch::stop() {
-    if (!data->safe) {
-        data->canceling = true;
-        while (!data->safe) { usleep(1); }
+void Watch::stop() {
+    if (!safe) {
+        canceling = true;
+        while (!safe) { usleep(1); }
     }
 }
 }

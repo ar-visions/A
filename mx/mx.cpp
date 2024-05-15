@@ -26,14 +26,16 @@ String::String(const M& m) : String() {
     length = m.a_str->length;
 }
 
-map map::args(int argc, cstr *argv, map &def) {
+
+map map::args(int argc, cstr *argv, map &def, symbol default_prop) {
     map iargs;
-    for (int ai = 0; ai < argc; ai++) {
+    for (int ai = 1; ai < argc; ai++) {
         cstr ps = argv[ai];
+        bool is_arg = ps[0] == '-';
         ///
-        if (ps[0] == '-') {
-            bool   is_single = ps[1] != '-';
-            M key = str(&ps[is_single ? 1 : 2]);
+        if (is_arg || default_prop) {
+            bool   is_single = is_arg && ps[1] != '-';
+            M key = is_arg ? str(&ps[is_single ? 1 : 2]) : str(default_prop);
             Field* found;
             if (is_single) {
                 for (Field &df: def) {
@@ -44,10 +46,10 @@ map map::args(int argc, cstr *argv, map &def) {
                     }
                 }
             } else
-                found = def->lookup(key);
+                found = def->fetch(key);
             ///
             if (found) {
-                str     aval = str(argv[ai + 1]);
+                str     aval = str(argv[ai + is_arg ? 1 : 0]);
                 type_t  type = found->value.type();
                 /// from_string should use const str&
                 iargs[key] = M::from_string(aval, type); /// static method on mx that performs the busy work of this
@@ -61,7 +63,7 @@ map map::args(int argc, cstr *argv, map &def) {
     /// return results in order of defaults, with default value given
     map res;
     for (Field &df: def) {
-        Field *ov = iargs->lookup(df.key);
+        Field *ov = iargs->fetch(df.key);
         res[df.key] = ov ? ov->value : df.value;
     }
     return res;
@@ -1289,14 +1291,6 @@ Item* Hashmap::find_item(const M &key, List **h_list, u64 *phash) {
             return i;
     }
     return null;
-}
-
-M Hashmap::lookup(const M &key) {
-    Item *fi = find_item(key, null, null);
-    if (!fi)
-        return M();
-    Field *f = fi->element.get<Field>();
-    return f->value;
 }
 
 /// always creates a field with fetch

@@ -55,7 +55,7 @@ struct Future:A {
     completer cd;
 
     Future() : A(typeof(Future)) { }
-    Future(completer cd) : A(typeof(Future)), cd(cd) { }
+    Future(const completer& cd) : A(typeof(Future)), cd(cd) { }
     
     int sync() {
         cd->mtx.lock();

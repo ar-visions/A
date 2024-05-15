@@ -100,7 +100,7 @@ namespace ion {
     U::U(_A_* data)       : data((_A_*)data) { } \
     U::U(const U &b)      : data((_A_*)b.data->hold()) { } \
     U::U(U &b)            : U((const U&)b) { } \
-    U::U()                : data(new _A_())  { data->type = typeof(_A_); } \
+    U::U()                : data(new _A_()) { } \
     bool U::operator==(const M& b) const { return data->compare(b) == 0; } \
     bool U::operator!=(const M& b) const { return data->compare(b) != 0; } \
     bool U::operator> (const M& b) const { return data->compare(b) >  0; } \
@@ -546,6 +546,7 @@ struct A { /// runtime of silver-lang
     virtual int compare(const struct M &ref) const;
     virtual struct String *to_string();
     virtual ~A() { }
+    operator bool() { return type; }
 };
 
 /// intentionally different from String
@@ -971,10 +972,8 @@ struct M {
             String *value = new String(cs);
             void *alloc = type->f.ctr_str(null, value);
             if (mx_based) {
-                value->drop();
                 return M((A*)alloc);
             }
-            value->drop();
             return M::pointer(type, alloc, true);
         }
     }
@@ -1607,7 +1606,7 @@ struct Hashmap:A {
     template <typename V>
     V &get(const M &k);
 
-    M      lookup(const M &k);
+    //M      lookup(const M &k);
     bool contains(const M& key);
     bool   remove(const M &key);
 
@@ -1643,7 +1642,7 @@ struct hashmap {
     //M &operator[](i64 key) { return (*data)[key]; }
     //M &operator[](i32 key) { return (*data)[key]; }
 
-    static hashmap args(int argc, cstr *argv, hashmap &def);
+    static hashmap args(int argc, cstr *argv, hashmap &def, symbol default_prop);
 
     Iterator<M> begin() const {
         return data->begin();
@@ -1738,7 +1737,14 @@ struct has_ctr_cp<T, std::enable_if_t<std::is_copy_constructible<T>::value>> : s
 template<typename T, typename = void>
 struct has_ctr_str : std::false_type {};
 template<typename T>
-struct has_ctr_str<T, std::enable_if_t<std::is_constructible<T, const str&>::value>> : std::true_type {};
+struct has_ctr_str<T, std::enable_if_t<std::is_constructible<T, String*>::value>> : std::true_type {};
+
+// Helper template to detect if a type has 'converts_to_string' member type
+template<typename T, typename = void>
+struct has_ctr_str2 : std::false_type {};
+
+template<typename T>
+struct has_ctr_str2<T, std::void_t<typename T::serialize>> : std::true_type {};
 
 /// converts T&, T* [const], to T
 template <typename T, bool isMemberFunctionPointer = std::is_member_function_pointer<T>::value>
@@ -1893,43 +1899,44 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
         else {
             static_assert("implement more args");
         }
-    } else if constexpr (!is_lambda<T>() && !inherits<A, T>()) {
+    } else if constexpr (!is_lambda<T>()) {
         using K = intern_of<T>;
-
+        
         if constexpr (std::is_default_constructible<T>::value)
             type->f.ctr      = [](void *a) -> void* { if (a) new (a) T(); else a = (void*)new T(); return a; };
         
-        if constexpr (has_ctr_str<K>::value)
-            type->f.ctr_str  = [](void* a, String *v) -> void* { str sv((A*)v); if (a) new (a) T(sv); else a = (void*)new T(sv); return a; };
+        if constexpr (inherits<A, T>() && has_ctr_str2<T>::value)
+            type->f.ctr_str  = [](void* a, String *v) -> void* { if (a) new (a) T(v); else a = (void*)new T(v); return a; };
         
         if constexpr (!std::is_trivially_destructible<T>::value)
             type->f.dtr      = [](void* a) -> void { ((T*)a) -> ~T(); };
         
-        type->f.del = [](void* a) -> void { if (a) delete (T*)a; };
+        if constexpr (inherits<A, T>())
+            type->f.del = [](void* a) -> void { if (a) delete (T*)a; };
 
-        if constexpr (std::is_class<T>::value && has_constructor<T, A*>::value)
+        if constexpr (has_intern<T>())
             type->f.ctr_mem  = [](void *a, A* mem) -> void* { if (a) new (a) T(mem); else a = (void*)new T(mem); return a; };
         
-        if constexpr (std::is_copy_constructible<T>::value)
+        if constexpr (!inherits<A, T>() && std::is_copy_constructible<T>::value)
             type->f.ctr_cp   = [](void* a, void* b) -> void* { if (a) new (a) T(*(const T*)b); else a = (void*)new T(*(const T*)b); return a; };
 
-        if constexpr (has_bool<T>)
+        if constexpr (inherits<A, T>() && has_bool<T>)
             type->f.boolean  = [](void* a) -> bool { return bool(*(T*)a); };
 
-        if constexpr (has_to_string<T>())
+        if constexpr (inherits<A, T>() && has_to_string<T>())
             type->f.to_str   = [](void* a) -> String* { return ((T*)a)->to_string(); };
 
-        if constexpr (has_hash<T>())
+        if constexpr (inherits<A, T>() && has_hash<T>())
             type->f.hash     = [](void* a) -> u64 { return ((T*)a)->hash(); };
 
-        if constexpr (has_compare<T>())
+        if constexpr (inherits<A, T>() && has_compare<T>())
             type->f.compare  = [](void* a, void* b) -> int { return ((T*)a)->compare(*(T*)b); };
 
         if constexpr (is_convertible<T, M>())
             type->f.m_ref    = [](void* a) -> M* { return new M(M::pointer((T*)a, false)); };
 
         /// mix is useful on trivial types, like vec2/3/4 rgba/8/32f
-        if constexpr (has_mix<T>::value)
+        if constexpr (inherits<A, T>() && has_mix<T>::value)
             type->f.mix      = [](void* a, void *b, void *c, double f) -> void {
                 *(T*)c = ((T*)a)->mix(*(T*)b, f);
             };
@@ -2539,6 +2546,7 @@ namespace fs = std::filesystem;
 /// use char as base.
 struct Path:A {
     inline static std::error_code ec;
+    using serialize = String;
 
     using Fn = lambda<void(Path*)>;
 
@@ -2554,7 +2562,7 @@ struct Path:A {
     String* to_string() override;
 
     Path();
-    Path(str      s);
+    Path(const str &s);
     Path(symbol  cs);
 
     template <typename T> T     read(symbol subpath = null) const;

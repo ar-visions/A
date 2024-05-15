@@ -16,7 +16,7 @@ Path *Path::cwd() {
 
 Path::operator str() { return str(cs()); }
 
-Path::Path(str s) : Path() {
+Path::Path(const str& s) : Path() {
     p = fs::path((symbol)s->cs());
 }
 
@@ -92,7 +92,7 @@ str Path::mime_type() {
     static Path *data = new Path("data/mime-type.json");
     static var  vmap = data->read<var>();
     static map  js   = vmap.a->hold();
-    Field      *find = js->lookup(e);
+    Field      *find = js->fetch(e);
     return find ? find->value : js["default"];
 }
 

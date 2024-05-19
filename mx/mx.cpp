@@ -19,11 +19,12 @@ A_impl(item,    Item)
 A_impl(hashmap, Hashmap)
 
 String::String(const M& m) : String() {
-    assert(m.a->type == typeof(String));
-    alloc  = m.a_str->length + 1;
+    String *cp = ((M&)m).to_string();
+    length = cp->length;
+    alloc  = cp->length + 1;
     chars  = new char[alloc];
-    memcpy(chars, m.a_str->chars, alloc);
-    length = m.a_str->length;
+    memcpy(chars, cp->chars, alloc);
+    cp->drop();
 }
 
 

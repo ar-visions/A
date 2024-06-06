@@ -88,7 +88,7 @@ fs::path *Path::pdata() const {
 
 str Path::mime_type() {
     str ext_str = ext()->mid(1);
-    M e = symbolize(ext_str->cs());
+    object e = symbolize(ext_str->cs());
     static Path *data = new Path("data/mime-type.json");
     static var  vmap = data->read<var>();
     static map  js   = vmap.a->hold();
@@ -309,7 +309,7 @@ void Path::resources(array exts, states<option> states, Fn fn) {
                     if (recursive && pp->is_dir()) {
                         if (fetched_dir->fetch(pp))
                             return;
-                        fetched_dir[pp] = M(true);
+                        fetched_dir[pp] = true;
                         res(pp);
                     }
                     ///

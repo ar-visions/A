@@ -26,7 +26,7 @@ struct vec2##t { \
     vec2##t(cstr s); \
     operator bool() const; \
     const T &operator[](int i) const; \
-    operator M() const; \
+    operator object() const; \
     vec2##t&operator= (const vec2##t &v); \
     vec2##t operator+ (const vec2##t &b) const; \
     vec2##t operator- (const vec2##t &b) const; \
@@ -56,7 +56,7 @@ struct vec3##t { \
     vec3##t(T x, T y, T z); \
     operator bool()                 const; \
     const T &operator[](int i)      const; \
-    operator M()                    const; \
+    operator object()               const; \
     vec3##t&operator= (const vec3##t &v); \
     vec3##t operator+ (const vec3##t &b) const; \
     vec3##t operator- (const vec3##t &b) const; \
@@ -103,7 +103,7 @@ struct vec4##t { \
     vec4##t &operator /= (T v); \
     operator bool()                         const; \
     const T &operator[](int i)              const; \
-    operator M()                            const; \
+    operator object()                       const; \
     vec3##t xyz()                           const; \
     str color()                             const; \
     T dot(const vec4##t &b)                 const; \
@@ -139,7 +139,7 @@ struct mat44##t { \
     mat44##t(const mat44##t &v); \
              operator bool() const; \
     const vec4##t &operator[](int i) const; \
-             operator M() const; \
+             operator object() const; \
     mat44##t operator*(const mat44##t &b) const; \
     vec4##t  operator*(const vec4##t  &b) const; \
     vec3##t  operator*(const vec3##t  &b) const; \

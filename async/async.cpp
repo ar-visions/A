@@ -3,9 +3,9 @@
 
 namespace ion {
 
-A_impl(future,    Future)
-A_impl(completer, Completer)
-A_impl(proc,      Proc)
+UA_impl(future,    Future)
+UA_impl(completer, Completer)
+UA_impl(proc,      Proc)
 
 void Proc::manager() {
     std::unique_lock<mutex> lock(mtx_list);
@@ -54,7 +54,7 @@ void Proc::thread(Proc* data, int w) {
 
 void Proc::run(int w) {
     /// run (fn) the work (p) on this thread (i)
-    M r = fn(this, w);
+    object r = fn(this, w);
     mtx_self.lock();
 
     failure |= !r;
@@ -103,7 +103,7 @@ async::async(int count, FnProcess fn) : async() {
     Proc::procs->push(&ps);
 }
 
-async::async(exec command) : async(1, [&](Proc &ps, int i) -> M {
+async::async(exec command) : async(1, [&](Proc &ps, int i) -> object {
     console.log("shell > {0}", { command });
     
     char cmd[256];
@@ -116,7 +116,7 @@ async::async(exec command) : async(1, [&](Proc &ps, int i) -> M {
     return exit_code;
 }) { }
 
-async::async(lambda<M(Proc*, int)> fn) : async(1, fn) {}
+async::async(lambda<object(Proc*, int)> fn) : async(1, fn) {}
 
 array async::sync(bool force_stop) {
     /// wait for join to complete, set results internal and return
@@ -150,14 +150,14 @@ int async::await_all() {
 
 /// return future for this async
 async::operator future() {
-    lambda<void(M)>   s, f;
+    lambda<void(object)>   s, f;
     completer    c = { s, f };
     assert(!d.ps->on_done);
-    d.ps->on_done = [s, f](M v) {
-        s(v);
+    d.ps->on_done = [s, f](object o) {
+        s(o);
     };
-    d.ps->on_fail = [s, f](M v) {
-        f(v);
+    d.ps->on_fail = [s, f](object o) {
+        f(o);
     };
     return future(c);
 }

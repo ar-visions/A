@@ -10,21 +10,27 @@
 
 namespace ion {
 
-A_impl(utf16,   UTF16)
-A_impl(str,     String)
-A_impl(path,    Path)
-A_impl(field,   Field)
-A_impl(list,    List)
-A_impl(item,    Item)
-A_impl(hashmap, Hashmap)
+UA_impl(utf16,   UTF16)
+UA_impl(str,     String)
+UA_impl(path,    Path)
+UA_impl(field,   Field)
+UA_impl(list,    List)
+UA_impl(item,    Item)
+UA_impl(hashmap, Hashmap)
 
-String::String(const M& m) : String() {
-    String *cp = ((M&)m).to_string();
-    length = cp->length;
-    alloc  = cp->length + 1;
+String::String(const A* _b) : String() {
+    String* b = (String*)_b;
+    bool rel = false;
+    if (b->type != typeof(str)) {
+        b = b->to_string();
+        rel = true;
+    }
+    length = b->length;
+    alloc  = b->length + 1;
     chars  = new char[alloc];
-    memcpy(chars, cp->chars, alloc);
-    cp->drop();
+    memcpy(chars, b->chars, alloc);
+    
+    if (rel) b->drop();
 }
 
 
@@ -35,13 +41,13 @@ map map::args(int argc, cstr *argv, map &def, symbol default_prop) {
         bool is_arg = ps[0] == '-';
         ///
         if (is_arg || default_prop) {
-            bool   is_single = is_arg && ps[1] != '-';
-            M key = is_arg ? str(&ps[is_single ? 1 : 2]) : str(default_prop);
+            bool is_single = is_arg && ps[1] != '-';
+            str key = is_arg ? str(&ps[is_single ? 1 : 2]) : str(default_prop);
             Field* found;
             if (is_single) {
                 for (Field &df: def) {
-                    symbol s = df.key.symbol();
-                    if (ps[1] == s[0]) {
+                    str key = df.key;
+                    if (ps[1] == key[0]) {
                         found = &df;
                         break;
                     }
@@ -53,9 +59,9 @@ map map::args(int argc, cstr *argv, map &def, symbol default_prop) {
                 str     aval = str(argv[ai + is_arg ? 1 : 0]);
                 type_t  type = found->value.type();
                 /// from_string should use const str&
-                iargs[key] = M::from_string(aval, type); /// static method on mx that performs the busy work of this
+                iargs[key] = object::from_string(aval, type); /// static method on mx that performs the busy work of this
             } else {
-                printf("arg not found: %s\n", key.symbol()); // shouldnt do this dangerous thing with strings
+                printf("arg not found: %s\n", key->cs()); // shouldnt do this dangerous thing with strings
                 return {};
             }
         }
@@ -75,22 +81,22 @@ int length(std::ifstream& in);
 Iterator<char> String::begin() { return { chars, 0 }; }
 Iterator<char> String::end()   { return { chars, length }; }
 
-void var::push(const M& v) { v_array->push(v); }
-M   &var::last()           { return v_array->last(); }
+void var::push(const object& v) { v_array->push(v); }
+object   &var::last()           { return v_array->last(); }
 
-M var::parse_obj(cstr *start, type_t type) {
+object var::parse_obj(cstr *start, type_t type) {
     if (type && type->intern) type = type->intern;
     /// supports primitive, meta-bound structs and mx objects with data type
     bool is_map = !type || (type->traits & traits::map);
-    M    mx_result;
+    object    mx_result;
     map  map_result;
 
     if (!is_map) {
         void *alloc = type->f.ctr(null);
         if (type->traits & traits::mx_obj) {
-            mx_result = M((A*)alloc);
+            mx_result = object((A*)alloc);
         } else
-            mx_result = M::pointer(type, alloc, true);
+            mx_result = object::pointer(type, alloc, true);
     }
 
     cstr cur = *start;
@@ -102,8 +108,8 @@ M var::parse_obj(cstr *start, type_t type) {
     /// read this object level, parse_values work recursively with 'cur' updated
     while (*cur != '}') {
         /// parse next field name
-        M parsed = parse_quoted(&cur, null);
-        M field = parsed.a_str;
+        object parsed = parse_quoted(&cur, null);
+        object field = parsed.a_str;
 
         /// assert field length, skip over the ':'
         ws(&cur);
@@ -125,11 +131,11 @@ M var::parse_obj(cstr *start, type_t type) {
 
         /// parse value at newly listed mx value in field, upon requesting it
         *start   = cur;
-        M value = parse_value(start, chosen_t, field);
+        object value = parse_value(start, chosen_t, field);
         if (is_map)
             map_result[field] = value;
         else
-            M::set(mx_result, field, value); /// this is designed to give a direct object, make sure it works here
+            object::set(mx_result, field, value); /// this is designed to give a direct object, make sure it works here
         
         cur = *start;
         /// skip ws, continue past ',' if there is another
@@ -148,7 +154,7 @@ M var::parse_obj(cstr *start, type_t type) {
 }
 
 /// no longer will store compacted data
-M var::parse_arr(cstr *start, type_t type) { /// array must be a Array<T> type
+object var::parse_arr(cstr *start, type_t type) { /// array must be a Array<T> type
     if (type && type->intern) type = type->intern;
     type_t   e_type = type;
     array *container = null;
@@ -168,7 +174,7 @@ M var::parse_arr(cstr *start, type_t type) { /// array must be a Array<T> type
     else {
         for (;;) {
             *start = cur;
-            M  pv = parse_value(start, e_type, M());
+            object  pv = parse_value(start, e_type, object());
             if (container)
                 (*container)->push(pv);
             else
@@ -188,7 +194,7 @@ M var::parse_arr(cstr *start, type_t type) { /// array must be a Array<T> type
     }
     *start = cur;
     if (container) {
-        M res = (*container)->hold();
+        object res = (*container)->hold();
         type->f.dtr(container);
         /// free container
         return res;
@@ -203,7 +209,7 @@ void var::skip_alpha(cstr *start) {
     *start = cur;
 }
 
-M var::parse_value(cstr *start, type_t type, const M& field) {
+object var::parse_value(cstr *start, type_t type, const object& field) {
     if (type && type->intern) type = type->intern;
     char first_chr = **start;
     bool numeric   =   first_chr == '-' || isdigit(first_chr);
@@ -232,8 +238,8 @@ M var::parse_value(cstr *start, type_t type, const M& field) {
             *start += 1 + blen;
         
         if (!is_b64 && type == typeof(vector<u8>)) { // we already switch baed on type, we must use this still; no reducing back to array
-            M file = parse_quoted(start, null);
-            FILE *f = fopen(file.symbol(), "rb");
+            object file = parse_quoted(start, null);
+            FILE *f = fopen(file, "rb");
             fseek(f, 0, SEEK_END);
             ulong sz = ftell(f);
             u8   *b  = (u8*)malloc(sz);
@@ -276,7 +282,7 @@ M var::parse_value(cstr *start, type_t type, const M& field) {
             if (type == typeof(u32))    { u32 vu32 = (u32)v;  return vu32; }
             if (type == typeof(i64))    { i64 vi64 = (i64)v;  return vi64; }
             if (type == typeof(u64))    { u64 vu64 = (u64)v;  return vu64; }
-            if (type == typeof(size_t)) { size_t sz64 = (size_t)v; return M((i64)sz64); }
+            if (type == typeof(size_t)) { size_t sz64 = (size_t)v; return object((i64)sz64); }
             assert(false);
         }
         return v;
@@ -284,7 +290,7 @@ M var::parse_value(cstr *start, type_t type, const M& field) {
 
     /// symbol can be undefined or null.  stored as instance of null_t
     skip_alpha(start);
-    return M(null);
+    return object(null);
 }
 
 str var::parse_numeric(cstr * cursor, bool &floaty) {
@@ -315,7 +321,7 @@ str var::parse_numeric(cstr * cursor, bool &floaty) {
 }
 
 /// \\ = \ ... \x = \x
-M var::parse_quoted(cstr *cursor, type_t type) {
+object var::parse_quoted(cstr *cursor, type_t type) {
     ion::symbol first = *cursor;
     str    result(256);
     if (type && type->intern) type = type->intern;
@@ -360,7 +366,7 @@ M var::parse_quoted(cstr *cursor, type_t type) {
             vector<u8> buffer = base64::decode(cs_result, result->len());
             return buffer;
         } else
-            return M::from_string(result->cs(), type);
+            return object::from_string(result->cs(), type);
     }
     return result;
 }
@@ -382,16 +388,16 @@ var::operator std::string() {
     return res;
 }
 
-M var::get(str key) {
+object var::get(str key) {
     if (a->type != typeof(Hashmap))
         return null;
     Field *f = v_map->fetch(key);
-    return f ? f->value : M();
+    return f ? f->value : object();
 }
 
 /// called from path::read<var>()
-M var::parse(cstr js, type_t type) {
-    return parse_value(&js, type, M());
+object var::parse(cstr js, type_t type) {
+    return parse_value(&js, type, object());
 }
 
 str var::stringify() const {
@@ -441,11 +447,11 @@ str var::stringify() const {
     };
 
     /// main recursion function
-    lambda<str(const M&)> fn;
-    fn = [&](const M &i) -> str {
+    lambda<str(const object&)> fn;
+    fn = [&](const object &i) -> str {
 
         /// used to output specific mx value -- can be any, may call upper recursion
-        auto format_v = [&](const M &e) {
+        auto format_v = [&](const object &e) {
             type_t  t = e.data_type();
 
             /// check if this is an object with meta data; then we can describe with the above
@@ -457,10 +463,10 @@ str var::stringify() const {
             if (!e.a || t == typeof(null_t))
                 res += "null";
             else {
-                if (t == typeof(M) || t == typeof(map))
+                if (t == typeof(object) || t == typeof(map))
                     res += fn(e);
                 else {
-                    M smem = ((M&)e).to_string();
+                    object smem = ((object&)e).to_string();
                     type_t mt = smem.type();
                     if (mt == typeof(null_t))
                         res += "null";
@@ -488,7 +494,7 @@ str var::stringify() const {
                 ar += "{";
                 size_t n_fields = 0;
                 for (prop &p: *meta) {
-                    M value = M::get(i, p.key);//ion::hold(skey));
+                    object value = object::get(i, p.key);//ion::hold(skey));
                     str key_str = p.key->to_string();
                     if (n_fields)
                         ar += ",";
@@ -522,7 +528,7 @@ str var::stringify() const {
             array arr(i);
             ar += "[";
             for (size_t ii = 0; ii < arr->len(); ii++) {
-                M &e = arr[ii];
+                object &e = arr[ii];
                 if (ii)
                     ar += ",";
                 ar += format_v(e);
@@ -538,11 +544,11 @@ str var::stringify() const {
 }
 
 /// default constructor constructs map
-var::var() : M(new Map()) { } /// var poses as different classes.
-var::var(const M& b) : M(b) { }
-var::var(map m) : M(m) { }
+var::var() : object(new Map()) { } /// var poses as different classes.
+var::var(const object& b) : object(b) { }
+var::var(map m) : object(m) { }
 
-M var::json(M i, type_t type) {
+object var::json(object i, type_t type) {
     if (type && type->intern) type = type->intern;
     type_t ty = i.type();
     cstr   cs = null;
@@ -1114,8 +1120,8 @@ void describe_type(id *type, cstr name, sz_t sz, u64 traits) {
 }
 
 void push_type(id *type) {
-    M key(type->name);
-    M value(M::pointer(type));
+    object key(type->name);
+    object value(object::pointer(type));
     id::types->set(key, value);
 }
 
@@ -1134,19 +1140,19 @@ id *primitive_type(symbol name, sz_t sz) {
     return type;
 }
 
-M symbolize(cstr cs, id* type, i32 id) {
+Symbol *symbolize(cstr cs, id* type, i32 id) {
     if (!type->symbols)
         type->symbols = new symbols;
-
-    M name(cs);
+    object name(cs);
+    Symbol *n = new Symbol(name, id);
     type->symbols->by_name[name] = id;
-    type->symbols->by_value[M(id)]  = name;
-    type->symbols->list += new Symbol(name.symbol(), id);
+    type->symbols->by_value[object(id)] = name;
+    type->symbols->list += n;
     return name;
 }
 
 prop::prop(const prop &ref) {
-    key         = ref.key ? new M(*ref.key) : null;
+    key         = ref.key ? ref.key : null;
     member_addr = ref.member_addr;
     offset      = ref.offset;
     type        = ref.type;
@@ -1156,29 +1162,33 @@ prop::prop(const prop &ref) {
 }
 
 String* prop::to_string() {
-    return (String*)(key ? key->a_str->hold() : null);
+    return (String*)(key ? key->name : null);
 }
 
-int Pointer::compare(const M& b) const {
+// int compare(const object& b) override; // we can compare apples and oranges with the same method
+int Pointer::compare(const object& ob) {
+    Pointer &b = ob;
+    size_t a_pointer = (size_t)b.ptr;
+    size_t b_pointer = (size_t)ptr;
+
     if (type->f.compare)
-        return type->f.compare(ptr, b.v_pointer->ptr);
-    return (size_t)ptr - (size_t)b.v_pointer->ptr;
+        return type->f.compare((void*)a_pointer, (void*)b_pointer); // you shouldnt have to cast this either
+    return a_pointer - b_pointer;
 }
 
 prop::prop() : key(null), member_addr(0), offset(0), type(null), is_method(false) { }
 
 
-void *prop::member_pointer(void *M) { return (void *)handle_t(&cstr(M)[offset]); }
+void *prop::member_pointer(void *MEMBER_ADDR) { return (void *)handle_t(&cstr(MEMBER_ADDR)[offset]); }
 
-symbol prop::name() const { return key->symbol(); }
+symbol prop::name() const { return (symbol)key->name; }
 
-int String::compare(const M &arg) const {
-    String *b = arg.get<String>();
-    return strcmp(chars, b->chars);
+int String::compare(const object& arg) {
+    return strcmp(chars, ((String*)arg)->chars);
 }
 
-Vector<M>* String::split() const { /// common split, if "abc, and 123", result is "abc", "and", "123"}
-    Vector<M> *res = new Vector<M>(length + 1);
+Vector<object>* String::split() const { /// common split, if "abc, and 123", result is "abc", "and", "123"}
+    Vector<object> *res = new Vector<object>(length + 1);
     str   chars(length + 1);
     ///
     cstr pc = chars;
@@ -1201,8 +1211,8 @@ Vector<M>* String::split() const { /// common split, if "abc, and 123", result i
     return res;
 }
 
-Vector<M> *String::split(const String &v) const {
-    Vector<M> *res = new Vector<M>(length + 1);
+Vector<object> *String::split(const String &v) const {
+    Vector<object> *res = new Vector<object>(length + 1);
     char *start  = chars;
     char *scan   = chars;
     char *sp     = v.chars;
@@ -1267,8 +1277,8 @@ String *String::format(const array &args) {
     return interpolate([&](const char* input) -> String* {
         int n = atoi(input);
         assert(n >= 0 && n < args->len());
-        M &arg = args[n];
-        M s    = arg.to_string();
+        object &arg = args[n];
+        object s    = arg.to_string();
         return s.a_str ? (String*)s.a_str->hold() : new String("null");
     });
 }
@@ -1278,8 +1288,8 @@ String *Field::to_string() {
 }
 
 
-Item* Hashmap::find_item(const M &key, List **h_list, u64 *phash) {
-    const u64 hash = hash_value((M&)key);
+Item* Hashmap::find_item(const object &key, List **h_list, u64 *phash) {
+    const u64 hash = hash_value((object&)key);
     const u64 k    = hash % sz;
     if (phash) *phash = hash;
     List &hist = list_for_key(k);
@@ -1295,39 +1305,42 @@ Item* Hashmap::find_item(const M &key, List **h_list, u64 *phash) {
 }
 
 /// always creates a field with fetch
-Field *Hashmap::fetch(const M &key) {
+Field *Hashmap::fetch(const object &key, bool insert) {
     List  *h_list = null;
     u64     hash = 0;
     Item  *fi   = find_item(key, &h_list, &hash);
     Field *f    = null;
-    if (!fi) {
+    if (!fi && insert) {
         f = new Field(key, null);
         Item* i = h_list->push(f); /// we iterate with a filter on hash id in doubly
         i->peer = ordered->push(f);
         count++;
-    } else {
+    } else if (fi) {
         f = fi->element.get<Field>();
+        count++;
     }
     return f;
 }
 
-M &Hashmap::value(const M &key) {
+object &Hashmap::value(const object &key) {
     Field *f = fetch(key);
+    assert(f);
     return f->value;
 }
 
-M &Hashmap::operator[](const M &key) {
-    Field *f = fetch(key);
+object &Hashmap::operator[](const object &key) {
+    Field *f = fetch(key, true);
+    assert(f);
     return f->value;
 }
 
-void Hashmap::set(const M &key, const M &value) {
-    Field *f = fetch(key);
+void Hashmap::set(const object &key, const object &value) {
+    Field *f = fetch(key, true);
     if (value.a != f->value.a)
         f->value = value;
 }
 
-bool Hashmap::remove(const M &key) {
+bool Hashmap::remove(const object &key) {
     List *h_list = null;
     Item *fi     = find_item(key, &h_list);
     if (fi && h_list) {
@@ -1339,7 +1352,7 @@ bool Hashmap::remove(const M &key) {
     return false;
 }
 
-bool Hashmap::contains(const M &key) {
+bool Hashmap::contains(const object &key) {
     return Hashmap::find_item(key, null);
 }
 
@@ -1354,9 +1367,10 @@ u64 A::hash() {
     console.fault("implement hash() for type {0}", { str(type->name) });
     return 0;
 }
-int A::compare(const M &ref) const {
-    console.fault("implement compare() for type {0}", { str(type->name) });
-    return -1;
+int A::compare(const object& ref) {
+    return ref.a == this ? 0 : -1;
+    //console.fault("implement compare() for type {0}", { str(type->name) });
+    //return -1;
 }
 
 String *A::to_string() {
@@ -1365,21 +1379,21 @@ String *A::to_string() {
 }
 
 /// type is not set on these primitive structs; we dont construct them ourselves, and the macro generally does this
-/// the exception is here, in the M generics. for all uses of A-type, we set their type
-M::M(const u64    &i) : v_u64(new Value<u64>(i))    { a->type = typeof(Value<u64>); }
-M::M(const i64    &i) : v_i64(new Value<i64>(i))    { a->type = typeof(Value<i64>); }
-M::M(const u32    &i) : v_u32(new Value<u32>(i))    { a->type = typeof(Value<u32>); }
-M::M(const i32    &i) : v_i32(new Value<i32>(i))    { a->type = typeof(Value<i32>); }
-M::M(const u16    &i) : v_u16(new Value<u16>(i))    { a->type = typeof(Value<u16>); }
-M::M(const i16    &i) : v_i16(new Value<i16>(i))    { a->type = typeof(Value<i16>); }
-M::M(const u8     &i) : v_u8 (new Value<u8 >(i))    { a->type = typeof(Value<u8>); }
-M::M(const i8     &i) : v_i8 (new Value<i8 >(i))    { a->type = typeof(Value<i8>); }
-M::M(const r64    &i) : v_r64(new Value<r64>(i))    { a->type = typeof(Value<r64>); }
-M::M(const r32    &i) : v_r32(new Value<r32>(i))    { a->type = typeof(Value<r32>); }
-M::M(const char   &i) : v_u8 (new Value<u8>((u8)i)) { a->type = typeof(Value<u8>); }
-M::M(ion::symbol sym) : a_str(new String(sym)) { a->type = typeof(String);    }
+/// the exception is here, in the object generics. for all uses of A-type, we set their type
+object::object(const u64    &i) : v_u64(new Value<u64>(i))    { a->type = typeof(Value<u64>); }
+object::object(const i64    &i) : v_i64(new Value<i64>(i))    { a->type = typeof(Value<i64>); }
+object::object(const u32    &i) : v_u32(new Value<u32>(i))    { a->type = typeof(Value<u32>); }
+object::object(const i32    &i) : v_i32(new Value<i32>(i))    { a->type = typeof(Value<i32>); }
+object::object(const u16    &i) : v_u16(new Value<u16>(i))    { a->type = typeof(Value<u16>); }
+object::object(const i16    &i) : v_i16(new Value<i16>(i))    { a->type = typeof(Value<i16>); }
+object::object(const u8     &i) : v_u8 (new Value<u8 >(i))    { a->type = typeof(Value<u8>); }
+object::object(const i8     &i) : v_i8 (new Value<i8 >(i))    { a->type = typeof(Value<i8>); }
+object::object(const r64    &i) : v_r64(new Value<r64>(i))    { a->type = typeof(Value<r64>); }
+object::object(const r32    &i) : v_r32(new Value<r32>(i))    { a->type = typeof(Value<r32>); }
+object::object(const char   &i) : v_u8 (new Value<u8>((u8)i)) { a->type = typeof(Value<u8>); }
+object::object(ion::symbol sym) : a_str(new String(sym)) { a->type = typeof(String);    }
 
-M M::get(const M& o, const M& key) {
+object object::get(const object& o, const object& key) {
     id   *type = o.a->type == typeof(Pointer) ? o.v_pointer->type     : o.a->type;
     u8   *ptr  = o.a->type == typeof(Pointer) ? (u8*)o.v_pointer->ptr : (u8*)o.a;
     assert(type->meta);
@@ -1390,14 +1404,14 @@ M M::get(const M& o, const M& key) {
     prop &pr = f->value; /// performs a type-check
     u8 *member_ptr = &ptr[pr.offset];
     assert(pr.type->f.m_ref);
-    M* ref = pr.type->f.m_ref(member_ptr);
-    M cp = *ref;
+    object* ref = pr.type->f.m_ref(member_ptr);
+    object cp = *ref;
     delete ref;
     return cp;
 }
 
-void M::set(const M& o, const M& key, const M& value) {
-    M ref = M::get(o, key);
+void object::set(const object& o, const object& key, const object& value) {
+    object ref = object::get(o, key);
     assert(ref.a->type == typeof(Pointer));
     /// check if value is a Value<T>
     /// that is for user types, primitives, misc structs (non-A)
@@ -1517,7 +1531,7 @@ size_t Size::index_value(const Size &index) const {
     return result;
 }
 
-A_impl(size, Size)
+UA_impl(size, Size)
 
 
 

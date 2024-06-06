@@ -2,9 +2,9 @@
 
 namespace ion {
 
-A_impl(path_op, PathOp)
-A_impl(path_state, PathState)
-A_impl(watch, Watch)
+UA_impl(path_op, PathOp)
+UA_impl(path_state, PathState)
+UA_impl(watch, Watch)
 
 Watch* Watch::spawn(array paths, array exts, states<Path::option> options, Watch::fn watch_fn) {
     Watch* s = new Watch();

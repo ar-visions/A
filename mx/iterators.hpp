@@ -36,7 +36,7 @@ struct Iterator {
             assert(e_type == typeof(T));
             return *(T*)src;
         } else {
-            if constexpr (identical<M, T>())
+            if constexpr (identical<object, T>())
                 return i_cur->element;
             else {
                 static id* i_type = i_cur->element.a->type;

@@ -60,13 +60,14 @@
 
 namespace ion {
 
-#define A_decl(U, _A_) \
-    struct _A_* data; \
+#define UA_decl(U, _A_) \
+    struct _A_* a; \
     using intern = _A_;\
-    U(const M& ref); \
-    U(M& ref); \
-    U(A* data); \
-    U(_A_* data); \
+    using data   = _A_;\
+    U(object& ref); \
+    U(const object& ref); \
+    U(A* a); \
+    U(_A_* a); \
     U(const U &b); \
     U(U &b); \
     U(); \
@@ -78,118 +79,120 @@ namespace ion {
     using NotCopy = std::enable_if_t<sizeof...(Args) != 1 || !FirstIsU<Args...>::value, int>; \
     \
     template <typename... Arg, NotCopy<Arg...> = 0> \
-    U(Arg&&... arg) : data(new _A_(std::forward<Arg>(arg)...)) { } \
-    bool operator==(const M& b) const; \
-    bool operator!=(const M& b) const; \
-    bool operator> (const M& b) const; \
-    bool operator< (const M& b) const; \
-    bool operator>=(const M& b) const; \
-    bool operator<=(const M& b) const; \
+    U(Arg&&... arg) : a(new _A_(std::forward<Arg>(arg)...)) { } \
+    bool operator==(const object& b) const; \
+    bool operator!=(const object& b) const; \
+    bool operator> (const object& b) const; \
+    bool operator< (const object& b) const; \
+    bool operator>=(const object& b) const; \
+    bool operator<=(const object& b) const; \
     explicit operator bool() const; \
-    operator M() const; \
-    _A_* operator->() const; \
-    operator _A_*() const; \
-    operator _A_&() const; \
-    U &operator=(const U &b); \
+         operator object()    const; \
+    _A_* operator->()    const; \
+         operator _A_*() const; \
+         operator _A_&() const; \
+    U &  operator=(const U &b); \
    ~U(); \
 
-#define A_impl(U, _A_) \
-    U::U(const M& ref)    : data((_A_*)(ref.a->hold())) { } \
-    U::U(M& ref)          : U((const M&)ref) { } \
-    U::U(A* data)         : data((_A_*)data) { } \
-    U::U(_A_* data)       : data((_A_*)data) { } \
-    U::U(const U &b)      : data((_A_*)b.data->hold()) { } \
+#define UA_impl(U, _A_) \
+    U::U(const object& ref)    : a((_A_*)(ref.a->hold())) { } \
+    U::U(object& ref)          : U((const object&)ref) { } \
+    U::U(A* a)            : a((_A_*)a) { } \
+    U::U(_A_* a)          : a((_A_*)a) { } \
+    U::U(const U &b)      : a((_A_*)b.a->hold()) { } \
     U::U(U &b)            : U((const U&)b) { } \
-    U::U()                : data(new _A_()) { } \
-    bool U::operator==(const M& b) const { return data->compare(b) == 0; } \
-    bool U::operator!=(const M& b) const { return data->compare(b) != 0; } \
-    bool U::operator> (const M& b) const { return data->compare(b) >  0; } \
-    bool U::operator< (const M& b) const { return data->compare(b) <  0; } \
-    bool U::operator>=(const M& b) const { return data->compare(b) >= 0; } \
-    bool U::operator<=(const M& b) const { return data->compare(b) <= 0; } \
-    _A_* U::operator->   () const { return data; } \
-         U::operator _A_*() const { return (_A_*)(data ? data->hold() : null); } \
-         U::operator _A_&() const { return *data; } \
+    U::U()                : a(new _A_()) { } \
+    bool U::operator==(const object& b) const { return a->compare(b) == 0; } \
+    bool U::operator!=(const object& b) const { return a->compare(b) != 0; } \
+    bool U::operator> (const object& b) const { return a->compare(b) >  0; } \
+    bool U::operator< (const object& b) const { return a->compare(b) <  0; } \
+    bool U::operator>=(const object& b) const { return a->compare(b) >= 0; } \
+    bool U::operator<=(const object& b) const { return a->compare(b) <= 0; } \
+    U::intern * U::operator->   () const { return a; } \
+         U::operator _A_*() const { return (_A_*)(a ? a->hold() : null); } \
+         U::operator _A_&() const { return *a; } \
     U   &U::operator=(const U &b) { \
-        if (data != b.data) { \
-            data->drop(); \
-            data = (_A_*)b.data->hold(); \
+        if (a != b.a) { \
+            a->drop(); \
+            a = (_A_*)b.a->hold(); \
         } \
         return *this; \
     } \
-    U::operator bool() const { return data ? bool(*data) : false; } \
-    U::operator M() const { return M(data->hold()); } \
-    U::~U() { data->drop(); } \
+    U::operator bool() const { return a ? bool(*a) : false; } \
+    U::operator object() const { return object(a->hold()); } \
+    U::~U() { a->drop(); } \
 
-#define A_struct(U, _A_) \
-    struct _A_* data; \
+
+#define UA_struct(U, _A_) \
+    struct _A_* a; \
     using intern = _A_;\
     template <typename... Arg> \
-    U(Arg&&... arg) : data(new _A_(std::forward<Arg>(arg)...)) { } \
-    U(const M& ref)    : data((_A_*)(ref.a->hold())) { } \
-    U(M& ref)          : U((const M&)ref) { } \
-    U(A* data)         : data((_A_*)data) { } \
-    U(_A_* data)       : data((_A_*)data) { } \
-    U(const U &b)      : data((_A_*)b.data->hold()) { } \
-    U(U &b)            : U((const U&)b) { } \
-    U()                : data(new _A_())  { data->type = typeof(_A_); } \
-    _A_* operator->   () const { return data; } \
-         operator _A_*() const { return (_A_*)(data ? data->hold() : null); } \
-         operator _A_&() const { return *data; } \
+    U(Arg&&... arg)      : a(new _A_(std::forward<Arg>(arg)...)) { } \
+    U(const object& ref) : a((_A_*)(ref.a->hold())) { } \
+    U(object& ref)       : U((const object&)ref) { } \
+    U(A* a)              : a((_A_*)a) { } \
+    U(_A_* a)            : a((_A_*)a) { } \
+    U(const U &b)        : a((_A_*)b.a->hold()) { } \
+    U(U &b)              : U((const U&)b) { } \
+    U()                  : a(new _A_())  { a->type = typeof(_A_); } \
+    _A_* operator->   () const { return a; } \
+         operator _A_*() const { return (_A_*)(a ? a->hold() : null); } \
+         operator _A_&() const { return *a; } \
     U   &operator=(const U &b) { \
-        if (data != b.data) { \
-            data->drop(); \
-            data = (_A_*)b.data->hold(); \
+        if (a != b.a) { \
+            a->drop(); \
+            a = (_A_*)b.a->hold(); \
         } \
         return *this; \
     } \
-    operator bool() const { return data ? bool(*data) : false; } \
-    operator M() const { return M(data->hold()); } \
-    ~U() { data->drop(); }
+    operator bool() const { return a ? bool(*a) : false; } \
+    operator object() const { return object(a->hold()); } \
+    ~U() { a->drop(); }
 
-#define A_type(_A_) { ((A*)data)->type = typeof(_A_); }
-#define A_forward(_A_, ...)  data(new _A_(__VA_ARGS__)) A_type(_A_)
+
+#define A_type(_A_) { ((A*)a)->type = typeof(_A_); }
+#define A_forward(_A_, ...)  a(new _A_(__VA_ARGS__)) A_type(_A_)
 
 
 #define enums(C,D,...) \
     struct C { \
         private: \
-        E* data; \
         void init_type() { \
-            data->type = typeof(C); \
+            a->type = typeof(C); \
         } \
         public: \
+        enumerable* a; \
         enum etype { __VA_ARGS__ }; \
         enum etype    value; \
-        using intern = E; \
+        using intern = enumerable; \
         static int         lookup_value(ion::symbol sym) { return typeof(C)->symbols->by_name [sym];   } \
-        static ion::symbol lookup_name (i32       value) { return typeof(C)->symbols->by_value[M(value)]; } \
+        static ion::symbol lookup_name (i32       value) { return typeof(C)->symbols->by_value[object(value)]; } \
         static List &symbols() { return typeof(C)->symbols->list; } \
         inline static const int count  = num_args(__VA_ARGS__); \
         inline static const str raw   = str_args(__VA_ARGS__); \
         str name() { return (char*)symbol(); } \
-        ion::symbol symbol() { return data->type->symbols->by_value[M(value)]; } \
-        C(enum etype t = etype::D):data(new E(E::initialize(t, (ion::symbol)raw, typeof(C)))), value(t) { init_type(); } \
+        ion::symbol symbol() { return a->type->symbols->by_value[object(value)]; } \
+        C(enum etype t = etype::D):a(new enumerable(enumerable::initialize(t, (ion::symbol)raw, typeof(C)))), value(t) { init_type(); } \
         C(int t)                  :C((enum etype)t) { } \
-        C(const str &sraw)        :C(E::convert(sraw, (ion::symbol)raw, typeof(C))) { } \
-        C(const M &mraw)          :C(E::convert(mraw, (ion::symbol)raw, typeof(C))) { } \
-        C(ion::symbol sym)        :C(E::convert(sym,  (ion::symbol)raw, typeof(C))) { } \
-        C(E* mem)                 :data((E*)mem->hold()) { } \
-        C(A* mem)                 :data((E*)mem->hold()) { } \
+        C(const str &sraw)        :C(enumerable::convert(sraw, (ion::symbol)raw, typeof(C))) { } \
+        C(const object &mraw)          :C(enumerable::convert(mraw, (ion::symbol)raw, typeof(C))) { } \
+        C(ion::symbol sym)        :C(enumerable::convert(sym,  (ion::symbol)raw, typeof(C))) { } \
+        C(enumerable* mem)        :a((enumerable*)mem->hold()) { } \
+        C(A* mem)                 :a((enumerable*)mem->hold()) { } \
         operator   etype() const { return value; } \
         C &operator=(const C &b) { \
-            if(data != b.data) { \
-                if (data) data->drop(); \
-                data = (E*)b.data->hold(); \
+            if(a != b.a) { \
+                if (a) a->drop(); \
+                a = (enumerable*)b.a->hold(); \
                 value = b.value; \
             } \
             return *this;\
         } \
         bool    operator== (const enum etype &v) const { return value == v; }\
         bool    operator== (ion::symbol sym) const { \
-            if (!data && !sym) \
+            if (!a && !sym) \
                 return true; \
-            i32 id = data->type->symbols->by_name[sym]; \
+            i32 id = a->type->symbols->by_name[sym]; \
             return id == (i32)value; \
         } \
         bool    operator!= (const enum etype &v) const { return value != v; } \
@@ -442,7 +445,7 @@ struct method_info {
     struct id** args;
     struct id*  r_type;
     int arg_count;
-    std::function<struct A*(void*, struct M*, int)> call; /// for methods
+    std::function<struct A*(void*, struct object*, int)> call; /// for methods
 };
 
 struct id {
@@ -476,7 +479,7 @@ struct id {
         std::function<bool(void*)>         boolean;
         std::function<u64(void*)>          hash;
         std::function<int(void*,void*)>    compare;
-        std::function<struct M*(void*)>    m_ref;
+        std::function<struct object*(void*)>    m_ref;
         std::function<struct String*(void*)> to_str;
     } f;
 
@@ -507,7 +510,7 @@ void register_type2(id *type, const std::string &sig, sz_t sz, u64 traits);
 
 /// now that we have allowed for any, make entry for meta description
 struct prop {
-    struct M *key;
+    struct Symbol *key;
     size_t  member_addr;
     size_t  offset; /// this is set by once-per-type meta fetcher
     id*     type;
@@ -535,6 +538,7 @@ struct prop {
     struct String* to_string();
 };
 
+struct object;
 struct A { /// runtime of silver-lang
     id*     type;
     u64     h;
@@ -543,7 +547,7 @@ struct A { /// runtime of silver-lang
     A   *hold() { refs++; return this; }
     void drop() { if (--refs <= 0) { delete this; } }
     virtual u64 hash();
-    virtual int compare(const struct M &ref) const;
+    virtual int compare(const object& a_object);
     virtual struct String *to_string();
     virtual ~A() { }
     operator bool() { return type; }
@@ -577,10 +581,10 @@ struct Vector; /// A-type
 template <typename T>
 struct vector; /// U-type
 
-struct M;
+struct object;
 
-using Array = Vector<M>; /// A-based class
-using array = vector<M>; /// array will facilitate what we did before
+using Array = Vector<object>; /// A-based class
+using array = vector<object>; /// array will facilitate what we did before
 
 struct UTF16;
 
@@ -622,7 +626,7 @@ struct String:A {
     String(const char *v, int v_len = -1);
     String(i64 value, u8 base, int width);
     String(const UTF16& u);
-    String(const M& m);
+    String(const A* m);
     String(std::ifstream &in);
 
     int reserve() const { return alloc; }
@@ -691,8 +695,8 @@ struct String:A {
 
     String(char *v, int v_len = -1) : String((const char *)v, v_len) { }
 
-    Vector<M> *split() const;
-    Vector<M> *split(const String &v) const;
+    Vector<object> *split() const;
+    Vector<object> *split(const String &v) const;
 
     int index_of(const String &s) const {
         char *f = strstr(chars, s.chars);
@@ -772,7 +776,7 @@ struct String:A {
         return A::h = fnv1a_hash(chars, length);
     }
 
-    int compare(const M &b) const override;
+    int compare(const object& b) override;
 };
 
 template <typename> struct is_value : false_type { };
@@ -785,7 +789,7 @@ struct Value:A {
 
     Value(const T& v) : A(typeof(Value)), value(v), value_type(typeof(T)) { }
 
-    int compare(const struct M &ref) const;
+    int compare(const object& b) const;
     
     u64 hash() {
         if (A::h) return A::h;
@@ -833,7 +837,7 @@ struct Pointer:A {
                 free(ptr);
         }
     }
-    int compare(const M& b) const override;
+    int compare(const object& b) override;
     u64 hash() {
         if (type->f.hash)
             return A::h = type->f.hash(ptr);
@@ -868,8 +872,8 @@ static void Free(A* a) {
     ((AType*)(u->a)) -> ~AType();
 }
 
-///
-struct M {
+/// object is all things
+struct object {
     union {
         Value<u64>  *v_u64;
         Value<u32>  *v_u32;
@@ -886,29 +890,29 @@ struct M {
         struct Hashmap *v_map;
         Pointer     *v_pointer;
         String      *a_str;
-        Symbol     *a_symbol;
+        Symbol      *a_symbol;
         A           *a;
     };
-    M()           : a(null) { }
-    M(null_t)     : M()     { }
-    M(const u64  &i);
-    M(const i64  &i);
-    M(const u32  &i);
-    M(const i32  &i);
-    M(const u16  &i);
-    M(const i16  &i);
-    M(const u8   &i);
-    M(const i8   &i);
-    M(const r64  &i);
-    M(const r32  &i);
-    M(const char &i); /// we use const refs here so we have no ambiguity with the const T& ctr
-    M(ion::symbol sym);
-    M(cstr   str) : M((ion::symbol)str) { }
-    M(A       *a) : a(a) { } /// this lets us pass around actual dynamically allocated A classes
-    M(String  *a) : a(a) { } /// this lets us pass around actual dynamically allocated A classes
-    M(const M& b) : a(b.a ? b.a->hold() : null) { }
+    object()           : a(null) { }
+    object(null_t)     : object()     { }
+    object(const u64  &i);
+    object(const i64  &i);
+    object(const u32  &i);
+    object(const i32  &i);
+    object(const u16  &i);
+    object(const i16  &i);
+    object(const u8   &i);
+    object(const i8   &i);
+    object(const r64  &i);
+    object(const r32  &i);
+    object(const char &i); /// we use const refs here so we have no ambiguity with the const T& ctr
+    object(ion::symbol sym);
+    object(cstr   str) : object((ion::symbol)str) { }
+    object(A       *a) : a(a) { } /// this lets us pass around actual dynamically allocated A classes
+    object(String  *a) : a(a) { } /// this lets us pass around actual dynamically allocated A classes
+    object(const object& b) : a(b.a ? b.a->hold() : null) { }
     template <typename T>
-    M(const T& any) {
+    object(const T& any) {
         using TT = std::remove_pointer<T>::type;
         if constexpr (inherits<A, TT>()) {
             /// if its an A pointer, we can merely hold it (we never put A's on stack, this reference can be stack but it should not be)
@@ -918,7 +922,7 @@ struct M {
                 a = ((TT&)any).hold();
         } else if constexpr (has_intern<TT>()) {
             /// hold onto A class within user type
-            a = any.data->hold();
+            a = any.a->hold();
         } else {
             /// this is so we can hold onto any data; it must be copied
             if constexpr (std::is_pointer<T>::value)
@@ -938,7 +942,7 @@ struct M {
     
     type_t type() const { return a ? a->type : null; }
 
-    static M from_string(cstr cs, id* type) {
+    static object from_string(cstr cs, id* type) {
         assert(type);
         
         if (type == typeof(String)) {
@@ -950,36 +954,36 @@ struct M {
                     [](unsigned char c){ return std::tolower(c); });
                 return new bool(s == "true" || s == "1" || s == "tru" || s == "yes");
             }
-            else if (type == typeof(u32))    return M(   u32(std::stoi(cs)));
-            else if (type == typeof(i32))    return M(   i32(std::stoi(cs)));
-            else if (type == typeof(u64))    return M(   u64(std::stoi(cs)));
-            else if (type == typeof(i64))    return M(   i64(std::stoi(cs)));
-            else if (type == typeof(u16))    return M(   u16(std::stoi(cs)));
-            else if (type == typeof(i16))    return M(   i16(std::stoi(cs)));
-            else if (type == typeof(u8))     return M(    u8(std::stoi(cs)));
-            else if (type == typeof(i8))     return M(    i8(std::stoi(cs)));
+            else if (type == typeof(u32))    return object( u32(std::stoi(cs)));
+            else if (type == typeof(i32))    return object( i32(std::stoi(cs)));
+            else if (type == typeof(u64))    return object( u64(std::stoi(cs)));
+            else if (type == typeof(i64))    return object( i64(std::stoi(cs)));
+            else if (type == typeof(u16))    return object( u16(std::stoi(cs)));
+            else if (type == typeof(i16))    return object( i16(std::stoi(cs)));
+            else if (type == typeof(u8))     return object(  u8(std::stoi(cs)));
+            else if (type == typeof(i8))     return object(  i8(std::stoi(cs)));
             printf("unknown numeric conversion\n");
-            return M();
+            return object();
         /// float / double
         } else if (type->traits & traits::realistic) {
-            if (type == typeof(float))       return M( float(std::stod(cs)));
-            else if (type == typeof(double)) return M(double(std::stod(cs)));
+            if (type == typeof(float))       return object( float(std::stod(cs)));
+            else if (type == typeof(double)) return object(double(std::stod(cs)));
             printf("unknown real type conversion\n");
-            return M();
+            return object();
         } else {
             bool mx_based = (type->traits & traits::mx_obj);
             sz_t len = strlen(cs);
             String *value = new String(cs);
             void *alloc = type->f.ctr_str(null, value);
             if (mx_based) {
-                return M((A*)alloc);
+                return object((A*)alloc);
             }
-            return M::pointer(type, alloc, true);
+            return object::pointer(type, alloc, true);
         }
     }
 
-    static M pointer(id* type, void *ptr, bool managed = false) {
-        M result;
+    static object pointer(id* type, void *ptr, bool managed = false) {
+        object result;
         result.v_pointer       = new Pointer(type, (void*)ptr, managed);
         result.v_pointer->type = type;
         result.a->type         = typeof(Pointer);
@@ -987,11 +991,11 @@ struct M {
     }
 
     template <typename T>
-    static M pointer(T *ptr, bool managed = false) {
+    static object pointer(T *ptr, bool managed = false) {
         return pointer(typeof(T), (void*)ptr, managed);
     }
 
-    M& operator=(const M &b) {
+    object& operator=(const object &b) {
         if (a != b.a) {
             if (a) a->drop();
             a = b.a->hold();
@@ -1001,14 +1005,14 @@ struct M {
     u64 hash() {
         return a ? a->hash() : 0;
     }
-    ~M() { if (a) a->drop(); }
+    ~object() { if (a) a->drop(); }
     id *type() { return a ? a->type : typeof(null_t); }
 
-    bool operator==(const M &ref) const {
+    bool operator==(const object &ref) const {
         return compare(ref) == 0;
     }
 
-    int compare(const M &ref) const {
+    int compare(const object &ref) const {
         if (a == ref.a) return 0;
         if (a->type != ref.a->type) return -1;
         return a->compare(ref);
@@ -1016,11 +1020,11 @@ struct M {
     
     operator bool() const { return (a && a->type->f.boolean) ? a->type->f.boolean(a) : false; }
     
-    static M    get(const M& o, const M& prop);
-    static void set(const M& o, const M& prop, const M& value);
+    static object    get(const object& o, const object& prop);
+    static void set(const object& o, const object& prop, const object& value);
 
     template <typename T>
-    static M method(T& obj, const struct str &name, const vector<M> &args);
+    static object method(T& obj, const struct str &name, const vector<object> &args);
 
     template <typename T>
     T* get() const {
@@ -1069,14 +1073,6 @@ struct M {
         }
     }
 
-    ion::symbol symbol() const {
-        if (a && a->type == typeof(String))
-            return a_str    ? ion::symbol(a_str->chars)   : ion::symbol(null);
-        else if (a && a->type == typeof(ion::symbol))
-            return a_symbol ? ion::symbol(a_symbol->name) : ion::symbol(null);
-        return null;
-    }
-
     String *to_string() {
         return a ? a->to_string() : null;
     }
@@ -1097,14 +1093,14 @@ struct Item:A {
     struct Item* prev;
     struct Item* peer; /// used with ahashmap; in keyed hashed list, the item contains a location of the list item (fifo list)
     public:
-    M element; /// mx is still the intermediate class, since it holds onto and can debug any of the data you give it
+    object element; /// mx is still the intermediate class, since it holds onto and can debug any of the data you give it
     Item() : A() {
         next = 0;
         prev = 0;
         peer = 0;
     }
-    Item(const M &e) : Item() {
-        element = (M&)e;
+    Item(const object &e) : Item() {
+        element = (object&)e;
     }
     u64 hash() {
         if (A::h) return A::h;
@@ -1116,20 +1112,20 @@ struct Item:A {
 #include <mx/iterators.hpp>
 
 template <typename MEM>
-prop::prop(ion::symbol name, const MEM &member) : key(new M(name)), member_addr((size_t)&member), type(typeof(MEM)), is_method(false) { }
+prop::prop(ion::symbol name, const MEM &member) : key(new object(name)), member_addr((size_t)&member), type(typeof(MEM)), is_method(false) { }
 
-
+// we want String(const name) to register a symbol
 template <typename MEM, typename CL>
 prop::prop(ion::symbol name, const MEM &member, const CL* inst) : 
-    key(new M(name)), member_addr((size_t)&member), type(signatureof(CL, MEM, member_addr, sizeof(member))), is_method(true) { }
+    key(String(name)), member_addr((size_t)&member), type(signatureof(CL, MEM, member_addr, sizeof(member))), is_method(true) { }
 
 template <typename T>
 T &prop::member_ref(void *m) { return *(T *)handle_t(&cstr(m)[offset]); }
 
 template <typename T>
-int Value<T>::compare(const struct M &ref) const {
-    Value &b = *(Value*)ref.a;
-    return value - b.value;
+int Value<T>::compare(const struct object& b) const {
+    Value &b_value = *(Value*)b;
+    return value - b_value.value;
 }
 
 template <typename T> struct is_vector : false_type {};
@@ -1140,8 +1136,8 @@ struct iList:A {
     public:
     iList(id *type) : A(type) { count = 0; }
     virtual void remove(int index, int amount = 1) = 0;
-    //virtual void push(const M &v) = 0; -- these abstract classes arent very useful; some of the list require M, some are T type; you cannot do that here.
-    //virtual M pop() = 0;
+    //virtual void push(const object &v) = 0; -- these abstract classes arent very useful; some of the list require object, some are T type; you cannot do that here.
+    //virtual object pop() = 0;
     virtual void clear() = 0;
 };
 
@@ -1240,8 +1236,8 @@ struct Vector:iList {
 
     T pop() {
         assert(count > 0);
-        T res = elements[count];
-        elements[--count].~T();
+        T res = elements[--count];
+        elements[count].~T();
         return res;
     }
     
@@ -1294,7 +1290,7 @@ struct Vector:iList {
 template <typename T> struct is_vector<Vector<T>> : true_type { };
 
 struct item {
-    A_decl(item, Item)
+    UA_decl(item, Item)
 };
 
 struct List:iList {
@@ -1306,7 +1302,7 @@ struct List:iList {
         count = 0;
     }
     //template <typename T>
-    List(std::initializer_list<M> args) : List() {
+    List(std::initializer_list<object> args) : List() {
         for (auto i: args)
             push(i);
     }
@@ -1344,9 +1340,9 @@ struct List:iList {
         }
         assert(found);
     }
-    Item *push(const M &v) {
+    Item *push(const object &v) {
         Item *i = new Item(v);
-        i->h = ((M&)v).hash();
+        i->h = ((object&)v).hash();
         if (last) {
             last->next = i;
             i->prev    = last;
@@ -1356,9 +1352,9 @@ struct List:iList {
         count++;
         return i;
     }
-    M pop() {
+    object pop() {
         assert(last);
-        M res = last->element;
+        object res = last->element;
         Item *ilast = last;
         last  = last->prev;
         if (!last)
@@ -1367,17 +1363,17 @@ struct List:iList {
         return res;
     }
 
-    void operator += (const M &v) {
+    void operator += (const object &v) {
         push(v);
     }
     operator bool() const { return count > 0; }
 
-    Iterator<M> begin() const {
-        return Iterator<M> { first };
+    Iterator<object> begin() const {
+        return Iterator<object> { first };
     }
 
-    Iterator<M>   end() const {
-        return Iterator<M> { null };
+    Iterator<object>   end() const {
+        return Iterator<object> { null };
     }
 };
 
@@ -1388,11 +1384,11 @@ struct registered_instance_meta<T, std::enable_if_t<std::is_same_v<decltype(std:
 
 /// never use directly, like all A-classes
 struct Field:A {
-    M key;
-    M value; /// these are more debuggable than simple A* pointers
+    object key;
+    object value; /// these are more debuggable than simple A* pointers
     public:
     Field() : A(typeof(Field)) { }
-    Field(const M& k, const M& v) : Field() {
+    Field(const object& k, const object& v) : Field() {
         key   = k;
         value = v;
     }
@@ -1461,85 +1457,85 @@ lambda<R(Args...)>::lambda(F&& fn) {
 }
 
 struct str {
-    A_decl(str, String)
-    operator             cstr() const { return        cstr(*data); }
-    ion::symbol        symbol() const { return ion::symbol(*data); }
-    operator           double() const { return      double(*data); }
-    operator            float() const { return       float(*data); }
-    operator              i64() const { return         i64(*data); }
-    operator      std::string() const { return std::string(data->chars); };
-    char&     operator[](int i) const { return (*data)[i];         }
-    str operator+  (const String& v) const { return data->combine(v);  }
-    void operator+=(const String& v) const { data->append((String&)v); }
+    UA_decl(str, String)
+    operator             cstr() const { return        cstr(*a); }
+    ion::symbol        symbol() const { return ion::symbol(*a); }
+    operator           double() const { return      double(*a); }
+    operator            float() const { return       float(*a); }
+    operator              i64() const { return         i64(*a); }
+    operator      std::string() const { return std::string(a->chars); };
+    char&     operator[](int i) const { return (*a)[i];         }
+    str operator+  (const String& v) const { return a->combine(v);  }
+    void operator+=(const String& v) const { a->append((String&)v); }
 };
 
 struct field {
-    A_decl(field, Field)
+    UA_decl(field, Field)
 };
 
 struct list {
-    A_decl(list,  List)
+    UA_decl(list,  List)
 
-    list(std::initializer_list<M> args) : A_forward(List, args)
+    list(std::initializer_list<object> args) : A_forward(List, args)
 
-    Iterator<M> begin() const { return data->first; }
-    Iterator<M>   end() const { return null; }
+    Iterator<object> begin() const { return a->first; }
+    Iterator<object>   end() const { return null; }
 
-    void operator+=(const M& b) const { (*data) += b; }
+    void operator+=(const object& b) const { (*a) += b; }
 };
 
 template <typename T>
 struct vector {
     private:
     public:
-    struct Vector<T>* data;
+    struct Vector<T>* a;
     using intern = Vector<T>;
 
-    vector()                : data(new Vector<T>())             { }
-    vector(Vector<T>* data) : data((Vector<T>*)data)            { }
-    vector(const M& ref)    : data((Vector<T>*)(ref.a->hold())) { }
-    vector(M& ref)          : vector((const M&)ref)             { }
-    vector(const vector &b) : data((Vector<T>*)b.data->hold())  { }
-    vector(int size)        : data(new Vector<T>(size))         { }
+    vector()                  : a(new Vector<T>())             { }
+    vector(Vector<T>* a)      : a((Vector<T>*)a)               { }
+    vector(const object& ref) : a((Vector<T>*)(ref.a->hold())) { }
+    vector(object& ref)       : vector((const object&)ref)     { }
+    vector(const vector &b)   : a((Vector<T>*)b.a->hold())     { }
+    vector(int size)          : a(new Vector<T>(size))         { }
 
     vector(std::initializer_list<T> args) : vector(args.size()) {
-        for (auto a: args)
-            data->push(a);
+        for (auto arg: args)
+            a->push(arg);
     }
 
     //template <typename... Arg>
     //vector(Arg&&... arg) : data(new Vector<T>(std::forward<Arg>(arg)...)) A_type(Vector<T>)
 
-    vector& operator += (const T& v) { (*data) += v;     return *this; }
-    vector& operator -= (int  index) { (*data) -= index; return *this; }
+    vector& operator += (const T& v) { (*a) += v;     return *this; }
+    vector& operator -= (int  index) { (*a) -= index; return *this; }
 
-    Iterator<T> begin() const { return data->begin(); }
-    Iterator<T>   end() const { return data->end(); }
+    Iterator<T> begin() const { return a->begin(); }
+    Iterator<T>   end() const { return a->end(); }
 
     operator T*() const {
-        return data->elements;
+        return a->elements;
     }
 
-    operator bool() const { return data->len() > 0; }
-    operator M() const { return M((A*)data->hold()); }
+    operator bool() const { return a->len() > 0; }
+    operator object() const { return object((A*)a->hold()); }
     
-    Vector<T>* operator->() const { return data; }
-    operator Vector<T>*() const { return (Vector<T>*)data->hold(); }
+    Vector<T>* operator->() const { return a; }
+    operator Vector<T>*() const { return (Vector<T>*)a->hold(); }
     vector &operator=(const vector &b) {
-        if (data != b.data) {
-            data->drop();
-            data = (Vector<T>*)b.data->hold();
+        if (a != b.a) {
+            a->drop();
+            a = (Vector<T>*)b.a->hold();
         }
         return *this;
     }
 
     ~vector() {
-        data->drop();
+        a->drop();
     }
 
     T &operator[](int index) const {
-        assert(index >= 0 && index < data->len());
-        return data->elements[index];
+        assert(index >= 0 && index < a->len());
+        return a->elements[index];
     }
 };
 
@@ -1557,11 +1553,11 @@ struct Hashmap:A {
         return count;
     }
 
-    static u64 hash_value(M &key) {
+    static u64 hash_value(object &key) {
         return key.hash();
     }
 
-    static u64 hash_index(M &key, int mod) {
+    static u64 hash_index(object &key, int mod) {
         return hash_value(key) % mod;
     }
 
@@ -1598,28 +1594,28 @@ struct Hashmap:A {
         (push(fields), ...);
     }
 
-    Item* find_item(const M &key, List **h_list = null, u64 *phash = null);
-    Field   *fetch(const M &key); /// we use Field here, because fetch is internal to hash and we store Field; any user who accepts a return value can contain it in a User type
-    M        &value(const M &key);
-    void        set(const M &key, const M &value);
+    Item* find_item(const object &key, List **h_list = null, u64 *phash = null);
+    Field   *fetch(const object &key, bool insert = false); /// we use Field here, because fetch is internal to hash and we store Field; any user who accepts a return value can contain it in a User type
+    object        &value(const object &key);
+    void        set(const object &key, const object &value);
 
     template <typename V>
-    V &get(const M &k);
+    V &get(const object &k);
 
-    //M      lookup(const M &k);
-    bool contains(const M& key);
-    bool   remove(const M &key);
+    //object      lookup(const object &k);
+    bool contains(const object& key);
+    bool   remove(const object &key);
 
-    M &operator[](const M &key);
+    object &operator[](const object &key);
 
     operator bool() { return *ordered; }
 
-    Iterator<M> begin() const {
-        return Iterator<M> { ordered->first };
+    Iterator<object> begin() const {
+        return Iterator<object> { ordered->first };
     }
 
-    Iterator<M>   end() const {
-        return Iterator<M> { null };
+    Iterator<object>   end() const {
+        return Iterator<object> { null };
     }
 };
 
@@ -1628,36 +1624,36 @@ using Map = Hashmap;
 template <> struct is_map<Hashmap> : true_type { };
 
 struct hashmap {
-    A_decl(hashmap, Hashmap)
+    UA_decl(hashmap, Hashmap)
 
     template<typename... F>
-    hashmap(const field& first, F&&... fields) : data(new Hashmap(first, std::forward<F>(fields)...)) { }
+    hashmap(const field& first, F&&... fields) : a(new Hashmap(first, std::forward<F>(fields)...)) { }
 
-    void set(const M& key, const M& val) {
-        data->set(key, val);
+    void set(const object& key, const object& val) {
+        a->set(key, val);
     }
 
-    M &operator[](const M &key) { return (*data)[key]; }
+    object &operator[](const object &key) { return (*a)[key]; }
 
-    //M &operator[](i64 key) { return (*data)[key]; }
-    //M &operator[](i32 key) { return (*data)[key]; }
+    //object &operator[](i64 key) { return (*a)[key]; }
+    //object &operator[](i32 key) { return (*a)[key]; }
 
     static hashmap args(int argc, cstr *argv, hashmap &def, symbol default_prop);
 
-    Iterator<M> begin() const {
-        return data->begin();
+    Iterator<object> begin() const {
+        return a->begin();
     }
 
-    Iterator<M>   end() const {
-        return data->end();
+    Iterator<object>   end() const {
+        return a->end();
     }
 };
 
 struct logger {
-    inline static lambda<void(M)> service;
+    inline static lambda<void(object)> service;
 
     protected:
-    static void _print(const str &st, const vector<M> &ar) {
+    static void _print(const str &st, const vector<object> &ar) {
         static std::mutex mtx;
         mtx.lock();
         str msg = st->format(ar);
@@ -1669,14 +1665,14 @@ struct logger {
     }
 
     public:
-    inline void log(const M& msg, const vector<M> &ar = {}) {
-        _print(((M&)msg).to_string(), ar);
+    inline void log(const object& msg, const vector<object> &ar = {}) {
+        _print(((object&)msg).to_string(), ar);
     }
 
-    void test(const bool cond, const M& str = {}, const vector<M> &ar = {}) {
+    void test(const bool cond, const object& str = {}, const vector<object> &ar = {}) {
         #ifndef NDEBUG
         if (!cond) {
-            _print(((M&)str).to_string(), ar);
+            _print(((object&)str).to_string(), ar);
             exit(1);
         }
         #endif
@@ -1686,10 +1682,10 @@ struct logger {
         return String::input(1024);
     }
 
-    inline void fault(const M& msg, const vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); brexit(); }
-    inline void error(const M& msg, const vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); brexit(); }
-    inline void print(const M& msg, const vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); }
-    inline void debug(const M& msg, const vector<M>& ar = { }) { _print(((M&)msg).to_string(), ar); }
+    inline void fault(const object& msg, const vector<object>& ar = { }) { _print(((object&)msg).to_string(), ar); brexit(); }
+    inline void error(const object& msg, const vector<object>& ar = { }) { _print(((object&)msg).to_string(), ar); brexit(); }
+    inline void print(const object& msg, const vector<object>& ar = { }) { _print(((object&)msg).to_string(), ar); }
+    inline void debug(const object& msg, const vector<object>& ar = { }) { _print(((object&)msg).to_string(), ar); }
 };
 
 extern logger console;
@@ -1807,7 +1803,7 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
                  (is_A                ? traits::mx_obj    : 0);
 
     if constexpr (has_intern<T>())
-        type->intern = id::for_type<typename T::intern>(MPTR, MPTR_SZ);
+        type->intern = id::for_type<typename T::intern>(MPTR, MPTR_SZ); /// express it first when its in private module
     if constexpr (is_value<T>())
         type->ref = id::for_type<typename T::value_t>(MPTR, MPTR_SZ);
     if constexpr (std::is_member_function_pointer<T>::value) {
@@ -1824,7 +1820,7 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
             R (CL::*member_func)(__VA_ARGS__); \
             assert(sizeof(member_func) == MPTR_SZ); \
             memcpy((void*)&member_func, (void*)MPTR_MEM, MPTR_SZ); \
-            M result;
+            object result;
 
         #undef member_call
         #define member_call(...) \
@@ -1837,7 +1833,7 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
         u8 MPTR_MEM[1024];
         memcpy(MPTR_MEM, MPTR, MPTR_SZ);
         if constexpr (member_fn<T>::n_args == 0) {
-            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, M * args, int n_args) -> A* {
+            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, object * args, int n_args) -> A* {
                 member_init()
                 member_call()
             };
@@ -1845,8 +1841,8 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
         else if constexpr (member_fn<T>::n_args == 1) {
             using A0 = typename member_fn<T>::argument<0>::type;
             type->method->args[0] = typeof(A0);
-            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, M * args, int n_args) -> A* {
-                A0 a0 = M(args[0]);
+            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, object * args, int n_args) -> A* {
+                A0 a0 = object(args[0]);
                 member_init(A0)
                 member_call(a0)
             };
@@ -1856,9 +1852,9 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
             using A1 = typename member_fn<T>::argument<1>::type;
             type->method->args[0] = typeof(A0);
             type->method->args[1] = typeof(A1);
-            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, M * args, int n_args) -> A* {
-                A0 a0 = M(args[0]);
-                A1 a1 = M(args[1]);
+            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, object * args, int n_args) -> A* {
+                A0 a0 = object(args[0]);
+                A1 a1 = object(args[1]);
                 member_init(A0, A1)
                 member_call(a0, a1)
             };
@@ -1870,10 +1866,10 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
             type->method->args[0] = typeof(A0);
             type->method->args[1] = typeof(A1);
             type->method->args[2] = typeof(A2);
-            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, M * args, int n_args) -> A* {
-                A0 a0 = M(args[0]);
-                A1 a1 = M(args[1]);
-                A2 a2 = M(args[2]);
+            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, object * args, int n_args) -> A* {
+                A0 a0 = object(args[0]);
+                A1 a1 = object(args[1]);
+                A2 a2 = object(args[2]);
                 member_init(A0, A1, A2)
                 member_call(a0, a1, a2)
             };
@@ -1887,11 +1883,11 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
             type->method->args[1] = typeof(A1);
             type->method->args[2] = typeof(A2);
             type->method->args[3] = typeof(A3);
-            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, M * args, int n_args) -> A* {
-                A0 a0 = M(args[0]);
-                A1 a1 = M(args[1]);
-                A2 a2 = M(args[2]);
-                A3 a3 = M(args[3]);
+            type->method->call = [MPTR_MEM, MPTR_SZ](void* inst, object * args, int n_args) -> A* {
+                A0 a0 = object(args[0]);
+                A1 a1 = object(args[1]);
+                A2 a2 = object(args[2]);
+                A3 a3 = object(args[3]);
                 member_init(A0, A1, A2, A3)
                 member_call(a0, a1, a2, a3)
             };
@@ -1929,11 +1925,11 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
         if constexpr (inherits<A, T>() && has_hash<T>())
             type->f.hash     = [](void* a) -> u64 { return ((T*)a)->hash(); };
 
-        if constexpr (inherits<A, T>() && has_compare<T>())
-            type->f.compare  = [](void* a, void* b) -> int { return ((T*)a)->compare(*(T*)b); };
-
-        if constexpr (is_convertible<T, M>())
-            type->f.m_ref    = [](void* a) -> M* { return new M(M::pointer((T*)a, false)); };
+        if constexpr (inherits<A, T>() && has_compare<T>()) {
+            type->f.compare = [](void* a, void* b) -> int { object o = object(*(T*)b); return ((T*)a)->compare(o); };
+        }
+        if constexpr (is_convertible<T, object>())
+            type->f.m_ref    = [](void* a) -> object* { return new object(object::pointer((T*)a, false)); };
 
         /// mix is useful on trivial types, like vec2/3/4 rgba/8/32f
         if constexpr (inherits<A, T>() && has_mix<T>::value)
@@ -1961,7 +1957,7 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
             static T *def = new T();
             list mlist = def->meta();
             type->meta = new hashmap(16);
-            for (M &element: mlist) {
+            for (object &element: mlist) {
                 prop &pr = element;
                 pr.offset = pr.is_method ? 0 : (size_t(pr.member_addr) - size_t(def));
                 pr.parent_type = type;
@@ -1980,12 +1976,13 @@ id *id::for_type(void *MPTR, size_t MPTR_SZ) {
     return (id*)type;
 }
 
-M symbolize(cstr cs, id* type = typeof(String), i32 id = 0);
 
-struct E:Value<i32> {
-    static int convert(M raw, ion::symbol S, id* type) {
+Symbol *symbolize(cstr cs, id* type = typeof(String), i32 id = 0);
+
+struct enumerable:Value<i32> {
+    static int convert(object raw, ion::symbol S, id* type) {
         initialize(0, S, type);
-        M sym;
+        object sym;
         if (raw.type() == typeof(ion::symbol))
             return raw.a_symbol->id;
         if (raw.type() == typeof(String)) {
@@ -1993,7 +1990,7 @@ struct E:Value<i32> {
             /// in json, the enum can sometimes be given in "23124" form; no enum begins with a numeric so we can handle this
             if (raw_str[0] == '-' || isdigit(raw_str[0])) {
                 i32 id   = (i32)i64(raw_str);
-                sym      = type->symbols->by_value[M(id)];
+                sym      = type->symbols->by_value[object(id)];
             } else {
                 sym      = type->symbols->by_name[raw];
             }
@@ -2008,10 +2005,10 @@ struct E:Value<i32> {
             }
         } else if (raw.type() == typeof(i32) || raw.type() == type->ref) { // make sure ref is set
             i32   id = i32(raw);
-            sym      = type->symbols->by_value[M(id)];
+            sym      = type->symbols->by_value[object(id)];
         } else if (raw.type() == typeof(i64)) {
             i32   id = i32(i64(raw));
-            sym      = type->symbols->by_value[M(id)];
+            sym      = type->symbols->by_value[object(id)];
         }
         if (!sym) {
             printf("symbol: %s, raw: %s\n", S, (ion::symbol)raw);
@@ -2046,7 +2043,7 @@ struct E:Value<i32> {
         return v;
     }
 
-    E(int value) : Value<i32>(value) {
+    enumerable(int value) : Value<i32>(value) {
     }
 
     static bool matches(ion::symbol a, ion::symbol b, int len) {
@@ -2063,19 +2060,19 @@ struct E:Value<i32> {
 
     ion::symbol symbol() {
         assert(type == typeof(Value<i32>));
-        i32 v = value;
+        i32 i = value;
         assert(type->symbols);
-        M mem_symbol = type->symbols->by_value[M(v)];
-        if (!mem_symbol) printf("symbol: mem is null for value %d\n", (int)v);
+        object mem_symbol = type->symbols->by_value[object(i)];
+        if (!mem_symbol) printf("symbol: mem is null for value %d\n", (int)i);
         assert(mem_symbol);
         return (ion::symbol)mem_symbol;
     }
 
-    String *to_string() override { return type->symbols->by_value[M(value)].a_str; }
+    String *to_string() override { return type->symbols->by_value[object(value)].a_str; }
 };
 
 template <typename T>
-M M::method(T& obj, const str &name, const vector<M> &args) {
+object object::method(T& obj, const str &name, const vector<object> &args) {
     id* type = typeof(T);
     if (type->intern)
         type = type->intern;
@@ -2084,22 +2081,22 @@ M M::method(T& obj, const str &name, const vector<M> &args) {
     prop &pr = f->value;
     method_info *method = pr.type->method;
 
-    M result;
+    object result;
     if (method) {
         int n_args = args->len();
         assert(n_args == method->arg_count);
 
-        M *mem_args = (M*)calloc(n_args, sizeof(M));
+        object *mem_args = (object*)calloc(n_args, sizeof(object));
         for (int a = 0; a < n_args; a++) {
-            M  &src = args[a];
-            M  &dst = mem_args[a];
+            object  &src = args[a];
+            object  &dst = mem_args[a];
             id *atype = method->args[a];
             if (src.a->type != atype) {
-                M   msrc(src.a->hold());
+                object   msrc(src.a->hold());
                 String *st = msrc.to_string();
-                M   conv = M::from_string(st->chars, atype);
+                object   conv = object::from_string(st->chars, atype);
                 st->drop();
-                dst = M(conv.a->hold());
+                dst = object(conv.a->hold());
             } else
                 dst = src;
         }
@@ -2185,7 +2182,7 @@ struct Size:Buffer<num, 16> {
 };
 
 struct size {
-    A_decl(size, Size)
+    UA_decl(size, Size)
 };
 
 struct str;
@@ -2239,7 +2236,7 @@ struct UTF16:A {
 };
 
 struct utf16 {
-    A_decl(utf16, UTF16)
+    UA_decl(utf16, UTF16)
 };
 
 using wchar = unsigned short;
@@ -2288,7 +2285,7 @@ using arg = field;
 struct IO:A {
     struct Source {
         type_t           type; /// types are the stream identifier
-        lambda<void(M)> fn;   /// 'sink' of sort
+        lambda<void(object)> fn;   /// 'sink' of sort
     };
 
     vector<Source> sources;   // type: Source
@@ -2301,7 +2298,7 @@ struct IO:A {
             shutdown();
     }
 
-    void emit(M data) {
+    void emit(object data) {
         type_t type = data.type();
         for (Source &src: sources) {
             if (src.type == type)
@@ -2333,7 +2330,7 @@ struct IO:A {
 };
 
 struct io {
-    A_struct(io, IO)
+    UA_struct(io, IO)
 };
 
 using ichar = int;
@@ -2418,7 +2415,7 @@ struct uniques:A {
 
 template <typename T>
 struct Uniques {
-    A_struct(Uniques, uniques<T>)
+    UA_struct(Uniques, uniques<T>)
 };
 
 template <typename T>
@@ -2513,10 +2510,10 @@ struct States:A {
 
 template <typename T>
 struct states {
-    A_struct(states, States<T>)
+    UA_struct(states, States<T>)
     template <typename ET>
     bool operator[](const ET &varg) const {
-        return (*data)[varg];
+        return (*a)[varg];
     }
 };
 
@@ -2630,9 +2627,9 @@ struct Path:A {
 };
 
 struct path {
-    A_decl(path, Path)
-    path operator / (const path& b) { return (*data) / (Path&)b; }
-    operator str() { return *data; }
+    UA_decl(path, Path)
+    path operator / (const path& b) { return (*a) / (Path&)b; }
+    operator str() { return a->to_string(); }
 };
 
 using path_t = path;
@@ -2683,7 +2680,7 @@ struct base64 {
         int p_len = ((len + 2) / 3) * 4;
         str encoded(p_len + 1);
 
-        u8    *e = (u8 *)encoded.data;
+        u8    *e = (u8 *)encoded->chars;
         size_t b = 0;
         
         for (size_t  i = 0; i < len; i += 3) {
@@ -2738,18 +2735,18 @@ struct base64 {
     }
 };
 
-/// var should inherit from M
-struct var:M {
+/// var should inherit from object
+struct var:object {
 protected:
-    void push(const M& v);
-    M  &last();
+    void push(const object& v);
+    object  &last();
 
-    static M parse_obj(cstr *start, type_t type);
-    static M parse_arr(cstr *start, type_t type);
+    static object parse_obj(cstr *start, type_t type);
+    static object parse_arr(cstr *start, type_t type);
     static void skip_alpha(cstr *start);
-    static M parse_value(cstr *start, type_t type, const M& field);
+    static object parse_value(cstr *start, type_t type, const object& field);
     static str parse_numeric(cstr * cursor, bool &floaty);
-    static M parse_quoted(cstr *cursor, type_t type);
+    static object parse_quoted(cstr *cursor, type_t type);
     static char ws(cstr *cursor);
 
     public:
@@ -2757,29 +2754,29 @@ protected:
     bool is_string() const { return type() == typeof(String); }
 
     operator std::string();
-    M get(str key);
-    static M parse(cstr js, type_t type);
+    object get(str key);
+    static object parse(cstr js, type_t type);
     str stringify() const;
 
     /// default constructor constructs map
     var();
-    var(const M& b);
+    var(const object& b);
     var(map m);
-    var(A* mem) : M(mem) { }
+    var(A* mem) : object(mem) { }
 
     template <typename T>
-    var(const T& b) : M(b) { }
+    var(const T& b) : object(b) { }
 
     var operator+(const var &b) const {
         type_t at =   a->type;
         type_t bt = b.a->type;
         if (at->ref) at = at->ref;
         if (bt->ref) bt = bt->ref;
-        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((M&)*this)        + i64((M&)b);
-        if (at == typeof(double) && bt == typeof(i64))    return double(double((M&)*this) + i64((M&)b));
-        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((M&)*this) + double((M&)b));
-        if (at == typeof(double) && bt == typeof(double)) return double(double((M&)*this) + double((M&)b));
-        if (at == typeof(String) && bt == typeof(String)) return str(     str((M&)*this)  +    str((M&)b));
+        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((object&)*this)        + i64((object&)b);
+        if (at == typeof(double) && bt == typeof(i64))    return double(double((object&)*this) + i64((object&)b));
+        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((object&)*this) + double((object&)b));
+        if (at == typeof(double) && bt == typeof(double)) return double(double((object&)*this) + double((object&)b));
+        if (at == typeof(String) && bt == typeof(String)) return str(     str((object&)*this)  +    str((object&)b));
         assert(false);
         return var();
     }
@@ -2789,10 +2786,10 @@ protected:
         type_t bt = b.a->type;
         if (at->ref) at = at->ref;
         if (bt->ref) bt = bt->ref;
-        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((M&)*this)        - i64((M&)b);
-        if (at == typeof(double) && bt == typeof(i64))    return double(double((M&)*this) - i64((M&)b));
-        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((M&)*this) - double((M&)b));
-        if (at == typeof(double) && bt == typeof(double)) return double(double((M&)*this) - double((M&)b));
+        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((object&)*this)        - i64((object&)b);
+        if (at == typeof(double) && bt == typeof(i64))    return double(double((object&)*this) - i64((object&)b));
+        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((object&)*this) - double((object&)b));
+        if (at == typeof(double) && bt == typeof(double)) return double(double((object&)*this) - double((object&)b));
         assert(false);
         return var();
     }
@@ -2802,10 +2799,10 @@ protected:
         type_t bt = b.a->type;
         if (at->ref) at = at->ref;
         if (bt->ref) bt = bt->ref;
-        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((M&)*this)        * i64((M&)b);
-        if (at == typeof(double) && bt == typeof(i64))    return double(double((M&)*this) * i64((M&)b));
-        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((M&)*this) * double((M&)b));
-        if (at == typeof(double) && bt == typeof(double)) return double(double((M&)*this) * double((M&)b));
+        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((object&)*this)        * i64((object&)b);
+        if (at == typeof(double) && bt == typeof(i64))    return double(double((object&)*this) * i64((object&)b));
+        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((object&)*this) * double((object&)b));
+        if (at == typeof(double) && bt == typeof(double)) return double(double((object&)*this) * double((object&)b));
         assert(false);
         return var();
     }
@@ -2815,29 +2812,29 @@ protected:
         type_t bt = b.a->type;
         if (at->ref) at = at->ref;
         if (bt->ref) bt = bt->ref;
-        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((M&)*this)        / i64((M&)b);
-        if (at == typeof(double) && bt == typeof(i64))    return double(double((M&)*this) / i64((M&)b));
-        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((M&)*this) / double((M&)b));
-        if (at == typeof(double) && bt == typeof(double)) return double(double((M&)*this) / double((M&)b));
+        if (at == typeof(i64)    && bt == typeof(i64))    return    i64((object&)*this)        / i64((object&)b);
+        if (at == typeof(double) && bt == typeof(i64))    return double(double((object&)*this) / i64((object&)b));
+        if (at == typeof(i64)    && bt == typeof(double)) return double(   i64((object&)*this) / double((object&)b));
+        if (at == typeof(double) && bt == typeof(double)) return double(double((object&)*this) / double((object&)b));
         assert(false);
         return var();
     }
 
     var operator&&(const var &b) const {
-        if (bool((M&)*this) && bool((M&)b))
+        if (bool((object&)*this) && bool((object&)b))
             return true;
         return false;
     }
 
     var operator||(const var &b) const {
-        if (bool((M&)*this)) return *this;
-        if (bool((M&)    b)) return b;
+        if (bool((object&)*this)) return *this;
+        if (bool((object&)    b)) return b;
         return var();
     }
 
     var operator^(const var &b) const {
-        bool ba = bool((M&)*this);
-        bool bb = bool((M&)b);
+        bool ba = bool((object&)*this);
+        bool bb = bool((object&)b);
         if ((ba ^ bb) == false) return var();
         if (ba) return *this;
         return b;
@@ -2850,7 +2847,7 @@ protected:
         /// Hashmap case
         if constexpr (identical<KT, char*>() || identical<KT, const char*>() || identical<KT, str>() || identical<KT, String*>()) {
             Hashmap *ptr = (Hashmap*)a;
-            M skey = M(key);
+            object skey = object(key);
             return var((*ptr)[skey]);
         /// Array case
         } else if (kt->traits & traits::integral) {    
@@ -2862,7 +2859,7 @@ protected:
         return *this;
     }
 
-    static M json(M i, type_t type);
+    static object json(object i, type_t type);
 
     String *to_string();
 
@@ -2876,24 +2873,24 @@ protected:
 
     operator bool();
 
-    Iterator<M> begin() const {
+    Iterator<object> begin() const {
         if (a->type == typeof(Array)) {
             return v_array->begin();
         } else if (a->type == typeof(Hashmap)) {
             return v_map->begin();
         }
         assert(false);
-        return Iterator<M> { null, 0 };
+        return Iterator<object> { null, 0 };
     }
 
-    Iterator<M>   end() const {
+    Iterator<object>   end() const {
         if (a->type == typeof(Array)) {
             return v_array->end();
         } else if (a->type == typeof(Hashmap)) {
             return v_map->end();
         }
         assert(false);
-        return Iterator<M> { null, 0 };
+        return Iterator<object> { null, 0 };
     }
 };
 
@@ -2910,13 +2907,13 @@ bool Path::write(T input) const {
         str    v  = input.stringify(); /// needs to escape strings
         std::ofstream f(*pdata, std::ios::out | std::ios::binary);
         if (v->len() > 0)
-            f.write((symbol)v.data, v->len());
+            f.write((symbol)v->cs(), v->len());
     } else if constexpr (identical<T,str>()) {
         std::ofstream f(*pdata, std::ios::out | std::ios::binary);
         if (input->len() > 0)
             f.write((symbol)input->cs(), input->len());
     } else {
-        console.log("path conversion to {0} is not implemented. surely it wont take long.", { M(typeof(T)->name) });
+        console.log("path conversion to {0} is not implemented. surely it wont take long.", { object(typeof(T)->name) });
         return false;
     }
     return true;

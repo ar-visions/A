@@ -22,7 +22,7 @@ struct PathOp:A {
 };
 
 struct path_op {
-    A_decl(path_op, PathOp)
+    UA_decl(path_op, PathOp)
 };
 
 struct PathState:A {
@@ -36,7 +36,7 @@ struct PathState:A {
 };
 
 struct path_state {
-    A_decl(path_state, PathState)
+    UA_decl(path_state, PathState)
 };
 
 struct Watch:A {
@@ -63,7 +63,7 @@ struct Watch:A {
 };
 
 struct watch {
-    A_decl(watch, Watch)
+    UA_decl(watch, Watch)
 };
 
 }

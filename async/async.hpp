@@ -10,16 +10,14 @@ namespace ion {
 /// executables are different types, and require async
 struct exec:str {
     exec(str s) : str(s) { }
-    ion::path path() {
-        return data;
-    }
+    ion::path path() { return *this; }
 };
 
-using FnFuture = lambda<void(M)>;
+using FnFuture = lambda<void(object)>;
 
 /// 
 struct Completer:A {
-    M               vdata;
+    object               vdata;
     mutex           mtx;
     bool            completed;
     array           l_success;
@@ -27,16 +25,16 @@ struct Completer:A {
 
     Completer() : A(typeof(Completer)) { }
 
-    Completer(lambda<void(M)>& fn_success,
-              lambda<void(M)>& fn_failure) : Completer() {
+    Completer(lambda<void(object)>& fn_success,
+              lambda<void(object)>& fn_failure) : Completer() {
         
-        fn_success = [this](M arg) {
+        fn_success = [this](object arg) {
             completed = true;
             for (FnFuture &fn: l_success)
                 fn(arg);
         };
         
-        fn_failure = [this](M arg) {
+        fn_failure = [this](object arg) {
             completed = true;
             for (FnFuture &fn: l_failure)
                 fn(arg);
@@ -47,7 +45,7 @@ struct Completer:A {
 };
 
 struct completer {
-    A_decl(completer, Completer)
+    UA_decl(completer, Completer)
 };
 
 /// how do you create a future?  you give it completer memory
@@ -63,7 +61,7 @@ struct Future:A {
         if (!cd->completed) {
             mtx.lock();
             void *v_mtx = &mtx;
-            FnFuture fn = [v_mtx] (M arg) { ((mutex*)v_mtx)->unlock(); };
+            FnFuture fn = [v_mtx] (object arg) { ((mutex*)v_mtx)->unlock(); };
             cd->l_success->push(fn);
             cd->l_failure->push(fn);
         }
@@ -92,11 +90,11 @@ struct Future:A {
 };
 
 struct future {
-    A_decl(future, Future)
+    UA_decl(future, Future)
 };
 
 struct Proc;
-typedef lambda<M(Proc*, int)> FnProcess;
+typedef lambda<object(Proc*, int)> FnProcess;
 
 typedef std::condition_variable ConditionV;
 struct Proc:A {
@@ -112,8 +110,8 @@ public:
     inline static int              exit_code = 0;
 
     mutex                      mtx_self; /// output the memory address of this mtx.
-    lambda<void(M)>            on_done;  /// not the same prototype as FnFuture, just as a slight distinguisher we dont need to do a needless non-conversion copy
-    lambda<void(M)>            on_fail;
+    lambda<void(object)>            on_done;  /// not the same prototype as FnFuture, just as a slight distinguisher we dont need to do a needless non-conversion copy
+    lambda<void(object)>            on_fail;
     int                        count;
     FnProcess				   fn;
     array                      results;
@@ -141,7 +139,7 @@ public:
 };
 
 struct proc {
-    A_decl(proc, Proc)
+    UA_decl(proc, Proc)
 };
 
 /// async is out of sync with the other objects.
@@ -149,7 +147,7 @@ struct async {
     ///
     struct delegation {
         proc            ps;
-        M               results;
+        object               results;
         mutex           mtx; /// could be copy ctr
     } d;
 

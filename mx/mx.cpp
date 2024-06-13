@@ -1151,6 +1151,19 @@ Symbol *symbolize(cstr cs, id* type, i32 id) {
     return name;
 }
 
+/// the method is made in the method type
+prop::prop(ion::symbol name, type_t rtype, array default_arguments) {
+    Symbol* symbol = symbolize((cstr)name);
+    key         = symbol;
+    member_addr = 0;
+    offset      = 0;
+    def_args    = new array(default_arguments);
+    type        = rtype;
+    parent_type = null;
+    init_value  = 0;
+    is_method   = true;
+}
+
 prop::prop(const prop &ref) {
     key         = ref.key ? ref.key : null;
     member_addr = ref.member_addr;
@@ -1163,6 +1176,15 @@ prop::prop(const prop &ref) {
 
 String* prop::to_string() {
     return (String*)(key ? key->name : null);
+}
+
+prop::~prop() {
+    delete def_args;
+}
+
+object object::create(type_t type) {
+    assert(type->f.ctr);
+    return object( (A*)type->f.ctr(null) );
 }
 
 // int compare(const object& b) override; // we can compare apples and oranges with the same method

@@ -508,16 +508,23 @@ template <> id *id::for_type<u64>   (void*, size_t);
 
 void register_type2(id *type, const std::string &sig, sz_t sz, u64 traits);
 
+template <typename T>
+struct vector;
+struct object;
+
 /// now that we have allowed for any, make entry for meta description
 struct prop {
     struct Symbol *key;
-    size_t  member_addr;
+    bool    scripted;
+    size_t  member_addr; /// can be member function, or can be a lambda allocation?
     size_t  offset; /// this is set by once-per-type meta fetcher
     id*     type;
     id*     parent_type;
     raw_t   init_value; /// value obtained after constructed on the parent type
     bool    is_method; /// make sure we dont enumerate the data on methods
-
+    vector<object>* def_args = null;
+    std::function<object(vector<object>&)> invoke;
+    
     prop() ;
 
     template <typename MEM>
@@ -528,6 +535,9 @@ struct prop {
 
     prop(const prop &ref);
 
+    /// reserved for silver methods on mods
+    prop(ion::symbol name, type_t rtype, vector<object> default_arguments) ;
+
     template <typename T>
     T &member_ref(void *m) ;
 
@@ -536,22 +546,42 @@ struct prop {
     ion::symbol name() const ;
 
     struct String* to_string();
+
+    ~prop();
 };
 
 struct object;
+
+/// A-objects are dual purpose but cannot be graphed in declarative
+/// use silver for this purpose 
+/// we can use them on the stack and thus fulfill the use of math types
+/// they can be held and dropped and the stack check should hold
 struct A { /// runtime of silver-lang
     id*     type;
     u64     h;
-    int     refs; /// no schema, since we'll use traditional c++ 17
+    int     refs;
     A(id *type = null) : type(type), refs(1), h(0) { }
-    A   *hold() { refs++; return this; }
-    void drop() { if (--refs <= 0) { delete this; } }
+    A   *hold() {
+        int stack;
+        if ((void*)this > (void*)(&stack))
+            refs++;
+        return this;
+    }
+    void drop() {
+        int stack;
+        if ((void*)this > (void*)(&stack))
+            if (--refs <= 0) { delete this; }
+    }
     virtual u64 hash();
     virtual int compare(const object& a_object);
     virtual struct String *to_string();
     virtual ~A() { }
     operator bool() { return type; }
 };
+
+/// for some reason, i cannot seem to fit a user and data type together when they are at the same peer level, and both uniquely identified
+/// U<Symbol>() to give args makes sense
+/// this is what we had at first
 
 /// intentionally different from String
 struct Symbol:A {
@@ -1025,6 +1055,8 @@ struct object {
 
     template <typename T>
     static object method(T& obj, const struct str &name, const vector<object> &args);
+
+    static object create(type_t type);
 
     template <typename T>
     T* get() const {

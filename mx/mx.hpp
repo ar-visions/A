@@ -552,31 +552,43 @@ struct prop {
 
 struct object;
 
-/// A-objects are dual purpose but cannot be graphed in declarative
-/// use silver for this purpose 
-/// we can use them on the stack and thus fulfill the use of math types
-/// they can be held and dropped and the stack check should hold
-struct A { /// runtime of silver-lang
+/// A-objects are smart types, registered meta info
+/// type model used by silver
+struct A {
     id*     type;
     u64     h;
     int     refs;
     A(id *type = null) : type(type), refs(1), h(0) { }
     A   *hold() {
         int stack;
-        if ((void*)this > (void*)(&stack))
-            refs++;
+        refs++;
         return this;
     }
     void drop() {
         int stack;
-        if ((void*)this > (void*)(&stack))
-            if (--refs <= 0) { delete this; }
+        if (--refs <= 0) { delete this; }
     }
     virtual u64 hash();
     virtual int compare(const object& a_object);
     virtual struct String *to_string();
     virtual ~A() { }
     operator bool() { return type; }
+};
+
+/// smart container for A class; for use of receiving and using A types in C++
+template <typename A>
+struct U {
+    A* data;
+    U(const U& ref) : data(ref.data->hold()) { } 
+    U(A* a) : data(a) { }
+    U& operator=(const U& ref) {
+        if (this != &ref) {
+            if (data) data->drop();
+            data = (A*)(ref.data ? ref.data->hold() : (A*)null);
+        }
+        return *this;
+    }
+    ~U() { if (data) data->drop(); }
 };
 
 /// for some reason, i cannot seem to fit a user and data type together when they are at the same peer level, and both uniquely identified
@@ -638,6 +650,7 @@ struct lambda;
 template <typename R, typename... Args>
 struct lambda<R(Args...)>;
 
+struct str;
 /// always working on string theory..
 struct String:A {
     char *chars;
@@ -725,8 +738,8 @@ struct String:A {
 
     String(char *v, int v_len = -1) : String((const char *)v, v_len) { }
 
-    Vector<object> *split() const;
-    Vector<object> *split(const String &v) const;
+    Vector<str> *split() const;
+    Vector<str> *split(const String &v) const;
 
     int index_of(const String &s) const {
         char *f = strstr(chars, s.chars);
@@ -882,6 +895,7 @@ struct Pointer:A {
     }
 };
 
+/*
 struct U { struct A* a; };
 
 /// this constructs without forwarding from a U class, and should be less ambiguous
@@ -902,7 +916,12 @@ static void Free(A* a) {
     ((AType*)(u->a)) -> ~AType();
 }
 
-/// object is all things
+*/
+
+/// object is all things -- i think its what Clint would do in C++
+/// method takes in an object, a method name to call (property-name), object-based args in vector
+/// we need a properties method on here is all
+/// 
 struct object {
     union {
         Value<u64>  *v_u64;
@@ -923,6 +942,12 @@ struct object {
         Symbol      *a_symbol;
         A           *a;
     };
+    /*
+    operator String*() {
+        if (!a || a->type != typeof(String))
+            return new String();
+        return (String*)a->hold();
+    }*/
     object()           : a(null) { }
     object(null_t)     : object()     { }
     object(const u64  &i);
@@ -962,6 +987,8 @@ struct object {
             a->type = typeof(Pointer);
         }
     }
+
+    hashmap& props();
 
     type_t data_type() const {
         type_t type = this->type();
@@ -1072,6 +1099,10 @@ struct object {
             assert(v_pointer->type == typeof(T)); /// inheritance check not supported here since it requires an alias protocol on the class
             return (T*)v_pointer->ptr;
         }
+        if constexpr (identical<T,const char>())
+            if (a->type == typeof(String))
+                return (const char*)a_str->chars;
+
         return &static_cast<T&>(*this);
     }
 
@@ -1182,7 +1213,6 @@ struct Vector:iList {
     private:
     T  *elements;
     int alloc;
-    int count;
 
     public:
     Vector(int reserve = 32) : iList(typeof(Vector)) {
@@ -2054,20 +2084,20 @@ struct enumerable:Value<i32> {
         if (type->secondary_init) return v;
         type->secondary_init = true;
         str  snames = str(names);
-        Array   *sp = snames->split(", ");
+        vector<str> sp = snames->split(", ");
         int       c = sp->len();
         i32    next = 0;
         int       i = 0;
-        for (String &s: *sp) {
-            num idx = s.index_of("=");
+        for (str &s: sp) {
+            num idx = s->index_of("=");
             if (idx >= 0) {
-                str sym = s.mid(0, idx);
+                str sym = s->mid(0, idx);
                 sym = sym->trim();
-                str val = s.mid(idx + 1);
+                str val = s->mid(idx + 1);
                 val = val->trim();
                 symbolize(sym, type, i32(i64(val)));
             } else {
-                str sym = s.trim();
+                str sym = s->trim();
                 symbolize(sym, type, i32(next));
             }
             next = i + 1;
@@ -2127,7 +2157,7 @@ object object::method(T& obj, const str &name, const vector<object> &args) {
                 object   msrc(src.a->hold());
                 String *st = msrc.to_string();
                 object   conv = object::from_string(st->chars, atype);
-                st->drop();
+                st->A::drop();
                 dst = object(conv.a->hold());
             } else
                 dst = src;

@@ -22,7 +22,7 @@ namespace ion {
         }; \
     } \
     vec2##t::vec2##t(str s) {               \
-        vector<object>   v  = s->split();        \
+        vector<str>   v  = s->split();      \
         size_t     len = v->len();          \
         if (len == 1) {                     \
             x = T(real(str(v[0])));         \
@@ -92,7 +92,7 @@ namespace ion {
         }; \
     } \
     vec3##t::vec3##t(str s) { \
-        vector<object> v = s->split(); \
+        vector<str> v = s->split(); \
         size_t len = v->len(); \
         if (len == 1) { \
             x = T(real(str(v[0]))); \
@@ -175,7 +175,7 @@ namespace ion {
                 w = T(ia) / T(255.0); \
             } \
         } else if (sz && (h[0] == '-' || (h[0] >= '0' && h[0] <= 9))) { \
-            vector<object> v = h->split(); \
+            vector<str> v = h->split(); \
             size_t len = v->len(); \
             if (len == 1) { \
                 x = T(real(str(v[0]))); \

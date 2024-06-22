@@ -1148,7 +1148,7 @@ Symbol *symbolize(cstr cs, id* type, i32 id) {
     type->symbols->by_name[name] = id;
     type->symbols->by_value[object(id)] = name;
     type->symbols->list += n;
-    return name;
+    return n;
 }
 
 /// the method is made in the method type
@@ -1206,11 +1206,12 @@ void *prop::member_pointer(void *MEMBER_ADDR) { return (void *)handle_t(&cstr(ME
 symbol prop::name() const { return (symbol)key->name; }
 
 int String::compare(const object& arg) {
-    return strcmp(chars, ((String*)arg)->chars);
+    String* s_args = ((object&)arg).to_string();
+    return strcmp(chars ? chars : "", s_args->chars ? s_args->chars : "");
 }
 
-Vector<object>* String::split() const { /// common split, if "abc, and 123", result is "abc", "and", "123"}
-    Vector<object> *res = new Vector<object>(length + 1);
+Vector<str>* String::split() const { /// common split, if "abc, and 123", result is "abc", "and", "123"}
+    Vector<str> *res = new Vector<str>(length + 1);
     str   chars(length + 1);
     ///
     cstr pc = chars;
@@ -1233,8 +1234,11 @@ Vector<object>* String::split() const { /// common split, if "abc, and 123", res
     return res;
 }
 
-Vector<object> *String::split(const String &v) const {
-    Vector<object> *res = new Vector<object>(length + 1);
+hashmap& object::props() { return *(type()->meta); }
+
+
+Vector<str> *String::split(const String &v) const {
+    Vector<str> *res = new Vector<str>(length + 1);
     char *start  = chars;
     char *scan   = chars;
     char *sp     = v.chars;

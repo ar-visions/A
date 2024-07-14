@@ -2,6 +2,7 @@
 #define _A_
 
 #include <assert.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -9,7 +10,6 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <unistd.h> 
-#include <ffi.h>
 
 /// A-type runtime
 typedef void                none;
@@ -30,11 +30,10 @@ typedef double              real;    /// real enough
 typedef void*               handle;
 typedef char*               cstr;
 typedef num                 sz;
-typedef struct A_f*         A_t;
 typedef struct A_f*         AType;
 typedef struct args_t {
     num             count;
-    A_t             arg_0, arg_1, arg_2, arg_3, 
+    AType           arg_0, arg_1, arg_2, arg_3, 
                     arg_4, arg_5, arg_6, arg_7;
 } args_t;
 
@@ -237,7 +236,7 @@ typedef struct prop_t {
 /// we may not want to expose members; they will be zero if that is the case
 typedef struct member_t {
     char*           name;
-    A_t             type;
+    AType           type;
     num             offset;
     enum A_TYPE     member_type;
     int             operator_type;
@@ -306,7 +305,7 @@ typedef struct member_t {
     } E##_f, *E##_t; \
     extern E##_f   E##_type;
 
-void A_push_type(A_t type);
+void A_push_type(AType type);
 
 /// declare object and type with f-table from meta-def
 #define declare_class(X) \
@@ -325,7 +324,7 @@ void        A_lazy_init(global_init_fn fn);
     static __attribute__((constructor)) bool global_##E() { \
         E ## _f* type_ref = &E ## _type; \
         A_f* base_ref     = &A_type; \
-        if ((A_t)type_ref != (A_t)base_ref && base_ref->size == 0) { \
+        if ((AType)type_ref != (AType)base_ref && base_ref->size == 0) { \
             A_lazy_init((global_init_fn)&global_##E); \
             return false; \
         } else { \
@@ -336,7 +335,7 @@ void        A_lazy_init(global_init_fn fn);
             E##_type.size     = sizeof(enum E); \
             E##_type.members  = members; \
             E##_type.traits   = A_TRAIT_ENUM; \
-            E##_type.arb      = &ffi_type_sint32; \
+            E##_type.arb      = primitive_ffi_arb(typeof(i32)); \
             E##_meta( E, IMPL ); \
             A_push_type(&E##_type); \
             return true; \
@@ -368,7 +367,7 @@ void        A_lazy_init(global_init_fn fn);
     static __attribute__((constructor)) bool global_##X() { \
         X##_f* type_ref = &X##_type; \
         Y##_f* base_ref = &Y##_type; \
-        if ((A_t)type_ref != (A_t)base_ref && base_ref->size == 0) { \
+        if ((AType)type_ref != (AType)base_ref && base_ref->size == 0) { \
             A_lazy_init((global_init_fn)&global_##X); \
             return false; \
         } else { \
@@ -385,14 +384,16 @@ void        A_lazy_init(global_init_fn fn);
         }                                   \
     }
 
-#define define_primitive(X, ffi_type, traits) \
+#define define_primitive(X, traits) \
     define_global(X, A, sizeof(X), A_TRAIT_PRIMITIVE | traits, \
-        X##_type.arb = &ffi_type; \
+        X##_type.arb = primitive_ffi_arb(typeof(X)); \
     )
+
+void* primitive_ffi_arb(AType);
 
 #define define_class(X) \
     define_global(X, A, sizeof(struct X), 0, \
-        X##_type.arb = &ffi_type_pointer; \
+        X##_type.arb = primitive_ffi_arb(typeof(cstr)); \
         X##_meta( X, A, INIT ) \
     )
 
@@ -430,7 +431,7 @@ void        A_lazy_init(global_init_fn fn);
 /// its important that any additional struct be static, thus limiting the amount of data we are exporting
 #define define_mod(X,Y) \
     define_global(X,Y, sizeof(struct X), 0, \
-        X##_type.arb = &ffi_type_pointer; \
+        X##_type.arb = primitive_ffi_arb(typeof(cstr)); \
         X##_meta( X,Y, INIT ) \
     )
 
@@ -439,7 +440,7 @@ void        A_lazy_init(global_init_fn fn);
 
 /// constructors get a type forwarded from the construct macro
 #define A_meta(X,Y,Z) \
-    i_intern(X,Y,Z, A_t,       type) \
+    i_intern(X,Y,Z, AType,       type) \
     i_intern(X,Y,Z, num,       refs) \
     i_intern(X,Y,Z, struct A*, data) \
     i_intern(X,Y,Z, num,       alloc) \
@@ -551,6 +552,8 @@ declare_enum(OPType)
 #define path_meta(X,Y,Z) \
     i_intern    (X,Y,Z, cstr,   chars) \
     i_method    (X,Y,Z, bool,   exists) \
+    i_method    (X,Y,Z, bool,   make_dir) \
+    i_method    (X,Y,Z, bool,   is_empty) \
     i_method    (X,Y,Z, A,      read, AType) \
     i_override_m(X,Y,Z, u64,    hash) \
     i_construct (X,Y,Z, cstr)
@@ -657,14 +660,14 @@ declare_mod(vector, collection)
     if (M(T, count, t)) for (E e = *(E*)M(T, get, t, 0), e0 = 0; e0 == 0; e0++) \
         for (num i = 0, len = M(T, count, t); i < len; i++, e = *(E*)M(T, get, t, i)) \
 
-A           A_alloc(A_t type, num count);
+A           A_alloc(AType type, num count);
 A           A_hold(A a);
 void        A_drop(A a);
 A_f**       A_types(num* length);
-member_t*   A_member(A_t type, enum A_TYPE member_type, char* name);
-A           A_method(A_t type, char* method_name, array args);
-A           A_primitive(A_t type, void* data);
-A           A_enum(A_t enum_type, i32 value);
+member_t*   A_member(AType type, enum A_TYPE member_type, char* name);
+A           A_method(AType type, char* method_name, array args);
+A           A_primitive(AType type, void* data);
+A           A_enum(AType enum_type, i32 value);
 A           A_i8(i8);
 A           A_u8(u8);
 A           A_i16(i16);

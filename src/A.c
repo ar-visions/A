@@ -698,7 +698,6 @@ static string path_stem(path a) {
             res->len = n_bytes;
             break;
         }
-        
     }
     return res;
 }

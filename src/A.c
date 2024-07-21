@@ -692,8 +692,9 @@ static string path_stem(path a) {
         if (cs[i] == '.')
             dot = i;
         if (cs[i] == '/' || i == 0) {
-            cstr start = cs[i] == '/' ? &cs[i + 1] : &cs[i];
-            int n_bytes = (dot > 0 ? (dot - 1) : len) - i;
+            int offset = cs[i] == '/';
+            cstr start = &cs[i + offset];
+            int n_bytes = (dot > 0 ? dot : len) - (i + offset);
             memcpy(res->chars, start, n_bytes);
             res->len = n_bytes;
             break;

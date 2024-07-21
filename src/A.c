@@ -56,7 +56,7 @@ A A_alloc(A_f* type, num count) {
             current->init(a->data);
         if (current == a_type)
             break;
-        current = current->parent;
+        current = current->parent_type;
     }
     return a->data; /// object(a) == this operation
 }
@@ -228,6 +228,28 @@ static num   string_compare(string a, string b) { return strcmp(a->chars, b->cha
 static array string_split(string a, A sp) {
     return null;
 }
+
+static void string_alloc_sz(string a, sz alloc) {
+    char* chars = calloc(alloc, sizeof(char));
+    memcpy(chars, a->chars, sizeof(char) * a->len);
+    chars[a->len] = 0;
+    free(a->chars);
+    a->chars = chars;
+    a->alloc = alloc;
+}
+
+static string string_mid(string a, num start, num len) {
+    return construct(string, cstr, &a->chars[start], len);
+}
+
+static none  string_append(string a, cstr b) {
+    sz blen = strlen(b);
+    string_alloc_sz(a, (a->alloc << 1) + blen);
+    memcpy(&a->chars[a->len], b, blen);
+    a->len += blen;
+    a->chars[a->len] = 0;
+}
+
 static num   string_index_of(string a, cstr cs) {
     char* f = strstr(a->chars, cs);
     return f ? (num)(f - a->chars) : (num)-1;
@@ -242,8 +264,8 @@ u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
     return hash;
 }
 
-static u64 field_hash(field f) {
-    return M(A, hash, f->key);
+static u64 item_hash(item f) {
+    return M(A, hash, f->key ? f->key : f->val);
 }
 
 static u64 string_hash(string a) {
@@ -300,7 +322,7 @@ void drop(A a) {
             }
             if (type == &A_type)
                 break;
-            type = type->parent;
+            type = type->parent_type;
         }
         free(aa);
     }
@@ -318,7 +340,7 @@ A data(A instance) {
 /// list -------------------------
 static void list_push(list a, A e) {
     item n = new(item);
-    n->element = e; /// held already by caller
+    n->val = e; /// held already by caller
     if (a->last) {
         a->last->next = n;
         n->prev       = a->last;
@@ -347,7 +369,7 @@ static num list_compare(list a, list b) {
     if (diff != 0)
         return diff;
     for (item ai = a->first, bi = b->first; ai; ai = ai->next, bi = bi->next) {
-        A_f* ai_t = *(A_f**)&((A)ai->element)[-1];
+        A_f* ai_t = *(A_f**)&((A)ai->val)[-1];
         num  cmp  = ai_t->compare(ai, bi);
         if (cmp != 0) return cmp;
     }
@@ -368,7 +390,7 @@ static A list_get(list a, num at_index) {
     num index = 0;
     for (item i = a->first; i; i = i->next) {
         if (at_index == index)
-            return i->element;
+            return i->val;
         index++;
     }
     assert(false);
@@ -623,14 +645,14 @@ u64 vector_hash(vector a) {
     return fnv1a_hash(obj->data, obj->type->size * obj->count, OFFSET_BASIS);
 }
 
-path path_with_cstr(path a, cstr path) {
+static path path_with_cstr(path a, cstr path) {
     num len = strlen(path);
     a->chars = calloc(len + 1, 1);
     memcpy(a->chars, path, len + 1);
     return a;
 }
 
-bool path_make_dir(path a) {
+static bool path_make_dir(path a) {
     cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
     for (num i = 1; i < len; i++) {
@@ -645,7 +667,7 @@ bool path_make_dir(path a) {
     return stat(cs, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
-bool path_is_empty(path a) {
+static bool path_is_empty(path a) {
     int    n = 0;
     struct dirent *d;
     DIR   *dir = opendir(a->chars);
@@ -661,7 +683,105 @@ bool path_is_empty(path a) {
     return n <= 2;  // Returns true if the directory is empty (only '.' and '..' are present)
 }
 
-bool path_exists(path a) {
+static string path_stem(path a) {
+    cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
+    sz   len = strlen(cs);
+    string res = construct(string, sz, 256);
+    sz     dot = 0;
+    for (num i = len - 1; i >= 0; i--) {
+        if (cs[i] == '.')
+            dot = i;
+        if (cs[i] == '/' || i == 0) {
+            cstr start = cs[i] == '/' ? &cs[i + 1] : &cs[i];
+            int n_bytes = (dot > 0 ? dot : len) - i;
+            memcpy(res->chars, start, n_bytes);
+            res->len = n_bytes;
+            break;
+        }
+    }
+    return res;
+}
+
+static string path_filename(path a) {
+    cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
+    sz   len = strlen(cs);
+    string res = construct(string, sz, 256);
+    for (num i = len - 1; i >= 0; i--) {
+        if (cs[i] == '/' || i == 0) {
+            cstr start = &cs[i + cs[i] == '/'];
+            int n_bytes = len - i;
+            memcpy(res->chars, start, n_bytes);
+            res->len = n_bytes;
+            break;
+        }
+    }
+    return res;
+}
+
+static path path_absolute(path a) {
+    path  result   = new(path);
+    result->chars  = strdup(realpath(a->chars, null));
+    return result;
+}
+
+static path path_directory(path a) {
+    path result = new(path);
+    result->chars = dirname(strdup(a->chars));
+    return result;
+}
+
+static path path_parent(path a) {
+    int len = strlen(a->chars);
+    char *cp = calloc(len + 4, 1);
+    memcpy(cp, a->chars, len);
+    if (a->chars[len - 1] == '\\' || a->chars[len - 1] == '/')
+        memcpy(&cp[len], "..", 3);
+    else
+        memcpy(&cp[len], "/..", 4);
+    char *dir_name = dirname(cp);
+    path  result   = new(path);
+    result->chars  = strdup(dir_name);
+    return result;
+}
+
+static path path_change_ext(path a, cstr ext) {
+    int   e_len = strlen(ext);
+    int     len = strlen(a->chars);
+    int ext_pos = -1;
+    for (int i = len - 1; i >= 0; i--) {
+        if (a->chars[i] == '/')
+            break;
+        if (a->chars[i] == '.') {
+            ext_pos = i;
+            break;
+        }
+    }
+    path res = new(path);
+    res->chars = calloc(32 + len + e_len, 1);
+    if (ext_pos >= 0) {
+        memcpy( res->chars, a->chars, ext_pos + 1);
+        if (e_len)
+            memcpy(&res->chars[ext_pos + 1], ext, e_len);
+        else
+            res->chars[ext_pos] = 0;
+    } else {
+        memcpy( res->chars, a->chars, len);
+        if (e_len) {
+            memcpy(&res->chars[len], ".", 1);
+            memcpy(&res->chars[len + 1], ext, e_len);
+        }
+    }
+    return res;
+}
+
+static path path_cwd(sz size) {
+    path a = new(path);
+    a->chars = calloc(size, 1);
+    getcwd(a->chars, size);
+    return a;
+}
+
+static bool path_exists(path a) {
     FILE *file = fopen(a->chars, "r");
     if (file) {
         fclose(file);
@@ -670,12 +790,12 @@ bool path_exists(path a) {
     return false; // File does not exist
 }
 
-u64 path_hash(path a) {
+static u64 path_hash(path a) {
     return fnv1a_hash(a->chars, strlen(a->chars), OFFSET_BASIS);
 }
 
 // implement several useful 
-A path_read(path a, AType type) {
+static A path_read(path a, AType type) {
     FILE* f = fopen(a->chars, "rb");
     if (!f) return null;
     if (type == typeof(string)) {
@@ -693,7 +813,7 @@ A path_read(path a, AType type) {
     return null;
 }
 
-field field_with_cstr(field f, cstr key, A val) {
+item item_with_cstr(item f, cstr key, A val) {
     f->key = construct(string, cstr, key, strlen(key));
     f->val = hold(val);
     return f;
@@ -747,10 +867,54 @@ define_enum(OPType)
 define_class(path)
 define_class(string)
 define_class(item)
-define_class(field)
 define_proto(collection)
 define_class(list)
 define_class(array)
 define_class(vector)
 
 define_alias(array, ATypes, AType)
+
+/*
+map map_parse(map a, int argc, cstr *argv, map def) {
+    map iargs = new(map);
+    for (int ai = 0; ai < argc; ai++) {
+        cstr ps = argv[ai];
+        ///
+        if (ps[0] == '-') {
+            bool   is_single = ps[1] != '-';
+            mx key {
+                cstr(&ps[is_single ? 1 : 2]), typeof(char)
+            };
+            field* found;
+            if (is_single) {
+                for (field &df: def.fields()) {
+                    symbol s = symbol(df.key.mem->origin);
+                    if (ps[1] == s[0]) {
+                        found = &df;
+                        break;
+                    }
+                }
+            } else found = def->lookup(key);
+            ///
+            if (found) {
+                str     aval = str(argv[ai + 1]);
+                type_t  type = found->value.mem->type;
+                /// from_string should use const str&
+                /// 
+                iargs[key] = mx::from_string((cstr)aval.mem->origin, type); /// static method on mx that performs the busy work of this
+            } else {
+                printf("arg not found: %s\n", key.mem->get<char>(0)); // shouldnt do this dangerous thing with strings
+                return {};
+            }
+        }
+    }
+    ///
+    /// return results in order of defaults, with default value given
+    map res = map();
+    for(field &df:def.data->fields.elements<field>()) {
+        field *ov = iargs->lookup(df.key);
+        res.data->fields += field { ion::hold(df.key), ov ? ion::hold(ov->value) : ion::hold(df.value) };
+    }
+    return res;
+}
+*/

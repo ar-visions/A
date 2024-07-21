@@ -9,7 +9,11 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <ctype.h>
-#include <unistd.h> 
+#include <libgen.h>
+#include <unistd.h>
+
+FILE *popen(const char *command, const char *type);
+int   pclose(FILE*);
 
 /// A-type runtime
 typedef void                none;
@@ -252,7 +256,7 @@ typedef struct member_t {
 /// so an alias of array may be called array_int from array and its meta is set to int
 /// the last part is useful for runtime
 #define A_f_members(B) \
-    struct B ## _f* parent; \
+    struct B ## _f* parent_type; \
     char*           name; \
     num             size; \
     num             member_count; \
@@ -330,7 +334,7 @@ void        A_lazy_init(global_init_fn fn);
         } else { \
             memcpy(type_ref, base_ref, sizeof(A_f)); \
             static member_t members[sizeof(E##_type) / sizeof(void*)]; \
-            E##_type.parent   = & A_type; \
+            E##_type.parent_type = & A_type; \
             E##_type.name     = #E; \
             E##_type.size     = sizeof(enum E); \
             E##_type.members  = members; \
@@ -373,7 +377,7 @@ void        A_lazy_init(global_init_fn fn);
         } else { \
             memcpy(type_ref, base_ref, sizeof(Y##_f)); \
             static member_t members[sizeof(X##_type) / sizeof(void*)]; \
-            X## _type.parent   = &Y##_type; \
+            X## _type.parent_type = &Y##_type; \
             X## _type.name     = #X;        \
             X## _type.size     = TYPE_SZ;   \
             X## _type.members  = members;   \
@@ -478,20 +482,15 @@ declare_primitive(handle)
 /// whatever we can 'name', we can handle as a type of any pointer primitive
 declare_primitive(AType)
 
-/// doubly-linked item type
+/// doubly-linked item type, integrated key so we dont also need a 'field' type
 #define item_meta(X,Y,Z) \
     i_intern(X,Y,Z, struct X*, next) \
     i_intern(X,Y,Z, struct X*, prev) \
-    i_intern(X,Y,Z, A,         element)
-declare_class(item)
-
-/// why not put a key on A
-#define field_meta(X,Y,Z) \
-    i_intern(X,Y,Z, A, key) \
-    i_intern(X,Y,Z, A, val) \
+    i_intern(X,Y,Z, A,         val) \
+    i_intern(X,Y,Z, A,         key) \
     i_override_m(X,Y,Z, u64, hash) \
     i_construct(X,Y,Z, cstr, A)
-declare_class(field)
+declare_class(item)
 
 /// abstract collection type
 /// proto needs an implement for each member type!
@@ -526,6 +525,8 @@ declare_mod(list, collection)
 // ":", "+=", "-=", "*=", "/=", "|=",
 // "&=", "^=", ">>=", "<<=", "%=", null);
 
+typedef struct string* string;
+
 #define OPType_meta(X,Y) \
     enum_value(X,Y, add) \
     enum_value(X,Y, sub) \
@@ -554,7 +555,14 @@ declare_enum(OPType)
     i_method    (X,Y,Z, bool,   exists) \
     i_method    (X,Y,Z, bool,   make_dir) \
     i_method    (X,Y,Z, bool,   is_empty) \
+    i_method    (X,Y,Z, path,   directory) \
+    i_method    (X,Y,Z, string, stem) \
+    i_method    (X,Y,Z, string, filename) \
+    i_method    (X,Y,Z, path,   absolute) \
+    i_method    (X,Y,Z, path,   parent) \
     i_method    (X,Y,Z, A,      read, AType) \
+    i_method    (X,Y,Z, path,   change_ext, cstr) \
+    s_method    (X,Y,Z, path,   cwd, sz) \
     i_override_m(X,Y,Z, u64,    hash) \
     i_construct (X,Y,Z, cstr)
 declare_class(path)
@@ -585,6 +593,40 @@ declare_mod(array, collection)
 
 declare_alias(array, ATypes)
 
+#define hashmap_meta(X,Y,Z) \
+    collection_meta  (X,Y,Z) \
+    i_intern         (X,Y,Z, list*, data) \
+    i_intern         (X,Y,Z, i32,   alloc) \
+    i_method         (X,Y,Z, X,     remove, A) \
+    i_method         (X,Y,Z, none,  set, A, A) \
+    i_method         (X,Y,Z, A,     get, A) \
+    i_method         (X,Y,Z, num,   count, A) \
+    i_method         (X,Y,Z, bool,  contains, A) \
+    i_construct      (X,Y,Z,        sz) \
+    i_override_m     (X,Y,Z, bool,  boolean) \
+    i_index          (X,Y,Z, A,     A) \
+    i_cast           (X,Y,Z, bool)
+declare_class(hashmap)
+
+/*
+#define map_meta(X,Y,Z) \
+    collection_meta  (X,Y,Z) \
+    i_intern         (X,Y,Z, list, fields) \
+    i_intern         (X,Y,Z, i32,  alloc) \
+    i_intern         (X,Y,Z, i32,  len) \
+    i_method         (X,Y,Z, X,    remove, A) \
+    i_method         (X,Y,Z, none, push, A) \
+    i_method         (X,Y,Z, A,    get, A) \
+    i_method         (X,Y,Z, A,    set, A, A) \
+    i_method         (X,Y,Z, num,  count, A) \
+    i_method         (X,Y,Z, bool, contains, A) \
+    i_construct      (X,Y,Z,       sz) \
+    i_override_m     (X,Y,Z, bool, boolean) \
+    i_index          (X,Y,Z, A,    A) \
+    i_cast           (X,Y,Z, bool)
+declare_class(map)
+*/
+
 void array_push(array a, A b);
 
 /// how beneficial is it to have args in 'context' structure?
@@ -608,6 +650,8 @@ declare_class(fn)
     i_intern(X,Y,Z,     u64,     h) \
     i_method(X,Y,Z,     array,   split, A) \
     i_method(X,Y,Z,     num,     index_of, cstr) \
+    i_method(X,Y,Z,     none,    append, cstr) \
+    i_method(X,Y,Z,     string,  mid, num, num) \
     i_construct(X,Y,Z,  sz) \
     i_construct(X,Y,Z,  cstr, num) \
     i_override_m(X,Y,Z, u64, hash) \

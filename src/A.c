@@ -697,7 +697,6 @@ static string path_stem(path a) {
             memcpy(res->chars, start, n_bytes);
             res->len = n_bytes;
             break;
-            
         }
     }
     return res;

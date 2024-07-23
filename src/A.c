@@ -212,7 +212,19 @@ static A   A_new_default(AType type, num count) {
     return A_alloc(type, count);
 }
 static void A_init      (A a) { }
-static void A_destructor(A a) { }
+static void A_destructor(A a) {
+    // go through objects type fields and their offsets; when they are traited as A, we release
+    AType type = typeid(a);
+    for (num i = 0; i < type->member_count; i++) {
+        member_t* m = &type->members[i];
+        if ((m->member_type == A_TYPE_PROP || m->member_type == A_TYPE_PRIV) && !(m->type->traits & A_TRAIT_PRIMITIVE)) {
+            u8* ptr = (u8*)a + m->offset;
+            A   ref = ptr;
+            drop(ref);
+            *((A*)&ptr) = null;
+        }
+    }
+}
 static u64  A_hash      (A a) { return (u64)(size_t)a; }
 static bool A_boolean   (A a) { return (bool)(size_t)a; }
 

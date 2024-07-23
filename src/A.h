@@ -57,13 +57,15 @@ typedef bool(*global_init_fn)();
 enum A_TYPE {
     A_TYPE_NONE      = 0,
     A_TYPE_PROP      = 1,
-    A_TYPE_IMETHOD   = 2,
-    A_TYPE_SMETHOD   = 4,
-    A_TYPE_CONSTRUCT = 8,
-    A_TYPE_OPERATOR  = 32,
-    A_TYPE_CAST      = 64,
-    A_TYPE_INDEX     = 128,
-    A_TYPE_ENUMV     = 256
+    A_TYPE_PRIV      = 2,
+    A_TYPE_INTERN    = 4,
+    A_TYPE_IMETHOD   = 8,
+    A_TYPE_SMETHOD   = 16,
+    A_TYPE_CONSTRUCT = 32,
+    A_TYPE_OPERATOR  = 64,
+    A_TYPE_CAST      = 128,
+    A_TYPE_INDEX     = 256,
+    A_TYPE_ENUMV     = 512
 };
 
 enum A_TRAIT {
@@ -84,11 +86,23 @@ enum A_TRAIT {
 #define   enum_value(X,Y, N)                enum_value_##Y(X, N)
 
 #define   i_intern_INST(X,Y, R, N, ...)     R N;
-#define   i_intern_TYPE(X,Y, R, N, ...)  
+#define   i_intern_TYPE(X,Y, R, N, ...)
 #define   i_intern_INIT(X,Y, R, N, ...)
 #define   i_intern_PROTO(X,Y, R, N, ...)    
 #define   i_intern_METHOD(X,Y, R, N, ...)    
 #define   i_intern(X,Y,Z, R, N, ...)        i_intern_##Z(X,Y,R,N, __VA_ARGS__)
+
+#define   i_priv_INST(X,Y, R, N, ...)       R N;
+#define   i_priv_TYPE(X,Y, R, N, ...)
+#define   i_priv_INIT(X,Y, R, N, ...) \
+    X##_type.members[X##_type.member_count].name     = #N; \
+    X##_type.members[X##_type.member_count].offset   = offsetof(struct X, N); \
+    X##_type.members[X##_type.member_count].type     = &R##_type; \
+    X##_type.members[X##_type.member_count].member_type = A_TYPE_PRIV; \
+    X##_type.member_count++;
+#define   i_priv_PROTO(X,Y, R, N, ...)    
+#define   i_priv_METHOD(X,Y, R, N, ...)    
+#define   i_priv(X,Y,Z, R, N, ...)          i_priv_##Z(X,Y,R,N, __VA_ARGS__)
 
 #define   i_public_INST(X,Y, R, N, ...)     R N;
 #define   i_public_TYPE(X,Y, R, N, ...)      
@@ -444,7 +458,7 @@ void* primitive_ffi_arb(AType);
 
 /// constructors get a type forwarded from the construct macro
 #define A_meta(X,Y,Z) \
-    i_intern(X,Y,Z, AType,       type) \
+    i_intern(X,Y,Z, AType,     type) \
     i_intern(X,Y,Z, num,       refs) \
     i_intern(X,Y,Z, struct A*, data) \
     i_intern(X,Y,Z, num,       alloc) \

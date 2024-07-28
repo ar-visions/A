@@ -1,4 +1,4 @@
-#include <A.h>
+#include <A>
 #include <ffi.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -14,7 +14,8 @@ void A_lazy_init(global_init_fn fn) {
     if (call_after_count == call_after_alloc) {
         global_init_fn prev       = call_after;
         num            alloc_prev = call_after_alloc;
-        call_after                = calloc(32 + (call_after_alloc << 1), sizeof(global_init_fn));
+        call_after_alloc          = 32 + (call_after_alloc << 1);
+        call_after                = calloc(call_after_alloc, sizeof(global_init_fn));
         if (prev) {
             memcpy(call_after, prev, sizeof(global_init_fn) * alloc_prev);
             free(prev);
@@ -27,7 +28,7 @@ void A_push_type(A_f* type) {
     if (types_alloc == types_len) {
         A_f** prev = types;
         num   alloc_prev = types_alloc;
-        types_alloc = 32 + (types_alloc << 1);
+        types_alloc = 128 + (types_alloc << 1);
         types = calloc(types_alloc, sizeof(A_f*));
         if (alloc_prev) {
             memcpy(types, prev, sizeof(A_f*) * alloc_prev);
@@ -58,11 +59,11 @@ A A_alloc(A_f* type, num count) {
             break;
         current = current->parent_type;
     }
-    return a->data; /// object(a) == this operation
+    return a->data; /// fields(a) == this operation
 }
 
 A A_realloc(A a, num alloc) {
-    A obj = object(a);
+    A obj = fields(a);
     assert(obj->type->traits == A_TRAIT_PRIMITIVE);
     A   re    = calloc(1, sizeof(struct A) + obj->type->size * alloc);
     num count = obj->count < alloc ? obj->count : alloc;
@@ -77,7 +78,7 @@ A A_realloc(A a, num alloc) {
 }
 
 void A_push(A a, A value) {
-    A   obj = object(a);
+    A   obj = fields(a);
     assert(obj->type->traits == A_TRAIT_PRIMITIVE);
     num sz  = obj->type->size;
     if (obj->count == obj->alloc)
@@ -85,7 +86,7 @@ void A_push(A a, A value) {
     memcpy(&((u8*)obj->data)[obj->count++ * sz], value, sz);
 }
 
-method_t* method_with_address(handle address, AType rtype, array atypes) {
+method_t* method_with_address(handle address, AType rtype, array atypes, AType method_owner) {
     const num max_args = 8;
     method_t* method = calloc(1, sizeof(method_t));
     method->ffi_cif  = calloc(1,        sizeof(ffi_cif));
@@ -101,7 +102,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes) {
     }
     ffi_status status = ffi_prep_cif(
         (ffi_cif*) method->ffi_cif, FFI_DEFAULT_ABI, atypes->len,
-        (ffi_type*)rtype->arb, ffi_args);
+        (ffi_type*)(rtype->traits & A_TRAIT_ABSTRACT) ? method_owner->arb : rtype->arb, ffi_args);
     assert(status == FFI_OK);
     return method;
 }
@@ -127,7 +128,7 @@ A method_call(method_t* a, array args) {
 
 /// this calls type methods
 A A_method(A_f* type, cstr method_name, array args) {
-    member_t* mem = A_member(type, A_TYPE_IMETHOD | A_TYPE_SMETHOD, method_name);
+    type_member_t* mem = A_member(type, A_TYPE_IMETHOD | A_TYPE_SMETHOD, method_name);
     assert(mem->method);
     return method_call(mem->method, args);
 }
@@ -150,10 +151,10 @@ void A_finish_types() {
     /// iterate through types
     for (num i = 0; i < types_len; i++) {
         A_f* type = types[i];
-
+        if (type->traits & A_TRAIT_ABSTRACT) continue;
         /// for each member of type
         for (num m = 0; m < type->member_count; m++) {
-            member_t* mem = &type->members[m];
+            type_member_t* mem = &type->members[m];
             if (mem->member_type & (A_TYPE_IMETHOD | A_TYPE_SMETHOD | A_TYPE_CONSTRUCT)) {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
@@ -162,20 +163,24 @@ void A_finish_types() {
                 for (num i = 0; i < mem->args.count; i++)
                     args->elements[i] = ((A_f**)&mem->args.arg_0)[i];
                 args->len = mem->args.count;
-                mem->method = method_with_address(address, mem->type, args);
+                mem->method = method_with_address(address, mem->type, args, type);
             }
         }
     }
 }
 
-member_t* A_member(A_f* type, enum A_TYPE member_type, char* name) {
+type_member_t* A_member(A_f* type, enum A_TYPE member_type, char* name) {
     for (num i = 0; i < type->member_count; i++) {
-        member_t* mem = &type->members[i];
+        type_member_t* mem = &type->members[i];
         if (mem->member_type & member_type && strcmp(mem->name, name) == 0)
             return mem;
     }
     return 0;
 }
+
+/// can we have i32_with_i16(i32 a, i16 b)
+/// primitives are based on A alone
+/// i wonder if we can add more constructors or even methods to the prims
 
 A A_primitive(A_f* type, void* data) {
     assert(type->traits & A_TRAIT_PRIMITIVE);
@@ -213,10 +218,10 @@ static A   A_new_default(AType type, num count) {
 }
 static void A_init      (A a) { }
 static void A_destructor(A a) {
-    // go through objects type fields and their offsets; when they are traited as A, we release
+    // go through objects type fields/offsets; when type is A-based, we release
     AType type = typeid(a);
     for (num i = 0; i < type->member_count; i++) {
-        member_t* m = &type->members[i];
+        type_member_t* m = &type->members[i];
         if ((m->member_type == A_TYPE_PROP || m->member_type == A_TYPE_PRIV) && !(m->type->traits & A_TRAIT_PRIMITIVE)) {
             u8* ptr = (u8*)a + m->offset;
             A   ref = ptr;
@@ -226,7 +231,64 @@ static void A_destructor(A a) {
     }
 }
 static u64  A_hash      (A a) { return (u64)(size_t)a; }
-static bool A_boolean   (A a) { return (bool)(size_t)a; }
+static bool A_cast_bool (A a) { return (bool)(size_t)a; }
+
+static A A_with_cstr(A a, cstr cs, num len) {
+    A        f = fields(a);
+    AType type = f->type;
+    if      (type == typeof(f64)) sscanf(cs, "%lf",  (f64*)a);
+    else if (type == typeof(f32)) sscanf(cs, "%f",   (f32*)a);
+    else if (type == typeof(i32)) sscanf(cs, "%i",   (i32*)a);
+    else if (type == typeof(u32)) sscanf(cs, "%u",   (u32*)a);
+    else if (type == typeof(i64)) sscanf(cs, "%lli", (i64*)a);
+    else if (type == typeof(u64)) sscanf(cs, "%llu", (u64*)a);
+    else {
+        printf("implement construct cstr for %s\n", f->type->name);
+        exit(-1);
+    }
+
+    return a;
+}
+
+#define set_v() \
+    AType type = typeid(a); \
+    if (type == typeof(i8))  *(i8*) a = (i8) v; \
+    if (type == typeof(i16)) *(i16*)a = (i16)v; \
+    if (type == typeof(i32)) *(i32*)a = (i32)v; \
+    if (type == typeof(i64)) *(i64*)a = (i64)v; \
+    if (type == typeof(u8))  *(u8*) a = (u8) v; \
+    if (type == typeof(u16)) *(u16*)a = (u16)v; \
+    if (type == typeof(u32)) *(u32*)a = (u32)v; \
+    if (type == typeof(u64)) *(u64*)a = (u64)v; \
+    if (type == typeof(f32)) *(f32*)a = (f32)v; \
+    if (type == typeof(f64)) *(f64*)a = (f64)v; \
+    return a;
+
+static A numeric_with_i8 (A a, i8   v) { set_v(); }
+static A numeric_with_i16(A a, i16  v) { set_v(); }
+static A numeric_with_i32(A a, i32  v) { set_v(); }
+static A numeric_with_i64(A a, i64  v) {
+    AType type = typeid(a);
+    if (type == typeof(i8))  *(i8*) a = (i8) v;
+    if (type == typeof(i16)) *(i16*)a = (i16)v;
+    if (type == typeof(i32)) *(i32*)a = (i32)v; \
+    if (type == typeof(i64)) *(i64*)a = (i64)v; \
+    if (type == typeof(u8))  *(u8*) a = (u8) v; \
+    if (type == typeof(u16)) *(u16*)a = (u16)v; \
+    if (type == typeof(u32)) *(u32*)a = (u32)v; \
+    if (type == typeof(u64)) *(u64*)a = (u64)v; \
+    if (type == typeof(f32)) *(f32*)a = (f32)v; \
+    if (type == typeof(f64)) *(f64*)a = (f64)v; \
+    return a;
+}
+static A numeric_with_u8 (A a, u8   v) { set_v(); }
+static A numeric_with_u16(A a, u16  v) { set_v(); }
+static A numeric_with_u32(A a, u32  v) { set_v(); }
+static A numeric_with_u64(A a, u64  v) { set_v(); }
+static A numeric_with_f32(A a, f32  v) { set_v(); }
+static A numeric_with_f64(A a, f64  v) { set_v(); }
+static A numeric_with_bool(A a, bool v) { set_v(); }
+static A numeric_with_num(A a, num  v) { set_v(); }
 
 A A_method(A_f* type, char* method_name, array args);
 
@@ -235,9 +297,26 @@ static i32 A_compare(A a, A b) {
     return (i32)(a - b);
 }
 
+string format(cstr template, ...) {
+    va_list args;
+    va_start(args, template);
+    char buf[1024];
+    sz len = vsnprintf(buf, sizeof(buf), template, args);
+    va_end(args);
+    return construct(string, cstr, buf, len);
+}
+
 static void  string_destructor(string a) { free(a->chars); }
 static num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
-static array string_split(string a, A sp) {
+
+static array string_split(string a, cstr sp) {
+    cstr next = a->chars;
+    sz   slen = strlen(sp);
+    while (next) {
+        cstr   n = strstr(&next[1], sp);
+        string v = construct(string, cstr, next, n ? (sz)(next - n) : -1);
+        next = n ? n + slen : null;
+    }
     return null;
 }
 
@@ -267,6 +346,10 @@ static num   string_index_of(string a, cstr cs) {
     return f ? (num)(f - a->chars) : (num)-1;
 }
 
+static bool string_cast_bool(string a) {
+    return a->len > 0;
+}
+
 u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
     const u8* bytes = (const u8*)data;
     for (size_t i = 0; i < length; ++i) {
@@ -286,13 +369,13 @@ static u64 string_hash(string a) {
     return a->h;
 }
 
-string string_with_sz(string a, sz size) {
+static string string_with_sz(string a, sz size) {
     a->alloc = size;
     a->chars = (char*)calloc(1, a->alloc);
     return a;
 }
 
-string string_with_cstr(string a, cstr value, num len) {
+static string string_with_cstr(string a, cstr value, num len) {
     if (len == -1) len = strlen(value);
     a->alloc = len + 1;
     a->len   = len;
@@ -302,9 +385,79 @@ string string_with_cstr(string a, cstr value, num len) {
     return a;
 }
 
+static item hashmap_fetch(hashmap a, A key) {
+    u64 h = fnv1a_hash(key, strlen(key), OFFSET_BASIS);
+    u64 k = h % a->alloc;
+    list bucket = a->data[k];
+    for (item f = bucket->first; f; f = f->next)
+        if (call(f->key, compare, key) == 0)
+            return f;
+    item n = call(bucket, push, null);
+    n->key = hold(key);
+    a->count++;
+    return n;
+}
+
+static item hashmap_lookup(hashmap a, A key) {
+    u64 h = fnv1a_hash(key, strlen(key), OFFSET_BASIS);
+    u64 k = h % a->alloc;
+    list bucket = a->data[k];
+    for (item f = bucket->first; f; f = f->next)
+        if (call(f->key, compare, key) == 0)
+            return f;
+    return null;
+}
+
+static none hashmap_set(hashmap a, A key, A value) {
+    item i = call(a, fetch, key);
+    A prev = i->val;
+    i->val = hold(value);
+    drop(prev);
+}
+
+static A hashmap_get(hashmap a, A key) {
+    item i = call(a, lookup, key);
+    return i ? i->val : null;
+}
+
+static bool hashmap_contains(hashmap a, A key) {
+    item i = call(a, lookup, key);
+    return i != null;
+}
+
+static none hashmap_remove(hashmap a, A key) {
+    u64 h = fnv1a_hash(key, strlen(key), OFFSET_BASIS);
+    u64 k = h % a->alloc;
+    list bucket = a->data[k];
+    for (item f = bucket->first; f; f = f->next)
+        if (call(f->key, compare, key) == 0) {
+            call(bucket, remove_item, f);
+            a->count--;
+            break;
+        }
+}
+
+static bool hashmap_cast_bool(hashmap a) {
+    return a->count > 0;
+}
+
+static A hashmap_index_A(hashmap a, A key) {
+    return call(a, get, key);
+}
+
+static hashmap hashmap_with_sz(hashmap a, sz size) {
+    a->alloc = size;
+    a->data  = (list*)calloc(size, sizeof(list));
+    return a;
+}
+
+define_class(hashmap)
+
+
 /// collection -------------------------
-static void collection_push(collection a, A b) {
+static A collection_push(collection a, A b) {
     assert(false);
+    return null;
 }
 
 static A  collection_pop(collection a) {
@@ -340,17 +493,17 @@ void drop(A a) {
     }
 }
 
-A object(A instance) {
+A fields(A instance) {
     return (instance - 1)->origin;
 }
 
 A data(A instance) {
-    A obj = object(instance);
+    A obj = fields(instance);
     return obj->data;
 }
 
 /// list -------------------------
-static void list_push(list a, A e) {
+static item list_push(list a, A e) {
     item n = new(item);
     n->val = e; /// held already by caller
     if (a->last) {
@@ -361,6 +514,7 @@ static void list_push(list a, A e) {
     }
     a->last = n;
     a->count++;
+    return n;
 }
 
 static A list_remove(list a, num index) {
@@ -373,6 +527,17 @@ static A list_remove(list a, num index) {
             if (ai->next)       ai->next->prev = ai->prev;
             a->count--;
         }
+    }
+}
+
+static A list_remove_item(list a, item ai) {
+    num i = 0;
+    if (ai) {
+        if (ai == a->first) a->first = ai->next;
+        if (ai == a->last)  a->last  = ai->prev;
+        if (ai->prev)       ai->prev->next = ai->next;
+        if (ai->next)       ai->next->prev = ai->prev;
+        a->count--;
     }
 }
 
@@ -427,10 +592,6 @@ static void array_expand(array a) {
     array_alloc_sz(a, alloc);
 }
 
-static bool array_cast_bool(array a) {
-    return a->len > 0;
-}
-
 bool is_meta(A a) {
     AType t = typeid(a);
     return t->meta.count > 0;
@@ -451,7 +612,7 @@ bool is_meta_compatible(A a, A b) {
     return false;
 }
 
-void array_push(array a, A b) {
+static A array_push(array a, A b) {
     if (a->alloc == a->len) {
         array_expand(a);
     }
@@ -459,6 +620,7 @@ void array_push(array a, A b) {
     if (is_meta(a))
         assert(is_meta_compatible(a, b));
     a->elements[a->len++] = b;
+    return b;
 }
 
 static A array_index_num(array a, num i) {
@@ -477,7 +639,7 @@ static A array_remove(array a, num b) {
 }
 
 static void array_operator_assign_add(array a, A b) {
-    return array_push(a, b);
+    array_push(a, b);
 }
 
 static void array_operator_assign_sub(array a, num b) {
@@ -494,9 +656,9 @@ static A array_last(array a) {
     return a->elements[a->len - 1];
 }
 
-static void array_push_symbols(array a, char* f, ...) {
+static void array_push_symbols(array a, ...) {
     va_list args;
-    va_start(args, f);
+    va_start(args, a);
     char* value;
     while ((value = va_arg(args, char*)) != null) {
         string s = construct(string, cstr, value, strlen(value));
@@ -557,13 +719,13 @@ static num array_count(array a) {
 /// index of element that compares to 0 diff with item
 static num array_index_of(array a, A b) {
     for (num i = 0; i < a->len; i++) {
-        if (a -> elements[i] == b)
+        if (call(a -> elements[i], compare, b) == 0)
             return i;
     }
     return -1;
 }
 
-static bool array_boolean(array a) { return a && a->len > 0; }
+static bool array_cast_bool(array a) { return a && a->len > 0; }
 
 static array array_with_sz(array a, sz size) {
     array_alloc_sz(a, size);
@@ -579,26 +741,28 @@ static A fn_call(fn f, array args) {
 
 static fn fn_with_ATypes(fn f, ATypes atypes, AType rtype, handle address) {
     assert(atypes->len <= 8);
-    f->method = method_with_address(address, rtype, atypes);
+    f->method = method_with_address(address, rtype, atypes, null);
     return f;
 }
 
 define_class(fn)
 
 
-static void vector_push(vector a, A b) {
-    A obj = object(a);
+static A vector_push(vector a, A b) {
+    A obj = fields(a);
     if (obj->alloc == obj->count)
         A_realloc(obj, 32 + (obj->alloc < 1));
     u8* dst = obj->data;
     num sz = obj->type->size;
-    memcpy(&dst[sz * obj->count++], b, sz);
+    A   cp = &dst[sz * obj->count++];
+    memcpy(cp, b, sz);
+    return cp;
 }
 
 /// the only thing we would look out for here is a generic 
 /// user of 'collection' calling object on this return result
 static A vector_pop(vector a) {
-    A obj = object(a);
+    A obj = fields(a);
     assert(obj->count > 0);
     u8* dst = obj->data;
     num sz = obj->type->size;
@@ -606,8 +770,8 @@ static A vector_pop(vector a) {
 }
 
 static num vector_compare(vector a, vector b) {
-    A a_object = object(a);
-    A b_object = object(b);
+    A a_object = fields(a);
+    A b_object = fields(b);
     num diff = a_object->count - b_object->count;
     if (diff != 0)
         return diff;
@@ -624,19 +788,19 @@ static num vector_compare(vector a, vector b) {
 }
 
 static A vector_get(vector a, num i) {
-    A a_object = object(a);
+    A a_object = fields(a);
     u8* a_data = data(a);
     num sz = a_object->type->size;
     return (A)&a_data[i * sz];
 }
 
 static num vector_count(vector a) {
-    A a_object = object(a);
+    A a_object = fields(a);
     return a_object->count;
 }
 
 static num vector_index_of(vector a, A b) {
-    A a_object = object(a);
+    A a_object = fields(a);
     u8* a_data = data(a);
     u8* b_data = data(b);
     num sz = a_object->type->size;
@@ -647,18 +811,18 @@ static num vector_index_of(vector a, A b) {
     return -1;
 }
 
-static bool vector_boolean(vector a) {
-    A a_object = object(a);
+static bool vector_cast_bool(vector a) {
+    A a_object = fields(a);
     return a_object->count > 0;
 }
 
 u64 vector_hash(vector a) {
-    A obj = object(a);
+    A obj = fields(a);
     return fnv1a_hash(obj->data, obj->type->size * obj->count, OFFSET_BASIS);
 }
 
-static path path_with_cstr(path a, cstr path) {
-    num len = strlen(path);
+static path path_with_cstr(path a, cstr path, num sz) {
+    num len = sz == -1 ? strlen(path) : sz;
     a->chars = calloc(len + 1, 1);
     memcpy(a->chars, path, len + 1);
     return a;
@@ -826,8 +990,8 @@ static A path_read(path a, AType type) {
     return null;
 }
 
-item item_with_cstr(item f, cstr key, A val) {
-    f->key = construct(string, cstr, key, strlen(key));
+item item_with_symbol(item f, symbol key, A val) {
+    f->key = construct(string, cstr, (cstr)key, strlen(key));
     f->val = hold(val);
     return f;
 }
@@ -845,6 +1009,7 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeof(f64)) return &ffi_type_double;
     if (ptype == typeof(f128)) return &ffi_type_longdouble;
     if (ptype == typeof(cstr)) return &ffi_type_pointer;
+    if (ptype == typeof(symbol)) return &ffi_type_pointer;
     if (ptype == typeof(bool)) return &ffi_type_uint32;
     if (ptype == typeof(num)) return &ffi_type_sint64;
     if (ptype == typeof(sz)) return &ffi_type_sint64;
@@ -857,24 +1022,30 @@ void* primitive_ffi_arb(AType ptype) {
 
 define_class(A)
 
-define_primitive( u8,  A_TRAIT_INTEGRAL)
-define_primitive(u16,  A_TRAIT_INTEGRAL)
-define_primitive(u32,  A_TRAIT_INTEGRAL)
-define_primitive(u64,  A_TRAIT_INTEGRAL)
-define_primitive( i8,  A_TRAIT_INTEGRAL)
-define_primitive(i16,  A_TRAIT_INTEGRAL)
-define_primitive(i32,  A_TRAIT_INTEGRAL)
-define_primitive(i64,  A_TRAIT_INTEGRAL)
-define_primitive(f32,  A_TRAIT_REALISTIC)
-define_primitive(f64,  A_TRAIT_REALISTIC)
-define_primitive(f128, A_TRAIT_REALISTIC)
-define_primitive(cstr, 0)
-define_primitive(bool, A_TRAIT_INTEGRAL)
-define_primitive(num,  A_TRAIT_INTEGRAL)
-define_primitive(sz,   A_TRAIT_INTEGRAL)
-define_primitive(none, 0)
-define_primitive(AType, 0)
-define_primitive(handle, 0)
+define_abstract(numeric)
+define_abstract(string_like)
+define_abstract(nil)
+define_abstract(raw)
+
+define_primitive( u8,    numeric, A_TRAIT_INTEGRAL)
+define_primitive(u16,    numeric, A_TRAIT_INTEGRAL)
+define_primitive(u32,    numeric, A_TRAIT_INTEGRAL)
+define_primitive(u64,    numeric, A_TRAIT_INTEGRAL)
+define_primitive( i8,    numeric, A_TRAIT_INTEGRAL)
+define_primitive(i16,    numeric, A_TRAIT_INTEGRAL)
+define_primitive(i32,    numeric, A_TRAIT_INTEGRAL)
+define_primitive(i64,    numeric, A_TRAIT_INTEGRAL)
+define_primitive(bool,   numeric, A_TRAIT_INTEGRAL)
+define_primitive(num,    numeric, A_TRAIT_INTEGRAL)
+define_primitive(sz,     numeric, A_TRAIT_INTEGRAL)
+define_primitive(f32,    numeric, A_TRAIT_REALISTIC)
+define_primitive(f64,    numeric, A_TRAIT_REALISTIC)
+define_primitive(f128,   numeric, A_TRAIT_REALISTIC)
+define_primitive(cstr,   string_like, 0)
+define_primitive(symbol, string_like, 0)
+define_primitive(none,   nil, 0)
+define_primitive(AType,  raw, 0)
+define_primitive(handle, raw, 0)
 
 define_enum(OPType)
 define_class(path)

@@ -12,7 +12,7 @@ static num             types_len;
 
 void A_lazy_init(global_init_fn fn) {
     if (call_after_count == call_after_alloc) {
-        global_init_fn prev       = call_after;
+        global_init_fn* prev      = call_after;
         num            alloc_prev = call_after_alloc;
         call_after_alloc          = 32 + (call_after_alloc << 1);
         call_after                = calloc(call_after_alloc, sizeof(global_init_fn));
@@ -82,7 +82,7 @@ void A_push(A a, A value) {
     assert(obj->type->traits == A_TRAIT_PRIMITIVE);
     num sz  = obj->type->size;
     if (obj->count == obj->alloc)
-        A_realloc(a, 32 + obj->alloc << 1);
+        A_realloc(a, 32 + (obj->alloc << 1));
     memcpy(&((u8*)obj->data)[obj->count++ * sz], value, sz);
 }
 
@@ -519,18 +519,24 @@ static item list_push(list a, A e) {
 
 static A list_remove(list a, num index) {
     num i = 0;
+    item res = null;
     for (item ai = a->first; ai; ai = ai->next) {
         if (i++ == index) {
+            res = ai;
             if (ai == a->first) a->first = ai->next;
             if (ai == a->last)  a->last  = ai->prev;
             if (ai->prev)       ai->prev->next = ai->next;
             if (ai->next)       ai->next->prev = ai->prev;
             a->count--;
+            res->prev = null;
+            res->next = null;
         }
     }
+    return res;
 }
 
 static A list_remove_item(list a, item ai) {
+    item res = null;
     num i = 0;
     if (ai) {
         if (ai == a->first) a->first = ai->next;
@@ -538,7 +544,10 @@ static A list_remove_item(list a, item ai) {
         if (ai->prev)       ai->prev->next = ai->next;
         if (ai->next)       ai->next->prev = ai->prev;
         a->count--;
+        res->prev = null;
+        res->next = null;
     }
+    return res;
 }
 
 static num list_compare(list a, list b) {
@@ -679,8 +688,8 @@ static void array_push_objects(array a, A f, ...) {
 static array array_of_objects(AType validate, ...) {
     array a = new(array);
     va_list args;
-    va_start(args, NULL);
-
+    va_start(args, validate);
+    assert(false);
     for (;;) {
         A arg = va_arg(args, A);
         if (!arg)
@@ -729,6 +738,7 @@ static bool array_cast_bool(array a) { return a && a->len > 0; }
 
 static array array_with_sz(array a, sz size) {
     array_alloc_sz(a, size);
+    return a;
 }
 
 static u64 fn_hash(fn f) {
@@ -1007,7 +1017,7 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeof(i64)) return &ffi_type_sint64;
     if (ptype == typeof(f32)) return &ffi_type_float;
     if (ptype == typeof(f64)) return &ffi_type_double;
-    if (ptype == typeof(f128)) return &ffi_type_longdouble;
+    //if (ptype == typeof(f128)) return &ffi_type_longdouble;
     if (ptype == typeof(cstr)) return &ffi_type_pointer;
     if (ptype == typeof(symbol)) return &ffi_type_pointer;
     if (ptype == typeof(bool)) return &ffi_type_uint32;
@@ -1040,7 +1050,7 @@ define_primitive(num,    numeric, A_TRAIT_INTEGRAL)
 define_primitive(sz,     numeric, A_TRAIT_INTEGRAL)
 define_primitive(f32,    numeric, A_TRAIT_REALISTIC)
 define_primitive(f64,    numeric, A_TRAIT_REALISTIC)
-define_primitive(f128,   numeric, A_TRAIT_REALISTIC)
+//define_primitive(f128,   numeric, A_TRAIT_REALISTIC)
 define_primitive(cstr,   string_like, 0)
 define_primitive(symbol, string_like, 0)
 define_primitive(none,   nil, 0)

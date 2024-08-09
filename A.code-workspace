@@ -5,6 +5,12 @@
 		},
 		{
 			"path": "../silver"
+		},
+		{
+			"path": "../ion"
+		},
+		{
+			"path": "../dawn"
 		}
 	],
 	"settings": {
@@ -122,7 +128,9 @@
 			"__bit_reference": "c",
 			"__node_handle": "c",
 			"bitset": "c",
-			"__memory": "c"
+			"__memory": "c",
+			"example.h": "c",
+			"*.hpp11": "cpp"
 		}
 	}
 }

@@ -1036,6 +1036,7 @@ define_abstract(numeric)
 define_abstract(string_like)
 define_abstract(nil)
 define_abstract(raw)
+define_abstract(imported)
 
 define_primitive( u8,    numeric, A_TRAIT_INTEGRAL)
 define_primitive(u16,    numeric, A_TRAIT_INTEGRAL)

@@ -130,7 +130,9 @@
 			"bitset": "c",
 			"__memory": "c",
 			"example.h": "c",
-			"*.hpp11": "cpp"
+			"*.hpp11": "cpp",
+			"webgpu.h": "c",
+			"stdlib.h": "c"
 		}
 	}
 }

@@ -517,7 +517,7 @@ void* primitive_ffi_arb(AType);
     i_method(X,Y,Z, none,      destructor) \
     i_method(X,Y,Z, i32,       compare,    X) \
     i_method(X,Y,Z, u64,       hash) \
-    i_cast(X,Y,Z, bool) \
+    i_cast(  X,Y,Z, bool) \
     i_construct(X,Y,Z, cstr, num)
 declare_base(A)
 
@@ -547,6 +547,9 @@ declare_abstract(nil)
 #define raw_meta(X,Y,Z)
 declare_abstract(raw)
 
+#define imported_meta(X,Y,Z)
+declare_abstract(imported)
+
 /// our numeric primitives have their constructs defined
 /// this is so we have a defined construction method for data conversion, we actually need it registered
 /// we may optimize the need for it to be called in C99 output once working
@@ -572,28 +575,28 @@ declare_abstract(raw)
 #define AType_meta(X,Y,Z)   raw_meta(X,Y,Z)
 
 /// meta gives us access to one token we can override with (F)
-declare_primitive( i8, numeric)
-declare_primitive(i16, numeric)
-declare_primitive(i32, numeric)
-declare_primitive(i64, numeric)
-declare_primitive( u8, numeric)
-declare_primitive(u16, numeric)
-declare_primitive(u32, numeric)
-declare_primitive(u64, numeric)
-declare_primitive(f32, numeric)
-declare_primitive(f64, numeric)
-declare_primitive(f128, numeric)
-declare_primitive(cstr, string_like)
-declare_primitive(symbol, string_like)
-declare_primitive(bool, numeric)
-declare_primitive(none, nil)
-declare_primitive(num,  numeric)
-declare_primitive(sz,   numeric)
-declare_primitive(raw_t, raw)
-declare_primitive(handle, raw)
+declare_primitive( i8,          numeric)
+declare_primitive(i16,          numeric)
+declare_primitive(i32,          numeric)
+declare_primitive(i64,          numeric)
+declare_primitive( u8,          numeric)
+declare_primitive(u16,          numeric)
+declare_primitive(u32,          numeric)
+declare_primitive(u64,          numeric)
+declare_primitive(f32,          numeric)
+declare_primitive(f64,          numeric)
+declare_primitive(f128,         numeric)
+declare_primitive(cstr,         string_like)
+declare_primitive(symbol,       string_like)
+declare_primitive(bool,         numeric)
+declare_primitive(none,         nil)
+declare_primitive(num,          numeric)
+declare_primitive(sz,           numeric)
+declare_primitive(raw_t,        raw)
+declare_primitive(handle,       raw)
 
 /// whatever we can 'name', we can handle as a type of any pointer primitive
-declare_primitive(AType, raw)
+declare_primitive(AType,        raw)
 
 /// doubly-linked item type, integrated key so we dont also need a 'field' type
 #define item_meta(X,Y,Z) \
@@ -763,6 +766,9 @@ declare_class(string)
     i_override_cast(X,Y,Z, bool)
 declare_mod(vector, collection)
 
+/// we do not want to resolve types at startup by stringifying them
+/// this results in a more compact binary and quicker runtime
+/// it also means our primitives can work, too since they have the _type identifier exported member
 #define EXPAND_ARGS_0()                         0
 #define EXPAND_ARGS_1(a)                        1, &a##_type
 #define EXPAND_ARGS_2(a, b)                     2, &a##_type, &b##_type

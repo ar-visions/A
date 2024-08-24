@@ -132,7 +132,8 @@
 			"example.h": "c",
 			"*.hpp11": "cpp",
 			"webgpu.h": "c",
-			"stdlib.h": "c"
+			"stdlib.h": "c",
+			"parentbad": "c"
 		}
 	}
 }

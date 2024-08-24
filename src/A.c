@@ -964,7 +964,8 @@ static path path_change_ext(path a, cstr ext) {
 static path path_cwd(sz size) {
     path a = new(path);
     a->chars = calloc(size, 1);
-    getcwd(a->chars, size);
+    char* res = getcwd(a->chars, size);
+    assert(res != null);
     return a;
 }
 

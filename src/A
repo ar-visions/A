@@ -85,6 +85,73 @@ enum A_TRAIT {
     E##_type.member_count++;
 #define   enum_value(X,Y, N)                enum_value_##Y(X, N)
 
+
+
+
+
+/// we do not want to resolve types at startup by stringifying them
+/// this results in a more compact binary and quicker runtime
+/// it also means our primitives can work, too since they have the _type identifier exported member
+#define EXPAND_ARGS_0()                         0
+#define EXPAND_ARGS_1(a)                        1, &a##_type
+#define EXPAND_ARGS_2(a, b)                     2, &a##_type, &b##_type
+#define EXPAND_ARGS_3(a, b, c)                  3, &a##_type, &b##_type, &c##_type
+#define EXPAND_ARGS_4(a, b, c, d)               4, &a##_type, &b##_type, &c##_type, &d##_type
+#define EXPAND_ARGS_5(a, b, c, d, e)            5, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type
+#define EXPAND_ARGS_6(a, b, c, d, e, f)         6, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type
+#define EXPAND_ARGS_7(a, b, c, d, e, f, g)      7, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type
+#define EXPAND_ARGS_8(a, b, c, d, e, f, g, h)   8, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type, &h##_type
+#define COUNT_ARGS_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
+
+#define COUNT_ARGS(...)             COUNT_ARGS_IMPL(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1)
+#define valloc(T, N)                ((A)A_alloc(typeof(T), N))
+#define new(T)                      ((A)valloc(T, 1))
+#define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
+#define typeid(INSTANCE)            ((AType)((A)INSTANCE)[-1].type) 
+
+#define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
+
+/// calling methods
+/// none of these set memory in-instance for the type info.
+/// thats located on the A-object.
+/// the type signature though, we put on the 'end' of the struct.  this memory is not valid
+#define M(T,N,...)                  T##_type.N(__VA_ARGS__)
+
+/// the call and cast take instance first
+#define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
+
+/// generic is from instance type, which we only need to store the args for, no other tables
+#define generic_at(I,IDX)           typeid(I) -> args.arg_##IDX
+
+/// our casts are polymorphic unlike C++
+#define cast(I,T)                   ftableI(I) -> cast_##T(I)
+
+#define construct(T,WITH,...)       T##_type.with_##WITH((A)valloc(T, 1), ## __VA_ARGS__)
+#define operator(I,OP,...)          ftableI(I) -> operator_##OP(I, ##__VA_ARGS__)
+#define emit_types(...)             EXPAND_ARGS(__VA_ARGS__)
+#define combine_tokens_(A, B)       A##B
+#define combine_tokens(A, B)        combine_tokens_(A, B)
+#define EXPAND_ARGS(...)            EXPAND_ARGS_HELPER(COUNT_ARGS(__VA_ARGS__), __VA_ARGS__)
+#define EXPAND_ARGS_HELPER(N, ...)  combine_tokens(EXPAND_ARGS_, N)(__VA_ARGS__)
+
+
+//#define EXPAND_ARGS2_0()                       
+#define EXPAND_ARGS2_1(a)                        a
+#define EXPAND_ARGS2_2(a, b)                     a##_##b
+#define EXPAND_ARGS2_3(a, b, c)                  a##_##b##_##c
+#define EXPAND_ARGS2_4(a, b, c, d)               a##_##b##_##c##_##d
+#define EXPAND_ARGS2_5(a, b, c, d, e)            a##_##b##_##c##_##d##_e
+#define EXPAND_ARGS2_6(a, b, c, d, e, f)         a##_##b##_##c##_##d##_e##_##f
+#define EXPAND_ARGS2_7(a, b, c, d, e, f, g)      a##_##b##_##c##_##d##_e##_##f##_##g
+#define EXPAND_ARGS2_8(a, b, c, d, e, f, g, h)   a##_##b##_##c##_##d##_e##_##f##_##g##_##h
+
+#define emit_types2(...)            EXPAND_ARGS2(__VA_ARGS__)
+#define EXPAND_ARGS2(...)            EXPAND_ARGS_HELPER2(COUNT_ARGS(__VA_ARGS__), __VA_ARGS__)
+#define EXPAND_ARGS_HELPER2(N, ...)  combine_tokens(EXPAND_ARGS2_, N)(__VA_ARGS__)
+
+
+
+
 #define   i_intern_INST(X,Y, R, N, ...)     R N;
 #define   i_intern_TYPE(X,Y, R, N, ...)
 #define   i_intern_INIT(X,Y, R, N, ...)
@@ -175,20 +242,20 @@ enum A_TRAIT {
 #define   i_cast(X,Y,Z, R)                      i_cast_##Z(X,Y, R)
 
 
-#define   i_index_INST(X,Y,ARG, ...)
-#define   i_index_TYPE(X,Y,ARG, ...)        X (*with_##ARG)(X, ARG, ##__VA_ARGS__);
-#define   i_index_PRIM(X,Y,ARG, ...)        Y (*with_##ARG)(Y, ARG, ##__VA_ARGS__);
-#define   i_index_INIT(X,Y,ARG, ...) \
-    X##_type.with_##ARG = & X##_with_##ARG; \
-    X##_type.members[X##_type.member_count].name        = #ARG; \
-    X##_type.members[X##_type.member_count].args        = (args_t) { emit_types(X, ARG, ##__VA_ARGS__) }; \
+#define   i_index_INST(X,Y,R, ...)
+#define   i_index_TYPE(X,Y,R, ...)        R (*emit_types2(index, ## __VA_ARGS__))(X, ##__VA_ARGS__);
+#define   i_index_PRIM(X,Y,R, ...)        R (*emit_types2(index, ## __VA_ARGS__))(Y, ##__VA_ARGS__);
+#define   i_index_INIT(X,Y,R, ...) \
+    X##_type.emit_types2(index, ## __VA_ARGS__) = & emit_types2(X ## _index, ## __VA_ARGS__); \
+    X##_type.members[X##_type.member_count].name        = stringify(emit_types2(index, __VA_ARGS__)); \
+    X##_type.members[X##_type.member_count].args        = (args_t) { emit_types(X, ##__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type        = &X##_type; \
-    X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, with_##ARG); \
+    X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, emit_types2(index, ## __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_INDEX; \
     X##_type.member_count++;  
-#define i_index_PROTO(X,Y, ARG, ...)
-#define i_index_METHOD(X,Y, ARG, ...)       X (*with_##ARG)(X, ARG, ##__VA_ARGS__);
-#define i_index(X,Y,Z, ARG, ...)            i_index_##Z(X,Y, ARG, ##__VA_ARGS__)
+#define i_index_PROTO(X,Y, R, ...)
+#define i_index_METHOD(X,Y, R, ...)       R (*emit_types2(index, __VA_ARGS__))(X, ##__VA_ARGS__);
+#define i_index(X,Y,Z, R, ...)            i_index_##Z(X,Y, R, ##__VA_ARGS__)
 
 /// construct PRIM swaps X with Y for the instance
 #define   i_construct_INST(X,Y,ARG, ...)
@@ -766,51 +833,6 @@ declare_class(string)
     i_override_m(X,Y,Z, u64,  hash) \
     i_override_cast(X,Y,Z, bool)
 declare_mod(vector, collection)
-
-/// we do not want to resolve types at startup by stringifying them
-/// this results in a more compact binary and quicker runtime
-/// it also means our primitives can work, too since they have the _type identifier exported member
-#define EXPAND_ARGS_0()                         0
-#define EXPAND_ARGS_1(a)                        1, &a##_type
-#define EXPAND_ARGS_2(a, b)                     2, &a##_type, &b##_type
-#define EXPAND_ARGS_3(a, b, c)                  3, &a##_type, &b##_type, &c##_type
-#define EXPAND_ARGS_4(a, b, c, d)               4, &a##_type, &b##_type, &c##_type, &d##_type
-#define EXPAND_ARGS_5(a, b, c, d, e)            5, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type
-#define EXPAND_ARGS_6(a, b, c, d, e, f)         6, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type
-#define EXPAND_ARGS_7(a, b, c, d, e, f, g)      7, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type
-#define EXPAND_ARGS_8(a, b, c, d, e, f, g, h)   8, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type, &h##_type
-#define COUNT_ARGS_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
-
-#define COUNT_ARGS(...)             COUNT_ARGS_IMPL(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1)
-#define valloc(T, N)                ((A)A_alloc(typeof(T), N))
-#define new(T)                      ((A)valloc(T, 1))
-#define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
-#define typeid(INSTANCE)            ((AType)((A)INSTANCE)[-1].type) 
-
-#define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
-
-/// calling methods
-/// none of these set memory in-instance for the type info.
-/// thats located on the A-object.
-/// the type signature though, we put on the 'end' of the struct.  this memory is not valid
-#define M(T,N,...)                  T##_type.N(__VA_ARGS__)
-
-/// the call and cast take instance first
-#define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
-
-/// generic is from instance type, which we only need to store the args for, no other tables
-#define generic_at(I,IDX)           typeid(I) -> args.arg_##IDX
-
-/// our casts are polymorphic unlike C++
-#define cast(I,T)                   ftableI(I) -> cast_##T(I)
-
-#define construct(T,WITH,...)       T##_type.with_##WITH((A)valloc(T, 1), ## __VA_ARGS__)
-#define operator(I,OP,...)          ftableI(I) -> operator_##OP(I, ##__VA_ARGS__)
-#define emit_types(...)             EXPAND_ARGS(__VA_ARGS__)
-#define combine_tokens_(A, B)       A##B
-#define combine_tokens(A, B)        combine_tokens_(A, B)
-#define EXPAND_ARGS(...)            EXPAND_ARGS_HELPER(COUNT_ARGS(__VA_ARGS__), __VA_ARGS__)
-#define EXPAND_ARGS_HELPER(N, ...)  combine_tokens(EXPAND_ARGS_, N)(__VA_ARGS__)
 
 string format(cstr template, ...);
 

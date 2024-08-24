@@ -175,19 +175,20 @@ enum A_TRAIT {
 #define   i_cast(X,Y,Z, R)                      i_cast_##Z(X,Y, R)
 
 
-#define   i_index_INST(X,Y, R, ARG)
-#define   i_index_TYPE(X,Y, R, ARG)             R (*index_##ARG)(struct X##_f*);
-#define   i_index_INIT(X,Y, R, ARG) \
-    X##_type  . index_##ARG = & X##_index_##ARG; \
-    X##_type.members[X##_type.member_count].name    = stringify(combine_tokens(index_, ARG)); \
-    X##_type.members[X##_type.member_count].args    = (args_t) { emit_types(X, ARG) }; \
-    X##_type.members[X##_type.member_count].type    = &R##_type; \
-    X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, index_##ARG); \
+#define   i_index_INST(X,Y,ARG, ...)
+#define   i_index_TYPE(X,Y,ARG, ...)        X (*with_##ARG)(X, ARG, ##__VA_ARGS__);
+#define   i_index_PRIM(X,Y,ARG, ...)        Y (*with_##ARG)(Y, ARG, ##__VA_ARGS__);
+#define   i_index_INIT(X,Y,ARG, ...) \
+    X##_type.with_##ARG = & X##_with_##ARG; \
+    X##_type.members[X##_type.member_count].name        = #ARG; \
+    X##_type.members[X##_type.member_count].args        = (args_t) { emit_types(X, ARG, ##__VA_ARGS__) }; \
+    X##_type.members[X##_type.member_count].type        = &X##_type; \
+    X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, with_##ARG); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_INDEX; \
-    X##_type.member_count++; 
-#define   i_index_PROTO(X,Y, R, ARG)
-#define   i_index_METHOD(X,Y, R, ARG)
-#define   i_index(X,Y,Z, R, ARG)                i_index_##Z(X,Y, R, ARG)
+    X##_type.member_count++;  
+#define i_index_PROTO(X,Y, ARG, ...)
+#define i_index_METHOD(X,Y, ARG, ...)       X (*with_##ARG)(X, ARG, ##__VA_ARGS__);
+#define i_index(X,Y,Z, ARG, ...)            i_index_##Z(X,Y, ARG, ##__VA_ARGS__)
 
 /// construct PRIM swaps X with Y for the instance
 #define   i_construct_INST(X,Y,ARG, ...)

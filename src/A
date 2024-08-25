@@ -243,18 +243,18 @@ enum A_TRAIT {
 
 
 #define   i_index_INST(X,Y,R, ...)
-#define   i_index_TYPE(X,Y,R, ...)        R (*emit_types2(_index, __VA_ARGS__))(X, ##__VA_ARGS__);
-#define   i_index_PRIM(X,Y,R, ...)        R (*emit_types2(_index, __VA_ARGS__))(Y, ##__VA_ARGS__);
+#define   i_index_TYPE(X,Y,R, ...)        R (*emit_types2(index, __VA_ARGS__))(X, ##__VA_ARGS__);
+#define   i_index_PRIM(X,Y,R, ...)        R (*emit_types2(index, __VA_ARGS__))(Y, ##__VA_ARGS__);
 #define   i_index_INIT(X,Y,R, ...) \
-    X##_type.emit_types2(_index, __VA_ARGS__) = & emit_types2(X ## _index, __VA_ARGS__); \
-    X##_type.members[X##_type.member_count].name        = stringify(emit_types2(_index, __VA_ARGS__)); \
+    X##_type.emit_types2(index, __VA_ARGS__) = & emit_types2(X ## _index, __VA_ARGS__); \
+    X##_type.members[X##_type.member_count].name        = stringify(emit_types2(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].args        = (args_t) { emit_types(X, ##__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type        = &X##_type; \
-    X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, emit_types2(_index, __VA_ARGS__)); \
+    X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, emit_types2(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_INDEX; \
     X##_type.member_count++;  
 #define i_index_PROTO(X,Y, R, ...)
-#define i_index_METHOD(X,Y, R, ...)       R (*emit_types2(_index, __VA_ARGS__))(X, ##__VA_ARGS__);
+#define i_index_METHOD(X,Y, R, ...)       R (*emit_types2(index, __VA_ARGS__))(X, ##__VA_ARGS__);
 #define i_index(X,Y,Z, R, ...)            i_index_##Z(X,Y, R, ##__VA_ARGS__)
 
 /// construct PRIM swaps X with Y for the instance

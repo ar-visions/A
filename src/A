@@ -107,7 +107,7 @@ enum A_TRAIT {
 #define valloc(T, N)                ((A)A_alloc(typeof(T), N))
 #define new(T)                      ((A)valloc(T, 1))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
-#define isa(INSTANCE)               (((struct A_f*)null)->type) 
+#define isa(INSTANCE)               ((struct A_f*)((struct A*)INSTANCE - 1)->type) 
 
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 

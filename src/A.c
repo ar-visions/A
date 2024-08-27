@@ -219,7 +219,7 @@ static A   A_new_default(AType type, num count) {
 static void A_init      (A a) { }
 static void A_destructor(A a) {
     // go through objects type fields/offsets; when type is A-based, we release
-    AType type = typeid(a);
+    AType type = isa(a);
     for (num i = 0; i < type->member_count; i++) {
         type_member_t* m = &type->members[i];
         if ((m->member_type == A_TYPE_PROP || m->member_type == A_TYPE_PRIV) && !(m->type->traits & A_TRAIT_PRIMITIVE)) {
@@ -251,7 +251,7 @@ static A A_with_cstr(A a, cstr cs, num len) {
 }
 
 #define set_v() \
-    AType type = typeid(a); \
+    AType type = isa(a); \
     if (type == typeof(i8))  *(i8*) a = (i8) v; \
     if (type == typeof(i16)) *(i16*)a = (i16)v; \
     if (type == typeof(i32)) *(i32*)a = (i32)v; \
@@ -268,7 +268,7 @@ static A numeric_with_i8 (A a, i8   v) { set_v(); }
 static A numeric_with_i16(A a, i16  v) { set_v(); }
 static A numeric_with_i32(A a, i32  v) { set_v(); }
 static A numeric_with_i64(A a, i64  v) {
-    AType type = typeid(a);
+    AType type = isa(a);
     if (type == typeof(i8))  *(i8*) a = (i8) v;
     if (type == typeof(i16)) *(i16*)a = (i16)v;
     if (type == typeof(i32)) *(i32*)a = (i32)v; \
@@ -602,14 +602,14 @@ static void array_expand(array a) {
 }
 
 bool is_meta(A a) {
-    AType t = typeid(a);
+    AType t = isa(a);
     return t->meta.count > 0;
 }
 
 bool is_meta_compatible(A a, A b) {
-    AType t = typeid(a);
+    AType t = isa(a);
     if (is_meta(a)) {
-        AType bt = typeid(b);
+        AType bt = isa(b);
         num found = 0;
         for (num i = 0; i < t->meta.count; i++) {
             AType mt = ((AType*)&t->meta.arg_0)[i];
@@ -625,7 +625,7 @@ static A array_push(array a, A b) {
     if (a->alloc == a->len) {
         array_expand(a);
     }
-    AType t = typeid(a);
+    AType t = isa(a);
     if (is_meta(a))
         assert(is_meta_compatible(a, b));
     a->elements[a->len++] = b;
@@ -694,7 +694,7 @@ static array array_of_objects(AType validate, ...) {
         A arg = va_arg(args, A);
         if (!arg)
             break;
-        assert(!validate || validate == typeid(arg));
+        assert(!validate || validate == isa(arg));
         M(array, push, a, arg);
     }
     return a;

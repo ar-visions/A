@@ -107,7 +107,7 @@ enum A_TRAIT {
 #define valloc(T, N)                ((A)A_alloc(typeof(T), N))
 #define new(T)                      ((A)valloc(T, 1))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
-#define typeid(INSTANCE)            ((AType)((A)INSTANCE)[-1].type) 
+#define isa(INSTANCE)               ((AType)((A)INSTANCE)[-1].type) 
 
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 
@@ -121,7 +121,7 @@ enum A_TRAIT {
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 
 /// generic is from instance type, which we only need to store the args for, no other tables
-#define generic_at(I,IDX)           typeid(I) -> args.arg_##IDX
+#define generic_at(I,IDX)           isa(I) -> args.arg_##IDX
 
 /// our casts are polymorphic unlike C++
 #define cast(I,T)                   ftableI(I) -> cast_##T(I)
@@ -159,17 +159,17 @@ enum A_TRAIT {
 #define   i_intern_METHOD(X,Y, R, N, ...)    
 #define   i_intern(X,Y,Z, R, N, ...)        i_intern_##Z(X,Y,R,N, __VA_ARGS__)
 
-#define   i_priv_INST(X,Y, R, N, ...)       R N;
-#define   i_priv_TYPE(X,Y, R, N, ...)
-#define   i_priv_INIT(X,Y, R, N, ...) \
+#define   i_private_INST(X,Y, R, N, ...)       R N;
+#define   i_private_TYPE(X,Y, R, N, ...)
+#define   i_private_INIT(X,Y, R, N, ...) \
     X##_type.members[X##_type.member_count].name     = #N; \
     X##_type.members[X##_type.member_count].offset   = offsetof(struct X, N); \
     X##_type.members[X##_type.member_count].type     = &R##_type; \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_PRIV; \
     X##_type.member_count++;
-#define   i_priv_PROTO(X,Y, R, N, ...)    
-#define   i_priv_METHOD(X,Y, R, N, ...)    
-#define   i_priv(X,Y,Z, R, N, ...)          i_priv_##Z(X,Y,R,N, __VA_ARGS__)
+#define   i_private_PROTO(X,Y, R, N, ...)    
+#define   i_private_METHOD(X,Y, R, N, ...)    
+#define   i_private(X,Y,Z, R, N, ...)          i_priv_##Z(X,Y,R,N, __VA_ARGS__)
 
 #define   i_public_INST(X,Y, R, N, ...)     R N;
 #define   i_public_TYPE(X,Y, R, N, ...)      
@@ -563,7 +563,6 @@ void* primitive_ffi_arb(AType);
         } \
     }
 
-/// its important that any additional struct be static, thus limiting the amount of data we are exporting
 #define define_mod(X,Y) \
     define_global(X,Y, sizeof(struct X), 0, \
         X##_type.arb = primitive_ffi_arb(typeof(cstr)); \

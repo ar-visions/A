@@ -36,6 +36,7 @@ typedef char*               cstr;
 typedef const char*         symbol;
 typedef num                 sz;
 typedef struct A_f*         AType;
+typedef struct A*           object; /// generic alias to describe base type; emitted with meta types
 typedef struct args_t {
     num             count;
     AType           arg_0, arg_1, arg_2, arg_3, 
@@ -107,7 +108,8 @@ enum A_TRAIT {
 #define valloc(T, N)                ((A)A_alloc(typeof(T), N))
 #define new(T)                      ((A)valloc(T, 1))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
-#define isa(INSTANCE)               ((struct A_f*)((struct A*)INSTANCE - 1)->type) 
+#define isa(INSTANCE)               ((struct A_f*)((struct A*)INSTANCE - 1)->type)
+#define inherits(left, type)        A_inherits(left, typeof(type))
 
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 
@@ -846,6 +848,7 @@ string format(cstr template, ...);
         for (num i = 0, len = M(T, count, t); i < len; i++, e = *(E*)M(T, get, t, i)) \
 
 A           A_alloc(AType type, num count);
+bool        A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
 A           A_hold(A a);
 void        A_drop(A a);
 A_f**       A_types(num* length);

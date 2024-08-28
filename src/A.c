@@ -502,6 +502,17 @@ A data(A instance) {
     return obj->data;
 }
 
+bool A_inherits(A inst, AType type) {
+    AType t  = type;
+    AType it = isa(inst); 
+    while (t) {
+        if (it == t)
+            return true;
+        t = t->parent_type; 
+    }
+    return false;
+}
+
 /// list -------------------------
 static item list_push(list a, A e) {
     item n = new(item);

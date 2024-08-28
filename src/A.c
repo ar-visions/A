@@ -45,14 +45,14 @@ A_f** A_types(num* length) {
 
 A A_construct(AType type, int n_args, ...) {
     A res = A_alloc(type, 1);
-    va_list args;
-    va_start(args, n_args);
+    va_list  vargs;
+    va_start(vargs, n_args);
     array args = construct(array, with_sz, n_args);
     for (int i = 0; i < n_args; i++) {
-        A arg = va_arg(args, A);
+        A arg = va_arg(vargs, A);
         call(args, push, arg);
     }
-    va_end(args);
+    va_end(vargs);
 
     AType arg0_type = isa(args->elements[0]);
     type_member_t* mem = A_constructor(type, arg0_type);

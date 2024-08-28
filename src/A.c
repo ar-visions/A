@@ -623,7 +623,7 @@ bool is_meta_compatible(A a, A b) {
         AType bt = isa(b);
         num found = 0;
         for (num i = 0; i < t->meta.count; i++) {
-            AType mt = ((AType*)&t->meta.arg_0)[i];
+            AType mt = ((AType*)&t->meta.meta_0)[i];
             if (mt == bt)
                 found++;
         }

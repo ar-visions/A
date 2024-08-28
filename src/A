@@ -37,11 +37,11 @@ typedef const char*         symbol;
 typedef num                 sz;
 typedef struct A_f*         AType;
 typedef struct A*           object; /// generic alias to describe base type; emitted with meta types
-typedef struct args_t {
+typedef struct meta_t {
     num             count;
-    AType           arg_0, arg_1, arg_2, arg_3, 
-                    arg_4, arg_5, arg_6, arg_7;
-} args_t;
+    AType           meta_0, meta_1, meta_2, meta_3, 
+                    meta_4, meta_5, meta_6, meta_7;
+} meta_t;
 
 typedef bool(*global_init_fn)();
 
@@ -123,7 +123,7 @@ enum A_TRAIT {
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 
 /// generic is from instance type, which we only need to store the args for, no other tables
-#define generic_at(I,IDX)           isa(I) -> args.arg_##IDX
+#define generic_at(I,IDX)           isa(I) -> meta.meta_##IDX
 
 /// our casts are polymorphic unlike C++
 #define cast(I,T)                   ftableI(I) -> cast_##T(I)
@@ -191,7 +191,7 @@ enum A_TRAIT {
 #define   s_method_INIT(X,Y, R, N, ...)     \
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
-    X##_type.members[X##_type.member_count].args    = (args_t) { emit_types(__VA_ARGS__) }; \
+    X##_type.members[X##_type.member_count].meta    = (meta_t) { emit_types(__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type    = &R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, N); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_SMETHOD; \
@@ -205,7 +205,7 @@ enum A_TRAIT {
 #define   i_method_INIT(X,Y, R, N, ...)     \
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
-    X##_type.members[X##_type.member_count].args    = (args_t) { emit_types(X, ##__VA_ARGS__) }; \
+    X##_type.members[X##_type.member_count].meta    = (meta_t) { emit_types(X, ##__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type    = &R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, N); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_IMETHOD; \
@@ -219,7 +219,7 @@ enum A_TRAIT {
 #define   i_operator_INIT(X,Y, R, N, ARG) \
     X##_type  . operator_##N = & X## _operator_ ## N; \
     X##_type.members[X##_type.member_count].name    = stringify(combine_tokens(operator_, N)); \
-    X##_type.members[X##_type.member_count].args    = (args_t) { emit_types(X, ARG) }; \
+    X##_type.members[X##_type.member_count].meta    = (meta_t) { emit_types(X, ARG) }; \
     X##_type.members[X##_type.member_count].type    = &R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, operator_##N); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_OPERATOR; \
@@ -234,7 +234,7 @@ enum A_TRAIT {
 #define   i_cast_INIT(X,Y, R) \
     X##_type.cast_##R = & X##_cast_##R; \
     X##_type.members[X##_type.member_count].name    = stringify(combine_tokens(cast_, R)); \
-    X##_type.members[X##_type.member_count].args    = (args_t) { emit_types(X) }; \
+    X##_type.members[X##_type.member_count].meta    = (meta_t) { emit_types(X) }; \
     X##_type.members[X##_type.member_count].type    = &R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, cast_##R); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_CAST; \
@@ -250,7 +250,7 @@ enum A_TRAIT {
 #define   i_index_INIT(X,Y,R, ...) \
     X##_type.emit_types2(index, __VA_ARGS__) = & emit_types2(X ## _index, __VA_ARGS__); \
     X##_type.members[X##_type.member_count].name        = stringify(emit_types2(index, __VA_ARGS__)); \
-    X##_type.members[X##_type.member_count].args        = (args_t) { emit_types(X, ##__VA_ARGS__) }; \
+    X##_type.members[X##_type.member_count].meta        = (meta_t) { emit_types(X, ##__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type        = &X##_type; \
     X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, emit_types2(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_INDEX; \
@@ -266,7 +266,7 @@ enum A_TRAIT {
 #define   i_construct_INIT(X,Y,ARG, ...) \
     X##_type.with_##ARG = & X##_with_##ARG; \
     X##_type.members[X##_type.member_count].name        = #ARG; \
-    X##_type.members[X##_type.member_count].args        = (args_t) { emit_types(X, ARG, ##__VA_ARGS__) }; \
+    X##_type.members[X##_type.member_count].meta        = (meta_t) { emit_types(X, ARG, ##__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type        = &X##_type; \
     X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, with_##ARG); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_CONSTRUCT; \
@@ -337,7 +337,7 @@ typedef struct type_member_t {
     num             offset;
     enum A_TYPE     member_type;
     int             operator_type;
-    args_t          args;
+    meta_t          meta;
     union {
         method_t*   method;
         prop_t*     prop;
@@ -356,7 +356,7 @@ typedef struct type_member_t {
     type_member_t*  members; \
     u64             traits; \
     AType           src; \
-    args_t          meta; \
+    meta_t          meta; \
     void*           arb;
 
 #define declare_inst( X,Y ) \
@@ -559,7 +559,7 @@ void* primitive_ffi_arb(AType);
             memcpy(&ALIAS_TYPE##_type, &SRC_TYPE##_type, sizeof(SRC_TYPE##_f)); \
             ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
             ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
-            ALIAS_TYPE##_type.meta     = (args_t) { emit_types(__VA_ARGS__) }; \
+            ALIAS_TYPE##_type.meta     = (meta_t) { emit_types(__VA_ARGS__) }; \
             ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
             return true; \
         } \

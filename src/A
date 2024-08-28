@@ -857,7 +857,7 @@ void        A_drop(A a);
 A_f**       A_types(num* length);
 type_member_t* A_member(AType type, enum A_TYPE member_type, char* name);
 A           A_method(AType type, char* method_name, array args);
-A           A_method_vargs(A instance, cstr method_name, ...);
+A           A_method_vargs(A instance, cstr method_name, int n_args, ...);
 A           A_primitive(AType type, void* data);
 A           A_enum(AType enum_type, i32 value);
 A           A_i8(i8);

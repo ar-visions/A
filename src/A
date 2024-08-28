@@ -337,7 +337,7 @@ typedef struct type_member_t {
     num             offset;
     enum A_TYPE     member_type;
     int             operator_type;
-    meta_t          meta;
+    meta_t          args;
     union {
         method_t*   method;
         prop_t*     prop;
@@ -848,6 +848,9 @@ string format(cstr template, ...);
         for (num i = 0, len = M(T, count, t); i < len; i++, e = *(E*)M(T, get, t, i)) \
 
 A           A_alloc(AType type, num count);
+A           A_new(AType type);
+A           A_construct(AType type, int n_args, ...);
+type_member_t* A_constructor(AType type, AType first_arg); // find a constructor method (used for dynamic construction)
 bool        A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
 A           A_hold(A a);
 void        A_drop(A a);

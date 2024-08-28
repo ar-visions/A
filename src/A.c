@@ -43,15 +43,38 @@ A_f** A_types(num* length) {
     return types;
 }
 
-A A_alloc(A_f* type, num count) {
+A A_construct(AType type, int n_args, ...) {
+    A res = A_alloc(type, 1);
+    va_list args;
+    va_start(args, n_args);
+    array args = construct(array, with_sz, n_args);
+    for (int i = 0; i < n_args; i++) {
+        A arg = va_arg(args, A);
+        call(args, push, arg);
+    }
+    va_end(args);
+
+    AType arg0_type = isa(args->elements[0]);
+    type_member_t* mem = A_constructor(type, arg0_type);
+    assert(mem && mem->method);
+    return method_call(mem->method, args);
+}
+
+A A_new(AType type) {
+    A res = A_alloc(type, 1);
+    // todo: do not call init in A_alloc
+    return res;
+}
+
+A A_alloc(AType type, num count) {
     A a = calloc(1, (type == typeof(A) ? 0 : sizeof(struct A)) + type->size * count);
     a->type   = type;
     a->origin = a;
     a->data   = &a[1];
     a->count  = count;
     a->alloc  = count;
-    A_f* a_type = &A_type;
-    A_f* current = type;
+    AType a_type = &A_type;
+    AType current = type;
     while (current) {
         if (current->init) /// init not being set on here somehow, even though it should be emitting string_type.init = &A_init
             current->init(a->data);
@@ -159,14 +182,23 @@ void A_finish_types() {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
                 assert(address);
-                array args = construct(array, sz, mem->meta.count);
-                for (num i = 0; i < mem->meta.count; i++)
-                    args->elements[i] = ((A_f**)&mem->meta.meta_0)[i];
-                args->len = mem->meta.count;
+                array args = construct(array, sz, mem->args.count);
+                for (num i = 0; i < mem->args.count; i++)
+                    args->elements[i] = ((A_f**)&mem->args.meta_0)[i];
+                args->len = mem->args.count;
                 mem->method = method_with_address(address, mem->type, args, type);
             }
         }
     }
+}
+
+type_member_t* A_constructor(AType type, AType first_arg) {
+    for (num i = 0; i < type->member_count; i++) {
+        type_member_t* mem = &type->members[i];
+        if (mem->member_type == A_TYPE_CONSTRUCT && mem->args.meta_0 == first_arg)
+            return mem;
+    }
+    return 0;
 }
 
 type_member_t* A_member(A_f* type, enum A_TYPE member_type, char* name) {

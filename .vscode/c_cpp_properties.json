@@ -1,0 +1,20 @@
+{
+    "configurations": [
+        {
+            "name": "Silver Development",
+            "includePath": [
+                "${workspaceFolder}/../silver/silver-build/install/include"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath":     "/usr/bin/gcc",
+            "cStandard":        "c99",
+            "cppStandard":      "c++17",
+            "intelliSenseMode": "gcc-x64"
+        }
+    ],
+    "version": 4
+}

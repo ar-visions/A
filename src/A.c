@@ -141,6 +141,24 @@ A A_method(A_f* type, cstr method_name, array args) {
     return res;
 }
 
+A A_method_vargs(A instance, cstr method_name, ...) {
+    AType type = isa(instance)
+    type_member_t* mem = A_member(type, A_TYPE_IMETHOD | A_TYPE_SMETHOD, method_name);
+    assert(mem->method);
+    method_t* m = mem->method;
+    va_list  vargs;
+    va_start(vargs, n_args);
+    array args = construct(array, sz, n_args + 1);
+    call(args, push, instance);
+    for (int i = 0; i < n_args; i++) {
+        A arg = va_arg(vargs, A);
+        call(args, push, arg);
+    }
+    va_end(vargs);
+    A res = method_call(m, args);
+    return res;
+}
+
 A A_construct(AType type, int n_args, ...) {
     A res = A_alloc(type, 1);
     va_list  vargs;

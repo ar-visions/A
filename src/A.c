@@ -47,7 +47,7 @@ A A_construct(AType type, int n_args, ...) {
     A res = A_alloc(type, 1);
     va_list  vargs;
     va_start(vargs, n_args);
-    array args = construct(array, with_sz, n_args);
+    array args = construct(array, sz, n_args);
     for (int i = 0; i < n_args; i++) {
         A arg = va_arg(vargs, A);
         call(args, push, arg);

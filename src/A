@@ -850,6 +850,7 @@ string format(cstr template, ...);
 A           A_alloc(AType type, num count);
 A           A_new(AType type);
 A           A_construct(AType type, int n_args, ...);
+A           A_convert(AType type, A input);
 type_member_t* A_constructor(AType type, AType first_arg); // find a constructor method (used for dynamic construction)
 bool        A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
 A           A_hold(A a);
@@ -858,6 +859,7 @@ A_f**       A_types(num* length);
 type_member_t* A_member(AType type, enum A_TYPE member_type, char* name);
 A           A_method(AType type, char* method_name, array args);
 A           A_method_vargs(A instance, cstr method_name, int n_args, ...);
+A           A_call(A instance, type_member_t* member, array args);
 A           A_primitive(AType type, void* data);
 A           A_enum(AType enum_type, i32 value);
 A           A_i8(i8);
@@ -882,5 +884,10 @@ A           fields(A instance);
 A           data(A instance);
 bool        is_meta(A a);
 bool        is_meta_compatible(A a, A b);
+
+/// todo: auto-release, no use of drop in most places
+/// push_weak is probably a reasonable idea for array
+array array_of_objects(AType validate, ...);
+void  array_weak_push(array, A);
 
 #endif

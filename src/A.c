@@ -113,7 +113,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     return method;
 }
 
-A method_call(method_t* a, array args) {
+A A_method_call(method_t* a, array args) {
     const num max_args = 8;
     void* arg_values[max_args];
     assert(args->len == a->atypes->len);
@@ -137,8 +137,14 @@ A A_method(A_f* type, cstr method_name, array args) {
     type_member_t* mem = A_member(type, A_TYPE_IMETHOD | A_TYPE_SMETHOD, method_name);
     assert(mem->method);
     method_t* m = mem->method;
-    A res = method_call(m, args);
+    A res = A_method_call(m, args);
     return res;
+}
+
+A A_convert(AType type, A input) {
+    if (type == isa(input)) return input;
+    assert(false);
+    return input;
 }
 
 A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
@@ -155,7 +161,7 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
         call(args, push, arg);
     }
     va_end(vargs);
-    A res = method_call(m, args);
+    A res = A_method_call(m, args);
     return res;
 }
 
@@ -173,7 +179,7 @@ A A_construct(AType type, int n_args, ...) {
     AType arg0_type = isa(args->elements[0]);
     type_member_t* mem = A_constructor(type, arg0_type);
     assert(mem && mem->method);
-    return method_call(mem->method, args);
+    return A_method_call(mem->method, args);
 }
 
 void A_finish_types() {
@@ -748,7 +754,7 @@ static void array_push_objects(array a, A f, ...) {
     va_end(args);
 }
 
-static array array_of_objects(AType validate, ...) {
+array array_of_objects(AType validate, ...) {
     array a = new(array);
     va_list args;
     va_start(args, validate);
@@ -761,6 +767,10 @@ static array array_of_objects(AType validate, ...) {
         M(array, push, a, arg);
     }
     return a;
+}
+
+void  array_weak_push(array a, A obj) {
+    a->elements[a->len++] = obj;
 }
 
 static A array_pop(array a) {
@@ -809,7 +819,7 @@ static u64 fn_hash(fn f) {
 }
 
 static A fn_call(fn f, array args) {
-    return method_call(f->method, args);
+    return A_method_call(f->method, args);
 }
 
 static fn fn_with_ATypes(fn f, ATypes atypes, AType rtype, handle address) {

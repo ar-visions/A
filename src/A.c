@@ -159,10 +159,10 @@ void A_finish_types() {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
                 assert(address);
-                array args = construct(array, sz, mem->args.count);
-                for (num i = 0; i < mem->args.count; i++)
-                    args->elements[i] = ((A_f**)&mem->args.arg_0)[i];
-                args->len = mem->args.count;
+                array args = construct(array, sz, mem->meta.count);
+                for (num i = 0; i < mem->meta.count; i++)
+                    args->elements[i] = ((A_f**)&mem->meta.meta_0)[i];
+                args->len = mem->meta.count;
                 mem->method = method_with_address(address, mem->type, args, type);
             }
         }

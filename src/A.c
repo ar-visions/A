@@ -142,7 +142,7 @@ A A_method(A_f* type, cstr method_name, array args) {
 }
 
 A A_method_vargs(A instance, cstr method_name, ...) {
-    AType type = isa(instance)
+    AType type = isa(instance);
     type_member_t* mem = A_member(type, A_TYPE_IMETHOD | A_TYPE_SMETHOD, method_name);
     assert(mem->method);
     method_t* m = mem->method;

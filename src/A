@@ -559,7 +559,7 @@ void* primitive_ffi_arb(AType);
             memcpy(&ALIAS_TYPE##_type, &SRC_TYPE##_type, sizeof(SRC_TYPE##_f)); \
             ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
             ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
-            ALIAS_TYPE##_type.args     = (meta_t) { emit_types(__VA_ARGS__) }; \
+            ALIAS_TYPE##_type.meta     = (meta_t) { emit_types(__VA_ARGS__) }; \
             ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
             return true; \
         } \

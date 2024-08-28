@@ -153,7 +153,9 @@ A method_call(method_t* a, array args) {
 A A_method(A_f* type, cstr method_name, array args) {
     type_member_t* mem = A_member(type, A_TYPE_IMETHOD | A_TYPE_SMETHOD, method_name);
     assert(mem->method);
-    return method_call(mem->method, args);
+    method_t* m = mem->method;
+    A res = method_call(m, args);
+    return res;
 }
 
 void A_finish_types() {

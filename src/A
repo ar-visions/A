@@ -857,6 +857,7 @@ A           A_hold(A a);
 void        A_drop(A a);
 A_f**       A_types(num* length);
 type_member_t* A_member(AType type, enum A_TYPE member_type, char* name);
+A           A_method_call(method_t* a, array args);
 A           A_method(AType type, char* method_name, array args);
 A           A_method_vargs(A instance, cstr method_name, int n_args, ...);
 A           A_call(A instance, type_member_t* member, array args);

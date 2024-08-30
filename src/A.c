@@ -114,7 +114,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
 }
 
 /// should work on statics or member functions the same; its up to the caller to push the self in there
-fn A_lambda(Member member, array context) {
+fn A_lambda(Member member, A context) {
     fn f = construct(fn, Member, member, context);
     return f;
 }
@@ -828,9 +828,10 @@ static A fn_call(fn f, array args) {
     return A_method_call(f->method, args);
 }
 
-static fn fn_with_Member(fn f, Member member, A context) {
+static fn fn_with_Member(fn f, Member member, A target, A context) {
     type_member_t* m = member;
-    f->method = m->method;
+    f->method  = m->method;
+    f->target  = target;
     f->context = hold(context);
     return f;
 }

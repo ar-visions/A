@@ -113,6 +113,12 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     return method;
 }
 
+/// should work on statics or member functions the same; its up to the caller to push the self in there
+fn A_lambda(Member member, array context) {
+    fn f = construct(fn, Member, member, context);
+    return f;
+}
+
 A A_method_call(method_t* a, array args) {
     const num max_args = 8;
     void* arg_values[max_args];
@@ -822,9 +828,10 @@ static A fn_call(fn f, array args) {
     return A_method_call(f->method, args);
 }
 
-static fn fn_with_ATypes(fn f, ATypes atypes, AType rtype, handle address) {
-    assert(atypes->len <= 8);
-    f->method = method_with_address(address, rtype, atypes, null);
+static fn fn_with_Member(fn f, Member member, A context) {
+    type_member_t* m = member;
+    f->method = m->method;
+    f->context = hold(context);
     return f;
 }
 
@@ -1131,6 +1138,7 @@ define_primitive(symbol, string_like, 0)
 define_primitive(none,   nil, 0)
 define_primitive(AType,  raw, 0)
 define_primitive(handle, raw, 0)
+define_primitive(Member, raw, 0)
 
 define_enum(OPType)
 define_class(path)

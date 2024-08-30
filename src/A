@@ -36,6 +36,7 @@ typedef char*               cstr;
 typedef const char*         symbol;
 typedef num                 sz;
 typedef struct A_f*         AType;
+typedef struct type_member_t* Member;
 typedef struct A*           object; /// generic alias to describe base type; emitted with meta types
 typedef struct meta_t {
     num             count;
@@ -642,6 +643,7 @@ declare_abstract(imported)
 #define raw_t_meta(X,Y,Z)   raw_meta(X,Y,Z)
 #define handle_meta(X,Y,Z)  raw_meta(X,Y,Z)
 #define AType_meta(X,Y,Z)   raw_meta(X,Y,Z)
+#define Member_meta(X,Y,Z)  raw_meta(X,Y,Z)
 
 /// meta gives us access to one token we can override with (F)
 declare_primitive( i8,          numeric)
@@ -663,9 +665,9 @@ declare_primitive(num,          numeric)
 declare_primitive(sz,           numeric)
 declare_primitive(raw_t,        raw)
 declare_primitive(handle,       raw)
-
 /// whatever we can 'name', we can handle as a type of any pointer primitive
 declare_primitive(AType,        raw)
+declare_primitive(Member,       raw)
 
 /// doubly-linked item type, integrated key so we dont also need a 'field' type
 #define item_meta(X,Y,Z) \
@@ -804,7 +806,7 @@ declare_class(hashmap)
     i_intern    (X,Y,Z, method_t*, method) \
     i_intern    (X,Y,Z, A,         context) \
     i_method    (X,Y,Z, A,         call, array) \
-    i_construct (X,Y,Z,            ATypes, AType, handle) \
+    i_construct (X,Y,Z,            Member, A) \
     i_override_m(X,Y,Z, u64,       hash)
 declare_class(fn)
 
@@ -860,6 +862,7 @@ type_member_t* A_member(AType type, enum A_TYPE member_type, char* name);
 A           A_method_call(method_t* a, array args);
 A           A_method(AType type, char* method_name, array args);
 A           A_method_vargs(A instance, cstr method_name, int n_args, ...);
+fn          A_lambda(type_member_t* member, array args);
 A           A_call(A instance, type_member_t* member, array args);
 A           A_primitive(AType type, void* data);
 A           A_enum(AType enum_type, i32 value);

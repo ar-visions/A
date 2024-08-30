@@ -807,7 +807,7 @@ declare_class(hashmap)
     i_intern    (X,Y,Z, A,         target) \
     i_intern    (X,Y,Z, A,         context) \
     i_method    (X,Y,Z, A,         call, array) \
-    i_construct (X,Y,Z,            Member, A) \
+    i_construct (X,Y,Z,            Member, A, A) \
     i_override_m(X,Y,Z, u64,       hash)
 declare_class(fn)
 
@@ -868,7 +868,7 @@ type_member_t* A_member(AType type, enum A_TYPE member_type, char* name);
 A           A_method_call(method_t* a, array args);
 A           A_method(AType type, char* method_name, array args);
 A           A_method_vargs(A instance, cstr method_name, int n_args, ...);
-fn          A_lambda(type_member_t* member, A context);
+fn          A_lambda(A target, type_member_t* member, A context);
 A           A_call(A instance, type_member_t* member, array args);
 A           A_primitive(AType type, void* data);
 A           A_enum(AType enum_type, i32 value);

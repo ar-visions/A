@@ -851,6 +851,11 @@ string format(cstr template, ...);
         for (num i = 0, len = M(T, count, t); i < len; i++, e = *(E*)M(T, get, t, i)) \
 
 A           A_alloc(AType type, num count);
+
+/// we are not registering struct types because we have no idea of membership
+/// however we may allocate based on their size
+#define A_struct(T) A_alloc(typeof(u8), sizeof(T))
+
 A           A_new(AType type);
 A           A_construct(AType type, int n_args, ...);
 A           A_convert(AType type, A input);

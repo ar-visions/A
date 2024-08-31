@@ -1150,7 +1150,7 @@ define_class(list)
 define_class(array)
 define_class(vector)
 
-define_alias(array, ATypes, AType)
+define_meta(array, ATypes, AType)
 
 /*
 map map_parse(map a, int argc, cstr *argv, map def) {

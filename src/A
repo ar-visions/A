@@ -376,7 +376,7 @@ typedef struct type_member_t {
     } X##_f; \
     extern X##_f X##_type;
 
-#define declare_alias(SRC, AA ) \
+#define declare_meta(SRC, AA ) \
     typedef struct SRC* AA; \
     typedef struct AA##_f { \
         A_f_members(SRC) \
@@ -545,9 +545,9 @@ void* primitive_ffi_arb(AType);
 /// defined as optional meta's in series.  Its very useful to anyone who wants to
 /// keep codesize down.  silver output can use pointers directly to the table when we cast
 
-/// define_alias(array, ListOfNumerics, u8, u16, u32, u64, i8, i16, i32, i64)
+/// define_meta(array, ListOfNumerics, u8, u16, u32, u64, i8, i16, i32, i64)
 
-#define define_alias(SRC_TYPE, ALIAS_TYPE, ...) \
+#define define_meta(SRC_TYPE, ALIAS_TYPE, ...) \
     A ALIAS_TYPE##_header; \
     ALIAS_TYPE##_f ALIAS_TYPE##_type; \
     static __attribute__((constructor)) bool global_##ALIAS_TYPE() { \
@@ -778,7 +778,7 @@ declare_class(path)
     i_override_cast  (X,Y,Z, bool)
 declare_mod(array, collection)
 
-declare_alias(array, ATypes)
+declare_meta(array, ATypes)
 
 #define hashmap_meta(X,Y,Z) \
     collection_meta  (X,Y,Z) \

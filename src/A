@@ -363,7 +363,7 @@ typedef struct type_member_t {
 #define declare_inst( X,Y ) \
     _Pragma("pack(push, 1)") \
     typedef struct X { \
-        X##_meta (X,Y, INST) \
+        X##_schema (X,Y, INST) \
         struct X##_f* f; \
     } *X; \
     _Pragma("pack(pop)") \
@@ -372,16 +372,16 @@ typedef struct type_member_t {
     declare_inst(X, A) \
     typedef struct X##_f { \
         A_f_members(A) \
-        X##_meta (X, A, TYPE) \
+        X##_schema (X, A, TYPE) \
     } X##_f; \
     extern X##_f X##_type;
 
-#define declare_meta(SRC, AA ) \
+#define declare_schema(SRC, AA ) \
     typedef struct SRC* AA; \
     typedef struct AA##_f { \
         A_f_members(SRC) \
-        A_meta     (A, A, METHOD) \
-        SRC##_meta (AA, A, TYPE) \
+        A_schema     (A, A, METHOD) \
+        SRC##_schema (AA, A, TYPE) \
     } AA##_f, *AA##_t; \
     extern AA##_f AA##_type;
 
@@ -390,8 +390,8 @@ typedef struct type_member_t {
     typedef struct A* X; \
     typedef struct X##_f { \
         A_f_members(A) \
-        A_meta   (A, A, METHOD) \
-        X##_meta (X, A, TYPE) \
+        A_schema   (A, A, METHOD) \
+        X##_schema (X, A, TYPE) \
     } X##_f, *X##_t; \
     extern X##_f X##_type;
 
@@ -399,19 +399,19 @@ typedef struct type_member_t {
 #define declare_primitive( X, Y ) \
     typedef struct X##_f { \
         A_f_members(A) \
-        A_meta   (A, A, METHOD) \
-        X##_meta (X, Y, PRIM) \
+        A_schema   (A, A, METHOD) \
+        X##_schema (X, Y, PRIM) \
     } X##_f, *X##_t; \
     extern X##_f X##_type;
 
 #define declare_enum( E ) \
     typedef enum E { \
-        E##_meta(E, DECL) \
+        E##_schema(E, DECL) \
         E##_ENUM_COUNT \
     } E; \
     typedef struct E##_f { \
         A_f_members(A) \
-        A_meta     (E, A, METHOD) \
+        A_schema     (E, A, METHOD) \
     } E##_f, *E##_t; \
     extern E##_f   E##_type;
 
@@ -422,8 +422,8 @@ void A_push_type(AType type);
     declare_inst(X, A) \
     typedef struct X##_f { \
         A_f_members(A) \
-        A_meta     (X, A, METHOD) \
-        X##_meta (X, A, TYPE) \
+        A_schema     (X, A, METHOD) \
+        X##_schema (X, A, TYPE) \
     } X##_f, *X##_t; \
     extern X##_f  X##_type;
 
@@ -446,7 +446,7 @@ void        A_lazy_init(global_init_fn fn);
             E##_type.members  = members; \
             E##_type.traits   = A_TRAIT_ENUM; \
             E##_type.arb      = primitive_ffi_arb(typeof(i32)); \
-            E##_meta( E, IMPL ); \
+            E##_schema( E, IMPL ); \
             A_push_type(&E##_type); \
             return true; \
         } \
@@ -457,8 +457,8 @@ void        A_lazy_init(global_init_fn fn);
     declare_inst(X,Y) \
     typedef struct X##_f { \
         A_f_members(Y) \
-        A_meta     (X,A, METHOD) \
-        X##_meta (X,Y, TYPE) \
+        A_schema     (X,A, METHOD) \
+        X##_schema (X,Y, TYPE) \
     } X##_f, *X##_t; \
     extern X##_f   X##_type;
 
@@ -466,8 +466,8 @@ void        A_lazy_init(global_init_fn fn);
     declare_inst(X,X) \
     typedef struct X##_f { \
         A_f_members(A) \
-        A_meta     (X, A, METHOD) \
-        X##_meta (X, A, TYPE) \
+        A_schema     (X, A, METHOD) \
+        X##_schema (X, A, TYPE) \
     } X##_f, *X##_t; \
     extern X##_f  X##_type;
 
@@ -524,7 +524,7 @@ void        A_lazy_init(global_init_fn fn);
 #define define_abstract(X) \
     define_global(X, A, 0, A_TRAIT_ABSTRACT, \
         X##_type.arb = null; \
-        X##_meta( X, A, INIT ) \
+        X##_schema( X, A, INIT ) \
     )
 
 void* primitive_ffi_arb(AType);
@@ -532,7 +532,7 @@ void* primitive_ffi_arb(AType);
 #define define_class(X) \
     define_global(X, A, sizeof(struct X), 0, \
         X##_type.arb = primitive_ffi_arb(typeof(cstr)); \
-        X##_meta( X, A, INIT ) \
+        X##_schema( X, A, INIT ) \
     )
 
 /// alias let us meta describe things without adding any code.  just a bit of cloning of the function table.  which is definitely bloat
@@ -569,14 +569,14 @@ void* primitive_ffi_arb(AType);
 #define define_mod(X,Y) \
     define_global(X,Y, sizeof(struct X), 0, \
         X##_type.arb = primitive_ffi_arb(typeof(cstr)); \
-        X##_meta( X,Y, INIT ) \
+        X##_schema( X,Y, INIT ) \
     )
 
 #define define_proto(X) \
-    define_global(X, A, sizeof(struct X), 0, X##_meta(X,X, PROTO ))
+    define_global(X, A, sizeof(struct X), 0, X##_schema(X,X, PROTO ))
 
 /// constructors get a type forwarded from the construct macro
-#define A_meta(X,Y,Z) \
+#define A_schema(X,Y,Z) \
     i_intern(X,Y,Z, AType,     type) \
     i_intern(X,Y,Z, num,       refs) \
     i_intern(X,Y,Z, struct A*, data) \
@@ -593,7 +593,7 @@ declare_base(A)
 
 #define typeof(X) ((struct A_f*)&X##_type)
 
-#define numeric_meta(X,Y,Z) \
+#define numeric_schema(X,Y,Z) \
     i_construct(X,Y,Z, i8)  \
     i_construct(X,Y,Z, i16) \
     i_construct(X,Y,Z, i32) \
@@ -608,42 +608,42 @@ declare_base(A)
     i_construct(X,Y,Z, num)
 declare_abstract(numeric)
 
-#define string_like_meta(X,Y,Z)
+#define string_like_schema(X,Y,Z)
 declare_abstract(string_like)
 
-#define nil_meta(X,Y,Z)
+#define nil_schema(X,Y,Z)
 declare_abstract(nil)
 
-#define raw_meta(X,Y,Z)
+#define raw_schema(X,Y,Z)
 declare_abstract(raw)
 
-#define imported_meta(X,Y,Z)
+#define imported_schema(X,Y,Z)
 declare_abstract(imported)
 
 /// our numeric primitives have their constructs defined
 /// this is so we have a defined construction method for data conversion, we actually need it registered
 /// we may optimize the need for it to be called in C99 output once working
-#define i8_meta(X,Y,Z)      numeric_meta(X,Y,Z)
-#define i16_meta(X,Y,Z)     numeric_meta(X,Y,Z)
-#define i32_meta(X,Y,Z)     numeric_meta(X,Y,Z)
-#define i64_meta(X,Y,Z)     numeric_meta(X,Y,Z)
-#define u8_meta(X,Y,Z)      numeric_meta(X,Y,Z)
-#define u16_meta(X,Y,Z)     numeric_meta(X,Y,Z)
-#define u32_meta(X,Y,Z)     numeric_meta(X,Y,Z)
-#define u64_meta(X,Y,Z)     numeric_meta(X,Y,Z)
-#define f32_meta(X,Y,Z)     numeric_meta(X,Y,Z)
-#define f64_meta(X,Y,Z)     numeric_meta(X,Y,Z)
-#define f128_meta(X,Y,Z)    numeric_meta(X,Y,Z)
-#define bool_meta(X,Y,Z)    numeric_meta(X,Y,Z)
-#define num_meta(X,Y,Z)     numeric_meta(X,Y,Z)
-#define sz_meta(X,Y,Z)      numeric_meta(X,Y,Z)
-#define cstr_meta(X,Y,Z)    string_like_meta(X,Y,Z)
-#define symbol_meta(X,Y,Z)  string_like_meta(X,Y,Z)
-#define none_meta(X,Y,Z)    nil_meta(X,Y,Z)
-#define raw_t_meta(X,Y,Z)   raw_meta(X,Y,Z)
-#define handle_meta(X,Y,Z)  raw_meta(X,Y,Z)
-#define AType_meta(X,Y,Z)   raw_meta(X,Y,Z)
-#define Member_meta(X,Y,Z)  raw_meta(X,Y,Z)
+#define i8_schema(X,Y,Z)      numeric_schema(X,Y,Z)
+#define i16_schema(X,Y,Z)     numeric_schema(X,Y,Z)
+#define i32_schema(X,Y,Z)     numeric_schema(X,Y,Z)
+#define i64_schema(X,Y,Z)     numeric_schema(X,Y,Z)
+#define u8_schema(X,Y,Z)      numeric_schema(X,Y,Z)
+#define u16_schema(X,Y,Z)     numeric_schema(X,Y,Z)
+#define u32_schema(X,Y,Z)     numeric_schema(X,Y,Z)
+#define u64_schema(X,Y,Z)     numeric_schema(X,Y,Z)
+#define f32_schema(X,Y,Z)     numeric_schema(X,Y,Z)
+#define f64_schema(X,Y,Z)     numeric_schema(X,Y,Z)
+#define f128_schema(X,Y,Z)    numeric_schema(X,Y,Z)
+#define bool_schema(X,Y,Z)    numeric_schema(X,Y,Z)
+#define num_schema(X,Y,Z)     numeric_schema(X,Y,Z)
+#define sz_schema(X,Y,Z)      numeric_schema(X,Y,Z)
+#define cstr_schema(X,Y,Z)    string_like_schema(X,Y,Z)
+#define symbol_schema(X,Y,Z)  string_like_schema(X,Y,Z)
+#define none_schema(X,Y,Z)    nil_schema(X,Y,Z)
+#define raw_t_schema(X,Y,Z)   raw_schema(X,Y,Z)
+#define handle_schema(X,Y,Z)  raw_schema(X,Y,Z)
+#define AType_schema(X,Y,Z)   raw_schema(X,Y,Z)
+#define Member_schema(X,Y,Z)  raw_schema(X,Y,Z)
 
 /// meta gives us access to one token we can override with (F)
 declare_primitive( i8,          numeric)
@@ -670,7 +670,7 @@ declare_primitive(AType,        raw)
 declare_primitive(Member,       raw)
 
 /// doubly-linked item type, integrated key so we dont also need a 'field' type
-#define item_meta(X,Y,Z) \
+#define item_schema(X,Y,Z) \
     i_intern(X,Y,Z, struct X*, next) \
     i_intern(X,Y,Z, struct X*, prev) \
     i_intern(X,Y,Z, A,         val) \
@@ -681,7 +681,7 @@ declare_class(item)
 
 /// abstract collection type
 /// proto needs an implement for each member type!
-#define collection_meta(X,Y,Z) \
+#define collection_schema(X,Y,Z) \
     implement(X,Y,Z, i64,     count) \
     implement(X,Y,Z, A,       push,   A) \
     implement(X,Y,Z, A,       pop) \
@@ -690,8 +690,8 @@ declare_class(item)
 declare_proto(collection)
 
 /// linked-list of elemental data
-#define list_meta(X,Y,Z) \
-    collection_meta(X,Y,Z) \
+#define list_schema(X,Y,Z) \
+    collection_schema(X,Y,Z) \
     i_intern(X,Y,Z, item,      first) \
     i_intern(X,Y,Z, item,      last)  \
     i_intern(X,Y,Z, i64,       count) \
@@ -715,7 +715,7 @@ declare_mod(list, collection)
 
 typedef struct string* string;
 
-#define OPType_meta(X,Y) \
+#define OPType_schema(X,Y) \
     enum_value(X,Y, add) \
     enum_value(X,Y, sub) \
     enum_value(X,Y, mul) \
@@ -738,7 +738,7 @@ typedef struct string* string;
     enum_value(X,Y, mod_assign)
 declare_enum(OPType)
 
-#define path_meta(X,Y,Z) \
+#define path_schema(X,Y,Z) \
     i_intern    (X,Y,Z, cstr,   chars) \
     i_method    (X,Y,Z, bool,   exists) \
     i_method    (X,Y,Z, bool,   make_dir) \
@@ -755,8 +755,8 @@ declare_enum(OPType)
     i_override_ctr(X,Y,Z, cstr)
 declare_class(path)
 
-#define array_meta(X,Y,Z) \
-    collection_meta  (X,Y,Z) \
+#define array_schema(X,Y,Z) \
+    collection_schema  (X,Y,Z) \
     i_intern         (X,Y,Z, A*,   elements) \
     i_intern         (X,Y,Z, i32,  alloc) \
     i_intern         (X,Y,Z, i32,  len) \
@@ -778,10 +778,10 @@ declare_class(path)
     i_override_cast  (X,Y,Z, bool)
 declare_mod(array, collection)
 
-declare_meta(array, ATypes)
+declare_schema(array, ATypes)
 
-#define hashmap_meta(X,Y,Z) \
-    collection_meta  (X,Y,Z) \
+#define hashmap_schema(X,Y,Z) \
+    collection_schema  (X,Y,Z) \
     i_intern         (X,Y,Z, list*, data) \
     i_intern         (X,Y,Z, num,   alloc) \
     i_intern         (X,Y,Z, num,   count) \
@@ -802,7 +802,7 @@ declare_class(hashmap)
 /// it could be significantly faster
 /// its compatible with lambdas; those args are just set first
 
-#define fn_meta(X,Y,Z) \
+#define fn_schema(X,Y,Z) \
     i_intern    (X,Y,Z, method_t*, method) \
     i_intern    (X,Y,Z, A,         target) \
     i_intern    (X,Y,Z, A,         context) \
@@ -811,7 +811,7 @@ declare_class(hashmap)
     i_override_m(X,Y,Z, u64,       hash)
 declare_class(fn)
 
-#define string_meta(X,Y,Z) \
+#define string_schema(X,Y,Z) \
     i_intern(X,Y,Z,     cstr,    chars) \
     i_intern(X,Y,Z,     num,     alloc) \
     i_intern(X,Y,Z,     num,     len) \
@@ -827,8 +827,8 @@ declare_class(fn)
     i_override_cast(X,Y,Z, bool)
 declare_class(string)
 
-#define vector_meta(X,Y,Z) \
-    collection_meta(X,Y,Z) \
+#define vector_schema(X,Y,Z) \
+    collection_schema(X,Y,Z) \
     i_method(X,Y,Z,     A,    pop) \
     i_method(X,Y,Z,     A,    push,     A) \
     i_method(X,Y,Z,     A,    get,      i32) \

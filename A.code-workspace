@@ -134,7 +134,8 @@
 			"webgpu.h": "c",
 			"stdlib.h": "c",
 			"parentbad": "c",
-			"dawn_proc_table.h": "c"
+			"dawn_proc_table.h": "c",
+			"string.h": "c"
 		}
 	}
 }

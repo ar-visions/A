@@ -11,6 +11,7 @@
 #include <ctype.h>
 #include <libgen.h>
 #include <unistd.h>
+#include <threads.h>
 
 FILE *popen(const char *command, const char *type);
 int   pclose(FILE*);
@@ -106,11 +107,12 @@ enum A_TRAIT {
 #define COUNT_ARGS_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
 
 #define COUNT_ARGS(...)             COUNT_ARGS_IMPL(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1)
-#define valloc(T, N)                ((A)A_alloc(typeof(T), N))
+#define valloc(T, N)                ((A)A_alloc(typeid(T), N))
 #define new(T)                      ((A)valloc(T, 1))
+#define alloc(T)                    ((A)valloc(T, 0))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
 #define isa(INSTANCE)               ((struct A_f*)((struct A*)INSTANCE - 1)->type)
-#define inherits(left, type)        A_inherits(left, typeof(type))
+#define inherits(left, type)        A_inherits(left, typeid(type))
 
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 
@@ -123,13 +125,18 @@ enum A_TRAIT {
 /// the call and cast take instance first
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 
+/// indexing is functionality of I [ A1, A2, A... ] -> R
+#define idx_1(I,T1,V1)              call(I, index ##_## T1, V1)
+#define idx_2(I,T1,T2,V1,V2)        call(I, index ##_## T1 ##_## T2, V1, V2)
+
+/// our casts are polymorphic
+#define cast(I,T)                   ftableI(I) -> cast_##T(I)
+
 /// generic is from instance type, which we only need to store the args for, no other tables
 #define meta_t(I,IDX)               isa(I) -> meta.meta_##IDX
 
-/// our casts are polymorphic unlike C++
-#define cast(I,T)                   ftableI(I) -> cast_##T(I)
-
 #define ctr(T,WITH,...)             T##_type.with_##WITH((A)valloc(T, 1), ## __VA_ARGS__)
+#define alloc_ctr(T,WITH,...)       T##_type.with_##WITH((A)valloc(T, 0), ## __VA_ARGS__)
 #define operator(I,OP,...)          ftableI(I) -> operator_##OP(I, ##__VA_ARGS__)
 #define emit_types(...)             EXPAND_ARGS(__VA_ARGS__)
 #define combine_tokens_(A, B)       A##B
@@ -445,7 +452,7 @@ void        A_lazy_init(global_init_fn fn);
             E##_type.size     = sizeof(enum E); \
             E##_type.members  = members; \
             E##_type.traits   = A_TRAIT_ENUM; \
-            E##_type.arb      = primitive_ffi_arb(typeof(i32)); \
+            E##_type.arb      = primitive_ffi_arb(typeid(i32)); \
             E##_schema( E, IMPL ); \
             A_push_type(&E##_type); \
             return true; \
@@ -488,7 +495,7 @@ void        A_lazy_init(global_init_fn fn);
             X## _type.name     = #X;        \
             X## _type.size     = TYPE_SZ;   \
             X## _type.traits   = TRAIT;     \
-            X## _type.arb = primitive_ffi_arb(typeof(X)); \
+            X## _type.arb = primitive_ffi_arb(typeid(X)); \
             A_push_type(&X##_type);         \
             return true;                    \
         }                                   \
@@ -533,7 +540,7 @@ void* primitive_ffi_arb(AType);
 #define define_class(X) \
     define_global(X, A, sizeof(struct X), 0, \
         printf("calling global for %s\n", #X); \
-        X##_type.arb = primitive_ffi_arb(typeof(cstr)); \
+        X##_type.arb = primitive_ffi_arb(typeid(cstr)); \
         X##_schema( X, A, INIT ) \
     )
 
@@ -570,7 +577,7 @@ void* primitive_ffi_arb(AType);
 
 #define define_mod(X,Y) \
     define_global(X,Y, sizeof(struct X), 0, \
-        X##_type.arb = primitive_ffi_arb(typeof(cstr)); \
+        X##_type.arb = primitive_ffi_arb(typeid(cstr)); \
         X##_schema( X,Y, INIT ) \
     )
 
@@ -583,6 +590,7 @@ typedef struct string* string;
 #define A_schema(X,Y,Z) \
     i_intern(X,Y,Z, AType,     type) \
     i_intern(X,Y,Z, num,       refs) \
+    i_intern(X,Y,Z, num,       ar_index) \
     i_intern(X,Y,Z, struct A*, data) \
     i_intern(X,Y,Z, num,       alloc) \
     i_intern(X,Y,Z, num,       count) \
@@ -596,7 +604,7 @@ typedef struct string* string;
     i_construct(X,Y,Z, cstr, num)
 declare_base(A)
 
-#define typeof(X) ((struct A_f*)&X##_type)
+#define typeid(X) ((struct A_f*)&X##_type)
 
 #define numeric_schema(X,Y,Z) \
     i_construct(X,Y,Z, i8)  \
@@ -700,14 +708,15 @@ declare_proto(collection)
     i_intern(X,Y,Z, item,      first) \
     i_intern(X,Y,Z, item,      last)  \
     i_intern(X,Y,Z, i64,       count) \
-    i_public(X,Y,Z, i32,       public_integer) \
     i_method(X,Y,Z, A,         pop) \
     i_method(X,Y,Z, A,         push, A) \
+    i_method(X,Y,Z, num,       index_of_element, A) \
     i_method(X,Y,Z, none,      remove, num) \
     i_method(X,Y,Z, none,      remove_item, item) \
     i_method(X,Y,Z, A,         get,  i32) \
     i_method(X,Y,Z, num,       count)
 declare_mod(list, collection)
+
 
 /// array of elemental data
 /// important to define the same operators here in silver definition of runtime
@@ -770,7 +779,9 @@ declare_class(path)
     i_method         (X,Y,Z, A,    last) \
     i_method         (X,Y,Z, X,    pop) \
     i_method         (X,Y,Z, X,    remove, num) \
+    i_method         (X,Y,Z, X,    remove_weak, num) \
     i_method         (X,Y,Z, A,    push,A) \
+    i_method         (X,Y,Z, A,    push_weak,A) \
     i_method         (X,Y,Z, A,    get, i32) \
     i_method         (X,Y,Z, num,  count) \
     i_method         (X,Y,Z, num,  index_of, A) \
@@ -785,8 +796,14 @@ declare_mod(array, collection)
 
 declare_schema(array, ATypes)
 
+#define AR_schema(X,Y,Z) \
+    i_intern(    X,Y,Z, array, pool) \
+    s_method(    X,Y,Z, AR,    fetch, num) \
+    i_override_m(X,Y,Z, none,  init) \
+    i_override_m(X,Y,Z, none,  destructor)
+declare_class(AR)
+
 #define hashmap_schema(X,Y,Z) \
-    collection_schema  (X,Y,Z) \
     i_intern         (X,Y,Z, list,  data) \
     i_private        (X,Y,Z, num,   alloc) \
     i_private        (X,Y,Z, num,   count) \
@@ -801,6 +818,21 @@ declare_schema(array, ATypes)
     i_index          (X,Y,Z, A,     A) \
     i_override_cast  (X,Y,Z, bool)
 declare_class(hashmap)
+
+#define map_item_schema(X,Y,Z) \
+    i_intern         (X,Y,Z, item, ref) \
+    i_intern         (X,Y,Z, A, value)
+declare_class(map_item)
+
+/// hmap stores the item, and our refs list has a value that holds that (origin = hmap)
+#define map_schema(X,Y,Z) \
+    i_intern         (X,Y,Z, hashmap, hmap) \
+    i_intern         (X,Y,Z, list, refs) \
+    i_override_cast  (X,Y,Z, string) \
+    i_construct      (X,Y,Z, sz) \
+    i_index          (X,Y,Z, A, A) \
+    i_override_cast  (X,Y,Z, bool)
+declare_class(map)
 
 /// how beneficial is it to have args in 'context' structure?
 /// we have a place for holding references
@@ -866,7 +898,7 @@ A           A_alloc(AType type, num count);
 
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size
-#define A_struct(T) A_alloc(typeof(u8), sizeof(T))
+#define A_struct(T) A_alloc(typeid(u8), sizeof(T))
 
 A           A_new(AType type);
 A           A_construct(AType type, int n_args, ...);
@@ -875,6 +907,7 @@ type_member_t* A_constructor(AType type, AType first_arg); // find a constructor
 bool        A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
 A           A_hold(A a);
 void        A_drop(A a);
+void        A_free(A a);
 A_f**       A_types(num* length);
 type_member_t* A_member(AType type, enum A_TYPE member_type, char* name);
 A           A_method_call(method_t* a, array args);

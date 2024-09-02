@@ -3,6 +3,9 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
+thread_local array     ar_stack;
+thread_local   AR      ar_top;
+
 static global_init_fn* call_after;
 static num             call_after_alloc;
 static num             call_after_count;
@@ -50,7 +53,7 @@ A A_new(AType type) {
 }
 
 A A_alloc(AType type, num count) {
-    A a = calloc(1, (type == typeof(A) ? 0 : sizeof(struct A)) + type->size * count);
+    A a = calloc(1, (type == typeid(A) ? 0 : sizeof(struct A)) + type->size * (count == 0 ? 1 : count));
     a->type   = type;
     a->origin = a;
     a->data   = &a[1];
@@ -64,6 +67,10 @@ A A_alloc(AType type, num count) {
         if (current == a_type)
             break;
         current = current->parent_type;
+    }
+    if (count > 0) {
+        a->ar_index = ar_top->pool->len;
+        call(ar_top->pool, push, a->data);
     }
     return a->data; /// fields(a) == this operation
 }
@@ -299,12 +306,12 @@ static bool A_cast_bool (A a) { return (bool)(size_t)a; }
 static A A_with_cstr(A a, cstr cs, num len) {
     A        f = A_fields(a);
     AType type = f->type;
-    if      (type == typeof(f64)) sscanf(cs, "%lf",  (f64*)a);
-    else if (type == typeof(f32)) sscanf(cs, "%f",   (f32*)a);
-    else if (type == typeof(i32)) sscanf(cs, "%i",   (i32*)a);
-    else if (type == typeof(u32)) sscanf(cs, "%u",   (u32*)a);
-    else if (type == typeof(i64)) sscanf(cs, "%lli", (i64*)a);
-    else if (type == typeof(u64)) sscanf(cs, "%llu", (u64*)a);
+    if      (type == typeid(f64)) sscanf(cs, "%lf",  (f64*)a);
+    else if (type == typeid(f32)) sscanf(cs, "%f",   (f32*)a);
+    else if (type == typeid(i32)) sscanf(cs, "%i",   (i32*)a);
+    else if (type == typeid(u32)) sscanf(cs, "%u",   (u32*)a);
+    else if (type == typeid(i64)) sscanf(cs, "%lli", (i64*)a);
+    else if (type == typeid(u64)) sscanf(cs, "%llu", (u64*)a);
     else {
         printf("implement ctr cstr for %s\n", f->type->name);
         exit(-1);
@@ -318,17 +325,17 @@ static void A_serialize(AType type, string res, A a) {
     if (type->traits & A_TRAIT_PRIMITIVE) {
         char buf[128];
         int len = 0;
-        if      (type == typeof(i64)) len = sprintf(buf, "%lld", *(i64*)a);
-        else if (type == typeof(num)) len = sprintf(buf, "%lld", *(i64*)a);
-        else if (type == typeof(i32)) len = sprintf(buf, "%d",   *(i32*)a);
-        else if (type == typeof(i16)) len = sprintf(buf, "%hd",  *(i16*)a);
-        else if (type == typeof(i8))  len = sprintf(buf, "%hhd", *(i8*) a);
-        else if (type == typeof(u64)) len = sprintf(buf, "%llu", *(u64*)a);
-        else if (type == typeof(u32)) len = sprintf(buf, "%u",   *(u32*)a);
-        else if (type == typeof(u16)) len = sprintf(buf, "%hu",  *(u16*)a);
-        else if (type == typeof(u8))  len = sprintf(buf, "%hhu", *(u8*) a);
-        else if (type == typeof(f64)) len = sprintf(buf, "%f",   *(f64*)a);
-        else if (type == typeof(f32)) len = sprintf(buf, "%f",   *(f32*)a);
+        if      (type == typeid(i64)) len = sprintf(buf, "%lld", *(i64*)a);
+        else if (type == typeid(num)) len = sprintf(buf, "%lld", *(i64*)a);
+        else if (type == typeid(i32)) len = sprintf(buf, "%d",   *(i32*)a);
+        else if (type == typeid(i16)) len = sprintf(buf, "%hd",  *(i16*)a);
+        else if (type == typeid(i8))  len = sprintf(buf, "%hhd", *(i8*) a);
+        else if (type == typeid(u64)) len = sprintf(buf, "%llu", *(u64*)a);
+        else if (type == typeid(u32)) len = sprintf(buf, "%u",   *(u32*)a);
+        else if (type == typeid(u16)) len = sprintf(buf, "%hu",  *(u16*)a);
+        else if (type == typeid(u8))  len = sprintf(buf, "%hhu", *(u8*) a);
+        else if (type == typeid(f64)) len = sprintf(buf, "%f",   *(f64*)a);
+        else if (type == typeid(f32)) len = sprintf(buf, "%f",   *(f32*)a);
         else {
             assert(false);
             printf("implement primitive cast to str: %s\n", type->name);
@@ -347,7 +354,7 @@ static void A_serialize(AType type, string res, A a) {
 
 static string A_cast_string(A a) {
     AType type = isa(a);
-    if (type == typeof(string))
+    if (type == typeid(string))
         return a;
     bool  once = false;
     string res = ctr(string, sz, 1024);
@@ -376,16 +383,16 @@ static string A_cast_string(A a) {
 
 #define set_v() \
     AType type = isa(a); \
-    if (type == typeof(i8))  *(i8*) a = (i8) v; \
-    if (type == typeof(i16)) *(i16*)a = (i16)v; \
-    if (type == typeof(i32)) *(i32*)a = (i32)v; \
-    if (type == typeof(i64)) *(i64*)a = (i64)v; \
-    if (type == typeof(u8))  *(u8*) a = (u8) v; \
-    if (type == typeof(u16)) *(u16*)a = (u16)v; \
-    if (type == typeof(u32)) *(u32*)a = (u32)v; \
-    if (type == typeof(u64)) *(u64*)a = (u64)v; \
-    if (type == typeof(f32)) *(f32*)a = (f32)v; \
-    if (type == typeof(f64)) *(f64*)a = (f64)v; \
+    if (type == typeid(i8))  *(i8*) a = (i8) v; \
+    if (type == typeid(i16)) *(i16*)a = (i16)v; \
+    if (type == typeid(i32)) *(i32*)a = (i32)v; \
+    if (type == typeid(i64)) *(i64*)a = (i64)v; \
+    if (type == typeid(u8))  *(u8*) a = (u8) v; \
+    if (type == typeid(u16)) *(u16*)a = (u16)v; \
+    if (type == typeid(u32)) *(u32*)a = (u32)v; \
+    if (type == typeid(u64)) *(u64*)a = (u64)v; \
+    if (type == typeid(f32)) *(f32*)a = (f32)v; \
+    if (type == typeid(f64)) *(f64*)a = (f64)v; \
     return a;
 
 static A numeric_with_i8 (A a, i8   v) { set_v(); }
@@ -393,16 +400,16 @@ static A numeric_with_i16(A a, i16  v) { set_v(); }
 static A numeric_with_i32(A a, i32  v) { set_v(); }
 static A numeric_with_i64(A a, i64  v) {
     AType type = isa(a);
-    if (type == typeof(i8))  *(i8*) a = (i8) v;
-    if (type == typeof(i16)) *(i16*)a = (i16)v;
-    if (type == typeof(i32)) *(i32*)a = (i32)v; \
-    if (type == typeof(i64)) *(i64*)a = (i64)v; \
-    if (type == typeof(u8))  *(u8*) a = (u8) v; \
-    if (type == typeof(u16)) *(u16*)a = (u16)v; \
-    if (type == typeof(u32)) *(u32*)a = (u32)v; \
-    if (type == typeof(u64)) *(u64*)a = (u64)v; \
-    if (type == typeof(f32)) *(f32*)a = (f32)v; \
-    if (type == typeof(f64)) *(f64*)a = (f64)v; \
+    if (type == typeid(i8))  *(i8*) a = (i8) v;
+    if (type == typeid(i16)) *(i16*)a = (i16)v;
+    if (type == typeid(i32)) *(i32*)a = (i32)v; \
+    if (type == typeid(i64)) *(i64*)a = (i64)v; \
+    if (type == typeid(u8))  *(u8*) a = (u8) v; \
+    if (type == typeid(u16)) *(u16*)a = (u16)v; \
+    if (type == typeid(u32)) *(u32*)a = (u32)v; \
+    if (type == typeid(u64)) *(u64*)a = (u64)v; \
+    if (type == typeid(f32)) *(f32*)a = (f32)v; \
+    if (type == typeid(f64)) *(f64*)a = (f64)v; \
     return a;
 }
 static A numeric_with_u8 (A a, u8   v) { set_v(); }
@@ -418,7 +425,7 @@ A A_method(A_f* type, char* method_name, array args);
 
 /// these pointers are invalid for A since they are in who-knows land, but the differences would be the same
 static i32 A_compare(A a, A b) {
-    return (i32)(a - b);
+    return (i32)((sz)(void*)a - (sz)(void*)b);
 }
 
 num parse_formatter(cstr start, cstr res, num sz) {
@@ -678,6 +685,74 @@ static string hashmap_cast_string(hashmap a) {
 }
 
 
+static item map_fetch(map a, A key) {
+    return call(a->hmap, fetch, key);
+}
+
+static none map_set(map a, A key, A value) {
+    item i = call(a->hmap, fetch, key);
+    map_item mi = i->val;
+    if (mi) {
+        A before = mi->value;
+        mi->value = A_hold(value);
+        A_drop(before);
+    } else {
+        mi = i->val = new(map_item);
+        mi->ref = new(item);
+        mi->ref->key = A_hold(key);
+        mi->ref->val = i;
+    }
+}
+
+static A map_get(map a, A key) {
+    item i = call(a->hmap, lookup, key);
+    return i ? i->val : null;
+}
+
+static bool map_contains(map a, A key) {
+    item i = call(a->hmap, lookup, key);
+    return i != null;
+}
+
+/// must store a ref to the ref item in hashmap item's value; we may call this an object map_value
+static none map_remove(map a, A key) {
+    item i = call(a->hmap, lookup, key);
+    if (i) {
+        item ref = i->val;
+        call(a->refs, remove_item, ref);
+    }
+}
+
+static bool map_cast_bool(map a) {
+    return a->refs->count > 0;
+}
+
+static A map_index_A(map a, A key) {
+    item hash_item = call(a->hmap, get, key);
+    return hash_item ? hash_item->val : null;
+}
+
+static map map_with_sz(map a, sz size) {
+    a->hmap  = ctr(hashmap, sz, size);
+    return a;
+}
+
+static string map_cast_string(map a) {
+    string res  = ctr(string, sz, 1024);
+    bool   once = false;
+    for (item i = a->refs->first; i; i = i->next) {
+        string key = cast(i->key, string);
+        string val = cast(i->val, string);
+        if (once) call(res, append, " ");
+        call(res, append, key->chars);
+        call(res, append, ":");
+        call(res, append, val->chars);
+        once = true;
+    }
+    return res;
+}
+
+
 /// collection -------------------------
 static A collection_push(collection a, A b) {
     assert(false);
@@ -695,26 +770,33 @@ static num collection_compare(array a, collection b) {
 }
 
 A A_hold(A a) {
-    if (a) (a - 1)->refs++;
+    if (a) {
+        A f = a - 1;
+        if (f->refs++ == 1 && f->ar_index > 0)
+            ar_top->pool->elements[f->ar_index] = null; // index of 0 is occupied by the pool itself; just a sentinel 
+    }
     return a;
 }
 
-void A_drop(A a) {
-    if (a && --(a - 1)->refs == -1) {
-        A aa = (a - 1);
-        A_f*  type = aa->type;
-        void* prev = null;
-        while (type) {
-            if (prev != type->destructor) {
-                type->destructor(a);
-                prev = type->destructor;
-            }
-            if (type == &A_type)
-                break;
-            type = type->parent_type;
+void A_free(A a) {
+    A       aa = (a - 1);
+    A_f*  type = aa->type;
+    void* prev = null;
+    while (type) {
+        if (prev != type->destructor) {
+            type->destructor(a);
+            prev = type->destructor;
         }
-        free(aa);
+        if (type == &A_type)
+            break;
+        type = type->parent_type;
     }
+    free(aa);
+}
+
+void A_drop(A a) {
+    if (a && --(a - 1)->refs == -1)
+        A_free(a);
 }
 
 A A_fields(A instance) {
@@ -750,6 +832,18 @@ static item list_push(list a, A e) {
     a->last = n;
     a->count++;
     return n;
+}
+
+/// we need index_of_element and index_of
+/// this is not calling compare for now, and we really need to be able to control that if it did (argument-based is fine)
+static num list_index_of_element(list a, A value) {
+    num index = 0;
+    for (item ai = a->first; ai; ai = ai->next) {
+        if (ai->val == value)
+            return index;
+        index++;
+    }
+    return -1;
 }
 
 static A list_remove(list a, num index) {
@@ -863,6 +957,17 @@ static A array_push(array a, A b) {
     AType t = isa(a);
     if (is_meta(a))
         assert(is_meta_compatible(a, b));
+    a->elements[a->len++] = A_hold(b);
+    return b;
+}
+
+static A array_push_weak(array a, A b) {
+    if (a->alloc == a->len) {
+        array_expand(a);
+    }
+    AType t = isa(a);
+    if (is_meta(a))
+        assert(is_meta_compatible(a, b));
     a->elements[a->len++] = b;
     return b;
 }
@@ -877,6 +982,16 @@ static A array_remove(array a, num b) {
         A prev = a->elements[b];
         a->elements[b] = a->elements[b + 1];
         A_drop(prev);
+    }
+    a->elements[--a->len] = null;
+    return before;
+}
+
+static A array_remove_weak(array a, num b) {
+    A before = a->elements[b];
+    for (num i = b; i < a->len; i++) {
+        A prev = a->elements[b];
+        a->elements[b] = a->elements[b + 1];
     }
     a->elements[--a->len] = null;
     return before;
@@ -978,6 +1093,39 @@ static bool array_cast_bool(array a) { return a && a->len > 0; }
 static array array_with_sz(array a, sz size) {
     array_alloc_sz(a, size);
     return a;
+}
+
+static void AR_init(AR a) {
+    ar_top = a;
+    a->pool = alloc_ctr(array, sz, 1024);
+    call(a->pool, push_weak, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
+
+    if (!ar_stack) ar_stack = alloc_ctr(array, sz, 16);
+    call(ar_stack, push_weak, a);
+}
+
+static void AR_destructor(AR a) {
+    int f = call(ar_stack, index_of, a);
+    assert(f >= 0);
+    call(ar_stack, remove_weak, f);
+    if (ar_top == a)
+        ar_top = ar_stack->len ? ar_stack->elements[ar_stack->len - 1] : null;
+    for (int i = 1; i < a->pool->len; i++) {
+        A ref = a->pool->elements[i];
+        if (ref) {
+            A f = A_fields(ref);
+            A_free(ref);
+        }
+    }
+    A_free(a->pool);
+}
+
+static AR AR_fetch(num index) {
+    if (ar_stack && abs(index) < ar_stack->len)
+        return index < 0 ? ar_stack->elements[ar_stack->len + index] :
+                           ar_stack->elements[index];
+    else
+        return null;
 }
 
 static u64 fn_hash(fn f) {
@@ -1224,7 +1372,7 @@ static u64 path_hash(path a) {
 static A path_read(path a, AType type) {
     FILE* f = fopen(a->chars, "rb");
     if (!f) return null;
-    if (type == typeof(string)) {
+    if (type == typeid(string)) {
         fseek(f, 0, SEEK_END);
         sz flen = ftell(f);
         fseek(f, 0, SEEK_SET);
@@ -1246,27 +1394,27 @@ item item_with_symbol(item f, symbol key, A val) {
 }
 
 void* primitive_ffi_arb(AType ptype) {
-    if (ptype == typeof(u8)) return &ffi_type_uint8;
-    if (ptype == typeof(i8)) return &ffi_type_sint8;
-    if (ptype == typeof(u16)) return &ffi_type_uint16;
-    if (ptype == typeof(i16)) return &ffi_type_sint16;
-    if (ptype == typeof(u32)) return &ffi_type_uint32;
-    if (ptype == typeof(i32)) return &ffi_type_sint32;
-    if (ptype == typeof(u64)) return &ffi_type_uint64;
-    if (ptype == typeof(i64)) return &ffi_type_sint64;
-    if (ptype == typeof(f32)) return &ffi_type_float;
-    if (ptype == typeof(f64)) return &ffi_type_double;
-    //if (ptype == typeof(f128)) return &ffi_type_longdouble;
-    if (ptype == typeof(cstr)) return &ffi_type_pointer;
-    if (ptype == typeof(symbol)) return &ffi_type_pointer;
-    if (ptype == typeof(bool)) return &ffi_type_uint32;
-    if (ptype == typeof(num)) return &ffi_type_sint64;
-    if (ptype == typeof(sz)) return &ffi_type_sint64;
-    if (ptype == typeof(none)) return &ffi_type_void;
-    if (ptype == typeof(AType)) return &ffi_type_pointer;
-    if (ptype == typeof(handle)) return &ffi_type_pointer;
-    if (ptype == typeof(Member)) return &ffi_type_pointer;
-    if (ptype == typeof(raw))    return &ffi_type_pointer;
+    if (ptype == typeid(u8)) return &ffi_type_uint8;
+    if (ptype == typeid(i8)) return &ffi_type_sint8;
+    if (ptype == typeid(u16)) return &ffi_type_uint16;
+    if (ptype == typeid(i16)) return &ffi_type_sint16;
+    if (ptype == typeid(u32)) return &ffi_type_uint32;
+    if (ptype == typeid(i32)) return &ffi_type_sint32;
+    if (ptype == typeid(u64)) return &ffi_type_uint64;
+    if (ptype == typeid(i64)) return &ffi_type_sint64;
+    if (ptype == typeid(f32)) return &ffi_type_float;
+    if (ptype == typeid(f64)) return &ffi_type_double;
+    //if (ptype == typeid(f128)) return &ffi_type_longdouble;
+    if (ptype == typeid(cstr)) return &ffi_type_pointer;
+    if (ptype == typeid(symbol)) return &ffi_type_pointer;
+    if (ptype == typeid(bool)) return &ffi_type_uint32;
+    if (ptype == typeid(num)) return &ffi_type_sint64;
+    if (ptype == typeid(sz)) return &ffi_type_sint64;
+    if (ptype == typeid(none)) return &ffi_type_void;
+    if (ptype == typeid(AType)) return &ffi_type_pointer;
+    if (ptype == typeid(handle)) return &ffi_type_pointer;
+    if (ptype == typeid(Member)) return &ffi_type_pointer;
+    if (ptype == typeid(raw))    return &ffi_type_pointer;
     assert(false);
     return null;
 }
@@ -1309,7 +1457,11 @@ define_class(list)
 define_class(array)
 define_class(vector)
 define_class(hashmap)
+define_class(map_item)
+define_class(map)
 define_class(fn)
+
+define_class(AR)
 
 define_meta(array, ATypes, AType)
 
@@ -1322,7 +1474,7 @@ map map_parse(map a, int argc, cstr *argv, map def) {
         if (ps[0] == '-') {
             bool   is_single = ps[1] != '-';
             mx key {
-                cstr(&ps[is_single ? 1 : 2]), typeof(char)
+                cstr(&ps[is_single ? 1 : 2]), typeid(char)
             };
             field* found;
             if (is_single) {

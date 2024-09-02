@@ -129,7 +129,7 @@ enum A_TRAIT {
 /// our casts are polymorphic unlike C++
 #define cast(I,T)                   ftableI(I) -> cast_##T(I)
 
-#define construct(T,WITH,...)       T##_type.with_##WITH((A)valloc(T, 1), ## __VA_ARGS__)
+#define ctr(T,WITH,...)             T##_type.with_##WITH((A)valloc(T, 1), ## __VA_ARGS__)
 #define operator(I,OP,...)          ftableI(I) -> operator_##OP(I, ##__VA_ARGS__)
 #define emit_types(...)             EXPAND_ARGS(__VA_ARGS__)
 #define combine_tokens_(A, B)       A##B
@@ -172,7 +172,7 @@ enum A_TRAIT {
     X##_type.member_count++;
 #define   i_private_PROTO(X,Y, R, N, ...)    
 #define   i_private_METHOD(X,Y, R, N, ...)    
-#define   i_private(X,Y,Z, R, N, ...)          i_priv_##Z(X,Y,R,N, __VA_ARGS__)
+#define   i_private(X,Y,Z, R, N, ...)          i_private_##Z(X,Y,R,N, __VA_ARGS__)
 
 #define   i_public_INST(X,Y, R, N, ...)     R N;
 #define   i_public_TYPE(X,Y, R, N, ...)      
@@ -475,6 +475,7 @@ void        A_lazy_init(global_init_fn fn);
     A     X##_header; \
     X##_f X##_type; \
     static __attribute__((constructor)) bool global_##X() { \
+        printf("global ctr: %s\n", #X); \
         X##_f* type_ref = &X##_type; \
         Y##_f* base_ref = &Y##_type; \
         if ((AType)type_ref != (AType)base_ref && base_ref->name == null) { \
@@ -518,7 +519,7 @@ void        A_lazy_init(global_init_fn fn);
 
 /// primitives dont have construct/method support, but its abstract does
 #define define_primitive(X, Y, traits) \
-    define_global_primitive(X, Y, sizeof(X), 0)
+    define_global_primitive(X, Y, sizeof(X), traits | A_TRAIT_PRIMITIVE)
 
 /// with abstracts we dont require ffi, so a pretty minimal global
 #define define_abstract(X) \
@@ -531,6 +532,7 @@ void* primitive_ffi_arb(AType);
 
 #define define_class(X) \
     define_global(X, A, sizeof(struct X), 0, \
+        printf("calling global for %s\n", #X); \
         X##_type.arb = primitive_ffi_arb(typeof(cstr)); \
         X##_schema( X, A, INIT ) \
     )
@@ -575,6 +577,8 @@ void* primitive_ffi_arb(AType);
 #define define_proto(X) \
     define_global(X, A, sizeof(struct X), 0, X##_schema(X,X, PROTO ))
 
+typedef struct string* string;
+
 /// constructors get a type forwarded from the construct macro
 #define A_schema(X,Y,Z) \
     i_intern(X,Y,Z, AType,     type) \
@@ -587,6 +591,7 @@ void* primitive_ffi_arb(AType);
     i_method(X,Y,Z, none,      destructor) \
     i_method(X,Y,Z, i32,       compare,    X) \
     i_method(X,Y,Z, u64,       hash) \
+    i_cast(  X,Y,Z, string) \
     i_cast(  X,Y,Z, bool) \
     i_construct(X,Y,Z, cstr, num)
 declare_base(A)
@@ -782,15 +787,16 @@ declare_schema(array, ATypes)
 
 #define hashmap_schema(X,Y,Z) \
     collection_schema  (X,Y,Z) \
-    i_intern         (X,Y,Z, list*, data) \
-    i_intern         (X,Y,Z, num,   alloc) \
-    i_intern         (X,Y,Z, num,   count) \
+    i_intern         (X,Y,Z, list,  data) \
+    i_private        (X,Y,Z, num,   alloc) \
+    i_private        (X,Y,Z, num,   count) \
     i_method         (X,Y,Z, none,  remove, A) \
     i_method         (X,Y,Z, none,  set, A, A) \
     i_method         (X,Y,Z, A,     get, A) \
     i_method         (X,Y,Z, item,  fetch, A) \
     i_method         (X,Y,Z, item,  lookup, A) \
     i_method         (X,Y,Z, bool,  contains, A) \
+    i_override_cast  (X,Y,Z, string) \
     i_construct      (X,Y,Z,        sz) \
     i_index          (X,Y,Z, A,     A) \
     i_override_cast  (X,Y,Z, bool)
@@ -820,6 +826,8 @@ declare_class(fn)
     i_method(X,Y,Z,     num,     index_of, cstr) \
     i_method(X,Y,Z,     none,    append, cstr) \
     i_method(X,Y,Z,     string,  mid, num, num) \
+    i_method(X,Y,Z,     none,    reserve, num) \
+    i_method(X,Y,Z,     none,    write, handle, bool) \
     i_construct(X,Y,Z,  sz) \
     i_override_ctr(X,Y,Z,  cstr) \
     i_override_m(X,Y,Z, u64, hash) \
@@ -838,7 +846,11 @@ declare_class(string)
     i_override_cast(X,Y,Z, bool)
 declare_mod(vector, collection)
 
-string format(cstr template, ...);
+/// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
+string A_formatter(bool with_print, cstr template, ...);
+
+#define format(t, ...) A_formatter(false, t, __VA_ARGS__)
+#define  print(t, ...) A_formatter(true,  t, __VA_ARGS__)
 
 /// we can iterate through a collection with this strange code
 #define each(T, t, E, e) \
@@ -888,10 +900,8 @@ A           A_bool(bool);
 A           A_realloc(A, num);
 void        A_push(A, A);
 void        A_finish_types();
-A           hold(A a);
-void        drop(A a);
-A           fields(A instance);
-A           data(A instance);
+A           A_fields(A instance);
+A           A_data(A instance);
 bool        is_meta(A a);
 bool        is_meta_compatible(A a, A b);
 

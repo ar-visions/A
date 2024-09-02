@@ -69,7 +69,7 @@ A A_alloc(AType type, num count) {
 }
 
 A A_realloc(A a, num alloc) {
-    A obj = fields(a);
+    A obj = A_fields(a);
     assert(obj->type->traits == A_TRAIT_PRIMITIVE);
     A   re    = calloc(1, sizeof(struct A) + obj->type->size * alloc);
     num count = obj->count < alloc ? obj->count : alloc;
@@ -84,7 +84,7 @@ A A_realloc(A a, num alloc) {
 }
 
 void A_push(A a, A value) {
-    A   obj = fields(a);
+    A   obj = A_fields(a);
     assert(obj->type->traits == A_TRAIT_PRIMITIVE);
     num sz  = obj->type->size;
     if (obj->count == obj->alloc)
@@ -115,7 +115,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
 
 /// should work on statics or member functions the same; its up to the caller to push the self in there
 fn A_lambda(A target, Member member, A context) {
-    fn f = construct(fn, Member, member, target, context);
+    fn f = ctr(fn, Member, member, target, context);
     return f;
 }
 
@@ -160,7 +160,7 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
     method_t* m = mem->method;
     va_list  vargs;
     va_start(vargs, n_args);
-    array args = construct(array, sz, n_args + 1);
+    array args = ctr(array, sz, n_args + 1);
     call(args, push, instance);
     for (int i = 0; i < n_args; i++) {
         A arg = va_arg(vargs, A);
@@ -175,7 +175,7 @@ A A_construct(AType type, int n_args, ...) {
     A res = A_alloc(type, 1);
     va_list  vargs;
     va_start(vargs, n_args);
-    array args = construct(array, sz, n_args);
+    array args = ctr(array, sz, n_args);
     for (int i = 0; i < n_args; i++) {
         A arg = va_arg(vargs, A);
         call(args, push, arg);
@@ -214,7 +214,7 @@ void A_finish_types() {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
                 assert(address);
-                array args = construct(array, sz, mem->args.count);
+                array args = ctr(array, sz, mem->args.count);
                 for (num i = 0; i < mem->args.count; i++)
                     args->elements[i] = ((A_f**)&mem->args.meta_0)[i];
                 args->len = mem->args.count;
@@ -272,11 +272,10 @@ A A_u64(u64 data)   { return A_primitive(&u64_type, &data); }
 A A_f32(f32 data)   { return A_primitive(&f32_type, &data); }
 A A_f64(f64 data)   { return A_primitive(&f64_type, &data); }
 A A_cstr(cstr data) { return A_primitive(&cstr_type, &data); }
-A A_none()          { return A_primitive(&none_type, &data); }
+A A_none()          { return A_primitive(&none_type, NULL); }
 A A_bool(bool data) { return A_primitive(&bool_type, &data); }
 
 /// A -------------------------
-A           A_hold(A a) { ++a->refs; return a; }
 static A   A_new_default(AType type, num count) {
     return A_alloc(type, count);
 }
@@ -289,7 +288,7 @@ static void A_destructor(A a) {
         if ((m->member_type == A_TYPE_PROP || m->member_type == A_TYPE_PRIV) && !(m->type->traits & A_TRAIT_PRIMITIVE)) {
             u8* ptr = (u8*)a + m->offset;
             A   ref = ptr;
-            drop(ref);
+            A_drop(ref);
             *((A*)&ptr) = null;
         }
     }
@@ -298,7 +297,7 @@ static u64  A_hash      (A a) { return (u64)(size_t)a; }
 static bool A_cast_bool (A a) { return (bool)(size_t)a; }
 
 static A A_with_cstr(A a, cstr cs, num len) {
-    A        f = fields(a);
+    A        f = A_fields(a);
     AType type = f->type;
     if      (type == typeof(f64)) sscanf(cs, "%lf",  (f64*)a);
     else if (type == typeof(f32)) sscanf(cs, "%f",   (f32*)a);
@@ -307,11 +306,72 @@ static A A_with_cstr(A a, cstr cs, num len) {
     else if (type == typeof(i64)) sscanf(cs, "%lli", (i64*)a);
     else if (type == typeof(u64)) sscanf(cs, "%llu", (u64*)a);
     else {
-        printf("implement construct cstr for %s\n", f->type->name);
+        printf("implement ctr cstr for %s\n", f->type->name);
         exit(-1);
     }
 
     return a;
+}
+
+static void A_serialize(AType type, string res, A a) {
+    //AType type = isa(a);
+    if (type->traits & A_TRAIT_PRIMITIVE) {
+        char buf[128];
+        int len = 0;
+        if      (type == typeof(i64)) len = sprintf(buf, "%lld", *(i64*)a);
+        else if (type == typeof(num)) len = sprintf(buf, "%lld", *(i64*)a);
+        else if (type == typeof(i32)) len = sprintf(buf, "%d",   *(i32*)a);
+        else if (type == typeof(i16)) len = sprintf(buf, "%hd",  *(i16*)a);
+        else if (type == typeof(i8))  len = sprintf(buf, "%hhd", *(i8*) a);
+        else if (type == typeof(u64)) len = sprintf(buf, "%llu", *(u64*)a);
+        else if (type == typeof(u32)) len = sprintf(buf, "%u",   *(u32*)a);
+        else if (type == typeof(u16)) len = sprintf(buf, "%hu",  *(u16*)a);
+        else if (type == typeof(u8))  len = sprintf(buf, "%hhu", *(u8*) a);
+        else if (type == typeof(f64)) len = sprintf(buf, "%f",   *(f64*)a);
+        else if (type == typeof(f32)) len = sprintf(buf, "%f",   *(f32*)a);
+        else {
+            assert(false);
+            printf("implement primitive cast to str: %s\n", type->name);
+        }
+        call(res, append, buf); // should allow for a -1 or len
+    } else {
+        string s = cast(a, string);
+        if (s) {
+            call(res, append, "\"");
+            call(res, append, s->chars);
+            call(res, append, "\"");
+        } else
+            call(res, append, "null");
+    }
+}
+
+static string A_cast_string(A a) {
+    AType type = isa(a);
+    if (type == typeof(string))
+        return a;
+    bool  once = false;
+    string res = ctr(string, sz, 1024);
+    if (type->traits & A_TRAIT_PRIMITIVE)
+        A_serialize(type, res, a);
+    else {
+        call(res, append, type->name);
+        call(res, append, "[");
+        for (num i = 0; i < type->member_count; i++) {
+            type_member_t* m = &type->members[i];
+            // todo: intern members wont be registered
+            if (m->member_type & (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN)) {
+                if (once)
+                    call(res, append, " ");
+                u8* ptr = (u8*)a + m->offset;
+                call(res, append, m->name);
+                call(res, append, ":");
+                A_serialize(m->type, res, ptr);
+                once = true;
+            }
+        }
+        call(res, append, "]");
+    }
+    return res;
 }
 
 #define set_v() \
@@ -361,13 +421,84 @@ static i32 A_compare(A a, A b) {
     return (i32)(a - b);
 }
 
-string format(cstr template, ...) {
+num parse_formatter(cstr start, cstr res, num sz) {
+    cstr scan = start;
+    num index = 0;
+    if (*scan == '%') {
+        if (index < sz - 1)
+            res[index++] = *scan++;
+        while (*scan) {
+            if (strchr("diouxXeEfFgGaAcspn%", *scan)) {
+                if (index < sz - 1) res[index++] = *scan++;
+                break;  // end of the format specifier
+            } else if (strchr("0123456789.-+lhjztL*", *scan)) {
+                if (index < sz - 1) res[index++] = *scan++;
+            } else
+                break;
+        }
+    }
+    res[index] = 0;
+    return (num)(scan - start);
+}
+
+/// does not seem possible to proxy args around in C99, so we are wrapping this in a macro
+string A_formatter(bool with_print, cstr template, ...) {
     va_list args;
     va_start(args, template);
-    char buf[1024];
-    sz len = vsnprintf(buf, sizeof(buf), template, args);
+    string  res  = ctr(string, sz, 1024);
+    cstr    scan = template;
+
+    while (*scan) {
+        /// format %o as object's string cast
+        if (*scan == '%' && *(scan + 1) == 'o') {
+            A      arg = va_arg(args, A);
+            string   a = cast(arg, string);
+            num    len = a->len;
+            call(res, reserve, len);
+            memcpy(&res->chars[res->len], a->chars, len);
+            res->len += len;
+            scan     += 2; // Skip over %o
+        } else {
+            /// format with vsnprintf
+            const char* next_percent = strchr(scan, '%');
+            num segment_len = next_percent ? (num)(next_percent - scan) : (num)strlen(scan);
+            call(res, reserve, segment_len);
+            memcpy(&res->chars[res->len], scan, segment_len);
+            res->len += segment_len;
+            scan     += segment_len;
+            if (*scan == '%') {
+                if (*(scan + 1) == 'o')
+                    continue;
+                char formatter[128];
+                int symbol_len = parse_formatter(scan, formatter, 128);
+                for (;;) {
+                    num f_len = 0;
+                    num avail = res->alloc - res->len;
+                    cstr  end = &res->chars[res->len];
+                    if (strchr("fFgG", formatter[symbol_len - 1]))
+                        f_len = snprintf(end, avail, formatter, va_arg(args, double));
+                    else if (strchr("diouxX", formatter[symbol_len - 1]))
+                        f_len = snprintf(end, avail, formatter, va_arg(args, int));
+                    else if (strchr("c", formatter[symbol_len - 1]))
+                        f_len = snprintf(end, avail, formatter, va_arg(args, int));
+                    else
+                        f_len = snprintf(
+                            end, avail, formatter, va_arg(args, void*));
+                    if (f_len > avail) {
+                        call(res, reserve, res->alloc << 1);
+                        continue;
+                    }
+                    res->len += f_len;
+                    break;
+                }
+                scan += symbol_len;
+            }
+        }
+    }
     va_end(args);
-    return construct(string, cstr, buf, len);
+    if (with_print)
+        call(res, write, stdout, false);
+    return res;
 }
 
 static void  string_destructor(string a) { free(a->chars); }
@@ -378,7 +509,7 @@ static array string_split(string a, cstr sp) {
     sz   slen = strlen(sp);
     while (next) {
         cstr   n = strstr(&next[1], sp);
-        string v = construct(string, cstr, next, n ? (sz)(next - n) : -1);
+        string v = ctr(string, cstr, next, n ? (sz)(next - n) : -1);
         next = n ? n + slen : null;
     }
     return null;
@@ -394,7 +525,13 @@ static void string_alloc_sz(string a, sz alloc) {
 }
 
 static string string_mid(string a, num start, num len) {
-    return construct(string, cstr, &a->chars[start], len);
+    return ctr(string, cstr, &a->chars[start], len);
+}
+
+static none  string_reserve(string a, num extra) {
+    if (a->alloc - a->len >= extra)
+        return;
+    string_alloc_sz(a, a->alloc + extra);
 }
 
 static none  string_append(string a, cstr b) {
@@ -412,6 +549,13 @@ static num   string_index_of(string a, cstr cs) {
 
 static bool string_cast_bool(string a) {
     return a->len > 0;
+}
+
+static none string_write(string a, handle f, bool new_line) {
+    FILE* output = f ? f : stdout;
+    fwrite(a->chars, a->len, 1, output);
+    if (new_line) fwrite("\n", 1, 1, output);
+    fflush(output);
 }
 
 u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
@@ -452,12 +596,12 @@ static string string_with_cstr(string a, cstr value, num len) {
 static item hashmap_fetch(hashmap a, A key) {
     u64 h = fnv1a_hash(key, strlen(key), OFFSET_BASIS);
     u64 k = h % a->alloc;
-    list bucket = a->data[k];
+    list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
         if (call(f->key, compare, key) == 0)
             return f;
-    item n = call(bucket, push, null);
-    n->key = hold(key);
+    item n = list_type.push(bucket, null);
+    n->key = A_hold(key);
     a->count++;
     return n;
 }
@@ -465,7 +609,7 @@ static item hashmap_fetch(hashmap a, A key) {
 static item hashmap_lookup(hashmap a, A key) {
     u64 h = fnv1a_hash(key, strlen(key), OFFSET_BASIS);
     u64 k = h % a->alloc;
-    list bucket = a->data[k];
+    list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
         if (call(f->key, compare, key) == 0)
             return f;
@@ -475,8 +619,8 @@ static item hashmap_lookup(hashmap a, A key) {
 static none hashmap_set(hashmap a, A key, A value) {
     item i = call(a, fetch, key);
     A prev = i->val;
-    i->val = hold(value);
-    drop(prev);
+    i->val = A_hold(value);
+    A_drop(prev);
 }
 
 static A hashmap_get(hashmap a, A key) {
@@ -492,10 +636,10 @@ static bool hashmap_contains(hashmap a, A key) {
 static none hashmap_remove(hashmap a, A key) {
     u64 h = fnv1a_hash(key, strlen(key), OFFSET_BASIS);
     u64 k = h % a->alloc;
-    list bucket = a->data[k];
+    list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
         if (call(f->key, compare, key) == 0) {
-            call(bucket, remove_item, f);
+            list_type.remove_item(bucket, f);
             a->count--;
             break;
         }
@@ -511,11 +655,27 @@ static A hashmap_index_A(hashmap a, A key) {
 
 static hashmap hashmap_with_sz(hashmap a, sz size) {
     a->alloc = size;
-    a->data  = (list*)calloc(size, sizeof(list));
+    a->data  = (list)calloc(size, sizeof(struct list)); /// we can zero-init a vectorized set of objects with A-type
     return a;
 }
 
-define_class(hashmap)
+static string hashmap_cast_string(hashmap a) {
+    string res  = ctr(string, sz, 1024);
+    bool   once = false;
+    for (int i = 0; i < a->alloc; i++) {
+        list bucket = &a->data[i];
+        for (item f = bucket->first; f; f = f->next) {
+            string key = cast(f->key, string);
+            string val = cast(f->val, string);
+            if (once) call(res, append, " ");
+            call(res, append, key->chars);
+            call(res, append, ":");
+            call(res, append, val->chars);
+            once = true;
+        }
+    }
+    return res;
+}
 
 
 /// collection -------------------------
@@ -534,12 +694,12 @@ static num collection_compare(array a, collection b) {
     return 0;
 }
 
-A hold(A a) {
+A A_hold(A a) {
     if (a) (a - 1)->refs++;
     return a;
 }
 
-void drop(A a) {
+void A_drop(A a) {
     if (a && --(a - 1)->refs == -1) {
         A aa = (a - 1);
         A_f*  type = aa->type;
@@ -557,12 +717,12 @@ void drop(A a) {
     }
 }
 
-A fields(A instance) {
+A A_fields(A instance) {
     return (instance - 1)->origin;
 }
 
-A data(A instance) {
-    A obj = fields(instance);
+A A_data(A instance) {
+    A obj = A_fields(instance);
     return obj->data;
 }
 
@@ -716,7 +876,7 @@ static A array_remove(array a, num b) {
     for (num i = b; i < a->len; i++) {
         A prev = a->elements[b];
         a->elements[b] = a->elements[b + 1];
-        drop(prev);
+        A_drop(prev);
     }
     a->elements[--a->len] = null;
     return before;
@@ -745,7 +905,7 @@ static void array_push_symbols(array a, ...) {
     va_start(args, a);
     char* value;
     while ((value = va_arg(args, char*)) != null) {
-        string s = construct(string, cstr, value, strlen(value));
+        string s = ctr(string, cstr, value, strlen(value));
         M(array, push, a, s);
     }
     va_end(args);
@@ -832,15 +992,12 @@ static fn fn_with_Member(fn f, Member member, A target, A context) {
     type_member_t* m = member;
     f->method  = m->method;
     f->target  = target;
-    f->context = hold(context);
+    f->context = A_hold(context);
     return f;
 }
 
-define_class(fn)
-
-
 static A vector_push(vector a, A b) {
-    A obj = fields(a);
+    A obj = A_fields(a);
     if (obj->alloc == obj->count)
         A_realloc(obj, 32 + (obj->alloc < 1));
     u8* dst = obj->data;
@@ -853,7 +1010,7 @@ static A vector_push(vector a, A b) {
 /// the only thing we would look out for here is a generic 
 /// user of 'collection' calling object on this return result
 static A vector_pop(vector a) {
-    A obj = fields(a);
+    A obj = A_fields(a);
     assert(obj->count > 0);
     u8* dst = obj->data;
     num sz = obj->type->size;
@@ -861,14 +1018,14 @@ static A vector_pop(vector a) {
 }
 
 static num vector_compare(vector a, vector b) {
-    A a_object = fields(a);
-    A b_object = fields(b);
+    A a_object = A_fields(a);
+    A b_object = A_fields(b);
     num diff = a_object->count - b_object->count;
     if (diff != 0)
         return diff;
     assert(a_object->type == b_object->type);
-    u8* a_data = data(a);
-    u8* b_data = data(b);
+    u8* a_data = A_data(a);
+    u8* b_data = A_data(b);
     num sz = a_object->type->size;
     for (num i = 0; i < a_object->count; i++) {
         num cmp = memcmp(&a_data[sz * i], &b_data[sz * i], sz);
@@ -879,21 +1036,21 @@ static num vector_compare(vector a, vector b) {
 }
 
 static A vector_get(vector a, num i) {
-    A a_object = fields(a);
-    u8* a_data = data(a);
+    A a_object = A_fields(a);
+    u8* a_data = A_data(a);
     num sz = a_object->type->size;
     return (A)&a_data[i * sz];
 }
 
 static num vector_count(vector a) {
-    A a_object = fields(a);
+    A a_object = A_fields(a);
     return a_object->count;
 }
 
 static num vector_index_of(vector a, A b) {
-    A a_object = fields(a);
-    u8* a_data = data(a);
-    u8* b_data = data(b);
+    A a_object = A_fields(a);
+    u8* a_data = A_data(a);
+    u8* b_data = A_data(b);
     num sz = a_object->type->size;
     for (num i = 0; i < a_object->count; i++) {
         if (memcmp(&a_data[sz * i], b_data, sz) == 0)
@@ -903,12 +1060,12 @@ static num vector_index_of(vector a, A b) {
 }
 
 static bool vector_cast_bool(vector a) {
-    A a_object = fields(a);
+    A a_object = A_fields(a);
     return a_object->count > 0;
 }
 
 u64 vector_hash(vector a) {
-    A obj = fields(a);
+    A obj = A_fields(a);
     return fnv1a_hash(obj->data, obj->type->size * obj->count, OFFSET_BASIS);
 }
 
@@ -953,7 +1110,7 @@ static bool path_is_empty(path a) {
 static string path_stem(path a) {
     cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
-    string res = construct(string, sz, 256);
+    string res = ctr(string, sz, 256);
     sz     dot = 0;
     for (num i = len - 1; i >= 0; i--) {
         if (cs[i] == '.')
@@ -973,7 +1130,7 @@ static string path_stem(path a) {
 static string path_filename(path a) {
     cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
-    string res = construct(string, sz, 256);
+    string res = ctr(string, sz, 256);
     for (num i = len - 1; i >= 0; i--) {
         if (cs[i] == '/' || i == 0) {
             cstr start = &cs[i + cs[i] == '/'];
@@ -1071,7 +1228,7 @@ static A path_read(path a, AType type) {
         fseek(f, 0, SEEK_END);
         sz flen = ftell(f);
         fseek(f, 0, SEEK_SET);
-        string a = construct(string, sz, flen + 1);
+        string a = ctr(string, sz, flen + 1);
         size_t n = fread(a->chars, 1, flen, f);
         fclose(f);
         assert(n == flen);
@@ -1083,8 +1240,8 @@ static A path_read(path a, AType type) {
 }
 
 item item_with_symbol(item f, symbol key, A val) {
-    f->key = construct(string, cstr, (cstr)key, strlen(key));
-    f->val = hold(val);
+    f->key = ctr(string, cstr, (cstr)key, strlen(key));
+    f->val = A_hold(val);
     return f;
 }
 
@@ -1108,6 +1265,8 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeof(none)) return &ffi_type_void;
     if (ptype == typeof(AType)) return &ffi_type_pointer;
     if (ptype == typeof(handle)) return &ffi_type_pointer;
+    if (ptype == typeof(Member)) return &ffi_type_pointer;
+    if (ptype == typeof(raw))    return &ffi_type_pointer;
     assert(false);
     return null;
 }
@@ -1149,6 +1308,8 @@ define_proto(collection)
 define_class(list)
 define_class(array)
 define_class(vector)
+define_class(hashmap)
+define_class(fn)
 
 define_meta(array, ATypes, AType)
 

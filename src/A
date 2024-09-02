@@ -757,6 +757,7 @@ declare_enum(OPType)
     i_method    (X,Y,Z, bool,   exists) \
     i_method    (X,Y,Z, bool,   make_dir) \
     i_method    (X,Y,Z, bool,   is_empty) \
+    i_method    (X,Y,Z, bool,   is_dir) \
     i_method    (X,Y,Z, path,   directory) \
     i_method    (X,Y,Z, string, stem) \
     i_method    (X,Y,Z, string, filename) \

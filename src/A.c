@@ -1239,6 +1239,15 @@ static bool path_make_dir(path a) {
     return stat(cs, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+static bool path_is_dir(path a) {
+    DIR   *dir = opendir(a->chars);
+    if (dir == NULL)
+        return false;
+    closedir(dir);
+    return true;
+}
+
+
 static bool path_is_empty(path a) {
     int    n = 0;
     struct dirent *d;

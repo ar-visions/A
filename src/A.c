@@ -3,8 +3,8 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-thread_local array     ar_stack;
-thread_local   AR      ar_top;
+thread_local array     af_stack;
+thread_local   AF      af_top;
 
 static global_init_fn* call_after;
 static num             call_after_alloc;
@@ -69,8 +69,8 @@ A A_alloc(AType type, num count) {
         current = current->parent_type;
     }
     if (count > 0) {
-        a->ar_index = ar_top->pool->len;
-        call(ar_top->pool, push, a->data);
+        a->ar_index = af_top->pool->len;
+        call(af_top->pool, push, a->data);
     }
     return a->data; /// fields(a) == this operation
 }
@@ -773,7 +773,7 @@ A A_hold(A a) {
     if (a) {
         A f = a - 1;
         if (f->refs++ == 1 && f->ar_index > 0)
-            ar_top->pool->elements[f->ar_index] = null; // index of 0 is occupied by the pool itself; just a sentinel 
+            af_top->pool->elements[f->ar_index] = null; // index of 0 is occupied by the pool itself; just a sentinel 
     }
     return a;
 }
@@ -1095,21 +1095,21 @@ static array array_with_sz(array a, sz size) {
     return a;
 }
 
-static void AR_init(AR a) {
-    ar_top = a;
+static void AF_init(AF a) {
+    af_top = a;
     a->pool = alloc_ctr(array, sz, 1024);
     call(a->pool, push_weak, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
 
-    if (!ar_stack) ar_stack = alloc_ctr(array, sz, 16);
-    call(ar_stack, push_weak, a);
+    if (!af_stack) af_stack = alloc_ctr(array, sz, 16);
+    call(af_stack, push_weak, a);
 }
 
-static void AR_destructor(AR a) {
-    int f = call(ar_stack, index_of, a);
+static void AF_destructor(AF a) {
+    int f = call(af_stack, index_of, a);
     assert(f >= 0);
-    call(ar_stack, remove_weak, f);
-    if (ar_top == a)
-        ar_top = ar_stack->len ? ar_stack->elements[ar_stack->len - 1] : null;
+    call(af_stack, remove_weak, f);
+    if (af_top == a)
+        af_top = af_stack->len ? af_stack->elements[af_stack->len - 1] : null;
     for (int i = 1; i < a->pool->len; i++) {
         A ref = a->pool->elements[i];
         if (ref) {
@@ -1120,10 +1120,10 @@ static void AR_destructor(AR a) {
     A_free(a->pool);
 }
 
-static AR AR_fetch(num index) {
-    if (ar_stack && abs(index) < ar_stack->len)
-        return index < 0 ? ar_stack->elements[ar_stack->len + index] :
-                           ar_stack->elements[index];
+static AF AF_fetch(num index) {
+    if (af_stack && abs(index) < af_stack->len)
+        return index < 0 ? af_stack->elements[af_stack->len + index] :
+                           af_stack->elements[index];
     else
         return null;
 }
@@ -1461,7 +1461,7 @@ define_class(map_item)
 define_class(map)
 define_class(fn)
 
-define_class(AR)
+define_class(AF)
 
 define_meta(array, ATypes, AType)
 

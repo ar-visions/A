@@ -796,12 +796,12 @@ declare_mod(array, collection)
 
 declare_schema(array, ATypes)
 
-#define AR_schema(X,Y,Z) \
+#define AF_schema(X,Y,Z) \
     i_intern(    X,Y,Z, array, pool) \
-    s_method(    X,Y,Z, AR,    fetch, num) \
+    s_method(    X,Y,Z, AF,    fetch, num) \
     i_override_m(X,Y,Z, none,  init) \
     i_override_m(X,Y,Z, none,  destructor)
-declare_class(AR)
+declare_class(AF)
 
 #define hashmap_schema(X,Y,Z) \
     i_intern         (X,Y,Z, list,  data) \

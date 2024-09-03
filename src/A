@@ -35,6 +35,7 @@ typedef double              real;    /// real enough
 typedef void*               handle;
 typedef char*               cstr;
 typedef const char*         symbol;
+typedef const char*         cereal;
 typedef num                 sz;
 typedef struct A_f*         AType;
 typedef struct type_member_t* Member;
@@ -107,9 +108,9 @@ enum A_TRAIT {
 #define COUNT_ARGS_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
 
 #define COUNT_ARGS(...)             COUNT_ARGS_IMPL(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1)
-#define valloc(T, N)                ((A)A_alloc(typeid(T), N))
-#define new(T)                      ((A)valloc(T, 1))
-#define alloc(T)                    ((A)valloc(T, 0))
+#define valloc(T, N)                ((A)A_alloc(typeid(T), N, false))
+#define new(T)                      ((A)A_alloc(typeid(T), 1, true))
+#define alloc(T)                    ((A)A_alloc(typeid(T), 1, false))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
 #define isa(INSTANCE)               ((struct A_f*)((struct A*)INSTANCE - 1)->type)
 #define inherits(left, type)        A_inherits(left, typeid(type))
@@ -135,8 +136,8 @@ enum A_TRAIT {
 /// generic is from instance type, which we only need to store the args for, no other tables
 #define meta_t(I,IDX)               isa(I) -> meta.meta_##IDX
 
-#define ctr(T,WITH,...)             T##_type.with_##WITH((A)valloc(T, 1), ## __VA_ARGS__)
-#define alloc_ctr(T,WITH,...)       T##_type.with_##WITH((A)valloc(T, 0), ## __VA_ARGS__)
+#define ctr(T,WITH,...)             T##_type.with_##WITH((A)A_alloc(typeid(T), 1, true), ## __VA_ARGS__)
+#define alloc_ctr(T,WITH,...)       T##_type.with_##WITH((A)A_alloc(typeid(T), 1, false), ## __VA_ARGS__)
 #define operator(I,OP,...)          ftableI(I) -> operator_##OP(I, ##__VA_ARGS__)
 #define emit_types(...)             EXPAND_ARGS(__VA_ARGS__)
 #define combine_tokens_(A, B)       A##B
@@ -601,7 +602,7 @@ typedef struct string* string;
     i_method(X,Y,Z, u64,       hash) \
     i_cast(  X,Y,Z, string) \
     i_cast(  X,Y,Z, bool) \
-    i_construct(X,Y,Z, cstr, num)
+    i_construct(X,Y,Z, cereal, num)
 declare_base(A)
 
 #define typeid(X) ((struct A_f*)&X##_type)
@@ -652,6 +653,7 @@ declare_abstract(imported)
 #define sz_schema(X,Y,Z)      numeric_schema(X,Y,Z)
 #define cstr_schema(X,Y,Z)    string_like_schema(X,Y,Z)
 #define symbol_schema(X,Y,Z)  string_like_schema(X,Y,Z)
+#define cereal_schema(X,Y,Z)  string_like_schema(X,Y,Z)
 #define none_schema(X,Y,Z)    nil_schema(X,Y,Z)
 #define raw_t_schema(X,Y,Z)   raw_schema(X,Y,Z)
 #define handle_schema(X,Y,Z)  raw_schema(X,Y,Z)
@@ -672,6 +674,7 @@ declare_primitive(f64,          numeric)
 declare_primitive(f128,         numeric)
 declare_primitive(cstr,         string_like)
 declare_primitive(symbol,       string_like)
+declare_primitive(cereal,       string_like)
 declare_primitive(bool,         numeric)
 declare_primitive(none,         nil)
 declare_primitive(num,          numeric)
@@ -767,7 +770,7 @@ declare_enum(OPType)
     i_method    (X,Y,Z, path,   change_ext, cstr) \
     s_method    (X,Y,Z, path,   cwd, sz) \
     i_override_m(X,Y,Z, u64,    hash) \
-    i_override_ctr(X,Y,Z, cstr)
+    i_construct(X,Y,Z, cstr)
 declare_class(path)
 
 #define array_schema(X,Y,Z) \
@@ -862,7 +865,7 @@ declare_class(fn)
     i_method(X,Y,Z,     none,    reserve, num) \
     i_method(X,Y,Z,     none,    write, handle, bool) \
     i_construct(X,Y,Z,  sz) \
-    i_override_ctr(X,Y,Z,  cstr) \
+    i_construct(X,Y,Z,  cstr, num) \
     i_override_m(X,Y,Z, u64, hash) \
     i_override_m(X,Y,Z, num, compare) \
     i_override_cast(X,Y,Z, bool)
@@ -895,11 +898,11 @@ string A_formatter(bool with_print, cstr template, ...);
     if (M(T, count, t)) for (E e = *(E*)M(T, get, t, 0), e0 = 0; e0 == 0; e0++) \
         for (num i = 0, len = M(T, count, t); i < len; i++, e = *(E*)M(T, get, t, i)) \
 
-A           A_alloc(AType type, num count);
+A           A_alloc(AType type, num count, bool af_pool);
 
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size
-#define A_struct(T) A_alloc(typeid(u8), sizeof(T))
+#define A_struct(T) A_alloc(typeid(u8), sizeof(T), true)
 
 A           A_new(AType type);
 A           A_construct(AType type, int n_args, ...);

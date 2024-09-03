@@ -135,7 +135,8 @@
 			"stdlib.h": "c",
 			"parentbad": "c",
 			"dawn_proc_table.h": "c",
-			"string.h": "c"
+			"string.h": "c",
+			"*.def": "c"
 		}
 	}
 }

@@ -47,33 +47,37 @@ A_f** A_types(num* length) {
 }
 
 A A_new(AType type) {
-    A res = A_alloc(type, 1);
+    A res = A_alloc(type, 1, true);
     // todo: do not call init in A_alloc
     return res;
 }
 
-A A_alloc(AType type, num count) {
-    A a = calloc(1, (type == typeid(A) ? 0 : sizeof(struct A)) + type->size * (count == 0 ? 1 : count));
-    a->type   = type;
-    a->origin = a;
-    a->data   = &a[1];
-    a->count  = count;
-    a->alloc  = count;
-    AType a_type = &A_type;
+A A_alloc(AType type, num count, bool af_pool) {
+    A a           = calloc(1, sizeof(struct A) + type->size * count);
+    a->refs       = af_pool ? 0 : 1;
+    a->type       = type;
+    a->origin     = a;
+    a->data       = &a[1];
+    a->count      = count;
+    a->alloc      = count;
+    AType a_type  = &A_type;
     AType current = type;
     while (current) {
-        if (current->init) /// init not being set on here somehow, even though it should be emitting string_type.init = &A_init
+        if (current->init)
             current->init(a->data);
         if (current == a_type)
             break;
         current = current->parent_type;
     }
-    if (count > 0) {
+    if (af_pool) {
         a->ar_index = af_top->pool->len;
         call(af_top->pool, push, a->data);
+    } else {
+        a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
-    return a->data; /// fields(a) == this operation
+    return a->data;
 }
+
 
 A A_realloc(A a, num alloc) {
     A obj = A_fields(a);
@@ -179,7 +183,7 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
 }
 
 A A_construct(AType type, int n_args, ...) {
-    A res = A_alloc(type, 1);
+    A res = A_alloc(type, 1, true);
     va_list  vargs;
     va_start(vargs, n_args);
     array args = ctr(array, sz, n_args);
@@ -255,7 +259,7 @@ type_member_t* A_member(A_f* type, enum A_TYPE member_type, char* name) {
 
 A A_primitive(A_f* type, void* data) {
     assert(type->traits & A_TRAIT_PRIMITIVE);
-    A copy = A_alloc(type, type->size);
+    A copy = A_alloc(type, type->size, true);
     memcpy(copy, data, type->size);
     return copy;
 }
@@ -263,7 +267,7 @@ A A_primitive(A_f* type, void* data) {
 A A_enum(A_f* type, i32 data) {
     assert(type->traits & A_TRAIT_ENUM);
     assert(type->size == sizeof(i32));
-    A copy = A_alloc(type, type->size);
+    A copy = A_alloc(type, type->size, true);
     memcpy(copy, &data, type->size);
     return copy;
 }
@@ -284,11 +288,15 @@ A A_bool(bool data) { return A_primitive(&bool_type, &data); }
 
 /// A -------------------------
 static A   A_new_default(AType type, num count) {
-    return A_alloc(type, count);
+    return A_alloc(type, count, true);
 }
 static void A_init      (A a) { }
 static void A_destructor(A a) {
-    // go through objects type fields/offsets; when type is A-based, we release
+    // go through objects type fields/offsets; 
+    // when type is A-based, we release; 
+    // this part is 'auto-release', our pool is an AF pool, or auto-free.
+    // when new() is made, the reference goes into a pool
+    // 
     AType type = isa(a);
     for (num i = 0; i < type->member_count; i++) {
         type_member_t* m = &type->members[i];
@@ -303,7 +311,8 @@ static void A_destructor(A a) {
 static u64  A_hash      (A a) { return (u64)(size_t)a; }
 static bool A_cast_bool (A a) { return (bool)(size_t)a; }
 
-static A A_with_cstr(A a, cstr cs, num len) {
+/// should be symbol, perhaps.. cstr is more functional than symbol and we can use it from here
+static A A_with_cereal(A a, symbol cs, num len) {
     A        f = A_fields(a);
     AType type = f->type;
     if      (type == typeid(f64)) sscanf(cs, "%lf",  (f64*)a);
@@ -1452,6 +1461,7 @@ define_primitive(f64,    numeric, A_TRAIT_REALISTIC)
 //define_primitive(f128,   numeric, A_TRAIT_REALISTIC)
 define_primitive(cstr,   string_like, 0)
 define_primitive(symbol, string_like, 0)
+define_primitive(cereal, string_like, 0)
 define_primitive(none,   nil, 0)
 define_primitive(AType,  raw, 0)
 define_primitive(handle, raw, 0)

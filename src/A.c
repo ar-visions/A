@@ -284,7 +284,7 @@ A A_f32(f32 data)   { return A_primitive(&f32_type, &data); }
 A A_f64(f64 data)   { return A_primitive(&f64_type, &data); }
 A A_cstr(cstr data) { return A_primitive(&cstr_type, &data); }
 A A_none()          { return A_primitive(&none_type, NULL); }
-A A_bool(bool32 data) { return A_primitive(&bool_type, &data); }
+A A_bool(bool32 data) { return A_primitive(&bool32_type, &data); }
 
 /// A -------------------------
 static A   A_new_default(AType type, num count) {

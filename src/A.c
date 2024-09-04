@@ -309,7 +309,7 @@ static void A_destructor(A a) {
     }
 }
 static u64  A_hash      (A a) { return (u64)(size_t)a; }
-static bool32 A_cast_bool (A a) { return (bool32)(size_t)a; }
+static bool32 A_cast_bool32 (A a) { return (bool32)(size_t)a; }
 
 /// should be symbol, perhaps.. cstr is more functional than symbol and we can use it from here
 static A A_with_cereal(A a, symbol cs, num len) {

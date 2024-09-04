@@ -11,6 +11,9 @@
 		},
 		{
 			"path": "../dawn"
+		},
+		{
+			"path": "../llvm-project"
 		}
 	],
 	"settings": {
@@ -136,7 +139,23 @@
 			"parentbad": "c",
 			"dawn_proc_table.h": "c",
 			"string.h": "c",
-			"*.def": "c"
+			"*.def": "c",
+			"__bits": "cpp",
+			"__config": "cpp",
+			"__debug": "cpp",
+			"__errc": "cpp",
+			"__locale": "cpp",
+			"__mutex_base": "cpp",
+			"__nullptr": "cpp",
+			"__split_buffer": "cpp",
+			"__string": "cpp",
+			"__threading_support": "cpp",
+			"codecvt": "cpp",
+			"csetjmp": "cpp",
+			"csignal": "cpp",
+			"cwctype": "cpp",
+			"strstream": "cpp",
+			"valarray": "cpp"
 		}
 	}
 }

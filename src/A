@@ -27,7 +27,7 @@ typedef unsigned short      u16;
 typedef unsigned int        u32;
 typedef unsigned long long  u64;
 typedef long long           num;
-typedef unsigned int        bool;
+typedef unsigned int        bool32;
 typedef float               f32;
 typedef double              f64;
 typedef long double         f128;
@@ -46,10 +46,10 @@ typedef struct meta_t {
                     meta_4, meta_5, meta_6, meta_7;
 } meta_t;
 
-typedef bool(*global_init_fn)();
+typedef bool32(*global_init_fn)();
 
-#define true                (bool)1
-#define false               (bool)0
+#define true                (bool32)1
+#define false               (bool32)0
 #define stringify(x)        #x
 #define null                ((void*)0)
 #define FNV_PRIME           0x100000001b3
@@ -439,7 +439,7 @@ void        A_lazy_init(global_init_fn fn);
 
 #define define_enum( E ) \
     E ## _f   E ## _type; \
-    static __attribute__((constructor)) bool global_##E() { \
+    static __attribute__((constructor)) bool32 global_##E() { \
         E ## _f* type_ref = &E ## _type; \
         A_f* base_ref     = &A_type; \
         if ((AType)type_ref != (AType)base_ref && base_ref->size == 0) { \
@@ -482,7 +482,7 @@ void        A_lazy_init(global_init_fn fn);
 #define define_global_primitive(X,Y, TYPE_SZ, TRAIT) \
     A     X##_header; \
     X##_f X##_type; \
-    static __attribute__((constructor)) bool global_##X() { \
+    static __attribute__((constructor)) bool32 global_##X() { \
         printf("global ctr: %s\n", #X); \
         X##_f* type_ref = &X##_type; \
         Y##_f* base_ref = &Y##_type; \
@@ -505,7 +505,7 @@ void        A_lazy_init(global_init_fn fn);
 #define define_global(X,Y, TYPE_SZ, TRAIT, META) \
     A     X##_header; \
     X##_f X##_type; \
-    static __attribute__((constructor)) bool global_##X() { \
+    static __attribute__((constructor)) bool32 global_##X() { \
         X##_f* type_ref = &X##_type; \
         Y##_f* base_ref = &Y##_type; \
         if ((AType)type_ref != (AType)base_ref && base_ref->size == 0) { \
@@ -560,7 +560,7 @@ void* primitive_ffi_arb(AType);
 #define define_meta(SRC_TYPE, ALIAS_TYPE, ...) \
     A ALIAS_TYPE##_header; \
     ALIAS_TYPE##_f ALIAS_TYPE##_type; \
-    static __attribute__((constructor)) bool global_##ALIAS_TYPE() { \
+    static __attribute__((constructor)) bool32 global_##ALIAS_TYPE() { \
         ALIAS_TYPE##_f* type_ref = &ALIAS_TYPE##_type; \
         SRC_TYPE##_f* src_ref = &SRC_TYPE##_type; \
         if (src_ref->size == 0) { \
@@ -601,7 +601,7 @@ typedef struct string* string;
     i_method(X,Y,Z, i32,       compare,    X) \
     i_method(X,Y,Z, u64,       hash) \
     i_cast(  X,Y,Z, string) \
-    i_cast(  X,Y,Z, bool) \
+    i_cast(  X,Y,Z, bool32) \
     i_construct(X,Y,Z, cereal, num)
 declare_base(A)
 
@@ -618,7 +618,7 @@ declare_base(A)
     i_construct(X,Y,Z, u64) \
     i_construct(X,Y,Z, f32) \
     i_construct(X,Y,Z, f64) \
-    i_construct(X,Y,Z, bool) \
+    i_construct(X,Y,Z, bool32) \
     i_construct(X,Y,Z, num)
 declare_abstract(numeric)
 
@@ -675,7 +675,7 @@ declare_primitive(f128,         numeric)
 declare_primitive(cstr,         string_like)
 declare_primitive(symbol,       string_like)
 declare_primitive(cereal,       string_like)
-declare_primitive(bool,         numeric)
+declare_primitive(bool32,       numeric)
 declare_primitive(none,         nil)
 declare_primitive(num,          numeric)
 declare_primitive(sz,           numeric)
@@ -757,10 +757,10 @@ declare_enum(OPType)
 
 #define path_schema(X,Y,Z) \
     i_intern    (X,Y,Z, cstr,   chars) \
-    i_method    (X,Y,Z, bool,   exists) \
-    i_method    (X,Y,Z, bool,   make_dir) \
-    i_method    (X,Y,Z, bool,   is_empty) \
-    i_method    (X,Y,Z, bool,   is_dir) \
+    i_method    (X,Y,Z, bool32,   exists) \
+    i_method    (X,Y,Z, bool32,   make_dir) \
+    i_method    (X,Y,Z, bool32,   is_empty) \
+    i_method    (X,Y,Z, bool32,   is_dir) \
     i_method    (X,Y,Z, path,   directory) \
     i_method    (X,Y,Z, string, stem) \
     i_method    (X,Y,Z, string, filename) \
@@ -795,7 +795,7 @@ declare_class(path)
     i_method_vargs   (X,Y,Z, none, push_objects, X, A) \
     i_construct      (X,Y,Z,       sz) \
     i_index          (X,Y,Z, A,    num) \
-    i_override_cast  (X,Y,Z, bool)
+    i_override_cast  (X,Y,Z, bool32)
 declare_mod(array, collection)
 
 declare_schema(array, ATypes)
@@ -816,11 +816,11 @@ declare_class(AF)
     i_method         (X,Y,Z, A,     get, A) \
     i_method         (X,Y,Z, item,  fetch, A) \
     i_method         (X,Y,Z, item,  lookup, A) \
-    i_method         (X,Y,Z, bool,  contains, A) \
+    i_method         (X,Y,Z, bool32,  contains, A) \
     i_override_cast  (X,Y,Z, string) \
     i_construct      (X,Y,Z,        sz) \
     i_index          (X,Y,Z, A,     A) \
-    i_override_cast  (X,Y,Z, bool)
+    i_override_cast  (X,Y,Z, bool32)
 declare_class(hashmap)
 
 #define map_item_schema(X,Y,Z) \
@@ -835,7 +835,7 @@ declare_class(map_item)
     i_override_cast  (X,Y,Z, string) \
     i_construct      (X,Y,Z, sz) \
     i_index          (X,Y,Z, A, A) \
-    i_override_cast  (X,Y,Z, bool)
+    i_override_cast  (X,Y,Z, bool32)
 declare_class(map)
 
 /// how beneficial is it to have args in 'context' structure?
@@ -863,12 +863,12 @@ declare_class(fn)
     i_method(X,Y,Z,     none,    append, cstr) \
     i_method(X,Y,Z,     string,  mid, num, num) \
     i_method(X,Y,Z,     none,    reserve, num) \
-    i_method(X,Y,Z,     none,    write, handle, bool) \
+    i_method(X,Y,Z,     none,    write, handle, bool32) \
     i_construct(X,Y,Z,  sz) \
     i_construct(X,Y,Z,  cstr, num) \
     i_override_m(X,Y,Z, u64, hash) \
     i_override_m(X,Y,Z, num, compare) \
-    i_override_cast(X,Y,Z, bool)
+    i_override_cast(X,Y,Z, bool32)
 declare_class(string)
 
 #define vector_schema(X,Y,Z) \
@@ -879,11 +879,11 @@ declare_class(string)
     i_method(X,Y,Z,     num,  count) \
     i_override_m(X,Y,Z, i32,  compare) \
     i_override_m(X,Y,Z, u64,  hash) \
-    i_override_cast(X,Y,Z, bool)
+    i_override_cast(X,Y,Z, bool32)
 declare_mod(vector, collection)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
-string A_formatter(bool with_print, cstr template, ...);
+string A_formatter(bool32 with_print, cstr template, ...);
 
 #define format(t, ...) A_formatter(false, t, __VA_ARGS__)
 #define  print(t, ...) A_formatter(true,  t, __VA_ARGS__)
@@ -898,7 +898,7 @@ string A_formatter(bool with_print, cstr template, ...);
     if (M(T, count, t)) for (E e = *(E*)M(T, get, t, 0), e0 = 0; e0 == 0; e0++) \
         for (num i = 0, len = M(T, count, t); i < len; i++, e = *(E*)M(T, get, t, i)) \
 
-A           A_alloc(AType type, num count, bool af_pool);
+A           A_alloc(AType type, num count, bool32 af_pool);
 
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size
@@ -908,7 +908,7 @@ A           A_new(AType type);
 A           A_construct(AType type, int n_args, ...);
 A           A_convert(AType type, A input);
 type_member_t* A_constructor(AType type, AType first_arg); // find a constructor method (used for dynamic construction)
-bool        A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
+bool32      A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
 A           A_hold(A a);
 void        A_drop(A a);
 void        A_free(A a);
@@ -933,14 +933,14 @@ A           A_f32(f32);
 A           A_f64(f64);
 A           A_cstr(cstr);
 A           A_none();
-A           A_bool(bool);
+A           A_bool32(bool32);
 A           A_realloc(A, num);
 void        A_push(A, A);
 void        A_finish_types();
 A           A_fields(A instance);
 A           A_data(A instance);
-bool        is_meta(A a);
-bool        is_meta_compatible(A a, A b);
+bool32      is_meta(A a);
+bool32      is_meta_compatible(A a, A b);
 
 /// todo: auto-release, no use of drop in most places
 /// push_weak is probably a reasonable idea for array

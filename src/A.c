@@ -108,7 +108,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     method_t* method = calloc(1, sizeof(method_t));
     method->ffi_cif  = calloc(1,        sizeof(ffi_cif));
     method->ffi_args = calloc(max_args, sizeof(ffi_type*));
-    method->atypes   = new(array);
+    method->atypes   = alloc(array);
     method->rtype    = rtype;
     ffi_type **ffi_args = (ffi_type**)method->ffi_args;
     for (num i = 0; i < atypes->len; i++) {

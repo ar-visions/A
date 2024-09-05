@@ -600,7 +600,7 @@ static string string_with_sz(string a, sz size) {
 }
 
 static string string_with_cstr(string a, cstr value, num len) {
-    if (len == -1) len = strlen(value);
+    if (len == -1) len = (value ? strlen(value) : 0);
     a->alloc = len + 1;
     a->len   = len;
     a->chars = (char*)calloc(1, a->alloc);

@@ -261,8 +261,8 @@ enum A_TRAIT {
 #define   i_index_INIT(X,Y,R, ...) \
     X##_type.emit_types2(index, __VA_ARGS__) = & emit_types2(X ## _index, __VA_ARGS__); \
     X##_type.members[X##_type.member_count].name        = stringify(emit_types2(index, __VA_ARGS__)); \
-    X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(X, ##__VA_ARGS__) }; \
-    X##_type.members[X##_type.member_count].type        = &X##_type; \
+    X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(__VA_ARGS__) }; \
+    X##_type.members[X##_type.member_count].type        = &R##_type; \
     X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, emit_types2(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_INDEX; \
     X##_type.member_count++;  
@@ -277,8 +277,8 @@ enum A_TRAIT {
 #define   i_construct_INIT(X,Y,ARG, ...) \
     X##_type.with_##ARG = & X##_with_##ARG; \
     X##_type.members[X##_type.member_count].name        = #ARG; \
-    X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(X, ARG, ##__VA_ARGS__) }; \
-    X##_type.members[X##_type.member_count].type        = &X##_type; \
+    X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(ARG, ##__VA_ARGS__) }; \
+    X##_type.members[X##_type.member_count].type        = &ARG##_type; \
     X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, with_##ARG); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_CONSTRUCT; \
     X##_type.member_count++;  

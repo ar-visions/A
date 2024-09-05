@@ -115,7 +115,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
         A_f* a_type   = atypes->elements[i];
         bool32 is_prim  = a_type->traits & A_TRAIT_PRIMITIVE;
         ffi_args[i]   = is_prim ? a_type->arb : &ffi_type_pointer;
-        M(array, push, method->atypes, a_type);
+        M(array, push_weak, method->atypes, a_type);
     }
     ffi_status status = ffi_prep_cif(
         (ffi_cif*) method->ffi_cif, FFI_DEFAULT_ABI, atypes->len,
@@ -225,7 +225,7 @@ void A_start() {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
                 assert(address);
-                array args = ctr(array, sz, mem->args.count);
+                array args = alloc_ctr(array, sz, mem->args.count);
                 for (num i = 0; i < mem->args.count; i++)
                     args->elements[i] = ((A_f**)&mem->args.meta_0)[i];
                 args->len = mem->args.count;

@@ -542,7 +542,6 @@ void* primitive_ffi_arb(AType);
 
 #define define_class(X) \
     define_global(X, A, sizeof(struct X), 0, \
-        printf("calling global for %s\n", #X); \
         X##_type.arb = primitive_ffi_arb(typeid(cstr)); \
         X##_schema( X, A, INIT ) \
     )

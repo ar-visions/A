@@ -892,8 +892,8 @@ declare_mod(vector, collection)
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
 string A_formatter(bool32 with_print, cstr template, ...);
 
-#define format(t, ...) A_formatter(false, t, __VA_ARGS__)
-#define  print(t, ...) A_formatter(true,  t, __VA_ARGS__)
+#define format(t, ...) A_formatter(false, t, ## __VA_ARGS__)
+#define  print(t, ...) A_formatter(true,  t, ## __VA_ARGS__)
 
 /// we can iterate through a collection with this strange code
 #define each(T, t, E, e) \

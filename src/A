@@ -833,9 +833,10 @@ declare_class(map_item)
 #define map_schema(X,Y,Z) \
     i_intern         (X,Y,Z, hashmap, hmap) \
     i_intern         (X,Y,Z, list, refs) \
-    i_method         (X,Y,Z, void, set, A, A) \
+    i_method         (X,Y,Z, none, set,   A, A) \
+    i_method         (X,Y,Z, A,    get,   A) \
     i_method         (X,Y,Z, A,    fetch, A) \
-    i_method         (X,Y,Z, void, set, A, A) \
+    i_method         (X,Y,Z, bool32, contains, A) \
     i_override_cast  (X,Y,Z, string) \
     i_construct      (X,Y,Z, sz) \
     i_index          (X,Y,Z, A, A) \

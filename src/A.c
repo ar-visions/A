@@ -782,7 +782,8 @@ static num collection_compare(array a, collection b) {
 A A_copy(A a) {
     A f = A_fields(a);
     assert(f->count > 0);
-    A b = A_alloc(isa(a), f->count, true);
+    AType type = isa(a);
+    A b = A_alloc(type, f->count, true);
     for (num i = 0; i < type->member_count; i++) { /// test this, its been a while -- intern cannot be copied
         type_member_t* mem = &type->members[i];
         if (mem->member_type) {

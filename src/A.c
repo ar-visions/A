@@ -253,6 +253,60 @@ type_member_t* A_member(A_f* type, enum A_TYPE member_type, char* name) {
     return 0;
 }
 
+
+/// should be adapted to work with schemas 
+/// what a weird thing it would be to have map access to properties
+/// everything should be A-based, and forget about the argument hacks?
+map A_args(int argc, symbol argv[], map default_values, object default_key) {
+    map result = ctr(map, sz, 16);
+    for (item ii = default_values->refs->first; ii; ii = ii->next) {
+        item  hm = ii->val;
+        object k = hm->key;
+        object v = hm->val;
+        call(result, set, k, v);
+    }
+    int    i = 1;
+    bool32 found_single = false;
+    while (i < argc) {
+        symbol arg = argv[i];
+        if (!arg) {
+            i++;
+            continue;
+        }
+        if (arg[0] == '-') {
+            // -s or --silver
+            bool32 doub  = arg[1] == '-';
+            string s_key = ctr(string, cstr, (cstr)&arg[doub + 1],     -1);
+            string s_val = ctr(string, cstr, (cstr)&arg[doub + 1 + 1], -1);
+
+            for (item f = default_values->refs->first; f; f = f->next) {
+                /// import A types from runtime
+                item        data = ((item)f->val);
+                map_item      mi = data->val;
+                object def_value = mi->value;
+                AType   def_type = def_value ? isa(def_value) : typeid(string);
+                assert(f->key == data->key); /// make sure we copy it over from refs
+                if ((!doub && strncmp(((string)f->key)->chars, s_key->chars, 1) == 0) ||
+                    ( doub && call(f->key, compare, s_key) == 0)) {
+                    /// inter-op with object-based A-type sells it.
+                    /// its also a guide to use the same schema
+                    object val = A_construct(def_type, 2, s_val, A_i64(-1));
+                    assert(isa(val) == def_type);
+                    call(result, set, f->key, val);
+                }
+            }
+        } else if (!found_single && default_key) {
+            string s_val     = ctr(string, cstr, (cstr)arg, -1);
+            object def_value = call(default_values, get, default_key);
+            AType  def_type  = isa(def_value);
+            object val       = A_construct(def_type, 2, s_val, A_i64(-1));
+            call(result, set, default_key, val);
+            found_single = true;
+        }
+    }
+    return result;
+}
+
 /// can we have i32_with_i16(i32 a, i16 b)
 /// primitives are based on A alone
 /// i wonder if we can add more constructors or even methods to the prims

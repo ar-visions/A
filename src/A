@@ -922,6 +922,11 @@ void        A_drop(A a);
 #define     drop(a) A_drop(a)
 #define     hold(a) A_hold(a)
 
+
+/// should be adapted to work with schemas 
+/// what a weird thing it would be to have map access to properties
+/// everything should be A-based, and forget about the argument hacks?
+map         A_args(int argc, symbol argv[], map default_values, object default_key);
 void        A_free(A a);
 A_f**       A_types(num* length);
 type_member_t* A_member(AType type, enum A_TYPE member_type, char* name);

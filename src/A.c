@@ -1440,6 +1440,7 @@ void* primitive_ffi_arb(AType ptype) {
     //if (ptype == typeid(f128)) return &ffi_type_longdouble;
     if (ptype == typeid(cstr)) return &ffi_type_pointer;
     if (ptype == typeid(symbol)) return &ffi_type_pointer;
+    if (ptype == typeid(cereal)) return &ffi_type_pointer;
     if (ptype == typeid(bool32)) return &ffi_type_uint32;
     if (ptype == typeid(num)) return &ffi_type_sint64;
     if (ptype == typeid(sz)) return &ffi_type_sint64;

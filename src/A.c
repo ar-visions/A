@@ -707,9 +707,8 @@ static none map_set(map a, A key, A value) {
         A_drop(before);
     } else {
         mi = i->val = new(map_item);
-        mi->ref = new(item);
+        mi->ref = call(a->refs, push, i);
         mi->ref->key = A_hold(key);
-        mi->ref->val = i;
     }
 }
 
@@ -743,6 +742,7 @@ static A map_index_A(map a, A key) {
 
 static map map_with_sz(map a, sz size) {
     a->hmap  = ctr(hashmap, sz, size);
+    a->refs  = new(list);
     return a;
 }
 

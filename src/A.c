@@ -52,7 +52,7 @@ A A_new(AType type) {
     return res;
 }
 
-A A_alloc(AType type, num count, bool32 af_pool) {
+A A_alloc(AType type, num count, bool af_pool) {
     A a           = calloc(1, sizeof(struct A) + type->size * count);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
@@ -113,7 +113,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     ffi_type **ffi_args = (ffi_type**)method->ffi_args;
     for (num i = 0; i < atypes->len; i++) {
         A_f* a_type   = atypes->elements[i];
-        bool32 is_prim  = a_type->traits & A_TRAIT_PRIMITIVE;
+        bool is_prim  = a_type->traits & A_TRAIT_PRIMITIVE;
         ffi_args[i]   = is_prim ? a_type->arb : &ffi_type_pointer;
         M(array, push_weak, method->atypes, a_type);
     }
@@ -266,7 +266,7 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
         call(result, set, k, v);
     }
     int    i = 1;
-    bool32 found_single = false;
+    bool found_single = false;
     while (i < argc) {
         symbol arg = argv[i];
         if (!arg) {
@@ -275,7 +275,7 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
         }
         if (arg[0] == '-') {
             // -s or --silver
-            bool32 doub  = arg[1] == '-';
+            bool doub  = arg[1] == '-';
             string s_key = ctr(string, cstr, (cstr)&arg[doub + 1],     -1);
             string s_val = ctr(string, cstr, (cstr)&arg[doub + 1 + 1], -1);
 
@@ -338,7 +338,7 @@ A A_f32(f32 data)   { return A_primitive(&f32_type, &data); }
 A A_f64(f64 data)   { return A_primitive(&f64_type, &data); }
 A A_cstr(cstr data) { return A_primitive(&cstr_type, &data); }
 A A_none()          { return A_primitive(&none_type, NULL); }
-A A_bool(bool32 data) { return A_primitive(&bool32_type, &data); }
+A A_bool(bool data) { return A_primitive(&bool_type, &data); }
 
 /// A -------------------------
 static A   A_new_default(AType type, num count) {
@@ -363,7 +363,7 @@ static void A_destructor(A a) {
     }
 }
 static u64  A_hash      (A a) { return (u64)(size_t)a; }
-static bool32 A_cast_bool32 (A a) { return (bool32)(size_t)a; }
+static bool A_cast_bool (A a) { return (bool)(size_t)a; }
 
 /// should be symbol, perhaps.. cstr is more functional than symbol and we can use it from here
 static A A_with_cereal(A a, symbol cs, num len) {
@@ -419,7 +419,7 @@ static string A_cast_string(A a) {
     AType type = isa(a);
     if (type == typeid(string))
         return a;
-    bool32  once = false;
+    bool  once = false;
     string res = ctr(string, sz, 1024);
     if (type->traits & A_TRAIT_PRIMITIVE)
         A_serialize(type, res, a);
@@ -481,7 +481,7 @@ static A numeric_with_u32(A a, u32  v) { set_v(); }
 static A numeric_with_u64(A a, u64  v) { set_v(); }
 static A numeric_with_f32(A a, f32  v) { set_v(); }
 static A numeric_with_f64(A a, f64  v) { set_v(); }
-static A numeric_with_bool32(A a, bool32 v) { set_v(); }
+static A numeric_with_bool(A a, bool v) { set_v(); }
 static A numeric_with_num(A a, num  v) { set_v(); }
 
 A A_method(A_f* type, char* method_name, array args);
@@ -512,7 +512,7 @@ num parse_formatter(cstr start, cstr res, num sz) {
 }
 
 /// does not seem possible to proxy args around in C99, so we are wrapping this in a macro
-string A_formatter(bool32 with_print, cstr template, ...) {
+string A_formatter(bool with_print, cstr template, ...) {
     va_list args;
     va_start(args, template);
     string  res  = ctr(string, sz, 1024);
@@ -617,11 +617,11 @@ static num   string_index_of(string a, cstr cs) {
     return f ? (num)(f - a->chars) : (num)-1;
 }
 
-static bool32 string_cast_bool32(string a) {
+static bool string_cast_bool(string a) {
     return a->len > 0;
 }
 
-static none string_write(string a, handle f, bool32 new_line) {
+static none string_write(string a, handle f, bool new_line) {
     FILE* output = f ? f : stdout;
     fwrite(a->chars, a->len, 1, output);
     if (new_line) fwrite("\n", 1, 1, output);
@@ -698,7 +698,7 @@ static A hashmap_get(hashmap a, A key) {
     return i ? i->val : null;
 }
 
-static bool32 hashmap_contains(hashmap a, A key) {
+static bool hashmap_contains(hashmap a, A key) {
     item i = call(a, lookup, key);
     return i != null;
 }
@@ -715,7 +715,7 @@ static none hashmap_remove(hashmap a, A key) {
         }
 }
 
-static bool32 hashmap_cast_bool32(hashmap a) {
+static bool hashmap_cast_bool(hashmap a) {
     return a->count > 0;
 }
 
@@ -731,7 +731,7 @@ static hashmap hashmap_with_sz(hashmap a, sz size) {
 
 static string hashmap_cast_string(hashmap a) {
     string res  = ctr(string, sz, 1024);
-    bool32   once = false;
+    bool   once = false;
     for (int i = 0; i < a->alloc; i++) {
         list bucket = &a->data[i];
         for (item f = bucket->first; f; f = f->next) {
@@ -771,7 +771,7 @@ static A map_get(map a, A key) {
     return i ? i->val : null;
 }
 
-static bool32 map_contains(map a, A key) {
+static bool map_contains(map a, A key) {
     item i = call(a->hmap, lookup, key);
     return i != null;
 }
@@ -785,7 +785,7 @@ static none map_remove(map a, A key) {
     }
 }
 
-static bool32 map_cast_bool32(map a) {
+static bool map_cast_bool(map a) {
     return a->refs->count > 0;
 }
 
@@ -802,7 +802,7 @@ static map map_with_sz(map a, sz size) {
 
 static string map_cast_string(map a) {
     string res  = ctr(string, sz, 1024);
-    bool32   once = false;
+    bool   once = false;
     for (item i = a->refs->first; i; i = i->next) {
         string key = cast(i->key, string);
         string val = cast(i->val, string);
@@ -886,7 +886,7 @@ A A_data(A instance) {
     return obj->data;
 }
 
-bool32 A_inherits(A inst, AType type) {
+bool A_inherits(A inst, AType type) {
     AType t  = type;
     AType it = isa(inst); 
     while (t) {
@@ -1008,12 +1008,12 @@ static void array_expand(array a) {
     array_alloc_sz(a, alloc);
 }
 
-bool32 is_meta(A a) {
+bool is_meta(A a) {
     AType t = isa(a);
     return t->meta.count > 0;
 }
 
-bool32 is_meta_compatible(A a, A b) {
+bool is_meta_compatible(A a, A b) {
     AType t = isa(a);
     if (is_meta(a)) {
         AType bt = isa(b);
@@ -1166,7 +1166,7 @@ static num array_index_of(array a, A b) {
     return -1;
 }
 
-static bool32 array_cast_bool32(array a) { return a && a->len > 0; }
+static bool array_cast_bool(array a) { return a && a->len > 0; }
 
 static array array_with_sz(array a, sz size) {
     array_alloc_sz(a, size);
@@ -1285,7 +1285,7 @@ static num vector_index_of(vector a, A b) {
     return -1;
 }
 
-static bool32 vector_cast_bool32(vector a) {
+static bool vector_cast_bool(vector a) {
     A a_object = A_fields(a);
     return a_object->count > 0;
 }
@@ -1302,12 +1302,12 @@ static path path_with_cstr(path a, cstr path, num sz) {
     return a;
 }
 
-static bool32 path_make_dir(path a) {
+static bool path_make_dir(path a) {
     cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
     for (num i = 1; i < len; i++) {
         if (cs[i] == '/' || i == len - 1) {
-            bool32 set = false;
+            bool set = false;
             if (cs[i] == '/') { cs[i] = 0; set = true; }
             mkdir(cs, 0755);
             if (set) cs[i] = '/';
@@ -1317,7 +1317,7 @@ static bool32 path_make_dir(path a) {
     return stat(cs, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
-static bool32 path_is_dir(path a) {
+static bool path_is_dir(path a) {
     DIR   *dir = opendir(a->chars);
     if (dir == NULL)
         return false;
@@ -1326,7 +1326,7 @@ static bool32 path_is_dir(path a) {
 }
 
 
-static bool32 path_is_empty(path a) {
+static bool path_is_empty(path a) {
     int    n = 0;
     struct dirent *d;
     DIR   *dir = opendir(a->chars);
@@ -1442,7 +1442,7 @@ static path path_cwd(sz size) {
     return a;
 }
 
-static bool32 path_exists(path a) {
+static bool path_exists(path a) {
     FILE *file = fopen(a->chars, "r");
     if (file) {
         fclose(file);
@@ -1495,7 +1495,7 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeid(cstr)) return &ffi_type_pointer;
     if (ptype == typeid(symbol)) return &ffi_type_pointer;
     if (ptype == typeid(cereal)) return &ffi_type_pointer;
-    if (ptype == typeid(bool32)) return &ffi_type_uint32;
+    if (ptype == typeid(bool)) return &ffi_type_uint32;
     if (ptype == typeid(num)) return &ffi_type_sint64;
     if (ptype == typeid(sz)) return &ffi_type_sint64;
     if (ptype == typeid(none)) return &ffi_type_void;
@@ -1523,7 +1523,7 @@ define_primitive( i8,    numeric, A_TRAIT_INTEGRAL)
 define_primitive(i16,    numeric, A_TRAIT_INTEGRAL)
 define_primitive(i32,    numeric, A_TRAIT_INTEGRAL)
 define_primitive(i64,    numeric, A_TRAIT_INTEGRAL)
-define_primitive(bool32,   numeric, A_TRAIT_INTEGRAL)
+define_primitive(bool,   numeric, A_TRAIT_INTEGRAL)
 define_primitive(num,    numeric, A_TRAIT_INTEGRAL)
 define_primitive(sz,     numeric, A_TRAIT_INTEGRAL)
 define_primitive(f32,    numeric, A_TRAIT_REALISTIC)

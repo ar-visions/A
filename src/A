@@ -485,7 +485,6 @@ void        A_lazy_init(global_init_fn fn);
     A     X##_header; \
     X##_f X##_type; \
     static __attribute__((constructor)) bool global_##X() { \
-        printf("global ctr: %s\n", #X); \
         X##_f* type_ref = &X##_type; \
         Y##_f* base_ref = &Y##_type; \
         if ((AType)type_ref != (AType)base_ref && base_ref->name == null) { \

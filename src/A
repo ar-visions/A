@@ -117,6 +117,8 @@ enum A_TRAIT {
 
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 
+#define str(CSTR)                   ctr(string, cstr, (cstr)(CSTR), -1)
+
 /// calling methods
 /// none of these set memory in-instance for the type info.
 /// thats located on the A-object.

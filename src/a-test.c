@@ -2,7 +2,7 @@
 
 int main(int n_args, char* v_args[]) {
 
-    AF pool = alloc(AF); // alloc and free are how you use these without auto-release
+    AF pool  = alloc(AF); // alloc and free are how you use these without auto-release
     AF pool2 = alloc(AF);
 
     string   key = ctr(string, cstr, "a-string", -1);

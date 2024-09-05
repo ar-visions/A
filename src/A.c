@@ -199,7 +199,7 @@ A A_construct(AType type, int n_args, ...) {
     return A_method_call(mem->method, args);
 }
 
-void A_finish_types() {
+void A_start() {
     int remaining = call_after_count;
     while (remaining)
         for (int i = 0; i < call_after_count; i++) {
@@ -427,7 +427,7 @@ static A numeric_with_u32(A a, u32  v) { set_v(); }
 static A numeric_with_u64(A a, u64  v) { set_v(); }
 static A numeric_with_f32(A a, f32  v) { set_v(); }
 static A numeric_with_f64(A a, f64  v) { set_v(); }
-static A numeric_with_bool(A a, bool32 v) { set_v(); }
+static A numeric_with_bool32(A a, bool32 v) { set_v(); }
 static A numeric_with_num(A a, num  v) { set_v(); }
 
 A A_method(A_f* type, char* method_name, array args);
@@ -563,7 +563,7 @@ static num   string_index_of(string a, cstr cs) {
     return f ? (num)(f - a->chars) : (num)-1;
 }
 
-static bool32 string_cast_bool(string a) {
+static bool32 string_cast_bool32(string a) {
     return a->len > 0;
 }
 
@@ -661,7 +661,7 @@ static none hashmap_remove(hashmap a, A key) {
         }
 }
 
-static bool32 hashmap_cast_bool(hashmap a) {
+static bool32 hashmap_cast_bool32(hashmap a) {
     return a->count > 0;
 }
 
@@ -732,7 +732,7 @@ static none map_remove(map a, A key) {
     }
 }
 
-static bool32 map_cast_bool(map a) {
+static bool32 map_cast_bool32(map a) {
     return a->refs->count > 0;
 }
 
@@ -776,6 +776,20 @@ static A  collection_pop(collection a) {
 static num collection_compare(array a, collection b) {
     assert(false);
     return 0;
+}
+
+/// copy member by member; bit copy the primitives
+A A_copy(A a) {
+    A f = A_fields(a);
+    assert(f->count > 0);
+    A b = A_alloc(isa(a), f->count, true);
+    for (num i = 0; i < type->member_count; i++) { /// test this, its been a while -- intern cannot be copied
+        type_member_t* mem = &type->members[i];
+        if (mem->member_type) {
+            return mem;
+        }
+    }
+    return b;
 }
 
 A A_hold(A a) {
@@ -1097,7 +1111,7 @@ static num array_index_of(array a, A b) {
     return -1;
 }
 
-static bool32 array_cast_bool(array a) { return a && a->len > 0; }
+static bool32 array_cast_bool32(array a) { return a && a->len > 0; }
 
 static array array_with_sz(array a, sz size) {
     array_alloc_sz(a, size);
@@ -1216,7 +1230,7 @@ static num vector_index_of(vector a, A b) {
     return -1;
 }
 
-static bool32 vector_cast_bool(vector a) {
+static bool32 vector_cast_bool32(vector a) {
     A a_object = A_fields(a);
     return a_object->count > 0;
 }

@@ -600,6 +600,7 @@ typedef struct string* string;
     i_method(X,Y,Z, none,      destructor) \
     i_method(X,Y,Z, i32,       compare,    X) \
     i_method(X,Y,Z, u64,       hash) \
+    i_method(X,Y,Z, A,         copy, A) \
     i_cast(  X,Y,Z, string) \
     i_cast(  X,Y,Z, bool32) \
     i_construct(X,Y,Z, cereal, num)
@@ -832,6 +833,9 @@ declare_class(map_item)
 #define map_schema(X,Y,Z) \
     i_intern         (X,Y,Z, hashmap, hmap) \
     i_intern         (X,Y,Z, list, refs) \
+    i_method         (X,Y,Z, void, set, A, A) \
+    i_method         (X,Y,Z, A,    fetch, A) \
+    i_method         (X,Y,Z, void, set, A, A) \
     i_override_cast  (X,Y,Z, string) \
     i_construct      (X,Y,Z, sz) \
     i_index          (X,Y,Z, A, A) \
@@ -936,7 +940,7 @@ A           A_none();
 A           A_bool32(bool32);
 A           A_realloc(A, num);
 void        A_push(A, A);
-void        A_finish_types();
+void        A_start();
 A           A_fields(A instance);
 A           A_data(A instance);
 bool32      is_meta(A a);

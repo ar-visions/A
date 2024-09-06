@@ -117,8 +117,6 @@ enum A_TRAIT {
 
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 
-#define str(CSTR)                   ctr(string, cstr, (cstr)(CSTR), -1)
-
 /// calling methods
 /// none of these set memory in-instance for the type info.
 /// thats located on the A-object.
@@ -139,7 +137,11 @@ enum A_TRAIT {
 #define meta_t(I,IDX)               isa(I) -> meta.meta_##IDX
 
 #define ctr(T,WITH,...)             T##_type.with_##WITH((A)A_alloc(typeid(T), 1, true), ## __VA_ARGS__)
+#define ctr1(T,WITH,...)            T##_type.with_##WITH((A)A_alloc(typeid(T), 1, true), ## __VA_ARGS__)
 #define alloc_ctr(T,WITH,...)       T##_type.with_##WITH((A)A_alloc(typeid(T), 1, false), ## __VA_ARGS__)
+
+#define str(CSTR)                   ctr1(string, cstr, (cstr)(CSTR), -1)
+
 #define operator(I,OP,...)          ftableI(I) -> operator_##OP(I, ##__VA_ARGS__)
 #define emit_types(...)             EXPAND_ARGS(__VA_ARGS__)
 #define combine_tokens_(A, B)       A##B

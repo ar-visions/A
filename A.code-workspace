@@ -156,7 +156,8 @@
 			"cwctype": "cpp",
 			"strstream": "cpp",
 			"valarray": "cpp",
-			"targetmachine.h": "c"
+			"targetmachine.h": "c",
+			"silver": "c"
 		}
 	}
 }

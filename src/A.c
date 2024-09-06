@@ -52,6 +52,20 @@ A A_new(AType type) {
     return res;
 }
 
+A A_initialize(A a) {
+    A f           = A_fields(a);
+    AType a_type  = &A_type;
+    AType current = f->type;
+    while (current) {
+        if (current->init)
+            current->init(a->data);
+        if (current == a_type)
+            break;
+        current = current->parent_type;
+    }
+    return a->data;
+}
+
 A A_alloc(AType type, num count, bool af_pool) {
     A a           = calloc(1, sizeof(struct A) + type->size * count);
     a->refs       = af_pool ? 0 : 1;
@@ -60,15 +74,6 @@ A A_alloc(AType type, num count, bool af_pool) {
     a->data       = &a[1];
     a->count      = count;
     a->alloc      = count;
-    AType a_type  = &A_type;
-    AType current = type;
-    while (current) {
-        if (current->init)
-            current->init(a->data);
-        if (current == a_type)
-            break;
-        current = current->parent_type;
-    }
     if (af_pool) {
         a->ar_index = af_top->pool->len;
         call(af_top->pool, push, a->data);

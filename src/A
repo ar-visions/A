@@ -136,9 +136,9 @@ enum A_TRAIT {
 /// generic is from instance type, which we only need to store the args for, no other tables
 #define meta_t(I,IDX)               isa(I) -> meta.meta_##IDX
 
-#define ctr(T,WITH,...)             T##_type.with_##WITH((A)A_alloc(typeid(T), 1, true), ## __VA_ARGS__)
-#define ctr1(T,WITH,...)            T##_type.with_##WITH((A)A_alloc(typeid(T), 1, true), ## __VA_ARGS__)
-#define alloc_ctr(T,WITH,...)       T##_type.with_##WITH((A)A_alloc(typeid(T), 1, false), ## __VA_ARGS__)
+#define ctr(T,WITH,...)             A_initialize(T##_type.with_##WITH((A)A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
+#define ctr1(T,WITH,...)            A_initialize(T##_type.with_##WITH((A)A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
+#define alloc_ctr(T,WITH,...)       A_initialize(T##_type.with_##WITH((A)A_alloc(typeid(T), 1, false), ## __VA_ARGS__))
 
 #define str(CSTR)                   ctr1(string, cstr, (cstr)(CSTR), -1)
 
@@ -484,8 +484,10 @@ void        A_lazy_init(global_init_fn fn);
     extern X##_f  X##_type;
 
 #define define_global_primitive(X,Y, TYPE_SZ, TRAIT) \
+    _Pragma("pack(push, 1)") \
     A     X##_header; \
     X##_f X##_type; \
+    _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##X() { \
         X##_f* type_ref = &X##_type; \
         Y##_f* base_ref = &Y##_type; \
@@ -506,8 +508,10 @@ void        A_lazy_init(global_init_fn fn);
     }
 
 #define define_global(X,Y, TYPE_SZ, TRAIT, META) \
+    _Pragma("pack(push, 1)") \
     A     X##_header; \
     X##_f X##_type; \
+    _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##X() { \
         X##_f* type_ref = &X##_type; \
         Y##_f* base_ref = &Y##_type; \
@@ -899,6 +903,8 @@ string A_formatter(FILE* f, bool write_ln, cstr template, ...);
 #define format(t, ...) A_formatter(null,   false, t, ## __VA_ARGS__)
 #define  print(t, ...) A_formatter(stdout, true,  t, ## __VA_ARGS__)
 #define  error(t, ...) A_formatter(stderr, true,  t, ## __VA_ARGS__)
+#define  fault(t, ...) do { A_formatter(stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0);
+
 /// we can iterate through a collection with this strange code
 #define each(T, t, E, e) \
     if (M(T, count, t)) for (E e = M(T, get, t, 0), e0 = 0; e0 == 0; e0++) \
@@ -917,6 +923,7 @@ A           A_alloc(AType type, num count, bool af_pool);
 
 A           A_new(AType type);
 A           A_construct(AType type, int n_args, ...);
+A           A_initialize(A a); /// called after 'construction' ... this is so we do something generic in init, and support named args
 A           A_convert(AType type, A input);
 type_member_t* A_constructor(AType type, AType first_arg); // find a constructor method (used for dynamic construction)
 bool      A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
@@ -930,6 +937,7 @@ void        A_drop(A a);
 /// should be adapted to work with schemas 
 /// what a weird thing it would be to have map access to properties
 /// everything should be A-based, and forget about the argument hacks?
+
 map         A_args(int argc, symbol argv[], map default_values, object default_key);
 void        A_free(A a);
 A_f**       A_types(num* length);

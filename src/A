@@ -903,7 +903,7 @@ string A_formatter(FILE* f, bool write_ln, cstr template, ...);
 #define format(t, ...) A_formatter(null,   false, t, ## __VA_ARGS__)
 #define  print(t, ...) A_formatter(stdout, true,  t, ## __VA_ARGS__)
 #define  error(t, ...) A_formatter(stderr, true,  t, ## __VA_ARGS__)
-#define  fault(t, ...) do { A_formatter(stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0);
+#define  fault(t, ...) do { A_formatter(stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0)
 
 /// we can iterate through a collection with this strange code
 #define each(T, t, E, e) \

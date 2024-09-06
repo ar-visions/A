@@ -877,7 +877,9 @@ declare_class(fn)
     i_override_m(X,Y,Z, u64, hash) \
     i_override_m(X,Y,Z, num, compare) \
     i_override_cast(X,Y,Z, bool) \
-    i_cast(  X,Y,Z, path)
+    i_cast(X,Y,Z,       cstr) \
+    i_cast(X,Y,Z,       sz) \
+    i_cast(X,Y,Z,       path)
 declare_class(string)
 
 #define vector_schema(X,Y,Z) \

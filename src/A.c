@@ -626,6 +626,14 @@ static bool string_cast_bool(string a) {
     return a->len > 0;
 }
 
+sz string_cast_sz(string a) {
+    return a->len;
+}
+
+cstr string_cast_cstr(string a) {
+    return a->chars;
+}
+
 static none string_write(string a, handle f, bool new_line) {
     FILE* output = f ? f : stdout;
     fwrite(a->chars, a->len, 1, output);

@@ -628,6 +628,10 @@ static none string_write(string a, handle f, bool new_line) {
     fflush(output);
 }
 
+static path string_cast_path(string a) {
+    return ctr(path, cstr, a->chars);
+}
+
 u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
     const u8* bytes = (const u8*)data;
     for (size_t i = 0; i < length; ++i) {
@@ -1300,6 +1304,10 @@ static path path_with_cstr(path a, cstr path, num sz) {
     a->chars = calloc(len + 1, 1);
     memcpy(a->chars, path, len + 1);
     return a;
+}
+
+static string path_cast_string(path a) {
+    return ctr(string, cstr, a->chars, -1);
 }
 
 static bool path_make_dir(path a) {

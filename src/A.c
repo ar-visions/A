@@ -629,7 +629,7 @@ static none string_write(string a, handle f, bool new_line) {
 }
 
 static path string_cast_path(string a) {
-    return ctr(path, cstr, a->chars);
+    return ctr(path, cstr, a->chars, -1);
 }
 
 u64 fnv1a_hash(const void* data, size_t length, u64 hash) {

@@ -155,7 +155,8 @@
 			"csignal": "cpp",
 			"cwctype": "cpp",
 			"strstream": "cpp",
-			"valarray": "cpp"
+			"valarray": "cpp",
+			"targetmachine.h": "c"
 		}
 	}
 }

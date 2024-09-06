@@ -512,7 +512,7 @@ num parse_formatter(cstr start, cstr res, num sz) {
 }
 
 /// does not seem possible to proxy args around in C99, so we are wrapping this in a macro
-string A_formatter(bool with_print, cstr template, ...) {
+string A_formatter(FILE* f, bool write_ln, cstr template, ...) {
     va_list args;
     va_start(args, template);
     string  res  = ctr(string, sz, 1024);
@@ -566,10 +566,12 @@ string A_formatter(bool with_print, cstr template, ...) {
         }
     }
     va_end(args);
-    if (with_print) {
-        call(res, write, stdout, false);
-        fwrite("\n", 1, 1, stdout);
-        fflush(stdout);
+    if (f) {
+        call(res, write, f, false);
+        if (write_ln) {
+            fwrite("\n", 1, 1, f);
+            fflush(f);
+        }
     }
     return res;
 }

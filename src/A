@@ -126,8 +126,8 @@ enum A_TRAIT {
 #define M(T,N,...)                  T##_type.N(__VA_ARGS__)
 
 /// the call and cast take instance first
-#define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
-
+#define  call(I,N,...)              ftableI(I) -> N(I, ##__VA_ARGS__)
+  
 /// indexing is functionality of I [ A1, A2, A... ] -> R
 #define idx_1(I,T1,V1)              call(I, index ##_## T1, V1)
 #define idx_2(I,T1,T2,V1,V2)        call(I, index ##_## T1 ##_## T2, V1, V2)
@@ -890,11 +890,11 @@ declare_class(string)
 declare_mod(vector, collection)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
-string A_formatter(bool with_print, cstr template, ...);
+string A_formatter(FILE* f, bool write_ln, cstr template, ...);
 
-#define format(t, ...) A_formatter(false, t, ## __VA_ARGS__)
-#define  print(t, ...) A_formatter(true,  t, ## __VA_ARGS__)
-
+#define format(t, ...) A_formatter(null,   t, false, ## __VA_ARGS__)
+#define  print(t, ...) A_formatter(stdout, t, true,  ## __VA_ARGS__)
+#define  error(t, ...) A_formatter(stderr, t, true,  ## __VA_ARGS__)
 /// we can iterate through a collection with this strange code
 #define each(T, t, E, e) \
     if (M(T, count, t)) for (E e = M(T, get, t, 0), e0 = 0; e0 == 0; e0++) \

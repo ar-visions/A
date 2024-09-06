@@ -566,8 +566,11 @@ string A_formatter(bool with_print, cstr template, ...) {
         }
     }
     va_end(args);
-    if (with_print)
+    if (with_print) {
         call(res, write, stdout, false);
+        fwrite("\n", 1, 1, stdout);
+        fflush(stdout);
+    }
     return res;
 }
 

@@ -157,7 +157,8 @@
 			"strstream": "cpp",
 			"valarray": "cpp",
 			"targetmachine.h": "c",
-			"silver": "c"
+			"silver": "c",
+			"tokens": "c"
 		}
 	}
 }

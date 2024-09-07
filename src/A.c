@@ -594,6 +594,14 @@ string A_formatter(FILE* f, bool write_ln, cstr template, ...) {
 static void  string_destructor(string a) { free(a->chars); }
 static num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
 
+static i32   string_index(string a, num index) {
+    if (index < 0)
+        index += a->len;
+    if (index >= a->len)
+        return 0;
+    return (i32)a->chars[index];
+}
+
 static array string_split(string a, cstr sp) {
     cstr next = a->chars;
     sz   slen = strlen(sp);
@@ -1083,6 +1091,10 @@ static A array_push_weak(array a, A b) {
 }
 
 static A array_index_num(array a, num i) {
+    if (i < 0)
+        i += a->len;
+    if (i >= a->len)
+        return 0;
     return a->elements[i];
 }
 

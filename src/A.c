@@ -1187,7 +1187,7 @@ static void array_push_objects(array a, A f, ...) {
     va_end(args);
 }
 
-array array_of_objects(AType validate, ...) {
+array array_of(AType validate, ...) {
     array a = new(array);
     va_list args;
     va_start(args, validate);

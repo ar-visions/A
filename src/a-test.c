@@ -1,8 +1,21 @@
 #include <A>
 
 int main(int n_args, char* v_args[]) {
-
+    printf("1\n");
     AF pool  = alloc(AF); // alloc and free are how you use these without auto-release
+
+    map imap;
+    printf("2\n");
+    call(imap, set, str("key"), A_i32(1));
+    item e;
+    printf("3\n");
+    print("enumerating?");
+    fflush(stdout);
+    enumerate(imap, e) {
+        print("key = %o, val = %o", e->key, e->val);
+    }
+
+
     AF pool2 = alloc(AF);
 
     string   key = ctr(string, cstr, "a-string", -1);

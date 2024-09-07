@@ -924,6 +924,11 @@ declare_enum(Exists)
     if (M(T, count, t)) for (E e = M(T, get, t, 0), e0 = 0; e0 == 0; e0++) \
         for (num __i = 0, len = M(T, count, t); __i < len; __i++, e = M(T, get, t, __i)) \
 
+/// we can go through a map
+#define enumerate(MM, EE) \
+    if (MM && cast(MM, bool)) for (item _i = MM->refs->first, EE = null; _i; _i = _i->next) \
+        for (item EE = ((map_item)_i->val)->value, e0 = EE; EE == e0; e0++) \
+
 /// possible to iterate safely through primitives
 #define primitives(T, t, E, e) \
     if (M(T, count, t)) for (E e = *(E*)M(T, get, t, 0), e0 = 0; e0 == 0; e0++) \

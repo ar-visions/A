@@ -937,11 +937,11 @@ A           A_construct(AType type, int n_args, ...);
 A           A_initialize(A a); /// called after 'construction' ... this is so we do something generic in init, and support named args
 A           A_convert(AType type, A input);
 type_member_t* A_constructor(AType type, AType first_arg); // find a constructor method (used for dynamic construction)
-bool      A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
+bool        A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
 A           A_hold(A a);
 void        A_drop(A a);
 sz          len(A a);
-enum A_exists_t A_exists(A a);
+Exists      A_exists(A a);
 
 #define     drop(a) A_drop(a)
 #define     hold(a) A_hold(a)

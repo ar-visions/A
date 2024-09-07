@@ -500,6 +500,17 @@ sz len(A a) {
     return 0;
 }
 
+bool A_exists(A o) {
+    AType t = isa(o);
+    path  f = null;
+    if (t == typeid(string))
+        f = cast((string)t, path);
+    else if (t == typeid(path))
+        f = o;
+    assert(f, "type not supported");
+    return call(f, exists);
+}
+
 /// these pointers are invalid for A since they are in who-knows land, but the differences would be the same
 static i32 A_compare(A a, A b) {
     return (i32)((sz)(void*)a - (sz)(void*)b);

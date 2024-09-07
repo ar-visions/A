@@ -906,7 +906,7 @@ string A_formatter(FILE* f, bool write_ln, cstr template, ...);
 #define  print(t, ...) A_formatter(stdout, true,  t, ## __VA_ARGS__)
 #define  error(t, ...) A_formatter(stderr, true,  t, ## __VA_ARGS__)
 #define  fault(t, ...) do { A_formatter(stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0)
-
+#define  exists(t, ...) A_exists(format(t, ## __VA_ARGS__))
 #define  assert(a,t, ...) do { if (a) { A_formatter(stderr, true,  t, ## __VA_ARGS__); exit(1); } } while(0)
 
 /// we can iterate through a collection with this strange code
@@ -934,6 +934,7 @@ bool      A_inherits(A left, AType type); // would be nice to actually allow typ
 A           A_hold(A a);
 void        A_drop(A a);
 sz          len(A a);
+bool        A_exists(A a);
 
 #define     drop(a) A_drop(a)
 #define     hold(a) A_hold(a)

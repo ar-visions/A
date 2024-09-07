@@ -789,7 +789,7 @@ declare_class(path)
     i_intern         (X,Y,Z, A*,   elements) \
     i_intern         (X,Y,Z, i32,  alloc) \
     i_intern         (X,Y,Z, i32,  len) \
-    s_method_vargs   (X,Y,Z, X,    of_objects, A) \
+    s_method_vargs   (X,Y,Z, X,    of, A) \
     i_method         (X,Y,Z, A,    first) \
     i_method         (X,Y,Z, A,    last) \
     i_method         (X,Y,Z, X,    pop) \

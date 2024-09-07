@@ -3,11 +3,12 @@
     "configurations": [
         {
             "name": "Python: silver44",
-            "type": "python",
+            "type": "debugpy",
+            "args": ["WGPU.si"],
             "request": "launch",
             "program": "${workspaceFolder}/../silver/silver/silver44.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/../silver/build"
+            "cwd": "${workspaceFolder}/../silver/silver"
         },
         {
             "name": "silver",

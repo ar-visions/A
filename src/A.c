@@ -86,7 +86,7 @@ A A_alloc(AType type, num count, bool af_pool) {
 
 A A_realloc(A a, num alloc) {
     A obj = A_fields(a);
-    assert(obj->type->traits == A_TRAIT_PRIMITIVE);
+    assert(obj->type->traits == A_TRAIT_PRIMITIVE, "realloc must be called on a primitive type");
     A   re    = calloc(1, sizeof(struct A) + obj->type->size * alloc);
     num count = obj->count < alloc ? obj->count : alloc;
     memcpy(&re[1], obj->data, obj->type->size * count);
@@ -101,7 +101,7 @@ A A_realloc(A a, num alloc) {
 
 void A_push(A a, A value) {
     A   obj = A_fields(a);
-    assert(obj->type->traits == A_TRAIT_PRIMITIVE);
+    assert(obj->type->traits == A_TRAIT_PRIMITIVE, "must be called on a primitive type");
     num sz  = obj->type->size;
     if (obj->count == obj->alloc)
         A_realloc(a, 32 + (obj->alloc << 1));
@@ -125,7 +125,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     ffi_status status = ffi_prep_cif(
         (ffi_cif*) method->ffi_cif, FFI_DEFAULT_ABI, atypes->len,
         (ffi_type*)(rtype->traits & A_TRAIT_ABSTRACT) ? method_owner->arb : rtype->arb, ffi_args);
-    assert(status == FFI_OK);
+    assert(status == FFI_OK, "status == %i", (i32)status);
     return method;
 }
 
@@ -138,7 +138,7 @@ fn A_lambda(A target, Member member, A context) {
 A A_method_call(method_t* a, array args) {
     const num max_args = 8;
     void* arg_values[max_args];
-    assert(args->len == a->atypes->len);
+    assert(args->len == a->atypes->len, "arg count mismatch");
     for (num i = 0; i < args->len; i++) {
         A_f* arg_type = a->atypes->elements[i];
         arg_values[i] = (arg_type->traits & (A_TRAIT_PRIMITIVE | A_TRAIT_ENUM)) ? 
@@ -157,7 +157,7 @@ A A_method_call(method_t* a, array args) {
 /// this calls type methods
 A A_method(A_f* type, cstr method_name, array args) {
     type_member_t* mem = A_member(type, A_TYPE_IMETHOD | A_TYPE_SMETHOD, method_name);
-    assert(mem->method);
+    assert(mem->method, "method not set");
     method_t* m = mem->method;
     A res = A_method_call(m, args);
     return res;
@@ -165,14 +165,14 @@ A A_method(A_f* type, cstr method_name, array args) {
 
 A A_convert(AType type, A input) {
     if (type == isa(input)) return input;
-    assert(false);
+    assert(false, "not implemented");
     return input;
 }
 
 A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
     AType type = isa(instance);
     type_member_t* mem = A_member(type, A_TYPE_IMETHOD | A_TYPE_SMETHOD, method_name);
-    assert(mem->method);
+    assert(mem->method, "method not set");
     method_t* m = mem->method;
     va_list  vargs;
     va_start(vargs, n_args);
@@ -200,7 +200,7 @@ A A_construct(AType type, int n_args, ...) {
 
     AType arg0_type = isa(args->elements[0]);
     type_member_t* mem = A_constructor(type, arg0_type);
-    assert(mem && mem->method);
+    assert(mem && mem->method, "alloc failed");
     return A_method_call(mem->method, args);
 }
 
@@ -229,7 +229,7 @@ void A_start() {
             if (mem->member_type & (A_TYPE_IMETHOD | A_TYPE_SMETHOD | A_TYPE_CONSTRUCT)) {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
-                assert(address);
+                assert(address, "no address");
                 array args = alloc_ctr(array, sz, mem->args.count);
                 for (num i = 0; i < mem->args.count; i++)
                     args->elements[i] = ((A_f**)&mem->args.meta_0)[i];
@@ -290,13 +290,13 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
                 map_item      mi = data->val;
                 object def_value = mi->value;
                 AType   def_type = def_value ? isa(def_value) : typeid(string);
-                assert(f->key == data->key); /// make sure we copy it over from refs
+                assert(f->key == data->key, "keys do not match"); /// make sure we copy it over from refs
                 if ((!doub && strncmp(((string)f->key)->chars, s_key->chars, 1) == 0) ||
                     ( doub && call(f->key, compare, s_key) == 0)) {
                     /// inter-op with object-based A-type sells it.
                     /// its also a guide to use the same schema
                     object val = A_construct(def_type, 2, s_val, A_i64(-1));
-                    assert(isa(val) == def_type);
+                    assert(isa(val) == def_type, "");
                     call(result, set, f->key, val);
                 }
             }
@@ -317,15 +317,15 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
 /// i wonder if we can add more constructors or even methods to the prims
 
 A A_primitive(A_f* type, void* data) {
-    assert(type->traits & A_TRAIT_PRIMITIVE);
+    assert(type->traits & A_TRAIT_PRIMITIVE, "must be primitive");
     A copy = A_alloc(type, type->size, true);
     memcpy(copy, data, type->size);
     return copy;
 }
 
 A A_enum(A_f* type, i32 data) {
-    assert(type->traits & A_TRAIT_ENUM);
-    assert(type->size == sizeof(i32));
+    assert(type->traits & A_TRAIT_ENUM, "must be enum");
+    assert(type->size == sizeof(i32), "enum size invalid");
     A copy = A_alloc(type, type->size, true);
     memcpy(copy, &data, type->size);
     return copy;
@@ -405,8 +405,7 @@ static void A_serialize(AType type, string res, A a) {
         else if (type == typeid(f64)) len = sprintf(buf, "%f",   *(f64*)a);
         else if (type == typeid(f32)) len = sprintf(buf, "%f",   *(f32*)a);
         else {
-            assert(false);
-            printf("implement primitive cast to str: %s\n", type->name);
+            fault("implement primitive cast to str: %s", type->name);
         }
         call(res, append, buf); // should allow for a -1 or len
     } else {
@@ -858,24 +857,24 @@ static string map_cast_string(map a) {
 
 /// collection -------------------------
 static A collection_push(collection a, A b) {
-    assert(false);
+    assert(false, "");
     return null;
 }
 
 static A  collection_pop(collection a) {
-    assert(false);
+    assert(false, "");
     return null;
 }
 
 static num collection_compare(array a, collection b) {
-    assert(false);
+    assert(false, "");
     return 0;
 }
 
 /// copy member by member; bit copy the primitives
 A A_copy(A a) {
     A f = A_fields(a);
-    assert(f->count > 0);
+    assert(f->count > 0, "invalid count");
     AType type = isa(a);
     A b = A_alloc(type, f->count, true);
     for (num i = 0; i < type->member_count; i++) { /// test this, its been a while -- intern cannot be copied
@@ -1026,7 +1025,7 @@ static A list_get(list a, num at_index) {
             return i->val;
         index++;
     }
-    assert(false);
+    assert(false, "could not fetch item at index %i", (i32)at_index);
     return null;
 }
 
@@ -1074,7 +1073,7 @@ static A array_push(array a, A b) {
     }
     AType t = isa(a);
     if (is_meta(a))
-        assert(is_meta_compatible(a, b));
+        assert(is_meta_compatible(a, b), "not meta compatible");
     a->elements[a->len++] = A_hold(b);
     return b;
 }
@@ -1085,7 +1084,7 @@ static A array_push_weak(array a, A b) {
     }
     AType t = isa(a);
     if (is_meta(a))
-        assert(is_meta_compatible(a, b));
+        assert(is_meta_compatible(a, b), "not meta compatible");
     a->elements[a->len++] = b;
     return b;
 }
@@ -1128,12 +1127,12 @@ static void array_operator_assign_sub(array a, num b) {
 }
 
 static A array_first(array a) {
-    assert(a->len);
+    assert(a->len, "no items");
     return a->elements[a->len - 1];
 }
 
 static A array_last(array a) {
-    assert(a->len);
+    assert(a->len, "no items");
     return a->elements[a->len - 1];
 }
 
@@ -1161,12 +1160,11 @@ array array_of_objects(AType validate, ...) {
     array a = new(array);
     va_list args;
     va_start(args, validate);
-    assert(false);
     for (;;) {
         A arg = va_arg(args, A);
         if (!arg)
             break;
-        assert(!validate || validate == isa(arg));
+        assert(!validate || validate == isa(arg), "validation failure");
         M(array, push, a, arg);
     }
     return a;
@@ -1177,7 +1175,7 @@ void  array_weak_push(array a, A obj) {
 }
 
 static A array_pop(array a) {
-    assert(a->len > 0);
+    assert(a->len > 0, "no items");
     return a->elements[a->len--];
 }
 
@@ -1228,7 +1226,7 @@ static void AF_init(AF a) {
 
 static void AF_destructor(AF a) {
     int f = call(af_stack, index_of, a);
-    assert(f >= 0);
+    assert(f >= 0, "invalid af-stack index");
     call(af_stack, remove_weak, f);
     if (af_top == a)
         af_top = af_stack->len ? af_stack->elements[af_stack->len - 1] : null;
@@ -1281,7 +1279,7 @@ static A vector_push(vector a, A b) {
 /// user of 'collection' calling object on this return result
 static A vector_pop(vector a) {
     A obj = A_fields(a);
-    assert(obj->count > 0);
+    assert(obj->count > 0, "no items");
     u8* dst = obj->data;
     num sz = obj->type->size;
     return (A)&dst[sz * --obj->count];
@@ -1293,7 +1291,7 @@ static num vector_compare(vector a, vector b) {
     num diff = a_object->count - b_object->count;
     if (diff != 0)
         return diff;
-    assert(a_object->type == b_object->type);
+    assert(a_object->type == b_object->type, "type mismatch");
     u8* a_data = A_data(a);
     u8* b_data = A_data(b);
     num sz = a_object->type->size;
@@ -1486,7 +1484,7 @@ static path path_cwd(sz size) {
     path a = new(path);
     a->chars = calloc(size, 1);
     char* res = getcwd(a->chars, size);
-    assert(res != null);
+    assert(res != null, "getcwd failure");
     return a;
 }
 
@@ -1514,11 +1512,11 @@ static A path_read(path a, AType type) {
         string a = ctr(string, sz, flen + 1);
         size_t n = fread(a->chars, 1, flen, f);
         fclose(f);
-        assert(n == flen);
+        assert(n == flen, "could not read enough bytes");
         a->len   = flen;
         return a;
     }
-    assert(false);
+    assert(false, "not implemented");
     return null;
 }
 
@@ -1551,7 +1549,7 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeid(handle)) return &ffi_type_pointer;
     if (ptype == typeid(Member)) return &ffi_type_pointer;
     if (ptype == typeid(raw))    return &ffi_type_pointer;
-    assert(false);
+    assert(false, "primitive_ffi_arb not implemented: %s", ptype->name);
     return null;
 }
 

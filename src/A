@@ -1,7 +1,7 @@
 #ifndef _A_
 #define _A_
 
-#include <assert.h>
+//#include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -496,7 +496,7 @@ void        A_lazy_init(global_init_fn fn);
             A_lazy_init((global_init_fn)&global_##X); \
             return false; \
         } else { \
-            assert(sizeof(Y##_f) >= sizeof(X##_f)); \
+            assert(sizeof(Y##_f) >= sizeof(X##_f), "invalid sz"); \
             memcpy(type_ref, base_ref, sizeof(Y##_f)); \
             X## _type.parent_type = &Y##_type; \
             X## _type.name     = #X;        \
@@ -906,6 +906,8 @@ string A_formatter(FILE* f, bool write_ln, cstr template, ...);
 #define  print(t, ...) A_formatter(stdout, true,  t, ## __VA_ARGS__)
 #define  error(t, ...) A_formatter(stderr, true,  t, ## __VA_ARGS__)
 #define  fault(t, ...) do { A_formatter(stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0)
+
+#define  assert(a,t, ...) do { if (a) { A_formatter(stderr, true,  t, ## __VA_ARGS__); exit(1); } } while(0)
 
 /// we can iterate through a collection with this strange code
 #define each(T, t, E, e) \

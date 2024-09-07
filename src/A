@@ -884,7 +884,7 @@ declare_class(fn)
     i_cast(X,Y,Z,       cstr) \
     i_cast(X,Y,Z,       sz) \
     i_cast(X,Y,Z,       path) \
-    i_index(X,Y,Z, int, num)
+    i_index(X,Y,Z, i32, num)
 declare_class(string)
 
 #define vector_schema(X,Y,Z) \

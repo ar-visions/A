@@ -594,7 +594,7 @@ string A_formatter(FILE* f, bool write_ln, cstr template, ...) {
 static void  string_destructor(string a) { free(a->chars); }
 static num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
 
-static i32   string_index(string a, num index) {
+static i32   string_index_num(string a, num index) {
     if (index < 0)
         index += a->len;
     if (index >= a->len)

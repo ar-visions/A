@@ -902,11 +902,18 @@ declare_mod(vector, collection)
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
 string A_formatter(FILE* f, bool write_ln, cstr template, ...);
 
+#define Exists_schema(X,Y) \
+    enum_value(X,Y, no) \
+    enum_value(X,Y, file) \
+    enum_value(X,Y, dir)
+declare_enum(Exists)
+
 #define format(t, ...) A_formatter(null,   false, t, ## __VA_ARGS__)
 #define  print(t, ...) A_formatter(stdout, true,  t, ## __VA_ARGS__)
 #define  error(t, ...) A_formatter(stderr, true,  t, ## __VA_ARGS__)
 #define  fault(t, ...) do { A_formatter(stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0)
-#define  exists(t, ...) A_exists(format(t, ## __VA_ARGS__))
+#define  file_exists(t, ...) A_exists(format(t, ## __VA_ARGS__) == Exists_file)
+#define   dir_exists(t, ...) A_exists(format(t, ## __VA_ARGS__) == Exists_dir)
 #define  assert(a,t, ...) do { if (a) { A_formatter(stderr, true,  t, ## __VA_ARGS__); exit(1); } } while(0)
 
 /// we can iterate through a collection with this strange code
@@ -934,7 +941,7 @@ bool      A_inherits(A left, AType type); // would be nice to actually allow typ
 A           A_hold(A a);
 void        A_drop(A a);
 sz          len(A a);
-bool        A_exists(A a);
+enum A_exists_t A_exists(A a);
 
 #define     drop(a) A_drop(a)
 #define     hold(a) A_hold(a)

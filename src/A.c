@@ -500,7 +500,7 @@ sz len(A a) {
     return 0;
 }
 
-bool A_exists(A o) {
+Exists A_exists(A o) {
     AType t = isa(o);
     path  f = null;
     if (t == typeid(string))
@@ -508,7 +508,12 @@ bool A_exists(A o) {
     else if (t == typeid(path))
         f = o;
     assert(f, "type not supported");
-    return call(f, exists);
+    bool is_dir = call(f, is_dir);
+    bool r = call(f, exists);
+    if (is_dir)
+        return r ? Exists_dir  : Exists_no;
+    else
+        return r ? Exists_file : Exists_no;
 }
 
 /// these pointers are invalid for A since they are in who-knows land, but the differences would be the same
@@ -1595,6 +1600,8 @@ define_primitive(handle, raw, 0)
 define_primitive(Member, raw, 0)
 
 define_enum(OPType)
+define_enum(Exists)
+
 define_class(path)
 define_class(string)
 define_class(item)

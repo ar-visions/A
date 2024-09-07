@@ -1368,6 +1368,11 @@ u64 vector_hash(vector a) {
     return fnv1a_hash(obj->data, obj->type->size * obj->count, OFFSET_BASIS);
 }
 
+bool create_symlink(path target, path link) {
+    bool is_err = symlink(target, link) == -1;
+    return !is_err;
+}
+
 static path path_with_cstr(path a, cstr cs, num sz) {
     num len = sz == -1 ? strlen(cs) : sz;
     a->chars = calloc(len + 1, 1);

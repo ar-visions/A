@@ -129,6 +129,7 @@ enum A_TRAIT {
 /// indexing is functionality of I [ A1, A2, A... ] -> R
 #define idx_1(I,T1,V1)              call(I, index ##_## T1, V1)
 #define idx_2(I,T1,T2,V1,V2)        call(I, index ##_## T1 ##_## T2, V1, V2)
+#define idx(I,V1)                   call(I, index ##_## num, V1)
 
 /// our casts are polymorphic
 #define cast(I,T)                   ftableI(I) -> cast_##T(I)

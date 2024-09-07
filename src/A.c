@@ -349,7 +349,13 @@ A A_bool(bool data) { return A_primitive(&bool_type, &data); }
 static A   A_new_default(AType type, num count) {
     return A_alloc(type, count, true);
 }
-static void A_init      (A a) { }
+
+//static A A_with_cereal(A a, cereal cs) {
+//    fault("not implemented");
+//    return a;
+//}
+
+static void A_init(A a) { }
 static void A_destructor(A a) {
     // go through objects type fields/offsets; 
     // when type is A-based, we release; 
@@ -380,6 +386,14 @@ static A A_with_cereal(A a, symbol cs, num len) {
     else if (type == typeid(u32)) sscanf(cs, "%u",   (u32*)a);
     else if (type == typeid(i64)) sscanf(cs, "%lli", (i64*)a);
     else if (type == typeid(u64)) sscanf(cs, "%llu", (u64*)a);
+    else if (type == typeid(string)) {
+        string  res = a;
+        sz     a_ln = len > -1 ? len : strlen(cs);
+        res->chars  = calloc(a_ln + 1, 1);
+        res->len    = a_ln;
+        memcpy(res->chars, cs, a_ln);
+        return res;
+    }
     else {
         printf("implement ctr cstr for %s\n", f->type->name);
         exit(-1);
@@ -542,7 +556,7 @@ num parse_formatter(cstr start, cstr res, num sz) {
 }
 
 /// does not seem possible to proxy args around in C99, so we are wrapping this in a macro
-string A_formatter(FILE* f, bool write_ln, cstr template, ...) {
+object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
     va_list args;
     va_start(args, template);
     string  res  = ctr(string, sz, 1024);
@@ -603,7 +617,8 @@ string A_formatter(FILE* f, bool write_ln, cstr template, ...) {
             fflush(f);
         }
     }
-    return res;
+    /// cereal is pretty available, and we only need this on string and path
+    return type ? (A)type->with_cereal(A_alloc(type, 1, true), res->chars, res->len) : (A)res;
 }
 
 static void  string_destructor(string a) { free(a->chars); }
@@ -1353,11 +1368,19 @@ u64 vector_hash(vector a) {
     return fnv1a_hash(obj->data, obj->type->size * obj->count, OFFSET_BASIS);
 }
 
-static path path_with_cstr(path a, cstr path, num sz) {
-    num len = sz == -1 ? strlen(path) : sz;
+static path path_with_cstr(path a, cstr cs, num sz) {
+    num len = sz == -1 ? strlen(cs) : sz;
     a->chars = calloc(len + 1, 1);
-    memcpy(a->chars, path, len + 1);
+    memcpy(a->chars, cs, len + 1);
     return a;
+}
+
+static path path_with_cereal(path a, cereal cs) {
+    return path_with_cstr(a, (cstr)cs, -1);
+}
+
+static cstr path_cast_cstr(path a) {
+    return a->chars;
 }
 
 static string path_cast_string(path a) {

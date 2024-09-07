@@ -778,7 +778,9 @@ declare_enum(OPType)
     i_method    (X,Y,Z, path,   change_ext, cstr) \
     s_method    (X,Y,Z, path,   cwd, sz) \
     i_override_m(X,Y,Z, u64,    hash) \
-    i_construct(X,Y,Z, cstr, sz) \
+    i_override_ctr( X,Y,Z, cereal) \
+    i_construct(    X,Y,Z, cstr, sz) \
+    i_cast(      X,Y,Z, cstr) \
     i_override_cast(X,Y,Z, string)
 declare_class(path)
 
@@ -900,7 +902,7 @@ declare_class(string)
 declare_mod(vector, collection)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
-string A_formatter(FILE* f, bool write_ln, cstr template, ...);
+object A_formatter(AType rtype, FILE* f, bool write_ln, cstr template, ...);
 
 #define Exists_schema(X,Y) \
     enum_value(X,Y, no) \
@@ -908,13 +910,13 @@ string A_formatter(FILE* f, bool write_ln, cstr template, ...);
     enum_value(X,Y, dir)
 declare_enum(Exists)
 
-#define format(t, ...) A_formatter(null,   false, t, ## __VA_ARGS__)
-#define  print(t, ...) A_formatter(stdout, true,  t, ## __VA_ARGS__)
-#define  error(t, ...) A_formatter(stderr, true,  t, ## __VA_ARGS__)
-#define  fault(t, ...) do { A_formatter(stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0)
-#define  file_exists(t, ...) A_exists(format(t, ## __VA_ARGS__) == Exists_file)
-#define   dir_exists(t, ...) A_exists(format(t, ## __VA_ARGS__) == Exists_dir)
-#define  assert(a,t, ...) do { if (a) { A_formatter(stderr, true,  t, ## __VA_ARGS__); exit(1); } } while(0)
+#define format(T, t, ...)   A_formatter(typeid(T), null,   false, t, ## __VA_ARGS__)
+#define  print(t,    ...)   A_formatter(null,      stdout, true,  t, ## __VA_ARGS__)
+#define  error(t, ...)      A_formatter(null,      stderr, true,  t, ## __VA_ARGS__)
+#define  fault(t, ...) do { A_formatter(null,      stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0)
+#define  file_exists(t, ...) A_exists(A_formatter(null, null, t, ## __VA_ARGS__) == Exists_file)
+#define   dir_exists(t, ...) A_exists(A_formatter(null, null, t, ## __VA_ARGS__) == Exists_dir)
+#define  assert(a, t, ...) do { if (a) { A_formatter(null, stderr, true,  t, ## __VA_ARGS__); exit(1); } } while(0)
 
 /// we can iterate through a collection with this strange code
 #define each(T, t, E, e) \

@@ -491,6 +491,16 @@ static A numeric_with_num(A a, num  v) { set_v(); }
 
 A A_method(A_f* type, char* method_name, array args);
 
+sz len(A a) {
+    AType t = isa(a);
+    if (t == typeid(string)) return ((string)a)->len;
+    if (t == typeid(array))  return ((array) a)->len;
+    if (t == typeid(cstr) || t == typeid(symbol) || t == typeid(cereal))
+        return strlen(a);
+    fault("len not handled for type %s", t->name);
+    return 0;
+}
+
 /// these pointers are invalid for A since they are in who-knows land, but the differences would be the same
 static i32 A_compare(A a, A b) {
     return (i32)((sz)(void*)a - (sz)(void*)b);

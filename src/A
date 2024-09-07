@@ -929,6 +929,7 @@ type_member_t* A_constructor(AType type, AType first_arg); // find a constructor
 bool      A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
 A           A_hold(A a);
 void        A_drop(A a);
+sz          len(A a);
 
 #define     drop(a) A_drop(a)
 #define     hold(a) A_hold(a)

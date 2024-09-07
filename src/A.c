@@ -733,6 +733,12 @@ static string string_with_cstr(string a, cstr value, num len) {
     return a;
 }
 
+static bool string_has_suffix(string a, cstr value) {
+    sz ln = strlen(value);
+    if (!ln || ln > a->len) return false;
+    return strcmp(&a->chars[a->len - ln], value) == 0;
+}
+
 static item hashmap_fetch(hashmap a, A key) {
     u64 h = fnv1a_hash(key, strlen(key), OFFSET_BASIS);
     u64 k = h % a->alloc;

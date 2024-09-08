@@ -110,6 +110,31 @@ void A_push(A a, A value) {
 
 #define iarray(I,M,...) array_ ## M(I, M, __VA_ARGS__)
 
+/// array -------------------------
+static void array_alloc_sz(array a, sz alloc) {
+    A* elements = (A*)calloc(alloc, sizeof(struct A*));
+    memcpy(elements, a->elements, sizeof(struct A*) * a->len);
+    free(a->elements);
+    a->elements = elements;
+    a->alloc = alloc;
+}
+
+static void array_expand(array a) {
+    num alloc = 32 + (a->alloc << 1);
+    array_alloc_sz(a, alloc);
+}
+
+static A array_push_weak(array a, A b) {
+    if (a->alloc == a->len) {
+        array_expand(a);
+    }
+    AType t = isa(a);
+    if (is_meta(a))
+        assert(is_meta_compatible(a, b), "not meta compatible");
+    a->elements[a->len++] = b;
+    return b;
+}
+
 method_t* method_with_address(handle address, AType rtype, array atypes, AType method_owner) {
     const num max_args = 8;
     method_t* method = calloc(1, sizeof(method_t));
@@ -122,7 +147,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
         A_f* a_type   = atypes->elements[i];
         bool is_prim  = a_type->traits & A_TRAIT_PRIMITIVE;
         ffi_args[i]   = is_prim ? a_type->arb : &ffi_type_pointer;
-        iarray(method->atypes, push_weak, a_type);
+        M(method->atypes, push_weak, a_type);
     }
     ffi_status status = ffi_prep_cif(
         (ffi_cif*) method->ffi_cif, FFI_DEFAULT_ABI, atypes->len,
@@ -1085,20 +1110,6 @@ static num list_count(list a) {
     return a->count;
 }
 
-static void array_alloc_sz(array a, sz alloc) {
-    A* elements = (A*)calloc(alloc, sizeof(struct A*));
-    memcpy(elements, a->elements, sizeof(struct A*) * a->len);
-    free(a->elements);
-    a->elements = elements;
-    a->alloc = alloc;
-}
-
-/// array -------------------------
-static void array_expand(array a) {
-    num alloc = 32 + (a->alloc << 1);
-    array_alloc_sz(a, alloc);
-}
-
 bool is_meta(A a) {
     AType t = isa(a);
     return t->meta.count > 0;
@@ -1127,17 +1138,6 @@ static A array_push(array a, A b) {
     if (is_meta(a))
         assert(is_meta_compatible(a, b), "not meta compatible");
     a->elements[a->len++] = A_hold(b);
-    return b;
-}
-
-static A array_push_weak(array a, A b) {
-    if (a->alloc == a->len) {
-        array_expand(a);
-    }
-    AType t = isa(a);
-    if (is_meta(a))
-        assert(is_meta_compatible(a, b), "not meta compatible");
-    a->elements[a->len++] = b;
     return b;
 }
 
@@ -1194,7 +1194,7 @@ static void array_push_symbols(array a, ...) {
     char* value;
     while ((value = va_arg(args, char*)) != null) {
         string s = ctr(string, cstr, value, strlen(value));
-        iarray(a, push, s);
+        M(a, push, s);
     }
     va_end(args);
 }
@@ -1204,7 +1204,7 @@ static void array_push_objects(array a, A f, ...) {
     va_start(args, f);
     A value;
     while ((value = va_arg(args, A)) != null)
-        iarray(a, push, value);
+        M(a, push, value);
     va_end(args);
 }
 
@@ -1217,7 +1217,7 @@ array array_of(AType validate, ...) {
         if (!arg)
             break;
         assert(!validate || validate == isa(arg), "validation failure");
-        iarray(a, push, arg);
+        M(a, push, arg);
     }
     return a;
 }

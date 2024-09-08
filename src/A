@@ -121,7 +121,7 @@ enum A_TRAIT {
 /// thats located on the A-object.
 /// the type signature though, we put on the 'end' of the struct.  this memory is not valid
 #define invoke(T,N,...)             T##_type.N(__VA_ARGS__)
-#define M(T,N,...)                  ftableI(I) -> N(I, ##__VA_ARGS__)
+#define M(I,N,...)                  ftableI(I) -> N(I, ##__VA_ARGS__)
   
 /// indexing is functionality of I [ A1, A2, A... ] -> R
 #define idx_1(I,T1,V1)              M(I, index ##_## T1, V1)

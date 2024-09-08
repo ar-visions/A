@@ -879,6 +879,7 @@ declare_class(fn)
     i_method(X,Y,Z,     none,    reserve, num) \
     i_method(X,Y,Z,     none,    write, handle, bool) \
     i_method(X,Y,Z,     bool,    has_suffix, cstr) \
+    i_method(X,Y,Z,     num,     cmp, cstr) \
     i_construct(X,Y,Z,  sz) \
     i_construct(X,Y,Z,  cstr, num) \
     i_override_m(X,Y,Z, u64, hash) \

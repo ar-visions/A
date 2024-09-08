@@ -621,8 +621,9 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
     return type ? (A)type->with_cereal(A_alloc(type, 1, true), res->chars, res->len) : (A)res;
 }
 
-static void  string_destructor(string a) { free(a->chars); }
+static void  string_destructor(string a)        { free(a->chars); }
 static num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
+static num   string_cmp(string a, cstr b)       { return strcmp(a->chars, b); }
 
 static i32   string_index_num(string a, num index) {
     if (index < 0)

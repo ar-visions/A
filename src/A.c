@@ -1294,7 +1294,7 @@ static void AF_destructor(AF a) {
 }
 
 static AF AF_fetch(num index) {
-    if (af_stack && abs(index) < af_stack->len)
+    if (af_stack && abs((int)index) < af_stack->len)
         return index < 0 ? af_stack->elements[af_stack->len + index] :
                            af_stack->elements[index];
     else

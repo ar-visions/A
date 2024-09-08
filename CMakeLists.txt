@@ -6,7 +6,7 @@ add_compile_options       (-Wno-write-strings -Wno-incompatible-pointer-types -W
 cmake_policy              (SET CMP0042 NEW)
 set(CMAKE_C_STANDARD      11)
 set(CMAKE_CXX_STANDARD    17)
-set(CMAKE_C_COMPILER      gcc)
+set(CMAKE_C_COMPILER      clang-18)
 set(CMAKE_CXX_COMPILER    clang-18)
 add_library               (A SHARED ${src})
 target_link_libraries     (A ffi)

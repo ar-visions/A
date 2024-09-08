@@ -922,7 +922,7 @@ declare_enum(Exists)
 /// we can iterate through a collection with this strange code
 #define each(T, t, E, e) \
     if (M(T, count, t)) for (E e = M(T, get, t, 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, len = M(T, count, t); __i < len; __i++, e = M(T, get, t, __i)) \
+        for (num __i = 0, __len = M(T, count, t); __i < __len; __i++, e = M(T, get, t, __i)) \
 
 /// we can go through a map
 #define enumerate(MM, EE) \
@@ -932,7 +932,7 @@ declare_enum(Exists)
 /// possible to iterate safely through primitives
 #define primitives(T, t, E, e) \
     if (M(T, count, t)) for (E e = *(E*)M(T, get, t, 0), e0 = 0; e0 == 0; e0++) \
-        for (num i = 0, len = M(T, count, t); i < len; i++, e = *(E*)M(T, get, t, i)) \
+        for (num i = 0, __len = M(T, count, t); i < __len; i++, e = *(E*)M(T, get, t, i)) \
 
 A           A_alloc(AType type, num count, bool af_pool);
 

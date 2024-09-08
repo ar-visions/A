@@ -915,8 +915,8 @@ declare_enum(Exists)
 #define        print(t,    ...)   A_formatter(null,      stdout, true,  t, ## __VA_ARGS__)
 #define        error(t, ...)      A_formatter(null,      stderr, true,  t, ## __VA_ARGS__)
 #define        fault(t, ...) do { A_formatter(null,      stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0)
-#define  file_exists(t, ...) A_exists(A_formatter(null, null, false, t, ## __VA_ARGS__)) == Exists_file
-#define   dir_exists(t, ...) A_exists(A_formatter(null, null, false, t, ## __VA_ARGS__)) == Exists_dir
+#define  file_exists(t, ...)     (A_exists(A_formatter(null, null, false, t, ## __VA_ARGS__)) == Exists_file)
+#define   dir_exists(t, ...)     (A_exists(A_formatter(null, null, false, t, ## __VA_ARGS__)) == Exists_dir)
 #define       assert(a, t, ...) do { if (a) { A_formatter(null, stderr, true,  t, ## __VA_ARGS__); exit(1); } } while(0)
 
 /// we can iterate through a collection with this strange code

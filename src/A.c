@@ -663,6 +663,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
 static void  string_destructor(string a)        { free(a->chars); }
 static num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
 static num   string_cmp(string a, cstr b)       { return strcmp(a->chars, b); }
+static bool  string_eq(string a, cstr b)        { return strcmp(a->chars, b) == 0; }
 
 static i32   string_index_num(string a, num index) {
     if (index < 0)

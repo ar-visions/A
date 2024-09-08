@@ -514,6 +514,18 @@ sz len(A a) {
     return 0;
 }
 
+num index_of_cstr(A a, cstr f) {
+    AType t = isa(a);
+    if (t == typeid(string)) return call((string)a, index_of, f);
+    if (t == typeid(array))  return call((array)a,  index_of, str(f));
+    if (t == typeid(cstr) || t == typeid(symbol) || t == typeid(cereal)) {
+        cstr v = strstr(a, f);
+        return v ? (num)(v - f) : (num)-1;
+    }
+    fault("len not handled for type %s", t->name);
+    return 0;
+}
+
 Exists A_exists(A o) {
     AType t = isa(o);
     path  f = null;

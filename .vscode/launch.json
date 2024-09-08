@@ -11,6 +11,25 @@
             "cwd": "${workspaceFolder}/../silver/silver"
         },
         {
+            "name": "a-test",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../A/silver-build/a-test",
+            "args": [
+                "module.c"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../A/silver-build",
+            "environment": [
+            ],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
             "name": "silver",
             "type": "cppdbg",
             "request": "launch",

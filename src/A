@@ -108,7 +108,7 @@ enum A_TRAIT {
 
 #define COUNT_ARGS(...)             COUNT_ARGS_IMPL(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1)
 #define valloc(T, N)                ((A)A_alloc(typeid(T), N, false))
-#define new(T)                      ((A)A_alloc(typeid(T), 1, true))
+#define new(T)                      ((A)A_initialize(A_alloc(typeid(T), 1, true)))
 #define alloc(T)                    ((A)A_alloc(typeid(T), 1, false))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
 #define isa(INSTANCE)               ((struct A_f*)((struct A*)INSTANCE - 1)->type)
@@ -513,28 +513,20 @@ void        A_lazy_init(global_init_fn fn);
     X##_f X##_type; \
     _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##X() { \
-        printf("doing something with primitive 1 %s\n", #X);\
         X##_f* type_ref = &X##_type; \
         Y##_f* base_ref = &Y##_type; \
         if ((AType)type_ref != (AType)base_ref && base_ref->name == null) { \
-            printf("doing something with primitive 2 %s\n", #X);\
             A_lazy_init((global_init_fn)&global_##X); \
-            printf("doing something with primitive 3 %s\n", #X);\
             return false; \
         } else { \
-            printf("doing something with primitive 114 %s\n", #X);\
             assert(sizeof(Y##_f) >= sizeof(X##_f), "invalid sz"); \
-            printf("doing something with primitive 4 %s\n", #X);\
             memcpy(type_ref, base_ref, sizeof(Y##_f)); \
-            printf("doing something with primitive 5 %s\n", #X);\
             X## _type.parent_type = &Y##_type; \
             X## _type.name     = #X;        \
             X## _type.size     = TYPE_SZ;   \
             X## _type.traits   = TRAIT;     \
             X## _type.arb = primitive_ffi_arb(typeid(X)); \
-            printf("doing something with primitive 6 %s\n", #X);\
             A_push_type(&X##_type);         \
-            printf("doing something with primitive 7 %s\n", #X);\
             return true;                    \
         }                                   \
     }
@@ -547,11 +539,8 @@ void        A_lazy_init(global_init_fn fn);
     static __attribute__((constructor)) bool global_##X() { \
         X##_f* type_ref = &X##_type; \
         Y##_f* base_ref = &Y##_type; \
-        printf("doing something with %s\n", #X);\
         if ((AType)type_ref != (AType)base_ref && base_ref->size == 0) { \
-            printf("doing something with 5 %s\n", #X);\
             A_lazy_init((global_init_fn)&global_##X); \
-            printf("doing something with 6 %s\n", #X);\
             return false; \
         } else { \
             memcpy(type_ref, base_ref, sizeof(Y##_f)); \
@@ -561,11 +550,8 @@ void        A_lazy_init(global_init_fn fn);
             X## _type.size     = TYPE_SZ;   \
             X## _type.members  = members;   \
             X## _type.traits   = TRAIT;     \
-            printf("doing something with 1 %s\n", #X);\
             META;                           \
-            printf("doing something with 2 %s\n", #X);\
             A_push_type(&X##_type);         \
-            printf("doing something with 4 %s\n", #X);\
             return true;                    \
         }                                   \
     }
@@ -749,19 +735,8 @@ declare_primitive(Member,       raw)
     i_construct(X,Y, symbol, A)
 declare_class(item)
 
-/// abstract collection type
-/// proto needs an implement for each member type!
-#define collection_schema(X,Y) \
-    implement(X,Y, i64,     count) \
-    implement(X,Y, A,       push,   A) \
-    implement(X,Y, A,       pop) \
-    implement(X,Y, none,    remove, num) \
-    implement(X,Y, A,       get,    num)
-declare_proto(collection)
-
 /// linked-list of elemental data
 #define list_schema(X,Y) \
-    collection_schema(X,Y) \
     i_intern(X,Y, item,      first) \
     i_intern(X,Y, item,      last)  \
     i_intern(X,Y, i64,       count) \
@@ -772,7 +747,7 @@ declare_proto(collection)
     i_method(X,Y, none,      remove_item, item) \
     i_method(X,Y, A,         get,  i32) \
     i_method(X,Y, num,       count)
-declare_mod(list, collection)
+declare_class(list)
 
 
 /// array of elemental data
@@ -824,14 +799,13 @@ declare_enum(OPType)
     i_method    (X,Y, path,   change_ext, cstr) \
     s_method    (X,Y, path,   cwd, sz) \
     i_override_m(X,Y, u64,    hash) \
-    i_override_ctr( X,Y, cereal) \
+    i_override_ctr(X,Y, cereal) \
     i_construct(    X,Y, cstr, sz) \
     i_cast(      X,Y, cstr) \
     i_override_cast(X,Y, string)
 declare_class(path)
 
 #define array_schema(X,Y) \
-    collection_schema  (X,Y) \
     i_intern         (X,Y, A*,   elements) \
     i_intern         (X,Y, i32,  alloc) \
     i_intern         (X,Y, i32,  len) \
@@ -853,13 +827,15 @@ declare_class(path)
     i_construct      (X,Y,       sz) \
     i_index          (X,Y, A,    num) \
     i_override_cast  (X,Y, bool)
-declare_mod(array, collection)
+declare_class(array)
 
 declare_meta(array, ATypes)
 
 #define AF_schema(X,Y) \
     i_intern(    X,Y, array, pool) \
+    i_public(    X,Y, sz,    start_size) \
     s_method(    X,Y, AF,    fetch, num) \
+    s_method(    X,Y, AF,    create, sz) \
     i_override_m(X,Y, none,  init) \
     i_override_m(X,Y, none,  destructor)
 declare_class(AF)
@@ -881,23 +857,25 @@ declare_class(AF)
 declare_class(hashmap)
 
 #define map_item_schema(X,Y) \
-    i_intern         (X,Y, item, ref) \
-    i_intern         (X,Y, A, value)
+    i_intern         (X,Y, item,    ref) \
+    i_intern         (X,Y, A,       key) \
+    i_intern         (X,Y, A,       val)
 declare_class(map_item)
 
 /// hmap stores the item, and our refs list has a value that holds that (origin = hmap)
 #define map_schema(X,Y) \
     i_intern         (X,Y, hashmap, hmap) \
-    i_intern         (X,Y, list, refs) \
-    i_method         (X,Y, none, set,   A, A) \
-    i_method         (X,Y, A,    get,   A) \
-    i_method         (X,Y, A,    fetch, A) \
-    i_method         (X,Y, bool, contains, A) \
+    i_intern         (X,Y, sz,      hsize) \
+    i_method         (X,Y, none,    set,        A, A) \
+    i_override_m     (X,Y, A,       get) \
+    i_method         (X,Y, A,       fetch,      A) \
+    i_method         (X,Y, bool,    contains,   A) \
+    i_override_m     (X,Y, none,    init) \
     i_override_cast  (X,Y, string) \
     i_construct      (X,Y, sz) \
     i_index          (X,Y, A, A) \
     i_override_cast  (X,Y, bool)
-declare_class(map)
+declare_mod(map, list)
 
 /// how beneficial is it to have args in 'context' structure?
 /// we have a place for holding references
@@ -940,7 +918,6 @@ declare_class(fn)
 declare_class(string)
 
 #define vector_schema(X,Y) \
-    collection_schema(X,Y) \
     i_method(X,Y,     A,    pop) \
     i_method(X,Y,     A,    push,     A) \
     i_method(X,Y,     A,    get,      i32) \
@@ -948,7 +925,7 @@ declare_class(string)
     i_override_m(X,Y, i32,  compare) \
     i_override_m(X,Y, u64,  hash) \
     i_override_cast(X,Y, bool)
-declare_mod(vector, collection)
+declare_class(vector)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
 object A_formatter(AType rtype, FILE* f, bool write_ln, cstr template, ...);
@@ -975,8 +952,8 @@ declare_enum(Exists)
 
 /// we can go through a map
 #define enumerate(MM, EE) \
-    if (MM && cast(MM, bool)) for (item _i = MM->refs->first, EE = null; _i; _i = _i->next) \
-        for (item EE = ((map_item)_i->val)->value, e0 = EE; EE == e0; e0++) \
+    if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
+        for (map_item EE = (map_item)_i->val, e0 = EE; EE == e0; e0++) \
 
 /// possible to iterate safely through primitives
 #define primitives(T, t, E, e) \
@@ -1010,6 +987,7 @@ Exists      A_exists(A a);
 /// everything should be A-based, and forget about the argument hacks?
 
 map         A_args(int argc, symbol argv[], map default_values, object default_key);
+AF          A_pool(sz size);
 void        A_free(A a);
 A_f**       A_types(num* length);
 type_member_t* A_member(AType type, enum A_TYPE member_type, char* name);
@@ -1019,7 +997,7 @@ A           A_method_vargs(A instance, cstr method_name, int n_args, ...);
 fn          A_lambda(A target, type_member_t* member, A context);
 A           A_call(A instance, type_member_t* member, array args);
 A           A_primitive(AType type, void* data);
-A           A_enum(AType enum_type, i32 value);
+A           A_enum(AType enum_type, i32 val);
 A           A_i8(i8);
 A           A_u8(u8);
 A           A_i16(i16);

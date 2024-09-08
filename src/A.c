@@ -58,12 +58,12 @@ A A_initialize(A a) {
     AType current = f->type;
     while (current) {
         if (current->init)
-            current->init(a->data);
+            current->init(a);
         if (current == a_type)
             break;
         current = current->parent_type;
     }
-    return a->data;
+    return a;
 }
 
 A A_alloc(AType type, num count, bool af_pool) {
@@ -291,7 +291,7 @@ type_member_t* A_member(A_f* type, enum A_TYPE member_type, char* name) {
 /// everything should be A-based, and forget about the argument hacks?
 map A_args(int argc, symbol argv[], map default_values, object default_key) {
     map result = ctr(map, sz, 16);
-    for (item ii = default_values->refs->first; ii; ii = ii->next) {
+    for (item ii = default_values->first; ii; ii = ii->next) {
         item  hm = ii->val;
         object k = hm->key;
         object v = hm->val;
@@ -311,13 +311,12 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
             string s_key = ctr(string, cstr, (cstr)&arg[doub + 1],     -1);
             string s_val = ctr(string, cstr, (cstr)&arg[doub + 1 + 1], -1);
 
-            for (item f = default_values->refs->first; f; f = f->next) {
+            for (item f = default_values->first; f; f = f->next) {
                 /// import A types from runtime
-                item        data = ((item)f->val);
-                map_item      mi = data->val;
-                object def_value = mi->value;
+                map_item      mi = (map_item) f->val;
+                object def_value = mi->val;
                 AType   def_type = def_value ? isa(def_value) : typeid(string);
-                assert(f->key == data->key, "keys do not match"); /// make sure we copy it over from refs
+                assert(f->key == mi->key, "keys do not match"); /// make sure we copy it over from refs
                 if ((!doub && strncmp(((string)f->key)->chars, s_key->chars, 1) == 0) ||
                     ( doub && M(f->key, compare, s_key) == 0)) {
                     /// inter-op with object-based A-type sells it.
@@ -869,17 +868,20 @@ static item map_fetch(map a, A key) {
     return M(a->hmap, fetch, key);
 }
 
-static none map_set(map a, A key, A value) {
-    item i = M(a->hmap, fetch, key);
+static none map_set(map a, A key, A val) {
+    item     i  = M(a->hmap, fetch, key);
     map_item mi = i->val;
     if (mi) {
-        A before = mi->value;
-        mi->value = A_hold(value);
+        A before     = mi->val;
+        mi->val      = A_hold(val);
         A_drop(before);
     } else {
-        mi = i->val = new(map_item);
-        mi->ref = M(a->refs, push, i);
+        mi = i->val  = new(map_item);
+        mi->key      = key;
+        mi->val      = val;
+        mi->ref      = M(a, push, i);
         mi->ref->key = A_hold(key);
+        mi->ref->val = mi;
     }
 }
 
@@ -898,12 +900,12 @@ static none map_remove(map a, A key) {
     item i = M(a->hmap, lookup, key);
     if (i) {
         item ref = i->val;
-        M(a->refs, remove_item, ref);
+        M(a, remove_item, ref);
     }
 }
 
 static bool map_cast_bool(map a) {
-    return a->refs->count > 0;
+    return a->count > 0;
 }
 
 static A map_index_A(map a, A key) {
@@ -912,15 +914,19 @@ static A map_index_A(map a, A key) {
 }
 
 static map map_with_sz(map a, sz size) {
-    a->hmap  = ctr(hashmap, sz, size);
-    a->refs  = new(list);
+    a->hsize = size;
     return a;
+}
+
+static void map_init(map a) {
+    if (!a->hsize) a->hsize = 1024;
+    a->hmap  = ctr(hashmap, sz, a->hsize);
 }
 
 static string map_cast_string(map a) {
     string res  = ctr(string, sz, 1024);
     bool   once = false;
-    for (item i = a->refs->first; i; i = i->next) {
+    for (item i = a->first; i; i = i->next) {
         string key = cast(i->key, string);
         string val = cast(i->val, string);
         if (once) M(res, append, " ");
@@ -930,23 +936,6 @@ static string map_cast_string(map a) {
         once = true;
     }
     return res;
-}
-
-
-/// collection -------------------------
-static A collection_push(collection a, A b) {
-    assert(false, "");
-    return null;
-}
-
-static A  collection_pop(collection a) {
-    assert(false, "");
-    return null;
-}
-
-static num collection_compare(array a, collection b) {
-    assert(false, "");
-    return 0;
 }
 
 /// copy member by member; bit copy the primitives
@@ -1270,11 +1259,22 @@ static array array_with_sz(array a, sz size) {
 
 static void AF_init(AF a) {
     af_top = a;
-    a->pool = alloc_ctr(array, sz, 1024);
+    a->pool = alloc_ctr(array, sz, a->start_size ? a->start_size : 1024);
     M(a->pool, push_weak, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
 
     if (!af_stack) af_stack = alloc_ctr(array, sz, 16);
     M(af_stack, push_weak, a);
+}
+
+AF AF_create(sz start_size) {
+    AF a = alloc(AF);
+    a->start_size = start_size;
+    AF_init(a);
+    return a;
+}
+
+AF A_pool(sz start_size) {
+    return AF_create(start_size);
 }
 
 static void AF_destructor(AF a) {
@@ -1655,13 +1655,13 @@ define_enum(Exists)
 define_class(path)
 define_class(string)
 define_class(item)
-define_proto(collection)
+//define_proto(collection) -- disabling for now during reduction to base + class + mod
 define_class(list)
 define_class(array)
 define_class(vector)
 define_class(hashmap)
 define_class(map_item)
-define_class(map)
+define_mod(map, list) // never quite did one like this but it does make sense
 define_class(fn)
 
 define_class(AF)

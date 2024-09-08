@@ -76,7 +76,7 @@ A A_alloc(AType type, num count, bool af_pool) {
     a->alloc      = count;
     if (af_pool) {
         a->ar_index = af_top->pool->len;
-        call(af_top->pool, push, a->data);
+        M(af_top->pool, push, a->data);
     } else {
         a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
@@ -108,6 +108,8 @@ void A_push(A a, A value) {
     memcpy(&((u8*)obj->data)[obj->count++ * sz], value, sz);
 }
 
+#define iarray(I,M,...) array_ ## M(I, M, __VA_ARGS__)
+
 method_t* method_with_address(handle address, AType rtype, array atypes, AType method_owner) {
     const num max_args = 8;
     method_t* method = calloc(1, sizeof(method_t));
@@ -120,7 +122,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
         A_f* a_type   = atypes->elements[i];
         bool is_prim  = a_type->traits & A_TRAIT_PRIMITIVE;
         ffi_args[i]   = is_prim ? a_type->arb : &ffi_type_pointer;
-        M(array, push_weak, method->atypes, a_type);
+        iarray(method->atypes, push_weak, a_type);
     }
     ffi_status status = ffi_prep_cif(
         (ffi_cif*) method->ffi_cif, FFI_DEFAULT_ABI, atypes->len,
@@ -177,10 +179,10 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
     va_list  vargs;
     va_start(vargs, n_args);
     array args = ctr(array, sz, n_args + 1);
-    call(args, push, instance);
+    M(args, push, instance);
     for (int i = 0; i < n_args; i++) {
         A arg = va_arg(vargs, A);
-        call(args, push, arg);
+        M(args, push, arg);
     }
     va_end(vargs);
     A res = A_method_call(m, args);
@@ -194,7 +196,7 @@ A A_construct(AType type, int n_args, ...) {
     array args = ctr(array, sz, n_args);
     for (int i = 0; i < n_args; i++) {
         A arg = va_arg(vargs, A);
-        call(args, push, arg);
+        M(args, push, arg);
     }
     va_end(vargs);
 
@@ -268,7 +270,7 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
         item  hm = ii->val;
         object k = hm->key;
         object v = hm->val;
-        call(result, set, k, v);
+        M(result, set, k, v);
     }
     int    i = 1;
     bool found_single = false;
@@ -292,20 +294,20 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
                 AType   def_type = def_value ? isa(def_value) : typeid(string);
                 assert(f->key == data->key, "keys do not match"); /// make sure we copy it over from refs
                 if ((!doub && strncmp(((string)f->key)->chars, s_key->chars, 1) == 0) ||
-                    ( doub && call(f->key, compare, s_key) == 0)) {
+                    ( doub && M(f->key, compare, s_key) == 0)) {
                     /// inter-op with object-based A-type sells it.
                     /// its also a guide to use the same schema
                     object val = A_construct(def_type, 2, s_val, A_i64(-1));
                     assert(isa(val) == def_type, "");
-                    call(result, set, f->key, val);
+                    M(result, set, f->key, val);
                 }
             }
         } else if (!found_single && default_key) {
             string s_val     = ctr(string, cstr, (cstr)arg, -1);
-            object def_value = call(default_values, get, default_key);
+            object def_value = M(default_values, get, default_key);
             AType  def_type  = isa(def_value);
             object val       = A_construct(def_type, 2, s_val, A_i64(-1));
-            call(result, set, default_key, val);
+            M(result, set, default_key, val);
             found_single = true;
         }
     }
@@ -421,15 +423,15 @@ static void A_serialize(AType type, string res, A a) {
         else {
             fault("implement primitive cast to str: %s", type->name);
         }
-        call(res, append, buf); // should allow for a -1 or len
+        M(res, append, buf); // should allow for a -1 or len
     } else {
         string s = cast(a, string);
         if (s) {
-            call(res, append, "\"");
-            call(res, append, s->chars);
-            call(res, append, "\"");
+            M(res, append, "\"");
+            M(res, append, s->chars);
+            M(res, append, "\"");
         } else
-            call(res, append, "null");
+            M(res, append, "null");
     }
 }
 
@@ -442,22 +444,22 @@ static string A_cast_string(A a) {
     if (type->traits & A_TRAIT_PRIMITIVE)
         A_serialize(type, res, a);
     else {
-        call(res, append, type->name);
-        call(res, append, "[");
+        M(res, append, type->name);
+        M(res, append, "[");
         for (num i = 0; i < type->member_count; i++) {
             type_member_t* m = &type->members[i];
             // todo: intern members wont be registered
             if (m->member_type & (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN)) {
                 if (once)
-                    call(res, append, " ");
+                    M(res, append, " ");
                 u8* ptr = (u8*)a + m->offset;
-                call(res, append, m->name);
-                call(res, append, ":");
+                M(res, append, m->name);
+                M(res, append, ":");
                 A_serialize(m->type, res, ptr);
                 once = true;
             }
         }
-        call(res, append, "]");
+        M(res, append, "]");
     }
     return res;
 }
@@ -516,8 +518,8 @@ sz len(A a) {
 
 num index_of_cstr(A a, cstr f) {
     AType t = isa(a);
-    if (t == typeid(string)) return call((string)a, index_of, f);
-    if (t == typeid(array))  return call((array)a,  index_of, str(f));
+    if (t == typeid(string)) return M((string)a, index_of, f);
+    if (t == typeid(array))  return M((array)a,  index_of, str(f));
     if (t == typeid(cstr) || t == typeid(symbol) || t == typeid(cereal)) {
         cstr v = strstr(a, f);
         return v ? (num)(v - f) : (num)-1;
@@ -534,8 +536,8 @@ Exists A_exists(A o) {
     else if (t == typeid(path))
         f = o;
     assert(f, "type not supported");
-    bool is_dir = call(f, is_dir);
-    bool r = call(f, exists);
+    bool is_dir = M(f, is_dir);
+    bool r = M(f, exists);
     if (is_dir)
         return r ? Exists_dir  : Exists_no;
     else
@@ -580,7 +582,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
             A      arg = va_arg(args, A);
             string   a = cast(arg, string);
             num    len = a->len;
-            call(res, reserve, len);
+            M(res, reserve, len);
             memcpy(&res->chars[res->len], a->chars, len);
             res->len += len;
             scan     += 2; // Skip over %o
@@ -588,7 +590,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
             /// format with vsnprintf
             const char* next_percent = strchr(scan, '%');
             num segment_len = next_percent ? (num)(next_percent - scan) : (num)strlen(scan);
-            call(res, reserve, segment_len);
+            M(res, reserve, segment_len);
             memcpy(&res->chars[res->len], scan, segment_len);
             res->len += segment_len;
             scan     += segment_len;
@@ -611,7 +613,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
                         f_len = snprintf(
                             end, avail, formatter, va_arg(args, void*));
                     if (f_len > avail) {
-                        call(res, reserve, res->alloc << 1);
+                        M(res, reserve, res->alloc << 1);
                         continue;
                     }
                     res->len += f_len;
@@ -623,7 +625,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
     }
     va_end(args);
     if (f) {
-        call(res, write, f, false);
+        M(res, write, f, false);
         if (write_ln) {
             fwrite("\n", 1, 1, f);
             fflush(f);
@@ -721,7 +723,7 @@ u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
 }
 
 static u64 item_hash(item f) {
-    return M(A, hash, f->key ? f->key : f->val);
+    return M(f->key ? f->key : f->val, hash);
 }
 
 static u64 string_hash(string a) {
@@ -757,7 +759,7 @@ static item hashmap_fetch(hashmap a, A key) {
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
-        if (call(f->key, compare, key) == 0)
+        if (M(f->key, compare, key) == 0)
             return f;
     item n = list_type.push(bucket, null);
     n->key = A_hold(key);
@@ -770,25 +772,25 @@ static item hashmap_lookup(hashmap a, A key) {
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
-        if (call(f->key, compare, key) == 0)
+        if (M(f->key, compare, key) == 0)
             return f;
     return null;
 }
 
 static none hashmap_set(hashmap a, A key, A value) {
-    item i = call(a, fetch, key);
+    item i = M(a, fetch, key);
     A prev = i->val;
     i->val = A_hold(value);
     A_drop(prev);
 }
 
 static A hashmap_get(hashmap a, A key) {
-    item i = call(a, lookup, key);
+    item i = M(a, lookup, key);
     return i ? i->val : null;
 }
 
 static bool hashmap_contains(hashmap a, A key) {
-    item i = call(a, lookup, key);
+    item i = M(a, lookup, key);
     return i != null;
 }
 
@@ -797,7 +799,7 @@ static none hashmap_remove(hashmap a, A key) {
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
-        if (call(f->key, compare, key) == 0) {
+        if (M(f->key, compare, key) == 0) {
             list_type.remove_item(bucket, f);
             a->count--;
             break;
@@ -809,7 +811,7 @@ static bool hashmap_cast_bool(hashmap a) {
 }
 
 static A hashmap_index_A(hashmap a, A key) {
-    return call(a, get, key);
+    return M(a, get, key);
 }
 
 static hashmap hashmap_with_sz(hashmap a, sz size) {
@@ -826,10 +828,10 @@ static string hashmap_cast_string(hashmap a) {
         for (item f = bucket->first; f; f = f->next) {
             string key = cast(f->key, string);
             string val = cast(f->val, string);
-            if (once) call(res, append, " ");
-            call(res, append, key->chars);
-            call(res, append, ":");
-            call(res, append, val->chars);
+            if (once) M(res, append, " ");
+            M(res, append, key->chars);
+            M(res, append, ":");
+            M(res, append, val->chars);
             once = true;
         }
     }
@@ -838,11 +840,11 @@ static string hashmap_cast_string(hashmap a) {
 
 
 static item map_fetch(map a, A key) {
-    return call(a->hmap, fetch, key);
+    return M(a->hmap, fetch, key);
 }
 
 static none map_set(map a, A key, A value) {
-    item i = call(a->hmap, fetch, key);
+    item i = M(a->hmap, fetch, key);
     map_item mi = i->val;
     if (mi) {
         A before = mi->value;
@@ -850,27 +852,27 @@ static none map_set(map a, A key, A value) {
         A_drop(before);
     } else {
         mi = i->val = new(map_item);
-        mi->ref = call(a->refs, push, i);
+        mi->ref = M(a->refs, push, i);
         mi->ref->key = A_hold(key);
     }
 }
 
 static A map_get(map a, A key) {
-    item i = call(a->hmap, lookup, key);
+    item i = M(a->hmap, lookup, key);
     return i ? i->val : null;
 }
 
 static bool map_contains(map a, A key) {
-    item i = call(a->hmap, lookup, key);
+    item i = M(a->hmap, lookup, key);
     return i != null;
 }
 
 /// must store a ref to the ref item in hashmap item's value; we may call this an object map_value
 static none map_remove(map a, A key) {
-    item i = call(a->hmap, lookup, key);
+    item i = M(a->hmap, lookup, key);
     if (i) {
         item ref = i->val;
-        call(a->refs, remove_item, ref);
+        M(a->refs, remove_item, ref);
     }
 }
 
@@ -879,7 +881,7 @@ static bool map_cast_bool(map a) {
 }
 
 static A map_index_A(map a, A key) {
-    item hash_item = call(a->hmap, get, key);
+    item hash_item = M(a->hmap, get, key);
     return hash_item ? hash_item->val : null;
 }
 
@@ -895,10 +897,10 @@ static string map_cast_string(map a) {
     for (item i = a->refs->first; i; i = i->next) {
         string key = cast(i->key, string);
         string val = cast(i->val, string);
-        if (once) call(res, append, " ");
-        call(res, append, key->chars);
-        call(res, append, ":");
-        call(res, append, val->chars);
+        if (once) M(res, append, " ");
+        M(res, append, key->chars);
+        M(res, append, ":");
+        M(res, append, val->chars);
         once = true;
     }
     return res;
@@ -1192,7 +1194,7 @@ static void array_push_symbols(array a, ...) {
     char* value;
     while ((value = va_arg(args, char*)) != null) {
         string s = ctr(string, cstr, value, strlen(value));
-        M(array, push, a, s);
+        iarray(a, push, s);
     }
     va_end(args);
 }
@@ -1202,7 +1204,7 @@ static void array_push_objects(array a, A f, ...) {
     va_start(args, f);
     A value;
     while ((value = va_arg(args, A)) != null)
-        M(array, push, a, value);
+        iarray(a, push, value);
     va_end(args);
 }
 
@@ -1215,7 +1217,7 @@ array array_of(AType validate, ...) {
         if (!arg)
             break;
         assert(!validate || validate == isa(arg), "validation failure");
-        M(array, push, a, arg);
+        iarray(a, push, arg);
     }
     return a;
 }
@@ -1234,7 +1236,7 @@ static num array_compare(array a, array b) {
     if (diff != 0)
         return diff;
     for (num i = 0; i < a->len; i++) {
-        num cmp = M(A, compare, a->elements[i], b->elements[i]);
+        num cmp = M(a->elements[i], compare, b->elements[i]);
         if (cmp != 0)
             return cmp;
     }
@@ -1252,7 +1254,7 @@ static num array_count(array a) {
 /// index of element that compares to 0 diff with item
 static num array_index_of(array a, A b) {
     for (num i = 0; i < a->len; i++) {
-        if (call(a -> elements[i], compare, b) == 0)
+        if (M(a -> elements[i], compare, b) == 0)
             return i;
     }
     return -1;
@@ -1268,16 +1270,16 @@ static array array_with_sz(array a, sz size) {
 static void AF_init(AF a) {
     af_top = a;
     a->pool = alloc_ctr(array, sz, 1024);
-    call(a->pool, push_weak, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
+    M(a->pool, push_weak, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
 
     if (!af_stack) af_stack = alloc_ctr(array, sz, 16);
-    call(af_stack, push_weak, a);
+    M(af_stack, push_weak, a);
 }
 
 static void AF_destructor(AF a) {
-    int f = call(af_stack, index_of, a);
+    int f = M(af_stack, index_of, a);
     assert(f >= 0, "invalid af-stack index");
-    call(af_stack, remove_weak, f);
+    M(af_stack, remove_weak, f);
     if (af_top == a)
         af_top = af_stack->len ? af_stack->elements[af_stack->len - 1] : null;
     for (int i = 1; i < a->pool->len; i++) {

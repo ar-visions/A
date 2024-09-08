@@ -6,7 +6,7 @@ int main(int n_args, char* v_args[]) {
 
     map imap;
     printf("2\n");
-    call(imap, set, str("key"), A_i32(1));
+    M(imap, set, str("key"), A_i32(1));
     item e;
     printf("3\n");
     print("enumerating?");
@@ -22,7 +22,7 @@ int main(int n_args, char* v_args[]) {
     A fields = A_fields(key);
     i64*     val = A_i64(100);
     hashmap    m = ctr(hashmap, sz, 8);
-    call(m, set, key, val);
+    M(m, set, key, val);
 
     /// test the map, iterate and such...
     print("hashmap = %o, int = %i, char = %i, float = %.2f, hashmap-pointer = %p\n",

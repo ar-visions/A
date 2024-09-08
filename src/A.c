@@ -3,8 +3,8 @@
 #include <sys/stat.h>
 #include <dirent.h>
 
-thread_local array     af_stack;
-thread_local   AF      af_top;
+__thread array     af_stack;
+__thread   AF      af_top;
 
 static global_init_fn* call_after;
 static num             call_after_alloc;

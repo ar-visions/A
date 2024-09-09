@@ -91,7 +91,7 @@ A A_initialize(A a) {
     AType current = f->type;
     raw last_init = null;
     while (current) {
-        if (current->init != last_init) {
+        if ((raw)current->init != last_init) {
             current->init(a);
             last_init = current->init;
         }

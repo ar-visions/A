@@ -262,7 +262,7 @@ void A_start() {
             }
         }
 
-    int remaining = call_last_count;
+    remaining = call_last_count;
     while (remaining)
         for (int i = 0; i < call_last_count; i++) {
             global_init_fn fn = call_last[i];

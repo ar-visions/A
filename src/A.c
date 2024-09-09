@@ -1266,9 +1266,10 @@ map map_of(cstr first_key, ...) {
     cstr key = first_key;
     for (;;) {
         A arg = va_arg(args, A);
-        if (!arg)
-            break;
         M(a, set, str(key), arg);
+        key = va_arg(args, cstr);
+        if (key == null)
+            break;
     }
     return a;
 }

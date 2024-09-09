@@ -919,8 +919,10 @@ static string hashmap_cast_string(hashmap a) {
 }
 
 
-static item map_fetch(map a, A key) {
-    return M(a->hmap, fetch, key);
+static pair map_fetch(map a, A key) {
+    item i = M(a->hmap, fetch, key);
+    pair map_pair = i->value;
+    return map_pair
 }
 
 static none map_set(map a, A key, A value) {
@@ -931,9 +933,7 @@ static none map_set(map a, A key, A value) {
         mi->value    = A_hold(value);
         A_drop(before);
     } else {
-        mi = i->value = new(pair, key, null, key, null);
-        mi->key      = key;
-        mi->value    = value;
+        mi = new(pair, key, key, value, value);
         mi->ref      = M(a, push, i);
         mi->ref->key = A_hold(key);
         mi->ref->value = mi;

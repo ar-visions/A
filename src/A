@@ -849,6 +849,7 @@ declare_class(path)
     i_method         (X,Y, X,    remove_weak, num) \
     i_method         (X,Y, A,    push,A) \
     i_method         (X,Y, A,    push_weak,A) \
+    i_method         (X,Y, none, concat, array) \
     i_method         (X,Y, A,    get, i32) \
     i_method         (X,Y, num,  count) \
     i_method         (X,Y, num,  index_of, A) \

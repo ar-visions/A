@@ -1188,6 +1188,10 @@ static A array_push(array a, A b) {
     return b;
 }
 
+static none array_concat(array a, array b) {
+    each(b, A, e) array_push(a, e);
+}
+
 static A array_index_num(array a, num i) {
     if (i < 0)
         i += a->len;

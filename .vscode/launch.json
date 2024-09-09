@@ -35,7 +35,8 @@
             "request": "launch",
             "program": "${workspaceFolder}/../silver/silver-build/silver",
             "args": [
-                "module.c"
+                "--module",  "module.c",
+                "--install", "/home/kalen/src/silver-import"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../silver/silver-build",

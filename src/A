@@ -834,6 +834,7 @@ declare_enum(OPType)
     i_override  (X,Y, hash) \
     i_override  (X,Y, init) \
     i_cast(      X,Y, cstr) \
+    i_cast(      X,Y, sz) \
     i_override_cast(X,Y, string)
 declare_class(path)
 

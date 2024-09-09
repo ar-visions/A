@@ -1266,7 +1266,7 @@ array array_of(AType validate, ...) {
 }
 
 array array_of_cstr(cstr first, ...) {
-    array a = new(array);
+    array a = allocate(array);
     va_list args;
     va_start(args, first);
     for (;;) {

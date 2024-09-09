@@ -89,9 +89,12 @@ A A_initialize(A a) {
     A f           = A_fields(a);
     AType a_type  = &A_type;
     AType current = f->type;
+    raw last_init = null;
     while (current) {
-        if (current->init)
+        if (current->init != last_init) {
             current->init(a);
+            last_init = current->init;
+        }
         if (current == a_type)
             break;
         current = current->parent_type;

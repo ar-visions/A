@@ -768,7 +768,7 @@ declare_class(item)
     i_intern(X,Y, item,      last)  \
     i_intern(X,Y, i64,       count) \
     i_method(X,Y, A,         pop) \
-    i_method(X,Y, A,         push, A) \
+    i_method(X,Y, item,      push, A) \
     i_method(X,Y, num,       index_of_element, A) \
     i_method(X,Y, none,      remove, num) \
     i_method(X,Y, none,      remove_item, item) \
@@ -902,7 +902,7 @@ declare_class(pair)
     i_intern         (X,Y, sz,      hsize) \
     i_method         (X,Y, none,    set,        A, A) \
     i_override       (X,Y, get) \
-    i_method         (X,Y, A,       fetch,      A) \
+    i_method         (X,Y, item,    fetch,      A) \
     i_method         (X,Y, bool,    contains,   A) \
     i_override       (X,Y, init) \
     i_override_cast  (X,Y, string) \

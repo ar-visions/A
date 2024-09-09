@@ -919,10 +919,9 @@ static string hashmap_cast_string(hashmap a) {
 }
 
 
-static pair map_fetch(map a, A key) {
+static item map_fetch(map a, A key) {
     item i = M(a->hmap, fetch, key);
-    pair map_pair = i->value;
-    return map_pair
+    return i;
 }
 
 static none map_set(map a, A key, A value) {

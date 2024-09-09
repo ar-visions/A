@@ -1,53 +1,21 @@
 #include <A>
 
+
+
+/// this is render, its odd but what is rendering other than an object being created
+/// compose is just lower down but fulfilling the property syntax
+
 int main(int n_args, char* v_args[]) {
-    printf("1\n");
-    AF pool  = A_pool(1024); // alloc and free are how you use these without auto-release
-
-    map imap = new(map);
-    printf("2\n");
-    fflush(stdout);
-    str("key");
-    printf("22\n");
-    fflush(stdout);
-    A_i32(1);
-    printf("24\n");
-    fflush(stdout);
-    A_i32(1);
-    printf("28\n");
-    fflush(stdout);
-    M(imap, set, str("key"), A_i32(1));
-    item e;
-    printf("3\n");
-    fflush(stdout);
-    print("enumerating?");
-    fflush(stdout);
-    printf("4\n");
-    fflush(stdout);
-    map_item mi   = (map_item)imap->refs->first->val;
-    i32*     test = mi->val;
-    int test2 = 1;
-
-    /// in clang llvm you dont have to emit stuff like this just to do what you want (and hope it gets O2'd)
-    if (imap && cast(imap, bool)) for (item _i = imap->refs->first, e = null; _i; _i = _i->next) \
-        for (map_item e = (map_item)_i->val, e0 = e; e == e0; e0++) {
-            print("key = %o, val = %o", e->key, e->val);
-        }
-
-    /// silver is about producing the operations you visually see
-    /// its also about molding the design time
-    enumerate(imap, e) {
-        print("key = %o, val = %o", e->key, e->val);
-    }
-
-    printf("4\n");
-    AF pool2 = A_pool(1024);
-
-    string   key = ctr(string, cstr, "a-string", -1);
+    AF      pool = A_pool(1024); // alloc and free are how you use these without auto-release
+    A         a1 = A_i32(1);
+    A         a2 = A_i64(2);
+    pair     mi2 = new(pair, key, str("a-key"), value, str("a-val"));
+    /// we need to hold members with a value
+    string   key = new(string, chars, "a-string");
     A     fields = A_fields(key);
-    i64*     val = A_i64(100);
-    hashmap    m = ctr(hashmap, sz, 8);
-    M(m, set, key, val);
+    i64*   value = A_i64(100);
+    hashmap    m = new(hashmap, alloc, 8);
+    M(m, set, key, value);
 
     print("hashmap ptr = %p\n", m);
     print("hashmap cereal = %o\n", m);
@@ -57,7 +25,6 @@ int main(int n_args, char* v_args[]) {
         m, 1024, 512, 0.5f, m);
 
     i64*    val2 = idx_1(m, A, key);
-    A_free(pool2);
     A_free(pool);
     return 0;
 }

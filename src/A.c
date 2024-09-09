@@ -41,6 +41,19 @@ void A_push_type(A_f* type) {
     types[types_len++] = type;
 }
 
+/// verify type is compatible with newly created object given from user
+/// if a null is given by user, we do nothing
+A A_verify(A instance, AType type) {
+    if (!instance) return null;
+    AType itype = isa(instance);
+    do {
+        if (itype == type)
+            return instance;
+        type = type->parent_type;
+    } while (type && type != typeid(A));
+    return null;
+}
+
 A_f** A_types(num* length) {
     *length = types_len;
     return types;
@@ -140,7 +153,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     method_t* method = calloc(1, sizeof(method_t));
     method->ffi_cif  = calloc(1,        sizeof(ffi_cif));
     method->ffi_args = calloc(max_args, sizeof(ffi_type*));
-    method->atypes   = alloc(array);
+    method->atypes   = allocate(array);
     method->rtype    = rtype;
     ffi_type **ffi_args = (ffi_type**)method->ffi_args;
     for (num i = 0; i < atypes->len; i++) {
@@ -158,7 +171,10 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
 
 /// should work on statics or member functions the same; its up to the caller to push the self in there
 fn A_lambda(A target, Member member, A context) {
-    fn f = ctr(fn, Member, member, target, context);
+    fn f = new(fn,
+        method,  member->method,
+        target,  target,
+        context, context);
     return f;
 }
 
@@ -203,7 +219,7 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
     method_t* m = mem->method;
     va_list  vargs;
     va_start(vargs, n_args);
-    array args = ctr(array, sz, n_args + 1);
+    array args = new(array, alloc, n_args + 1);
     M(args, push, instance);
     for (int i = 0; i < n_args; i++) {
         A arg = va_arg(vargs, A);
@@ -212,23 +228,6 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
     va_end(vargs);
     A res = A_method_call(m, args);
     return res;
-}
-
-A A_construct(AType type, int n_args, ...) {
-    A res = A_alloc(type, 1, true);
-    va_list  vargs;
-    va_start(vargs, n_args);
-    array args = ctr(array, sz, n_args);
-    for (int i = 0; i < n_args; i++) {
-        A arg = va_arg(vargs, A);
-        M(args, push, arg);
-    }
-    va_end(vargs);
-
-    AType arg0_type = isa(args->elements[0]);
-    type_member_t* mem = A_constructor(type, arg0_type);
-    assert(mem && mem->method, "alloc failed");
-    return A_method_call(mem->method, args);
 }
 
 void A_start() {
@@ -253,11 +252,11 @@ void A_start() {
         /// for each member of type
         for (num m = 0; m < type->member_count; m++) {
             type_member_t* mem = &type->members[m];
-            if (mem->member_type & (A_TYPE_IMETHOD | A_TYPE_SMETHOD | A_TYPE_CONSTRUCT)) {
+            if (mem->member_type & (A_TYPE_IMETHOD | A_TYPE_SMETHOD)) {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
                 assert(address, "no address");
-                array args = alloc_ctr(array, sz, mem->args.count);
+                array args = allocate(array, alloc, mem->args.count);
                 for (num i = 0; i < mem->args.count; i++)
                     args->elements[i] = ((A_f**)&mem->args.meta_0)[i];
                 args->len = mem->args.count;
@@ -265,15 +264,6 @@ void A_start() {
             }
         }
     }
-}
-
-type_member_t* A_constructor(AType type, AType first_arg) {
-    for (num i = 0; i < type->member_count; i++) {
-        type_member_t* mem = &type->members[i];
-        if (mem->member_type == A_TYPE_CONSTRUCT && mem->args.meta_0 == first_arg)
-            return mem;
-    }
-    return 0;
 }
 
 type_member_t* A_member(A_f* type, enum A_TYPE member_type, char* name) {
@@ -285,16 +275,39 @@ type_member_t* A_member(A_f* type, enum A_TYPE member_type, char* name) {
     return 0;
 }
 
+type_member_t* A_hold_members(A instance) {
+    AType type = isa(instance);
+    for (num i = 0; i < type->member_count; i++) {
+        type_member_t* mem = &type->members[i];
+        A   *mdata = (A*)((cstr)instance + mem->offset);
+        if (*mdata && mem->member_type & (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN))
+            if (!(mem->type->traits & A_TRAIT_PRIMITIVE))
+                A_hold(*mdata);
+    }
+    return 0;
+}
+
+A A_set_property(A instance, symbol name, A value) {
+    AType type = isa(instance);
+    type_member_t* m = A_member(type, (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN), name);
+    assert(m, "%s not found on object %s", name, type->name);
+    A   *mdata = (A*)((cstr)instance + m->offset);
+    A prev = *mdata;
+    *mdata = A_hold(value);
+    A_drop(prev);
+    return value;
+}
+
 
 /// should be adapted to work with schemas 
 /// what a weird thing it would be to have map access to properties
 /// everything should be A-based, and forget about the argument hacks?
 map A_args(int argc, symbol argv[], map default_values, object default_key) {
-    map result = ctr(map, sz, 16);
+    map result = new(map, hsize, 16);
     for (item ii = default_values->first; ii; ii = ii->next) {
-        item  hm = ii->val;
+        item  hm = ii->value;
         object k = hm->key;
-        object v = hm->val;
+        object v = hm->value;
         M(result, set, k, v);
     }
     int    i = 1;
@@ -308,30 +321,30 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
         if (arg[0] == '-') {
             // -s or --silver
             bool doub  = arg[1] == '-';
-            string s_key = ctr(string, cstr, (cstr)&arg[doub + 1],     -1);
-            string s_val = ctr(string, cstr, (cstr)&arg[doub + 1 + 1], -1);
+            string s_key = new(string, chars, (cstr)&arg[doub + 1]);
+            string s_val = new(string, chars, (cstr)&arg[doub + 1 + 1]);
 
             for (item f = default_values->first; f; f = f->next) {
                 /// import A types from runtime
-                map_item      mi = (map_item) f->val;
-                object def_value = mi->val;
+                pair      mi = (pair) f->value;
+                object def_value = mi->value;
                 AType   def_type = def_value ? isa(def_value) : typeid(string);
                 assert(f->key == mi->key, "keys do not match"); /// make sure we copy it over from refs
                 if ((!doub && strncmp(((string)f->key)->chars, s_key->chars, 1) == 0) ||
                     ( doub && M(f->key, compare, s_key) == 0)) {
                     /// inter-op with object-based A-type sells it.
                     /// its also a guide to use the same schema
-                    object val = A_construct(def_type, 2, s_val, A_i64(-1));
-                    assert(isa(val) == def_type, "");
-                    M(result, set, f->key, val);
+                    object value = A_formatter(def_type, null, false, "%o", s_val);
+                    assert(isa(value) == def_type, "");
+                    M(result, set, f->key, value);
                 }
             }
         } else if (!found_single && default_key) {
-            string s_val     = ctr(string, cstr, (cstr)arg, -1);
+            string s_val     = new(string, chars, (cstr)arg);
             object def_value = M(default_values, get, default_key);
             AType  def_type  = isa(def_value);
-            object val       = A_construct(def_type, 2, s_val, A_i64(-1));
-            M(result, set, default_key, val);
+            object value     = A_formatter(def_type, null, false, "%o", s_val);
+            M(result, set, default_key, value);
             found_single = true;
         }
     }
@@ -403,7 +416,7 @@ static u64  A_hash      (A a) { return (u64)(size_t)a; }
 static bool A_cast_bool (A a) { return (bool)(size_t)a; }
 
 /// should be symbol, perhaps.. cstr is more functional than symbol and we can use it from here
-static A A_with_cereal(A a, symbol cs, num len) {
+static A A_cerealize(A a, symbol cs, num len) {
     A        f = A_fields(a);
     AType type = f->type;
     if      (type == typeid(f64)) sscanf(cs, "%lf",  (f64*)a);
@@ -464,7 +477,7 @@ static string A_cast_string(A a) {
     if (type == typeid(string))
         return a;
     bool  once = false;
-    string res = ctr(string, sz, 1024);
+    string res = new(string, alloc, 1024);
     if (type->traits & A_TRAIT_PRIMITIVE)
         A_serialize(type, res, a);
     else {
@@ -597,7 +610,7 @@ num parse_formatter(cstr start, cstr res, num sz) {
 object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
     va_list args;
     va_start(args, template);
-    string  res  = ctr(string, sz, 1024);
+    string  res  = new(string, alloc, 1024);
     cstr    scan = template;
 
     while (*scan) {
@@ -656,7 +669,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
         }
     }
     /// cereal is pretty available, and we only need this on string and path
-    return type ? (A)type->with_cereal(A_alloc(type, 1, true), res->chars, res->len) : (A)res;
+    return type ? (A)type->cerealize(A_alloc(type, 1, true), res->chars, res->len) : (A)res;
 }
 
 static void  string_destructor(string a)        { free(a->chars); }
@@ -677,14 +690,14 @@ static array string_split(string a, cstr sp) {
     sz   slen = strlen(sp);
     while (next) {
         cstr   n = strstr(&next[1], sp);
-        string v = ctr(string, cstr, next, n ? (sz)(next - n) : -1);
+        string v = new(string, chars, next, ref_length, n ? (sz)(1 + next - n) : 0);
         next = n ? n + slen : null;
     }
     return null;
 }
 
 static void string_alloc_sz(string a, sz alloc) {
-    char* chars = calloc(alloc, sizeof(char));
+    char* chars = calloc(1 + alloc, sizeof(char));
     memcpy(chars, a->chars, sizeof(char) * a->len);
     chars[a->len] = 0;
     free(a->chars);
@@ -693,7 +706,7 @@ static void string_alloc_sz(string a, sz alloc) {
 }
 
 static string string_mid(string a, num start, num len) {
-    return ctr(string, cstr, &a->chars[start], len);
+    return new(string, chars, &a->chars[start], ref_length, len);
 }
 
 static none  string_reserve(string a, num extra) {
@@ -735,7 +748,7 @@ static none string_write(string a, handle f, bool new_line) {
 }
 
 static path string_cast_path(string a) {
-    return ctr(path, cstr, a->chars, -1);
+    return new(path, chars, a->chars);
 }
 
 u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
@@ -748,7 +761,7 @@ u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
 }
 
 static u64 item_hash(item f) {
-    return M(f->key ? f->key : f->val, hash);
+    return M(f->key ? f->key : f->value, hash);
 }
 
 static u64 string_hash(string a) {
@@ -757,19 +770,25 @@ static u64 string_hash(string a) {
     return a->h;
 }
 
-static string string_with_sz(string a, sz size) {
-    a->alloc = size;
-    a->chars = (char*)calloc(1, a->alloc);
-    return a;
+static void string_init(string a) {
+    cstr value = a->chars;
+    if (a->alloc)
+        a->chars = (char*)calloc(1, 1 + a->alloc);
+    if (value) {
+        sz len = a->ref_length ? a->ref_length : strlen(value);
+        if (!a->alloc)
+            a->alloc = len;
+        if (a->chars == value)
+            a->chars = (char*)calloc(1, len + 1);
+        memcpy(a->chars, value, len);
+        a->chars[len] = 0;
+        a->len = len;
+    }
 }
 
 static string string_with_cstr(string a, cstr value, num len) {
     if (len == -1) len = (value ? strlen(value) : 0);
-    a->alloc = len + 1;
-    a->len   = len;
-    a->chars = (char*)calloc(1, a->alloc);
-    memcpy(a->chars, value, len);
-    a->chars[len] = 0;
+
     return a;
 }
 
@@ -804,14 +823,14 @@ static item hashmap_lookup(hashmap a, A key) {
 
 static none hashmap_set(hashmap a, A key, A value) {
     item i = M(a, fetch, key);
-    A prev = i->val;
-    i->val = A_hold(value);
+    A prev = i->value;
+    i->value = A_hold(value);
     A_drop(prev);
 }
 
 static A hashmap_get(hashmap a, A key) {
     item i = M(a, lookup, key);
-    return i ? i->val : null;
+    return i ? i->value : null;
 }
 
 static bool hashmap_contains(hashmap a, A key) {
@@ -839,20 +858,21 @@ static A hashmap_index_A(hashmap a, A key) {
     return M(a, get, key);
 }
 
-static hashmap hashmap_with_sz(hashmap a, sz size) {
-    a->alloc = size;
-    a->data  = (list)calloc(size, sizeof(struct list)); /// we can zero-init a vectorized set of objects with A-type
+static hashmap hashmap_init(hashmap a) {
+    if (!a->alloc)
+         a->alloc = 16;
+    a->data  = (list)calloc(a->alloc, sizeof(struct list)); /// we can zero-init a vectorized set of objects with A-type
     return a;
 }
 
 static string hashmap_cast_string(hashmap a) {
-    string res  = ctr(string, sz, 1024);
+    string res  = new(string, alloc, 1024);
     bool   once = false;
     for (int i = 0; i < a->alloc; i++) {
         list bucket = &a->data[i];
         for (item f = bucket->first; f; f = f->next) {
             string key = cast(f->key, string);
-            string val = cast(f->val, string);
+            string val = cast(f->value, string);
             if (once) M(res, append, " ");
             M(res, append, key->chars);
             M(res, append, ":");
@@ -868,26 +888,26 @@ static item map_fetch(map a, A key) {
     return M(a->hmap, fetch, key);
 }
 
-static none map_set(map a, A key, A val) {
-    item     i  = M(a->hmap, fetch, key);
-    map_item mi = i->val;
+static none map_set(map a, A key, A value) {
+    item i  = M(a->hmap, fetch, key);
+    pair mi = i->value;
     if (mi) {
-        A before     = mi->val;
-        mi->val      = A_hold(val);
+        A before     = mi->value;
+        mi->value    = A_hold(value);
         A_drop(before);
     } else {
-        mi = i->val  = new(map_item);
+        mi = i->value = new(pair, key, null, key, null);
         mi->key      = key;
-        mi->val      = val;
+        mi->value    = value;
         mi->ref      = M(a, push, i);
         mi->ref->key = A_hold(key);
-        mi->ref->val = mi;
+        mi->ref->value = mi;
     }
 }
 
 static A map_get(map a, A key) {
     item i = M(a->hmap, lookup, key);
-    return i ? i->val : null;
+    return i ? i->value : null;
 }
 
 static bool map_contains(map a, A key) {
@@ -899,7 +919,7 @@ static bool map_contains(map a, A key) {
 static none map_remove(map a, A key) {
     item i = M(a->hmap, lookup, key);
     if (i) {
-        item ref = i->val;
+        item ref = i->value;
         M(a, remove_item, ref);
     }
 }
@@ -910,7 +930,7 @@ static bool map_cast_bool(map a) {
 
 static A map_index_A(map a, A key) {
     item hash_item = M(a->hmap, get, key);
-    return hash_item ? hash_item->val : null;
+    return hash_item ? hash_item->value : null;
 }
 
 static map map_with_sz(map a, sz size) {
@@ -920,19 +940,19 @@ static map map_with_sz(map a, sz size) {
 
 static void map_init(map a) {
     if (!a->hsize) a->hsize = 1024;
-    a->hmap  = ctr(hashmap, sz, a->hsize);
+    a->hmap  = new(hashmap, alloc, a->hsize);
 }
 
 static string map_cast_string(map a) {
-    string res  = ctr(string, sz, 1024);
+    string res  = new(string, alloc, 1024);
     bool   once = false;
     for (item i = a->first; i; i = i->next) {
         string key = cast(i->key, string);
-        string val = cast(i->val, string);
+        string value = cast(i->value, string);
         if (once) M(res, append, " ");
         M(res, append, key->chars);
         M(res, append, ":");
-        M(res, append, val->chars);
+        M(res, append, value->chars);
         once = true;
     }
     return res;
@@ -1006,7 +1026,7 @@ bool A_inherits(A inst, AType type) {
 /// list -------------------------
 static item list_push(list a, A e) {
     item n = new(item);
-    n->val = e; /// held already by caller
+    n->value = e; /// held already by caller
     if (a->last) {
         a->last->next = n;
         n->prev       = a->last;
@@ -1023,7 +1043,7 @@ static item list_push(list a, A e) {
 static num list_index_of_element(list a, A value) {
     num index = 0;
     for (item ai = a->first; ai; ai = ai->next) {
-        if (ai->val == value)
+        if (ai->value == value)
             return index;
         index++;
     }
@@ -1068,7 +1088,7 @@ static num list_compare(list a, list b) {
     if (diff != 0)
         return diff;
     for (item ai = a->first, bi = b->first; ai; ai = ai->next, bi = bi->next) {
-        A_f* ai_t = *(A_f**)&((A)ai->val)[-1];
+        A_f* ai_t = *(A_f**)&((A)ai->value)[-1];
         num  cmp  = ai_t->compare(ai, bi);
         if (cmp != 0) return cmp;
     }
@@ -1085,14 +1105,16 @@ static A list_pop(list a) {
     return l;
 }
 
-static A list_get(list a, num at_index) {
+static A list_get(list a, object at_index) {
     num index = 0;
+    assert(isa(at_index) == typeid(i32), "invalid indexing type");
+    i32 at = *(i32*)at_index;
     for (item i = a->first; i; i = i->next) {
-        if (at_index == index)
-            return i->val;
+        if (at == index)
+            return i->value;
         index++;
     }
-    assert(false, "could not fetch item at index %i", (i32)at_index);
+    assert(false, "could not fetch item at index %i", at);
     return null;
 }
 
@@ -1183,7 +1205,7 @@ static void array_push_symbols(array a, ...) {
     va_start(args, a);
     char* value;
     while ((value = va_arg(args, char*)) != null) {
-        string s = ctr(string, cstr, value, strlen(value));
+        string s = new(string, chars, value);
         M(a, push, s);
     }
     va_end(args);
@@ -1259,15 +1281,15 @@ static array array_with_sz(array a, sz size) {
 
 static void AF_init(AF a) {
     af_top = a;
-    a->pool = alloc_ctr(array, sz, a->start_size ? a->start_size : 1024);
+    a->pool = allocate(array, alloc, a->start_size ? a->start_size : 1024);
     M(a->pool, push_weak, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
 
-    if (!af_stack) af_stack = alloc_ctr(array, sz, 16);
+    if (!af_stack) af_stack = allocate(array, alloc, 16);
     M(af_stack, push_weak, a);
 }
 
 AF AF_create(sz start_size) {
-    AF a = alloc(AF);
+    AF a = allocate(AF);
     a->start_size = start_size;
     AF_init(a);
     return a;
@@ -1309,101 +1331,16 @@ static A fn_call(fn f, array args) {
     return A_method_call(f->method, args);
 }
 
-static fn fn_with_Member(fn f, Member member, A target, A context) {
-    type_member_t* m = member;
-    f->method  = m->method;
-    f->target  = target;
-    f->context = A_hold(context);
-    return f;
-}
-
-static A vector_push(vector a, A b) {
-    A obj = A_fields(a);
-    if (obj->alloc == obj->count)
-        A_realloc(obj, 32 + (obj->alloc < 1));
-    u8* dst = obj->data;
-    num sz = obj->type->size;
-    A   cp = &dst[sz * obj->count++];
-    memcpy(cp, b, sz);
-    return cp;
-}
-
-/// the only thing we would look out for here is a generic 
-/// user of 'collection' calling object on this return result
-static A vector_pop(vector a) {
-    A obj = A_fields(a);
-    assert(obj->count > 0, "no items");
-    u8* dst = obj->data;
-    num sz = obj->type->size;
-    return (A)&dst[sz * --obj->count];
-}
-
-static num vector_compare(vector a, vector b) {
-    A a_object = A_fields(a);
-    A b_object = A_fields(b);
-    num diff = a_object->count - b_object->count;
-    if (diff != 0)
-        return diff;
-    assert(a_object->type == b_object->type, "type mismatch");
-    u8* a_data = A_data(a);
-    u8* b_data = A_data(b);
-    num sz = a_object->type->size;
-    for (num i = 0; i < a_object->count; i++) {
-        num cmp = memcmp(&a_data[sz * i], &b_data[sz * i], sz);
-        if (cmp != 0)
-            return cmp;
-    }
-    return 0;
-}
-
-static A vector_get(vector a, num i) {
-    A a_object = A_fields(a);
-    u8* a_data = A_data(a);
-    num sz = a_object->type->size;
-    return (A)&a_data[i * sz];
-}
-
-static num vector_count(vector a) {
-    A a_object = A_fields(a);
-    return a_object->count;
-}
-
-static num vector_index_of(vector a, A b) {
-    A a_object = A_fields(a);
-    u8* a_data = A_data(a);
-    u8* b_data = A_data(b);
-    num sz = a_object->type->size;
-    for (num i = 0; i < a_object->count; i++) {
-        if (memcmp(&a_data[sz * i], b_data, sz) == 0)
-            return i;
-    }
-    return -1;
-}
-
-static bool vector_cast_bool(vector a) {
-    A a_object = A_fields(a);
-    return a_object->count > 0;
-}
-
-u64 vector_hash(vector a) {
-    A obj = A_fields(a);
-    return fnv1a_hash(obj->data, obj->type->size * obj->count, OFFSET_BASIS);
-}
-
 bool create_symlink(path target, path link) {
     bool is_err = symlink(target, link) == -1;
     return !is_err;
 }
 
-static path path_with_cstr(path a, cstr cs, num sz) {
-    num len = sz == -1 ? strlen(cs) : sz;
+static none path_init(path a) {
+    cstr arg = a->chars;
+    num  len = arg ? strlen(arg) : 0;
     a->chars = calloc(len + 1, 1);
-    memcpy(a->chars, cs, len + 1);
-    return a;
-}
-
-static path path_with_cereal(path a, cereal cs) {
-    return path_with_cstr(a, (cstr)cs, -1);
+    memcpy(a->chars, arg, len + 1);
 }
 
 static cstr path_cast_cstr(path a) {
@@ -1411,7 +1348,7 @@ static cstr path_cast_cstr(path a) {
 }
 
 static string path_cast_string(path a) {
-    return ctr(string, cstr, a->chars, -1);
+    return new(string, chars, a->chars);
 }
 
 static bool path_make_dir(path a) {
@@ -1457,7 +1394,7 @@ static bool path_is_empty(path a) {
 static string path_stem(path a) {
     cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
-    string res = ctr(string, sz, 256);
+    string res = new(string, alloc, 256);
     sz     dot = 0;
     for (num i = len - 1; i >= 0; i--) {
         if (cs[i] == '.')
@@ -1477,7 +1414,7 @@ static string path_stem(path a) {
 static string path_filename(path a) {
     cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
-    string res = ctr(string, sz, 256);
+    string res = new(string, alloc, 256);
     for (num i = len - 1; i >= 0; i--) {
         if (cs[i] == '/' || i == 0) {
             cstr start = &cs[i + cs[i] == '/'];
@@ -1575,7 +1512,7 @@ static A path_read(path a, AType type) {
         fseek(f, 0, SEEK_END);
         sz flen = ftell(f);
         fseek(f, 0, SEEK_SET);
-        string a = ctr(string, sz, flen + 1);
+        string a = new(string, alloc, flen);
         size_t n = fread(a->chars, 1, flen, f);
         fclose(f);
         assert(n == flen, "could not read enough bytes");
@@ -1584,12 +1521,6 @@ static A path_read(path a, AType type) {
     }
     assert(false, "not implemented");
     return null;
-}
-
-item item_with_symbol(item f, symbol key, A val) {
-    f->key = ctr(string, cstr, (cstr)key, strlen(key));
-    f->val = A_hold(val);
-    return f;
 }
 
 void* primitive_ffi_arb(AType ptype) {
@@ -1658,9 +1589,8 @@ define_class(item)
 //define_proto(collection) -- disabling for now during reduction to base + class + mod
 define_class(list)
 define_class(array)
-define_class(vector)
 define_class(hashmap)
-define_class(map_item)
+define_class(pair)
 define_mod(map, list) // never quite did one like this but it does make sense
 define_class(fn)
 

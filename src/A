@@ -1,7 +1,6 @@
 #ifndef _A_
 #define _A_
 
-//#include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,8 +36,11 @@ typedef const char*         symbol;
 typedef const char*         cereal;
 typedef num                 sz;
 typedef struct A_f*         AType;
+typedef struct A*           object;
+typedef struct A**          ARef;
+typedef struct A*           A;
 typedef struct type_member_t* Member;
-typedef struct A*           object; /// generic alias to describe base type; emitted with meta types
+
 typedef struct meta_t {
     num             count;
     AType           meta_0, meta_1, meta_2, meta_3, 
@@ -63,11 +65,10 @@ enum A_TYPE {
     A_TYPE_INTERN    = 4,
     A_TYPE_IMETHOD   = 8,
     A_TYPE_SMETHOD   = 16,
-    A_TYPE_CONSTRUCT = 32,
-    A_TYPE_OPERATOR  = 64,
-    A_TYPE_CAST      = 128,
-    A_TYPE_INDEX     = 256,
-    A_TYPE_ENUMV     = 512
+    A_TYPE_OPERATOR  = 32,
+    A_TYPE_CAST      = 64,
+    A_TYPE_INDEX     = 128,
+    A_TYPE_ENUMV     = 256
 };
 
 enum A_TRAIT {
@@ -89,12 +90,107 @@ enum A_TRAIT {
 #define   enum_value(X,Y, N)                enum_value_##Y(X, N)
 
 
+/// A_init method is simple: named args are set, then an init() is called from base to top
+/// we will need to support 16 args for 8 props
+
+// runtime type-check api
+#ifndef NDEBUG
+    //intern needs to be effectively switched on to introspect for debug-only
+    //it would be useful to runtime verify args, though
+    //#define TC(MEMBER, VALUE) A_verify(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)
+    #define TC(MEMBER, VALUE) VALUE
+#else
+    #define TC(MEMBER, VALUE) VALUE
+#endif
+
+#define _ARG_COUNT_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, N, ...) N
+#define _ARG_COUNT(...)        _ARG_COUNT_IMPL(__VA_ARGS__, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
+#define _COMBINE_(A, B)        A##B
+#define _COMBINE(A, B)         _COMBINE_(A, B)
+#define _N_ARGS_HELPER(N, ...) _COMBINE(EXPAND_ARGS_, N)(__VA_ARGS__)
+#define _N_ARGS_0()
+#define _N_ARGS_1()  // somehow this is counted in cases where we have new(Type) with no args, and new(Type, a, 2) results in 2; its an effect of ## __VA_ARGS__                      
+#define _N_ARGS_2(a,b)                                       instance->a = TC(a,b);
+#define _N_ARGS_4(a,b, c,d)                                  _N_ARGS_2 (a,b) instance->c = TC(c,d);
+#define _N_ARGS_6(a,b, c,d, e,f)                             _N_ARGS_4 (a,b, c, d) instance->e = TC(e,f);
+#define _N_ARGS_8(a,b, c,d, e,f, g,h)                        _N_ARGS_6 (a,b, c, d, e, f) instance->g = TC(g,h);
+#define _N_ARGS_10(a,b, c,d, e,f, g,h, i,j)                  _N_ARGS_8 (a,b, c,d, e,f, g,h) instance->i = TC(i,j);
+#define _N_ARGS_12(a,b, c,d, e,f, g,h, i,j, l,m)             _N_ARGS_10(a,b, c,d, e,f, g,h, i,j) instance->l = TC(l,m);
+#define _N_ARGS_14(a,b, c,d, e,f, g,h, i,j, l,m, n,o)        _N_ARGS_12(a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC(n,o);
+#define _N_ARGS_16(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q)   _N_ARGS_14(a,b, c,d, e,f, g,h, i,j, l,m, p,q) instance->p = TC(p,q);
+#define _N_ARGS(instance,...)    _N_ARGS_HELPER2(_ARG_COUNT(__VA_ARGS__), __VA_ARGS__)
+#define _N_ARGS_HELPER2(N, ...)  _COMBINE(_N_ARGS_, N)(__VA_ARGS__)
+#define new(T, ...) \
+    ({ \
+        T instance = (T)A_alloc(typeid(T), 1, true); \
+        _N_ARGS(instance, __VA_ARGS__); \
+        A_initialize(instance); \
+        instance; \
+    })
 
 
+#define _CTR_ARGS_0()
+#define _CTR_ARGS_1()                   
+#define _CTR_ARGS_2(a,b)                                       A_set_properties(instance, a, b, null);
+#define _CTR_ARGS_4(a,b, c,d)                                  A_set_properties(instance, a,b, c,d, null);
+#define _CTR_ARGS_6(a,b, c,d, e,f)                             A_set_properties(instance, a,b, c,d, e,f, null);
+#define _CTR_ARGS_8(a,b, c,d, e,f, g,h)                        A_set_properties(instance, a,b, c,d, e,f, g,h, null);
+#define _CTR_ARGS_10(a,b, c,d, e,f, g,h, i,j)                  A_set_properties(instance, a,b, c,d, e,f, g,h, i,j, null);
+#define _CTR_ARGS_12(a,b, c,d, e,f, g,h, i,j, l,m)             A_set_properties(instance, a,b, c,d, e,f, g,h, i,j, l,m, null);
+#define _CTR_ARGS_14(a,b, c,d, e,f, g,h, i,j, l,m, n,o)        A_set_properties(instance, a,b, c,d, e,f, g,h, i,j, l,m, n,o, null);
+#define _CTR_ARGS_16(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q)   A_set_properties(instance, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, null);
+#define _CTR_ARGS(instance,...)    _N_ARGS_HELPER2(_ARG_COUNT(__VA_ARGS__), __VA_ARGS__)
+#define _CTR_ARGS_HELPER2(N, ...)  _COMBINE(_CTR_ARGS_, N)(__VA_ARGS__)
 
-/// we do not want to resolve types at startup by stringifying them
-/// this results in a more compact binary and quicker runtime
-/// it also means our primitives can work, too since they have the _type identifier exported member
+/// with construct we give it a dynamic type, symbols and A-values
+#define construct(type, ...) \
+    ({ \
+        T instance = (T)A_alloc(type, 1, true); \
+        _N_ARGS(instance, __VA_ARGS__); \
+        A_initialize(instance); \
+        instance; \
+    })
+
+#define new0(T, ...) \
+    ({ \
+        T instance = (T)A_alloc(typeid(T), 1, true); \
+        _N_ARGS(instance, __VA_ARGS__); \
+        A_initialize(instance); \
+        instance; \
+    })
+//#define allocate(T)                 ((A)A_alloc(typeid(T), 1, false))
+#define allocate(T, ...) \
+    ({ \
+        T instance = (T)A_alloc(typeid(T), 1, false); \
+        _N_ARGS(instance, __VA_ARGS__); \
+        A_initialize(instance); \
+        instance; \
+    })
+#define valloc(T, N)                ((A)A_alloc(typeid(T), N, false))
+#define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
+#define isa(INSTANCE)               ((struct A_f*)((struct A*)INSTANCE - 1)->type)
+#define inherits(left, type)        A_inherits(left, typeid(type))
+#define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
+#define invoke(T,N,...)             T##_type.N(__VA_ARGS__)
+#define M(I,N,...)                  ftableI(I) -> N(I, ##__VA_ARGS__)
+#define val(T,V)                    A_primitive(typeid(T), (&(T){V}))
+#define idx_1(I,T1,V1)              M(I, index ##_## T1, V1)
+#define idx_2(I,T1,T2,V1,V2)        M(I, index ##_## T1 ##_## T2, V1, V2)
+#define idx(I,V1)                   M(I, index ##_## num, V1)
+#define cast(I,T)                   ftableI(I) -> cast_##T(I)
+#define meta_t(I,IDX)               isa(I) -> meta.meta_##IDX
+#define ctr(T,WITH,...)             A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
+#define ctr1(T,WITH,...)            A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
+#define alloc_ctr(T,WITH,...)       A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, false), ## __VA_ARGS__))
+#define str(CSTR)                   new0(string, chars, (cstr)(CSTR))
+#define operator(I,OP,...)          ftableI(I) -> operator_##OP(I, ##__VA_ARGS__)
+
+/// arg expansion for type emission (give address of its statically defined)
+#define emit_types(...)             EXPAND_ARGS(__VA_ARGS__)
+#define combine_tokens_(A, B)       A##B
+#define combine_tokens(A, B)        combine_tokens_(A, B)
+#define EXPAND_ARGS(...)            EXPAND_ARGS_HELPER(COUNT_ARGS(__VA_ARGS__), __VA_ARGS__)
+#define EXPAND_ARGS_HELPER(N, ...)  combine_tokens(EXPAND_ARGS_, N)(__VA_ARGS__)
 #define EXPAND_ARGS_0()                         0
 #define EXPAND_ARGS_1(a)                        1, &a##_type
 #define EXPAND_ARGS_2(a, b)                     2, &a##_type, &b##_type
@@ -105,48 +201,7 @@ enum A_TRAIT {
 #define EXPAND_ARGS_7(a, b, c, d, e, f, g)      7, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type
 #define EXPAND_ARGS_8(a, b, c, d, e, f, g, h)   8, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type, &h##_type
 #define COUNT_ARGS_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
-
 #define COUNT_ARGS(...)             COUNT_ARGS_IMPL(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1)
-#define valloc(T, N)                ((A)A_alloc(typeid(T), N, false))
-#define new(T)                      ((A)A_initialize(A_alloc(typeid(T), 1, true)))
-#define alloc(T)                    ((A)A_alloc(typeid(T), 1, false))
-#define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
-#define isa(INSTANCE)               ((struct A_f*)((struct A*)INSTANCE - 1)->type)
-#define inherits(left, type)        A_inherits(left, typeid(type))
-
-#define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
-
-/// calling methods
-/// none of these set memory in-instance for the type info.
-/// thats located on the A-object.
-/// the type signature though, we put on the 'end' of the struct.  this memory is not valid
-#define invoke(T,N,...)             T##_type.N(__VA_ARGS__)
-#define M(I,N,...)                  ftableI(I) -> N(I, ##__VA_ARGS__)
-  
-/// indexing is functionality of I [ A1, A2, A... ] -> R
-#define idx_1(I,T1,V1)              M(I, index ##_## T1, V1)
-#define idx_2(I,T1,T2,V1,V2)        M(I, index ##_## T1 ##_## T2, V1, V2)
-#define idx(I,V1)                   M(I, index ##_## num, V1)
-
-/// our casts are polymorphic
-#define cast(I,T)                   ftableI(I) -> cast_##T(I)
-
-/// generic is from instance type, which we only need to store the args for, no other tables
-#define meta_t(I,IDX)               isa(I) -> meta.meta_##IDX
-
-#define ctr(T,WITH,...)             A_initialize(T##_type.with_##WITH((A)A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
-#define ctr1(T,WITH,...)            A_initialize(T##_type.with_##WITH((A)A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
-#define alloc_ctr(T,WITH,...)       A_initialize(T##_type.with_##WITH((A)A_alloc(typeid(T), 1, false), ## __VA_ARGS__))
-
-#define str(CSTR)                   ctr1(string, cstr, (cstr)(CSTR), -1)
-
-#define operator(I,OP,...)          ftableI(I) -> operator_##OP(I, ##__VA_ARGS__)
-#define emit_types(...)             EXPAND_ARGS(__VA_ARGS__)
-#define combine_tokens_(A, B)       A##B
-#define combine_tokens(A, B)        combine_tokens_(A, B)
-#define EXPAND_ARGS(...)            EXPAND_ARGS_HELPER(COUNT_ARGS(__VA_ARGS__), __VA_ARGS__)
-#define EXPAND_ARGS_HELPER(N, ...)  combine_tokens(EXPAND_ARGS_, N)(__VA_ARGS__)
-
 
 //#define EXPAND_ARGS2_0()                       
 #define EXPAND_ARGS2_1(a)                        a
@@ -157,13 +212,9 @@ enum A_TRAIT {
 #define EXPAND_ARGS2_6(a, b, c, d, e, f)         a##_##b##_##c##_##d##_e##_##f
 #define EXPAND_ARGS2_7(a, b, c, d, e, f, g)      a##_##b##_##c##_##d##_e##_##f##_##g
 #define EXPAND_ARGS2_8(a, b, c, d, e, f, g, h)   a##_##b##_##c##_##d##_e##_##f##_##g##_##h
-
-#define emit_types2(...)            EXPAND_ARGS2(__VA_ARGS__)
+#define emit_idx_symbol(...)             EXPAND_ARGS2(__VA_ARGS__)
 #define EXPAND_ARGS2(...)            EXPAND_ARGS_HELPER2(COUNT_ARGS(__VA_ARGS__), __VA_ARGS__)
 #define EXPAND_ARGS_HELPER2(N, ...)  combine_tokens(EXPAND_ARGS2_, N)(__VA_ARGS__)
-
-
-
 
 #define   i_intern_INST(    X,Y, R, N, ...)         R N;
 #define   i_intern_TYPE(    X,Y, R, N, ...)
@@ -263,37 +314,20 @@ enum A_TRAIT {
 
 
 #define   i_index_INST(X,Y,R, ...)
-#define   i_index_TYPE(X,Y,R, ...)        R (*emit_types2(index, __VA_ARGS__))(X, ##__VA_ARGS__);
-#define   i_index_PRIM(X,Y,R, ...)        R (*emit_types2(index, __VA_ARGS__))(X, ##__VA_ARGS__);
+#define   i_index_TYPE(X,Y,R, ...)        R (*emit_idx_symbol(index, __VA_ARGS__))(X, ##__VA_ARGS__);
+#define   i_index_PRIM(X,Y,R, ...)        R (*emit_idx_symbol(index, __VA_ARGS__))(X, ##__VA_ARGS__);
 #define   i_index_BASE(X,Y,R, ...)
 #define   i_index_INIT(X,Y,R, ...) \
-    X##_type.emit_types2(index, __VA_ARGS__) = & emit_types2(X ## _index, __VA_ARGS__); \
-    X##_type.members[X##_type.member_count].name        = stringify(emit_types2(index, __VA_ARGS__)); \
+    X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__); \
+    X##_type.members[X##_type.member_count].name        = stringify(emit_idx_symbol(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type        = &R##_type; \
-    X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, emit_types2(index, __VA_ARGS__)); \
+    X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, emit_idx_symbol(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_INDEX; \
     X##_type.member_count++;  
 #define i_index_PROTO(X,Y, R, ...)
-#define i_index_METHOD(X,Y, R, ...)       R (*emit_types2(index, __VA_ARGS__))(X, ##__VA_ARGS__);
+#define i_index_METHOD(X,Y, R, ...)       R (*emit_idx_symbol(index, __VA_ARGS__))(X, ##__VA_ARGS__);
 #define i_index(X,Y, R, ...)            i_index_##Y(X,Y, R, ##__VA_ARGS__)
-
-/// construct PRIM swaps X with Y for the instance
-#define   i_construct_INST(X,Y,ARG, ...)
-#define   i_construct_TYPE(X,Y,ARG, ...)        X (*with_##ARG)(X, ARG, ##__VA_ARGS__);
-#define   i_construct_PRIM(X,Y,ARG, ...)        X (*with_##ARG)(X, ARG, ##__VA_ARGS__);
-#define   i_construct_BASE(X,Y,ARG, ...)
-#define   i_construct_INIT(X,Y,ARG, ...) \
-    X##_type.with_##ARG = & X##_with_##ARG; \
-    X##_type.members[X##_type.member_count].name        = #ARG; \
-    X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(ARG, ##__VA_ARGS__) }; \
-    X##_type.members[X##_type.member_count].type        = &ARG##_type; \
-    X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, with_##ARG); \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_CONSTRUCT; \
-    X##_type.member_count++;  
-#define i_construct_PROTO(X,Y, ARG, ...)
-#define i_construct_METHOD(X,Y, ARG, ...)       X (*with_##ARG)(X, ARG, ##__VA_ARGS__);
-#define i_construct(X,Y, ARG, ...)            i_construct_##Y(X,Y, ARG, ##__VA_ARGS__)
 
 #define i_method_vargs_INST(X,Y, R, N, ...)
 #define i_method_vargs_TYPE(X,Y, R, N, ...)     R (*N)(X, __VA_ARGS__, ...);
@@ -319,13 +353,13 @@ enum A_TRAIT {
 #define implement_METHOD(X,Y, R, N, ...)
 #define implement(X,Y, R, N, ...)             implement_##Y(X,Y, R, N, __VA_ARGS__)
 
-#define i_override_m_INST(X,Y, R, N)
-#define i_override_m_TYPE(X,Y, R, N)        
-#define i_override_m_INIT(X,Y, R, N)            X##_type . N = & X## _ ## N;
-#define i_override_m_BASE(X,Y, R, N)
-#define i_override_m_PROTO(X,Y, R, N)
-#define i_override_m_METHOD(X,Y, R, N)
-#define i_override_m(X,Y, R, N)               i_override_m_##Y(X,Y, R, N)
+#define i_override_INST(X,Y, R, N)
+#define i_override_TYPE(X,Y, R, N)        
+#define i_override_INIT(X,Y, R, N)            X##_type . N = & X## _ ## N;
+#define i_override_BASE(X,Y, R, N)
+#define i_override_PROTO(X,Y, R, N)
+#define i_override_METHOD(X,Y, R, N)
+#define i_override(X,Y, R, N)               i_override_##Y(X,Y, R, N)
 
 #define i_override_cast_INST(X,Y, R)
 #define i_override_cast_TYPE(X,Y, R)        
@@ -334,14 +368,6 @@ enum A_TRAIT {
 #define i_override_cast_PROTO(X,Y, R)
 #define i_override_cast_METHOD(X,Y, R)
 #define i_override_cast(X,Y, R)               i_override_cast_##Y(X,Y, R)
-
-#define i_override_ctr_INST(X,Y,   ARG)
-#define i_override_ctr_TYPE(X,Y,   ARG)
-#define i_override_ctr_INIT(X,Y,   ARG)         X##_type.with_##ARG = & X##_with_##ARG;
-#define i_override_ctr_BASE(X,Y,   ARG)         
-#define i_override_ctr_PROTO(X,Y,  ARG)
-#define i_override_ctr_METHOD(X,Y, ARG)
-#define i_override_ctr(X,Y, ARG)              i_override_ctr_##Y(X,Y, ARG)
 
 typedef struct method_t {
     struct array*   atypes;
@@ -422,7 +448,7 @@ typedef struct type_member_t {
 
 /// declare object and type with f-table from meta-def
 #define declare_abstract( X ) \
-    typedef struct A* X; \
+    typedef struct X *X; \
     typedef struct X##_f { \
         A_f_members(A) \
         A_schema(A, METHOD) \
@@ -509,8 +535,8 @@ void        A_lazy_init(global_init_fn fn);
 
 #define define_global_primitive(X,Y, TYPE_SZ, TRAIT) \
     _Pragma("pack(push, 1)") \
-    A     X##_header; \
-    X##_f X##_type; \
+    object X##_header; \
+    X##_f  X##_type; \
     _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##X() { \
         X##_f* type_ref = &X##_type; \
@@ -533,8 +559,8 @@ void        A_lazy_init(global_init_fn fn);
 
 #define define_global(X,Y, TYPE_SZ, TRAIT, META) \
     _Pragma("pack(push, 1)") \
-    A     X##_header; \
-    X##_f X##_type; \
+    object X##_header; \
+    X##_f  X##_type; \
     _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##X() { \
         X##_f* type_ref = &X##_type; \
@@ -606,7 +632,7 @@ void* primitive_ffi_arb(AType);
 /// define_meta(array, ListOfNumerics, u8, u16, u32, u64, i8, i16, i32, i64)
 
 #define define_meta(SRC_TYPE, ALIAS_TYPE, ...) \
-    A ALIAS_TYPE##_header; \
+    object         ALIAS_TYPE##_header; \
     ALIAS_TYPE##_f ALIAS_TYPE##_type; \
     static __attribute__((constructor)) bool global_##ALIAS_TYPE() { \
         ALIAS_TYPE##_f* type_ref = &ALIAS_TYPE##_type; \
@@ -631,10 +657,10 @@ typedef struct string* string;
     i_intern(X,Y, AType,     type) \
     i_intern(X,Y, num,       refs) \
     i_intern(X,Y, num,       ar_index) \
-    i_intern(X,Y, struct A*, data) \
+    i_intern(X,Y, A,         data) \
     i_intern(X,Y, num,       alloc) \
     i_intern(X,Y, num,       count) \
-    i_intern(X,Y, struct A*, origin) \
+    i_intern(X,Y, A,         origin) \
     i_method(X,Y, none,      init) \
     i_method(X,Y, none,      destructor) \
     i_method(X,Y, i32,       compare,    X) \
@@ -642,24 +668,12 @@ typedef struct string* string;
     i_method(X,Y, A,         copy, A) \
     i_cast(  X,Y, string) \
     i_cast(  X,Y, bool) \
-    i_construct(X,Y, cereal, num)
+    s_method(X,Y, A, cerealize, A, cereal, num)
 declare_base(A)
 
 #define typeid(X) ((struct A_f*)&X##_type)
 
-#define numeric_schema(X,Y) \
-    i_construct(X,Y, i8)  \
-    i_construct(X,Y, i16) \
-    i_construct(X,Y, i32) \
-    i_construct(X,Y, i64) \
-    i_construct(X,Y, u8)  \
-    i_construct(X,Y, u16) \
-    i_construct(X,Y, u32) \
-    i_construct(X,Y, u64) \
-    i_construct(X,Y, f32) \
-    i_construct(X,Y, f64) \
-    i_construct(X,Y, bool) \
-    i_construct(X,Y, num)
+#define numeric_schema(X,Y)
 declare_abstract(numeric)
 
 #define string_like_schema(X,Y)
@@ -670,6 +684,9 @@ declare_abstract(nil)
 
 #define raw_schema(X,Y)
 declare_abstract(raw)
+
+#define ref_schema(X,Y)
+declare_abstract(ref)
 
 #define imported_schema(X,Y)
 declare_abstract(imported)
@@ -699,6 +716,7 @@ declare_abstract(imported)
 #define handle_schema(X,Y)      raw_schema(X,Y)
 #define AType_schema(X,Y)       raw_schema(X,Y)
 #define Member_schema(X,Y)      raw_schema(X,Y)
+#define ARef_schema(X,Y)        ref_schema(X,Y)
 
 /// meta gives us access to one token we can override with (F)
 declare_primitive( i8,          numeric)
@@ -723,16 +741,16 @@ declare_primitive(raw_t,        raw)
 declare_primitive(handle,       raw)
 /// whatever we can 'name', we can handle as a type of any pointer primitive
 declare_primitive(AType,        raw)
+declare_primitive(ARef,         ref)
 declare_primitive(Member,       raw)
 
 /// doubly-linked item type, integrated key so we dont also need a 'field' type
 #define item_schema(X,Y) \
     i_intern(X,Y, struct X*, next) \
     i_intern(X,Y, struct X*, prev) \
-    i_intern(X,Y, A,         val) \
+    i_intern(X,Y, A,         value) \
     i_intern(X,Y, A,         key) \
-    i_override_m(X,Y, u64, hash) \
-    i_construct(X,Y, symbol, A)
+    i_override(X,Y, u64, hash)
 declare_class(item)
 
 /// linked-list of elemental data
@@ -745,9 +763,15 @@ declare_class(item)
     i_method(X,Y, num,       index_of_element, A) \
     i_method(X,Y, none,      remove, num) \
     i_method(X,Y, none,      remove_item, item) \
-    i_method(X,Y, A,         get,  i32) \
+    i_method(X,Y, A,         get,  A) \
     i_method(X,Y, num,       count)
 declare_class(list)
+
+
+
+
+
+
 
 
 /// array of elemental data
@@ -798,15 +822,14 @@ declare_enum(OPType)
     i_method    (X,Y, A,      read, AType) \
     i_method    (X,Y, path,   change_ext, cstr) \
     s_method    (X,Y, path,   cwd, sz) \
-    i_override_m(X,Y, u64,    hash) \
-    i_override_ctr(X,Y, cereal) \
-    i_construct(    X,Y, cstr, sz) \
+    i_override  (X,Y, u64,    hash) \
+    i_override  (X,Y, none, init) \
     i_cast(      X,Y, cstr) \
     i_override_cast(X,Y, string)
 declare_class(path)
 
 #define array_schema(X,Y) \
-    i_intern         (X,Y, A*,   elements) \
+    i_intern         (X,Y, ARef, elements) \
     i_intern         (X,Y, i32,  alloc) \
     i_intern         (X,Y, i32,  len) \
     s_method_vargs   (X,Y, X,    of, A) \
@@ -824,7 +847,6 @@ declare_class(path)
     i_operator       (X,Y, none, assign_sub, num) \
     i_method_vargs   (X,Y, none, push_symbols, X, cstr) \
     i_method_vargs   (X,Y, none, push_objects, X, A) \
-    i_construct      (X,Y,       sz) \
     i_index          (X,Y, A,    num) \
     i_override_cast  (X,Y, bool)
 declare_class(array)
@@ -836,8 +858,8 @@ declare_meta(array, ATypes)
     i_public(    X,Y, sz,    start_size) \
     s_method(    X,Y, AF,    fetch, num) \
     s_method(    X,Y, AF,    create, sz) \
-    i_override_m(X,Y, none,  init) \
-    i_override_m(X,Y, none,  destructor)
+    i_override  (X,Y, none,  init) \
+    i_override  (X,Y, none,  destructor)
 declare_class(AF)
 
 #define hashmap_schema(X,Y) \
@@ -851,28 +873,27 @@ declare_class(AF)
     i_method         (X,Y, item,  lookup, A) \
     i_method         (X,Y, bool,  contains, A) \
     i_override_cast  (X,Y, string) \
-    i_construct      (X,Y,        sz) \
+    i_override       (X,Y, none,  init) \
     i_index          (X,Y, A,     A) \
     i_override_cast  (X,Y, bool)
 declare_class(hashmap)
 
-#define map_item_schema(X,Y) \
+#define pair_schema(X,Y) \
     i_intern         (X,Y, item,    ref) \
     i_intern         (X,Y, A,       key) \
-    i_intern         (X,Y, A,       val)
-declare_class(map_item)
+    i_intern         (X,Y, A,       value)
+declare_class(pair)
 
 /// hmap stores the item, and our refs list has a value that holds that (origin = hmap)
 #define map_schema(X,Y) \
     i_intern         (X,Y, hashmap, hmap) \
     i_intern         (X,Y, sz,      hsize) \
     i_method         (X,Y, none,    set,        A, A) \
-    i_override_m     (X,Y, A,       get) \
+    i_override       (X,Y, A,       get) \
     i_method         (X,Y, A,       fetch,      A) \
     i_method         (X,Y, bool,    contains,   A) \
-    i_override_m     (X,Y, none,    init) \
+    i_override       (X,Y, none,    init) \
     i_override_cast  (X,Y, string) \
-    i_construct      (X,Y, sz) \
     i_index          (X,Y, A, A) \
     i_override_cast  (X,Y, bool)
 declare_mod(map, list)
@@ -888,13 +909,13 @@ declare_mod(map, list)
     i_intern    (X,Y, A,         target) \
     i_intern    (X,Y, A,         context) \
     i_method    (X,Y, A,         call, array) \
-    i_construct (X,Y,            Member, A, A) \
-    i_override_m(X,Y, u64,       hash)
+    i_override  (X,Y, u64,       hash)
 declare_class(fn)
 
 #define string_schema(X,Y) \
     i_intern(X,Y,     cstr,    chars) \
     i_intern(X,Y,     num,     alloc) \
+    i_intern(X,Y,     num,     ref_length) \
     i_intern(X,Y,     num,     len) \
     i_intern(X,Y,     u64,     h) \
     i_method(X,Y,     array,   split, cstr) \
@@ -906,26 +927,15 @@ declare_class(fn)
     i_method(X,Y,     bool,    has_suffix, cstr) \
     i_method(X,Y,     num,     cmp, cstr) \
     i_method(X,Y,     bool,    eq,  cstr) \
-    i_construct(X,Y,  sz) \
-    i_construct(X,Y,  cstr, num) \
-    i_override_m(X,Y, u64, hash) \
-    i_override_m(X,Y, num, compare) \
+    i_override(X,Y, u64, hash) \
+    i_override(X,Y, num, compare) \
+    i_override(X,Y, none, init) \
     i_override_cast(X,Y, bool) \
     i_cast(X,Y,       cstr) \
     i_cast(X,Y,       sz) \
     i_cast(X,Y,       path) \
     i_index(X,Y, i32, num)
 declare_class(string)
-
-#define vector_schema(X,Y) \
-    i_method(X,Y,     A,    pop) \
-    i_method(X,Y,     A,    push,     A) \
-    i_method(X,Y,     A,    get,      i32) \
-    i_method(X,Y,     num,  count) \
-    i_override_m(X,Y, i32,  compare) \
-    i_override_m(X,Y, u64,  hash) \
-    i_override_cast(X,Y, bool)
-declare_class(vector)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
 object A_formatter(AType rtype, FILE* f, bool write_ln, cstr template, ...);
@@ -953,7 +963,7 @@ declare_enum(Exists)
 /// we can go through a map
 #define enumerate(MM, EE) \
     if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
-        for (map_item EE = (map_item)_i->val, e0 = EE; EE == e0; e0++) \
+        for (pair EE = (pair)_i->value, e0 = EE; EE == e0; e0++) \
 
 /// possible to iterate safely through primitives
 #define primitives(T, t, E, e) \
@@ -997,7 +1007,7 @@ A           A_method_vargs(A instance, cstr method_name, int n_args, ...);
 fn          A_lambda(A target, type_member_t* member, A context);
 A           A_call(A instance, type_member_t* member, array args);
 A           A_primitive(AType type, void* data);
-A           A_enum(AType enum_type, i32 val);
+A           A_enum(AType enum_type, i32 value);
 A           A_i8(i8);
 A           A_u8(u8);
 A           A_i16(i16);
@@ -1016,6 +1026,8 @@ void        A_push(A, A);
 void        A_start();
 A           A_fields(A instance);
 A           A_data(A instance);
+A           A_verify(A instance, AType type);
+
 bool      is_meta(A a);
 bool      is_meta_compatible(A a, A b);
 

@@ -1,9 +1,9 @@
 {
     "configurations": [
         {
-            "name": "Silver Development",
+            "name": "silver environment",
             "includePath": [
-                "${workspaceFolder}/../silver/silver-build/install/include"
+                "/home/kalen/src/silver-import/include"
             ],
             "defines": [
                 "_DEBUG",

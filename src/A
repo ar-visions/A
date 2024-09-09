@@ -1046,7 +1046,7 @@ bool create_symlink(path target, path link);
 
 /// todo: auto-release, no use of drop in most places
 /// push_weak is probably a reasonable idea for array
-array map_of(cstr first_key, ...); /// cstr, A, ...
+map   map_of(cstr first_key, ...); /// cstr, A, ...
 array array_of(AType validate, ...);
 array array_of_cstr(cstr first, ...);
 void  array_weak_push(array, A);

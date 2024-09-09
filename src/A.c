@@ -1321,9 +1321,9 @@ static num array_index_of(array a, A b) {
 
 static bool array_cast_bool(array a) { return a && a->len > 0; }
 
-static array array_with_sz(array a, sz size) {
-    array_alloc_sz(a, size);
-    return a;
+static none array_init(array a) {
+    if (a->alloc)
+        array_alloc_sz(a, a->alloc);
 }
 
 static void AF_init(AF a) {

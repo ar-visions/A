@@ -956,9 +956,9 @@ declare_enum(Exists)
 #define       assert(a, t, ...) do { if (!(a)) { A_formatter(null, stderr, true,  t, ## __VA_ARGS__); exit(1); } } while(0)
 
 /// we can iterate through a collection with this strange code
-#define each(T, t, E, e) \
-    if (M(T, count, t)) for (E e = M(T, get, t, 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, __len = M(T, count, t); __i < __len; __i++, e = M(T, get, t, __i)) \
+#define each(container, E, e) \
+    if (M(container, count)) for (E e = M(container, get, 0), e0 = 0; e0 == 0; e0++) \
+        for (num __i = 0, __len = M(container, count); __i < __len; __i++, e = M(container, get, __i)) \
 
 /// we can go through a map
 #define enumerate(MM, EE) \
@@ -966,9 +966,9 @@ declare_enum(Exists)
         for (pair EE = (pair)_i->value, e0 = EE; EE == e0; e0++) \
 
 /// possible to iterate safely through primitives
-#define primitives(T, t, E, e) \
-    if (M(T, count, t)) for (E e = *(E*)M(T, get, t, 0), e0 = 0; e0 == 0; e0++) \
-        for (num i = 0, __len = M(T, count, t); i < __len; i++, e = *(E*)M(T, get, t, i)) \
+#define primitives(arr, E, e) \
+    if (M(arr, count)) for (E e = *(E*)M(arr, get, 0), e0 = 0; e0 == 0; e0++) \
+        for (num i = 0, __len = M(arr, count); i < __len; i++, e = *(E*)M(arr, get, i)) \
 
 A           A_alloc(AType type, num count, bool af_pool);
 

@@ -857,6 +857,7 @@ declare_class(path)
     i_method_vargs   (X,Y, none, push_symbols, X, cstr) \
     i_method_vargs   (X,Y, none, push_objects, X, A) \
     i_index          (X,Y, A,    num) \
+    i_override(X,Y, init) \
     i_override_cast  (X,Y, bool)
 declare_class(array)
 

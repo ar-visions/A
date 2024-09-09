@@ -381,6 +381,7 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
             M(result, set, default_key, value);
             found_single = true;
         }
+        i++;
     }
     return result;
 }

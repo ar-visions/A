@@ -534,7 +534,13 @@ void        A_lazy_init(global_init_fn fn);
     extern X##_f  X##_type;
 
 #define module_init(fn) \
-    static __attribute__((constructor)) void _module_ctr() { fn(); }
+    static bool _module_init() { \
+        fn(); \
+        return true; \
+    } \
+    static __attribute__((constructor)) void _module_register() { \
+        A_module_init((global_init_fn)&_module_init); \
+    }
 
 #define define_global_primitive(X,Y, TYPE_SZ, TRAIT) \
     _Pragma("pack(push, 1)") \
@@ -1030,6 +1036,7 @@ void        A_start();
 A           A_fields(A instance);
 A           A_data(A instance);
 A           A_verify(A instance, AType type);
+void        A_module_init(bool(*fn)());
 
 bool      is_meta(A a);
 bool      is_meta_compatible(A a, A b);

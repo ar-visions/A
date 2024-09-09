@@ -9,9 +9,6 @@ __thread   AF      af_top;
 static global_init_fn* call_after;
 static num             call_after_alloc;
 static num             call_after_count;
-static A_f**           types;
-static num             types_alloc;
-static num             types_len;
 
 void A_lazy_init(global_init_fn fn) {
     if (call_after_count == call_after_alloc) {
@@ -26,6 +23,29 @@ void A_lazy_init(global_init_fn fn) {
     }
     call_after[call_after_count++] = fn;
 }
+
+static global_init_fn* call_last;
+static num             call_last_alloc;
+static num             call_last_count;
+
+void A_module_init(bool(*fn)()) {
+    /// these should be loaded after the types are loaded.. the module inits are used for setting module-members (not globals!)
+    if (call_last_count == call_last_alloc) {
+        global_init_fn* prev      = call_last;
+        num            alloc_prev = call_last_alloc;
+        call_last_alloc           = 32 + (call_last_alloc << 1);
+        call_last                 = calloc(call_last_alloc, sizeof(global_init_fn));
+        if (prev) {
+            memcpy(call_last, prev, sizeof(global_init_fn) * alloc_prev);
+            free(prev);
+        }
+    }
+    call_last[call_last_count++] = fn;
+}
+
+static A_f**           types;
+static num             types_alloc;
+static num             types_len;
 
 void A_push_type(A_f* type) {
     if (types_alloc == types_len) {
@@ -230,6 +250,7 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
     return res;
 }
 
+
 void A_start() {
     int remaining = call_after_count;
     while (remaining)
@@ -237,6 +258,16 @@ void A_start() {
             global_init_fn fn = call_after[i];
             if (fn && fn()) {
                 call_after[i] = null;
+                remaining--;
+            }
+        }
+
+    int remaining = call_last_count;
+    while (remaining)
+        for (int i = 0; i < call_last_count; i++) {
+            global_init_fn fn = call_last[i];
+            if (fn && fn()) {
+                call_last[i] = null;
                 remaining--;
             }
         }

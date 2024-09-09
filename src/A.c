@@ -834,7 +834,7 @@ static bool string_has_suffix(string a, cstr value) {
 }
 
 static item hashmap_fetch(hashmap a, A key) {
-    u64 h = fnv1a_hash(key, strlen(key), OFFSET_BASIS);
+    u64 h = M(key, hash);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
@@ -847,7 +847,7 @@ static item hashmap_fetch(hashmap a, A key) {
 }
 
 static item hashmap_lookup(hashmap a, A key) {
-    u64 h = fnv1a_hash(key, strlen(key), OFFSET_BASIS);
+    u64 h = M(key, hash);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
@@ -874,7 +874,7 @@ static bool hashmap_contains(hashmap a, A key) {
 }
 
 static none hashmap_remove(hashmap a, A key) {
-    u64 h = fnv1a_hash(key, strlen(key), OFFSET_BASIS);
+    u64 h = M(key, hash);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)

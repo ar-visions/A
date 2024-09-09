@@ -533,6 +533,9 @@ void        A_lazy_init(global_init_fn fn);
     } X##_f, *X##_t; \
     extern X##_f  X##_type;
 
+#define module_init(fn) \
+    static __attribute__((constructor)) void _module_ctr() { fn(); }
+
 #define define_global_primitive(X,Y, TYPE_SZ, TRAIT) \
     _Pragma("pack(push, 1)") \
     object X##_header; \
@@ -1036,6 +1039,7 @@ bool create_symlink(path target, path link);
 /// todo: auto-release, no use of drop in most places
 /// push_weak is probably a reasonable idea for array
 array array_of(AType validate, ...);
+array array_of_cstr(cstr first, ...);
 void  array_weak_push(array, A);
 
 #endif

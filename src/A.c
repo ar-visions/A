@@ -1234,6 +1234,19 @@ array array_of(AType validate, ...) {
     return a;
 }
 
+array array_of_cstr(cstr first, ...) {
+    array a = new(array);
+    va_list args;
+    va_start(args, first);
+    for (;;) {
+        cstr arg = va_arg(args, A);
+        if (!arg)
+            break;
+        M(a, push, str(arg));
+    }
+    return a;
+}
+
 void  array_weak_push(array a, A obj) {
     a->elements[a->len++] = obj;
 }

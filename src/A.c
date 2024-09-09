@@ -1255,7 +1255,7 @@ static void array_push_objects(array a, A f, ...) {
 }
 
 map map_of(cstr first_key, ...) {
-    array a = new(map, hsize, 16);
+    map a = new(map, hsize, 16);
     va_list args;
     va_start(args, first_key);
     cstr key = first_key;

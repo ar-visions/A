@@ -942,7 +942,7 @@ static none map_set(map a, A key, A value) {
 
 static A map_get(map a, A key) {
     item i = M(a->hmap, lookup, key);
-    return i ? i->value : null;
+    return i->value ? ((pair)i->value)->value : null;
 }
 
 static bool map_contains(map a, A key) {

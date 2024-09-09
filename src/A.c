@@ -981,8 +981,9 @@ static string map_cast_string(map a) {
     string res  = new(string, alloc, 1024);
     bool   once = false;
     for (item i = a->first; i; i = i->next) {
-        string key = cast(i->key, string);
-        string value = cast(i->value, string);
+        pair   kv    = i->value;
+        string key   = cast(kv->key,   string);
+        string value = cast(kv->value, string);
         if (once) M(res, append, " ");
         M(res, append, key->chars);
         M(res, append, ":");

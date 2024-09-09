@@ -1254,6 +1254,20 @@ static void array_push_objects(array a, A f, ...) {
     va_end(args);
 }
 
+map map_of(cstr first_key, ...) {
+    array a = new(map, hsize, 16);
+    va_list args;
+    va_start(args, first_key);
+    cstr key = first_key;
+    for (;;) {
+        A arg = va_arg(args, A);
+        if (!arg)
+            break;
+        M(a, set, str(key), arg);
+    }
+    return a;
+}
+
 array array_of(AType validate, ...) {
     array a = new(array);
     va_list args;

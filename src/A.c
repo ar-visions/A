@@ -374,6 +374,7 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
                 }
             }
         } else if (!found_single && default_key) {
+            A default_key_obj = A_fields(default_key);
             string s_val     = new(string, chars, (cstr)arg);
             object def_value = M(default_values, get, default_key);
             AType  def_type  = isa(def_value);

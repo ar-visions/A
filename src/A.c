@@ -339,7 +339,7 @@ A A_set_property(A instance, symbol name, A value) {
 map A_args(int argc, symbol argv[], map default_values, object default_key) {
     map result = new(map, hsize, 16);
     for (item ii = default_values->first; ii; ii = ii->next) {
-        item  hm = ii->value;
+        pair  hm = ii->value;
         object k = hm->key;
         object v = hm->value;
         M(result, set, k, v);

@@ -1273,7 +1273,7 @@ array array_of_cstr(cstr first, ...) {
         cstr arg = va_arg(args, A);
         if (!arg)
             break;
-        M(a, push, str(arg));
+        M(a, push, allocate(string, chars, arg));
     }
     return a;
 }

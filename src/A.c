@@ -933,7 +933,7 @@ static none map_set(map a, A key, A value) {
         mi->value    = A_hold(value);
         A_drop(before);
     } else {
-        mi = new(pair, key, key, value, value);
+        mi = i->value = new(pair, key, key, value, value); // todo: make pair originate in hash; remove the key from item
         mi->ref      = M(a, push, i);
         mi->ref->key = A_hold(key);
         mi->ref->value = mi;

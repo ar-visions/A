@@ -1511,7 +1511,7 @@ static string path_filename(path a) {
     string res = new(string, alloc, 256);
     for (num i = len - 1; i >= 0; i--) {
         if (cs[i] == '/' || i == 0) {
-            cstr start = &cs[i + cs[i] == '/'];
+            cstr start = &cs[i + (cs[i] == '/')];
             int n_bytes = len - i;
             memcpy(res->chars, start, n_bytes);
             res->len = n_bytes;

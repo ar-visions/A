@@ -1423,8 +1423,8 @@ static string path_cast_cstr(path a) {
     return a->chars;
 }
 
-static string path_cast_string(path a) {
-    return new(string, chars, a->chars);
+static string path_cast_cereal(path a) {
+    return a->chars;
 }
 
 static bool path_make_dir(path a) {

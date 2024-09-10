@@ -815,12 +815,12 @@ declare_enum(OPType)
     i_method    (X,Y, public, A,      read, AType) \
     i_method    (X,Y, public, path,   change_ext, cstr) \
     s_method    (X,Y, public, path,   cwd, sz) \
+    i_ctr       (X,Y, ctr,    string) \
     i_cast      (X,Y, public, cstr) \
     i_cast      (X,Y, public, sz) \
     i_override  (X,Y, method, hash) \
     i_override  (X,Y, method, init) \
-    i_override  (X,Y, cast,   string) \
-    i_override  (X,Y, ctr,    string)
+    i_override  (X,Y, cast,   string)
 declare_class(path)
 
 #define array_schema(X,Y) \

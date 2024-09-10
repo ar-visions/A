@@ -818,9 +818,9 @@ declare_enum(OPType)
     i_ctr       (X,Y, public, string) \
     i_cast      (X,Y, public, cstr) \
     i_cast      (X,Y, public, sz) \
+    i_override  (X,Y, ctr,    cereal) \
     i_override  (X,Y, method, hash) \
-    i_override  (X,Y, method, init) \
-    i_override  (X,Y, cast,   cereal)
+    i_override  (X,Y, method, init)
 declare_class(path)
 
 #define array_schema(X,Y) \

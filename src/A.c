@@ -28,6 +28,13 @@ static global_init_fn* call_last;
 static num             call_last_alloc;
 static num             call_last_count;
 
+cstr copy_cstr(cstr input) {
+    sz len = strlen(input);
+    cstr res = calloc(len + 1, 1);
+    memcpy(res, input, len);
+    return res;
+}
+
 void A_module_init(bool(*fn)()) {
     /// these should be loaded after the types are loaded.. the module inits are used for setting module-members (not globals!)
     if (call_last_count == call_last_alloc) {
@@ -1412,7 +1419,8 @@ static none path_init(path a) {
 }
 
 static path path_with_string(path a, string s) {
-    return new(path, chars, s->chars);
+    a->chars = copy_cstr(s->chars);
+    return a;
 }
 
 static sz path_cast_sz(path a) {
@@ -1423,8 +1431,9 @@ static string path_cast_cstr(path a) {
     return a->chars;
 }
 
-static string path_cast_cereal(path a) {
-    return a->chars;
+static path path_with_cereal(path a, cereal cs) {
+    a->chars = copy_cstr(cs);
+    return a;
 }
 
 static bool path_make_dir(path a) {

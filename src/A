@@ -815,7 +815,7 @@ declare_enum(OPType)
     i_method    (X,Y, public, A,      read, AType) \
     i_method    (X,Y, public, path,   change_ext, cstr) \
     s_method    (X,Y, public, path,   cwd, sz) \
-    i_ctr       (X,Y, ctr,    string) \
+    i_ctr       (X,Y, public, string) \
     i_cast      (X,Y, public, cstr) \
     i_cast      (X,Y, public, sz) \
     i_override  (X,Y, method, hash) \

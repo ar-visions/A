@@ -499,7 +499,7 @@ static void A_serialize(AType type, string res, A a) {
         else if (type == typeid(u8))  len = sprintf(buf, "%hhu", *(u8*) a);
         else if (type == typeid(f64)) len = sprintf(buf, "%f",   *(f64*)a);
         else if (type == typeid(f32)) len = sprintf(buf, "%f",   *(f32*)a);
-        else if (type == typeid(cstr)) len = sprintf(buf, "%s",   a);
+        else if (type == typeid(cstr)) len = sprintf(buf, "%s",  *(cstr*)a);
         else {
             fault("implement primitive cast to str: %s", type->name);
         }

@@ -1432,8 +1432,12 @@ static sz path_cast_sz(path a) {
     return strlen(a->chars);
 }
 
-static string path_cast_cstr(path a) {
+static cstr path_cast_cstr(path a) {
     return a->chars;
+}
+
+static string path_cast_string(path a) {
+    return new(string, chars, a->chars);
 }
 
 static path path_with_cereal(path a, cereal cs) {

@@ -362,6 +362,13 @@ enum A_TRAIT {
 #define i_override_METHOD(X,Y, N)
 #define i_override(X,Y, N)                      i_override_##Y(X,Y, N)
 
+#define i_override_ctr_INST(X,Y, R)
+#define i_override_ctr_INIT(X,Y, R)            X##_type . with_##R = & X##_with_##R;
+#define i_override_ctr_BASE(X,Y, R)
+#define i_override_ctr_PROTO(X,Y, R)
+#define i_override_ctr_METHOD(X,Y, R)
+#define i_override_ctr(X,Y, R)                 i_override_ctr_##Y(X,Y, R)
+
 #define i_override_cast_INST(X,Y, R)
 #define i_override_cast_INIT(X,Y, R)            X##_type . cast_##R = & X##_cast_##R;
 #define i_override_cast_BASE(X,Y, R)

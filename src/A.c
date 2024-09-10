@@ -1616,6 +1616,7 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeid(AType)) return &ffi_type_pointer;
     if (ptype == typeid(handle)) return &ffi_type_pointer;
     if (ptype == typeid(Member)) return &ffi_type_pointer;
+    if (ptype == typeid(ARef))   return &ffi_type_pointer;
     if (ptype == typeid(raw))    return &ffi_type_pointer;
     assert(false, "primitive_ffi_arb not implemented: %s", ptype->name);
     return null;
@@ -1627,6 +1628,7 @@ define_abstract(numeric)
 define_abstract(string_like)
 define_abstract(nil)
 define_abstract(raw)
+define_abstract(ref)
 define_abstract(imported)
 
 define_primitive( u8,    numeric, A_TRAIT_INTEGRAL)
@@ -1650,6 +1652,7 @@ define_primitive(none,   nil, 0)
 define_primitive(AType,  raw, 0)
 define_primitive(handle, raw, 0)
 define_primitive(Member, raw, 0)
+define_primitive(ARef,   ref, 0);
 
 define_enum(OPType)
 define_enum(Exists)

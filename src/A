@@ -217,49 +217,41 @@ enum A_TRAIT {
 #define EXPAND_ARGS2(...)            EXPAND_ARGS_HELPER2(COUNT_ARGS(__VA_ARGS__), __VA_ARGS__)
 #define EXPAND_ARGS_HELPER2(N, ...)  combine_tokens(EXPAND_ARGS2_, N)(__VA_ARGS__)
 
-#define   i_intern_INST(    X,Y, R, N, ...)         R N;
-#define   i_intern_INIT(    X,Y, R, N, ...)
-#define   i_intern_PROTO(   X,Y, R, N, ...)    
-#define   i_intern_METHOD(  X,Y, R, N, ...)    
-#define   i_intern(         X,Y, R, N, ...)         i_intern_##Y(X,Y,R,N, ## __VA_ARGS__)
 
-#define   i_ctr_INST(X,Y,ARG)
-#define   i_ctr_INIT(X,Y,ARG) \
+#define   i_ctr_public_INST(X, ARG)
+#define   i_ctr_public_INIT(X, ARG) \
     X##_type.with_##ARG = & X##_with_##ARG; \
-    X##_type.members[X##_type.member_count].name        = with_##ARG; \
+    X##_type.members[X##_type.member_count].name        = stringify(with_##ARG); \
     X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(ARG) }; \
     X##_type.members[X##_type.member_count].type        = &ARG##_type; \
     X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, with_##ARG); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_CONSTRUCT; \
     X##_type.member_count++;  
-#define     i_ctr_PROTO(X,Y, ARG)
-#define     i_ctr_METHOD(X,Y, ARG)         X (*with_##ARG)(X, ARG);
-#define     i_ctr(X,Y, ARG)                i_ctr_##Y(X,Y, ARG)
+#define   i_ctr_public_PROTO(X, ARG)
+#define   i_ctr_public_METHOD(X, ARG)      X (*with_##ARG)(X, ARG);
+#define   i_ctr_intern_INST(X, ARG)
+#define   i_ctr_intern_INIT(X, ARG) 
+#define   i_ctr_intern_PROTO(X, ARG)
+#define   i_ctr_intern_METHOD(X, ARG)      X (*with_##ARG)(X, ARG);
+#define   i_ctr(X, Y, T, ARG)              i_ctr_##T##_##Y(X, ARG)
 
-#define   i_private_INST(   X,Y, R, N, ...)         R N;
-#define   i_private_INIT(   X,Y, R, N, ...) \
-    X##_type.members[X##_type.member_count].name     = #N; \
-    X##_type.members[X##_type.member_count].offset   = offsetof(struct X, N); \
-    X##_type.members[X##_type.member_count].type     = &R##_type; \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_PRIV; \
-    X##_type.member_count++;
-#define   i_private_PROTO(  X,Y, R, N, ...)    
-#define   i_private_METHOD( X,Y, R, N, ...)    
-#define   i_private(        X,Y, R, N, ...)          i_private_##Y(X,Y,R,N, ## __VA_ARGS__)
-
-#define   i_public_INST(    X,Y, R, N, ...)         R N;  
-#define   i_public_INIT(    X,Y, R, N, ...) \
+#define   i_prop_public_INST(X, R, N)         R N;  
+#define   i_prop_public_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].name     = #N; \
     X##_type.members[X##_type.member_count].offset   = offsetof(struct X, N); \
     X##_type.members[X##_type.member_count].type     = &R##_type; \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_PROP; \
     X##_type.member_count++;
-#define   i_public_PROTO(   X,Y, R, N, ...)  
-#define   i_public_METHOD(  X,Y, R, N, ...)   
-#define   i_public(         X,Y, R, N, ...)         i_public_##Y(X,Y, R, N, __VA_ARGS__)
+#define   i_prop_public_PROTO(X, R, N)  
+#define   i_prop_public_METHOD(X, R, N)
+#define   i_prop_intern_INST(X, R, N)         R N;  
+#define   i_prop_intern_INIT(X, R, N)
+#define   i_prop_intern_PROTO(X, R, N)  
+#define   i_prop_intern_METHOD(X, R, N)  
+#define   i_prop(X, Y, T, R, N) i_prop_##T##_##Y(X, R, N)
 
-#define   s_method_INST(    X,Y, R, N, ...)
-#define   s_method_INIT(    X,Y, R, N, ...) \
+#define   s_method_public_INST(X, R, N, ...)
+#define   s_method_public_INIT(X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(__VA_ARGS__) }; \
@@ -267,12 +259,16 @@ enum A_TRAIT {
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, N); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_SMETHOD; \
     X##_type.member_count++;   
-#define   s_method_PROTO(   X,Y, R, N, ...)
-#define   s_method_METHOD(  X,Y, R, N, ...)         R (*N)(__VA_ARGS__);
-#define   s_method(         X,Y, R, N, ...)         s_method_##Y(X,Y, R, N, ##__VA_ARGS__)
+#define   s_method_public_PROTO(X, R, N, ...)
+#define   s_method_public_METHOD(X, R, N, ...)    R (*N)(__VA_ARGS__);
+#define   s_method_intern_INST(X, R, N, ...)
+#define   s_method_intern_INIT(X, R, N, ...)      X##_type . N = & X## _ ## N;
+#define   s_method_intern_PROTO(X, R, N, ...)
+#define   s_method_intern_METHOD(X, R, N, ...)    R (*N)(__VA_ARGS__);
+#define   s_method(X, Y, T, R, N, ...)            s_method_##T##_##Y(X, R, N, ##__VA_ARGS__)
 
-#define   i_method_INST(    X,Y, R, N, ...)
-#define   i_method_INIT(    X,Y, R, N, ...) \
+#define   i_method_public_INST(    X, R, N, ...)
+#define   i_method_public_INIT(    X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X, ##__VA_ARGS__) }; \
@@ -280,12 +276,16 @@ enum A_TRAIT {
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, N); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_IMETHOD; \
     X##_type.member_count++;
-#define   i_method_PROTO(X,Y, R, N, ...)
-#define   i_method_METHOD(X,Y, R, N, ...)           R (*N)(__VA_ARGS__);
-#define   i_method(X,Y, R, N, ...)                  i_method_##Y(X,Y, R, N, X, ##__VA_ARGS__)
+#define   i_method_public_PROTO(X, R, N, ...)
+#define   i_method_public_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
+#define   i_method_intern_INST(    X, R, N, ...)
+#define   i_method_intern_INIT(    X, R, N, ...)    X##_type . N = & X## _ ## N;
+#define   i_method_intern_PROTO(X, R, N, ...)
+#define   i_method_intern_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
+#define   i_method(X, Y, T, R, N, ...)              i_method_##T##_##Y(X, R, N, X, ##__VA_ARGS__)
 
-#define   i_operator_INST(X,Y, R, N, ARG)
-#define   i_operator_INIT(X,Y, R, N, ARG) \
+#define   i_operator_public_INST(X, R, N, ARG)
+#define   i_operator_public_INIT(X, R, N, ARG) \
     X##_type  . operator_##N = & X## _operator_ ## N; \
     X##_type.members[X##_type.member_count].name    = stringify(combine_tokens(operator_, N)); \
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X, ARG) }; \
@@ -294,12 +294,16 @@ enum A_TRAIT {
     X##_type.members[X##_type.member_count].member_type = A_TYPE_OPERATOR; \
     X##_type.members[X##_type.member_count].operator_type = OPType_ ## N; \
     X##_type.member_count++; 
-#define   i_operator_PROTO(X,Y, R, N, ARG)
-#define   i_operator_METHOD(X,Y, R, N, ARG)         R (*operator_ ## N)(X, ARG);
-#define   i_operator(X,Y, R, N, ARG)                i_operator_##Y(X,Y, R, N, ARG)
+#define   i_operator_public_PROTO(X, R, N, ARG)
+#define   i_operator_public_METHOD(X, R, N, ARG)    R (*operator_ ## N)(X, ARG);
+#define   i_operator_intern_INST(X, R, N, ARG)      
+#define   i_operator_intern_INIT(X, R, N, ARG)      X##_type  . operator_##N = & X## _operator_ ## N;
+#define   i_operator_intern_PROTO(X, R, N, ARG)
+#define   i_operator_intern_METHOD(X, R, N, ARG)    R (*operator_ ## N)(X, ARG);
+#define   i_operator(X, Y, T, R, N, ARG)            i_operator_##T##_##Y(X, R, N, ARG)
 
-#define   i_cast_INST(X,Y, R)
-#define   i_cast_INIT(X,Y, R) \
+#define   i_cast_public_INST(X, R)
+#define   i_cast_public_INIT(X, R) \
     X##_type.cast_##R = & X##_cast_##R; \
     X##_type.members[X##_type.member_count].name    = stringify(combine_tokens(cast_, R)); \
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X) }; \
@@ -307,13 +311,16 @@ enum A_TRAIT {
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, cast_##R); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_CAST; \
     X##_type.member_count++;  
-#define   i_cast_PROTO(X,Y, R)
-#define   i_cast_METHOD(X,Y, R)                 R (*cast_##R)(X);
-#define   i_cast(X,Y, R)                      i_cast_##Y(X,Y, R)
+#define   i_cast_public_PROTO(X, R)
+#define   i_cast_public_METHOD(X, R)        R (*cast_##R)(X);
+#define   i_cast_intern_INST(X, R)
+#define   i_cast_intern_INIT(X, R)          X##_type.cast_##R = & X##_cast_##R;
+#define   i_cast_intern_PROTO(X, R)
+#define   i_cast_intern_METHOD(X, R)        R (*cast_##R)(X);
+#define   i_cast(X, Y, T, R)                i_cast_##T##_##Y(X, R)
 
-
-#define   i_index_INST(X,Y,R, ...)
-#define   i_index_INIT(X,Y,R, ...) \
+#define   i_index_public_INST(X, R, ...)
+#define   i_index_public_INIT(X, R, ...) \
     X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__); \
     X##_type.members[X##_type.member_count].name        = stringify(emit_idx_symbol(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(__VA_ARGS__) }; \
@@ -321,49 +328,56 @@ enum A_TRAIT {
     X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, emit_idx_symbol(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_INDEX; \
     X##_type.member_count++;  
-#define i_index_PROTO(X,Y, R, ...)
-#define i_index_METHOD(X,Y, R, ...)             R (*emit_idx_symbol(index, __VA_ARGS__))(X, ##__VA_ARGS__);
-#define i_index(X,Y, R, ...)                    i_index_##Y(X,Y, R, ##__VA_ARGS__)
+#define i_index_public_PROTO(X, R, ...)
+#define i_index_public_METHOD(X, R, ...)             R (*emit_idx_symbol(index, __VA_ARGS__))(X, ##__VA_ARGS__);
+#define i_index_intern_INST(X, R, ...)
+#define i_index_intern_INIT(X, R, ...) \
+    X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__);
+#define i_index_intern_PROTO(X, R, ...)
+#define i_index_intern_METHOD(X, R, ...)            R (*emit_idx_symbol(index, __VA_ARGS__))(X, ##__VA_ARGS__);
+#define i_index(X, Y, T, R, ...)                    i_index_##T##_##Y(X, R, ##__VA_ARGS__)
 
-#define i_method_vargs_INST(X,Y, R, N, ...)
-#define i_method_vargs_INIT(X,Y, R, N, ...)     i_method_INIT(X,Y, R, N, __VA_ARGS__)  
-#define i_method_vargs_PROTO(X,Y, R, N, ...)
-#define i_method_vargs_METHOD(X,Y, R, N, ...)   R (*N)(__VA_ARGS__, ...);
-#define i_method_vargs(X,Y, R, N, ...)          i_method_vargs_##Y(X,Y, R, N, __VA_ARGS__)
+#define i_vargs_public_INST(X, R, N, ...)
+#define i_vargs_public_INIT(X, R, N, ...)             i_method_public_INIT(X, R, N, __VA_ARGS__)  
+#define i_vargs_public_PROTO(X, R, N, ...)
+#define i_vargs_public_METHOD(X, R, N, ...)           R (*N)(__VA_ARGS__, ...);
+#define i_vargs_intern_INST(X, R, N, ...)
+#define i_vargs_intern_INIT(X, R, N, ...)             i_method_intern_INIT(X, R, N, __VA_ARGS__)  
+#define i_vargs_intern_PROTO(X, R, N, ...)
+#define i_vargs_intern_METHOD(X, R, N, ...)           R (*N)(__VA_ARGS__, ...);
+#define i_vargs(X, Y, T, R, N, ...)                   i_vargs_##T##_##Y(X, R, N, __VA_ARGS__)
 
-#define s_method_vargs_INST(X,Y, R, N, ...)
-#define s_method_vargs_INIT(X,Y, R, N, ...)     s_method_INIT(X,Y, R, N, ##__VA_ARGS__)
-#define s_method_vargs_PROTO(X,Y, R, N, ...)
-#define s_method_vargs_METHOD(X,Y, R, N, ...)   R (*N)(__VA_ARGS__, ...);
-#define s_method_vargs(X,Y, R, N, ...)          s_method_vargs_##Y(X,Y, R, N, ##__VA_ARGS__)
+#define s_vargs_public_INST(X, R, N, ...)
+#define s_vargs_public_INIT(X, R, N, ...)               s_method_public_INIT(X, R, N, ##__VA_ARGS__)
+#define s_vargs_public_PROTO(X, R, N, ...)
+#define s_vargs_public_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
+#define s_vargs_intern_INST(X, R, N, ...)
+#define s_vargs_intern_INIT(X, R, N, ...)               s_method_intern_INIT(X, R, N, ##__VA_ARGS__)
+#define s_vargs_intern_PROTO(X, R, N, ...)
+#define s_vargs_intern_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
+#define s_vargs(X, Y, T, R, N, ...)                     s_vargs_##T##_##Y(X, R, N, ##__VA_ARGS__)
 
-#define implement_INST(X,Y, R, N, ...)
-#define implement_INIT(X,Y, R, N, ...)
-#define implement_PROTO(X,Y, R, N, ...)
-#define implement_METHOD(X,Y, R, N, ...)
-#define implement(X,Y, R, N, ...)                       implement_##Y(X,Y, R, N, __VA_ARGS__)
+#define i_override_method_INST(X, N)
+#define i_override_method_INIT(X, N)                  X##_type . N = & X## _ ## N;
+#define i_override_method_PROTO(X, N)
+#define i_override_method_METHOD(X, N)
 
-#define i_override_method_INST(X,Y, N)
-#define i_override_method_INIT(X,Y, N)                  X##_type . N = & X## _ ## N;
-#define i_override_method_PROTO(X,Y, N)
-#define i_override_method_METHOD(X,Y, N)
+#define i_override_ctr_INST(X, R)
+#define i_override_ctr_INIT(X, R)                     X##_type . with_##R = & X##_with_##R;
+#define i_override_ctr_PROTO(X, R)
+#define i_override_ctr_METHOD(X, R)
 
-#define i_override_ctr_INST(X,Y, R)
-#define i_override_ctr_INIT(X,Y, R)                     X##_type . with_##R = & X##_with_##R;
-#define i_override_ctr_PROTO(X,Y, R)
-#define i_override_ctr_METHOD(X,Y, R)
+#define i_override_cast_INST(X, R)
+#define i_override_cast_INIT(X, R)                    X##_type . cast_##R = & X##_cast_##R;
+#define i_override_cast_PROTO(X, R)
+#define i_override_cast_METHOD(X, R)
 
-#define i_override_cast_INST(X,Y, R)
-#define i_override_cast_INIT(X,Y, R)                    X##_type . cast_##R = & X##_cast_##R;
-#define i_override_cast_PROTO(X,Y, R)
-#define i_override_cast_METHOD(X,Y, R)
+#define i_override_idx_INST(X, R)
+#define i_override_idx_INIT(X, R)                    X##_type . idx_##R = & X##_idx_##R;
+#define i_override_idx_PROTO(X, R)
+#define i_override_idx_METHOD(X, R)
 
-#define i_override_idx_INST(X,Y, R)
-#define i_override_idx_INIT(X,Y, R)                    X##_type . idx_##R = & X##_idx_##R;
-#define i_override_idx_PROTO(X,Y, R)
-#define i_override_idx_METHOD(X,Y, R)
-
-#define i_override(X,Y, T, N)                           i_override_##T##_##Y(X,Y, N)
+#define i_override(X, Y, OT, N)                        i_override_##OT##_##Y(X, N)
 
 typedef struct method_t {
     struct array*   atypes;
@@ -640,22 +654,21 @@ typedef struct string* string;
 
 /// constructors get a type forwarded from the construct macro
 #define A_schema(X,Y) \
-    i_intern(X,Y, AType,     type) \
-    i_intern(X,Y, num,       refs) \
-    i_intern(X,Y, num,       ar_index) \
-    i_intern(X,Y, A,         data) \
-    i_intern(X,Y, num,       alloc) \
-    i_intern(X,Y, num,       count) \
-    i_intern(X,Y, A,         origin) \
-    i_method(X,Y, none,      init) \
-    i_method(X,Y, none,      destructor) \
-    i_method(X,Y, i32,       compare,    X) \
-    i_method(X,Y, u64,       hash) \
-    i_method(X,Y, A,         copy, A) \
-    i_ctr(   X,Y, cereal) \
-    i_cast(  X,Y, string) \
-    i_cast(  X,Y, bool) \
-    s_method(X,Y, A, cerealize, A, cereal, num)
+    i_prop  (X,Y, intern, AType,     type) \
+    i_prop  (X,Y, intern, num,       refs) \
+    i_prop  (X,Y, intern, num,       ar_index) \
+    i_prop  (X,Y, intern, A,         data) \
+    i_prop  (X,Y, intern, num,       alloc) \
+    i_prop  (X,Y, intern, num,       count) \
+    i_prop  (X,Y, intern, A,         origin) \
+    i_method(X,Y, public, none,      init) \
+    i_method(X,Y, public, none,      destructor) \
+    i_method(X,Y, public, i32,       compare,    X) \
+    i_method(X,Y, public, u64,       hash) \
+    i_method(X,Y, public, A,         copy, A) \
+    i_ctr(   X,Y, public, cereal) \
+    i_cast(  X,Y, public, string) \
+    i_cast(  X,Y, public, bool)
 declare_base(A)
 
 #define typeid(X) ((struct A_f*)&X##_type)
@@ -733,33 +746,26 @@ declare_primitive(Member,       raw)
 
 /// doubly-linked item type, integrated key so we dont also need a 'field' type
 #define item_schema(X,Y) \
-    i_intern(X,Y, struct X*, next) \
-    i_intern(X,Y, struct X*, prev) \
-    i_intern(X,Y, A,         value) \
-    i_intern(X,Y, A,         key) \
+    i_prop    (X,Y, intern, struct X*, next) \
+    i_prop    (X,Y, intern, struct X*, prev) \
+    i_prop    (X,Y, intern, A,         value) \
+    i_prop    (X,Y, intern, A,         key) \
     i_override(X,Y, method, hash)
 declare_class(item)
 
 /// linked-list of elemental data
 #define list_schema(X,Y) \
-    i_intern(X,Y, item,      first) \
-    i_intern(X,Y, item,      last)  \
-    i_intern(X,Y, i64,       count) \
-    i_method(X,Y, A,         pop) \
-    i_method(X,Y, item,      push, A) \
-    i_method(X,Y, num,       index_of_element, A) \
-    i_method(X,Y, none,      remove, num) \
-    i_method(X,Y, none,      remove_item, item) \
-    i_method(X,Y, A,         get,  A) \
-    i_method(X,Y, num,       count)
+    i_prop  (X,Y, intern,    item,    first) \
+    i_prop  (X,Y, intern,    item,    last)  \
+    i_prop  (X,Y, intern,    i64,     count) \
+    i_method(X,Y, public,    A,       pop) \
+    i_method(X,Y, public,    item,    push, A) \
+    i_method(X,Y, public,    num,     index_of_element, A) \
+    i_method(X,Y, public,    none,    remove, num) \
+    i_method(X,Y, public,    none,    remove_item, item) \
+    i_method(X,Y, public,    A,       get,  A) \
+    i_method(X,Y, public,    num,     count)
 declare_class(list)
-
-
-
-
-
-
-
 
 /// array of elemental data
 /// important to define the same operators here in silver definition of runtime
@@ -796,47 +802,47 @@ typedef struct string* string;
 declare_enum(OPType)
 
 #define path_schema(X,Y) \
-    i_intern    (X,Y, cstr,   chars) \
-    i_method    (X,Y, bool,   exists) \
-    i_method    (X,Y, bool,   make_dir) \
-    i_method    (X,Y, bool,   is_empty) \
-    i_method    (X,Y, bool,   is_dir) \
-    i_method    (X,Y, path,   directory) \
-    i_method    (X,Y, string, stem) \
-    i_method    (X,Y, string, filename) \
-    i_method    (X,Y, path,   absolute) \
-    i_method    (X,Y, path,   parent) \
-    i_method    (X,Y, A,      read, AType) \
-    i_method    (X,Y, path,   change_ext, cstr) \
-    s_method    (X,Y, path,   cwd, sz) \
+    i_prop      (X,Y, public, cstr,   chars) \
+    i_method    (X,Y, public, bool,   exists) \
+    i_method    (X,Y, public, bool,   make_dir) \
+    i_method    (X,Y, public, bool,   is_empty) \
+    i_method    (X,Y, public, bool,   is_dir) \
+    i_method    (X,Y, public, path,   directory) \
+    i_method    (X,Y, public, string, stem) \
+    i_method    (X,Y, public, string, filename) \
+    i_method    (X,Y, public, path,   absolute) \
+    i_method    (X,Y, public, path,   parent) \
+    i_method    (X,Y, public, A,      read, AType) \
+    i_method    (X,Y, public, path,   change_ext, cstr) \
+    s_method    (X,Y, public, path,   cwd, sz) \
+    i_cast      (X,Y, public, cstr) \
+    i_cast      (X,Y, public, sz) \
     i_override  (X,Y, method, hash) \
     i_override  (X,Y, method, init) \
-    i_cast(      X,Y, cstr) \
-    i_cast(      X,Y, sz) \
-    i_override  (X,Y, cast, string)
+    i_override  (X,Y, cast,   string)
 declare_class(path)
 
 #define array_schema(X,Y) \
-    i_intern         (X,Y, ARef, elements) \
-    i_intern         (X,Y, i32,  alloc) \
-    i_intern         (X,Y, i32,  len) \
-    s_method_vargs   (X,Y, X,    of, A) \
-    i_method         (X,Y, A,    first) \
-    i_method         (X,Y, A,    last) \
-    i_method         (X,Y, X,    pop) \
-    i_method         (X,Y, X,    remove, num) \
-    i_method         (X,Y, X,    remove_weak, num) \
-    i_method         (X,Y, A,    push,A) \
-    i_method         (X,Y, A,    push_weak,A) \
-    i_method         (X,Y, none, concat, array) \
-    i_method         (X,Y, A,    get, i32) \
-    i_method         (X,Y, num,  count) \
-    i_method         (X,Y, num,  index_of, A) \
-    i_operator       (X,Y, none, assign_add, A) \
-    i_operator       (X,Y, none, assign_sub, num) \
-    i_method_vargs   (X,Y, none, push_symbols, X, cstr) \
-    i_method_vargs   (X,Y, none, push_objects, X, A) \
-    i_index          (X,Y, A,    num) \
+    i_prop           (X,Y, public, ARef, elements) \
+    i_prop           (X,Y, public, i32,  alloc) \
+    i_prop           (X,Y, public, i32,  len) \
+    s_vargs          (X,Y, public, X,    of, A) \
+    i_method         (X,Y, public, A,    first) \
+    i_method         (X,Y, public, A,    last) \
+    i_method         (X,Y, public, X,    pop) \
+    i_method         (X,Y, public, X,    remove, num) \
+    i_method         (X,Y, public, X,    remove_weak, num) \
+    i_method         (X,Y, public, A,    push,A) \
+    i_method         (X,Y, public, A,    push_weak,A) \
+    i_method         (X,Y, public, none, concat, array) \
+    i_method         (X,Y, public, A,    get, i32) \
+    i_method         (X,Y, public, num,  count) \
+    i_method         (X,Y, public, num,  index_of, A) \
+    i_operator       (X,Y, public, none, assign_add, A) \
+    i_operator       (X,Y, public, none, assign_sub, num) \
+    i_vargs          (X,Y, public, none, push_symbols, X, cstr) \
+    i_vargs          (X,Y, public, none, push_objects, X, A) \
+    i_index          (X,Y, public, A,    num) \
     i_override       (X,Y, method, init) \
     i_override       (X,Y, cast,   bool)
 declare_class(array)
@@ -844,48 +850,48 @@ declare_class(array)
 declare_meta(array, ATypes)
 
 #define AF_schema(X,Y) \
-    i_intern(    X,Y, array, pool) \
-    i_public(    X,Y, sz,    start_size) \
-    s_method(    X,Y, AF,    fetch, num) \
-    s_method(    X,Y, AF,    create, sz) \
+    i_prop      (X,Y, intern, array, pool) \
+    i_prop      (X,Y, public, sz,    start_size) \
+    s_method    (X,Y, public, AF,    fetch, num) \
+    s_method    (X,Y, public, AF,    create, sz) \
     i_override  (X,Y, method, init) \
     i_override  (X,Y, method, destructor)
 declare_class(AF)
 
 #define hashmap_schema(X,Y) \
-    i_intern         (X,Y, list,  data) \
-    i_private        (X,Y, num,   alloc) \
-    i_private        (X,Y, num,   count) \
-    i_method         (X,Y, none,  remove, A) \
-    i_method         (X,Y, none,  set, A, A) \
-    i_method         (X,Y, A,     get, A) \
-    i_method         (X,Y, item,  fetch, A) \
-    i_method         (X,Y, item,  lookup, A) \
-    i_method         (X,Y, bool,  contains, A) \
-    i_override       (X,Y, cast,  string) \
-    i_override       (X,Y, method, init) \
-    i_index          (X,Y, A,     A) \
-    i_override       (X,Y, cast,  bool)
+    i_prop      (X,Y, intern, list,  data) \
+    i_prop      (X,Y, public, num,   alloc) \
+    i_prop      (X,Y, intern, num,   count) \
+    i_method    (X,Y, public, none,  remove, A) \
+    i_method    (X,Y, public, none,  set, A, A) \
+    i_method    (X,Y, public, A,     get, A) \
+    i_method    (X,Y, public, item,  fetch, A) \
+    i_method    (X,Y, public, item,  lookup, A) \
+    i_method    (X,Y, public, bool,  contains, A) \
+    i_index     (X,Y, public, A, A) \
+    i_override  (X,Y, cast,   string) \
+    i_override  (X,Y, method, init) \
+    i_override  (X,Y, cast,   bool)
 declare_class(hashmap)
 
 #define pair_schema(X,Y) \
-    i_intern         (X,Y, item,    ref) \
-    i_intern         (X,Y, A,       key) \
-    i_intern         (X,Y, A,       value)
+    i_prop      (X,Y, public, item,    ref) \
+    i_prop      (X,Y, public, A,       key) \
+    i_prop      (X,Y, public, A,       value)
 declare_class(pair)
 
 /// hmap stores the item, and our refs list has a value that holds that (origin = hmap)
 #define map_schema(X,Y) \
-    i_prop           (X,Y, intern,  hashmap,    hmap) \
-    i_prop           (X,Y, intern,  sz,         hsize) \
-    i_method         (X,Y, public,  none,       set,        A, A) \
-    i_method         (X,Y, public,  item,       fetch,      A) \
-    i_method         (X,Y, public,  bool,       contains,   A) \
-    i_override       (X,Y, method,  get) \
-    i_override       (X,Y, method,  init) \
-    i_override       (X,Y, cast,    string) \
-    i_override       (X,Y, cast,    bool) \
-    i_index          (X,Y, A, A)
+    i_prop      (X,Y, intern,  hashmap,    hmap) \
+    i_prop      (X,Y, public,  sz,         hsize) \
+    i_method    (X,Y, public,  none,       set,        A, A) \
+    i_method    (X,Y, public,  item,       fetch,      A) \
+    i_method    (X,Y, public,  bool,       contains,   A) \
+    i_index     (X,Y, public,  A, A) \
+    i_override  (X,Y, method,  get) \
+    i_override  (X,Y, method,  init) \
+    i_override  (X,Y, cast,    string) \
+    i_override  (X,Y, cast,    bool)
 declare_mod(map, list)
 
 /// how beneficial is it to have args in 'context' structure?
@@ -895,36 +901,36 @@ declare_mod(map, list)
 /// its compatible with lambdas; those args are just set first
 
 #define fn_schema(X,Y) \
-    i_intern    (X,Y, method_t*, method) \
-    i_intern    (X,Y, A,         target) \
-    i_intern    (X,Y, A,         context) \
-    i_method    (X,Y, A,         call, array) \
+    i_prop      (X,Y, intern, method_t*, method) \
+    i_prop      (X,Y, public, A,         target) \
+    i_prop      (X,Y, public, A,         context) \
+    i_method    (X,Y, public, A,         call, array) \
     i_override  (X,Y, method,    hash)
 declare_class(fn)
 
 #define string_schema(X,Y) \
-    i_intern(X,Y,     cstr,    chars) \
-    i_intern(X,Y,     num,     alloc) \
-    i_intern(X,Y,     num,     ref_length) \
-    i_intern(X,Y,     num,     len) \
-    i_intern(X,Y,     u64,     h) \
-    i_method(X,Y,     array,   split, cstr) \
-    i_method(X,Y,     num,     index_of, cstr) \
-    i_method(X,Y,     none,    append, cstr) \
-    i_method(X,Y,     string,  mid, num, num) \
-    i_method(X,Y,     none,    reserve, num) \
-    i_method(X,Y,     none,    write, handle, bool) \
-    i_method(X,Y,     bool,    has_suffix, cstr) \
-    i_method(X,Y,     num,     cmp, cstr) \
-    i_method(X,Y,     bool,    eq,  cstr) \
+    i_prop    (X,Y,   public, cstr,    chars) \
+    i_prop    (X,Y,   public, num,     alloc) \
+    i_prop    (X,Y,   public, num,     ref_length) \
+    i_prop    (X,Y,   public, num,     len) \
+    i_prop    (X,Y,   public, u64,     h) \
+    i_method  (X,Y,   public, array,   split, cstr) \
+    i_method  (X,Y,   public, num,     index_of, cstr) \
+    i_method  (X,Y,   public, none,    append, cstr) \
+    i_method  (X,Y,   public, string,  mid, num, num) \
+    i_method  (X,Y,   public, none,    reserve, num) \
+    i_method  (X,Y,   public, none,    write, handle, bool) \
+    i_method  (X,Y,   public, bool,    has_suffix, cstr) \
+    i_method  (X,Y,   public, num,     cmp, cstr) \
+    i_method  (X,Y,   public, bool,    eq,  cstr) \
+    i_cast    (X,Y,   public, cstr) \
+    i_cast    (X,Y,   public, sz) \
+    i_cast    (X,Y,   public, path) \
+    i_index   (X,Y,   public, i32, num) \
     i_override(X,Y,   method, hash) \
     i_override(X,Y,   method, compare) \
     i_override(X,Y,   method, init) \
-    i_override(X,Y,   cast,   bool) \
-    i_cast(X,Y,       cstr) \
-    i_cast(X,Y,       sz) \
-    i_cast(X,Y,       path) \
-    i_index(X,Y, i32, num)
+    i_override(X,Y,   cast,   bool)
 declare_class(string)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)

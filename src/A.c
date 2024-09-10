@@ -1407,11 +1407,12 @@ static none path_init(path a) {
     cstr arg = a->chars;
     num  len = arg ? strlen(arg) : 0;
     a->chars = calloc(len + 1, 1);
-    memcpy(a->chars, arg, len + 1);
+    if (arg)
+        memcpy(a->chars, arg, len + 1);
 }
 
-static cstr path_cast_cstr(path a) {
-    return a->chars;
+static path path_with_string(path a, string s) {
+    return new(path, chars, s->chars);
 }
 
 static sz path_cast_sz(path a) {

@@ -820,7 +820,7 @@ declare_enum(OPType)
     i_override  (X,Y, method, hash) \
     i_override  (X,Y, method, init) \
     i_override  (X,Y, cast,   string) \
-    i_override  (X,Y, cast,   cstr)
+    i_override  (X,Y, ctr,    string)
 declare_class(path)
 
 #define array_schema(X,Y) \

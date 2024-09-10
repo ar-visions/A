@@ -1424,6 +1424,10 @@ static path path_with_string(path a, string s) {
     return a;
 }
 
+static bool path_cast_bool(path a) {
+    return a->chars && strlen(a->chars) > 0;
+}
+
 static sz path_cast_sz(path a) {
     return strlen(a->chars);
 }
@@ -1515,9 +1519,11 @@ static string path_filename(path a) {
 
 static path path_absolute(path a) {
     path  result   = new(path);
-    result->chars  = strdup(realpath(a->chars, null));
+    cstr  rpath    = realpath(a->chars, null);
+    result->chars  = rpath ? strdup(rpath) : copy_cstr("");
     return result;
 }
+
 
 static path path_directory(path a) {
     path result = new(path);

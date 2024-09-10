@@ -451,8 +451,8 @@ static void A_destructor(A a) {
 static u64  A_hash      (A a) { return (u64)(size_t)a; }
 static bool A_cast_bool (A a) { return (bool)(size_t)a; }
 
-/// should be symbol, perhaps.. cstr is more functional than symbol and we can use it from here
-static A A_cerealize(A a, symbol cs, num len) {
+static A A_with_cereal(A a, cereal cs) {
+    sz len = strlen(cs);
     A        f = A_fields(a);
     AType type = f->type;
     if      (type == typeid(f64)) sscanf(cs, "%lf",  (f64*)a);
@@ -473,7 +473,6 @@ static A A_cerealize(A a, symbol cs, num len) {
         printf("implement ctr cstr for %s\n", f->type->name);
         exit(-1);
     }
-
     return a;
 }
 
@@ -705,7 +704,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
         }
     }
     /// cereal is pretty available, and we only need this on string and path
-    return type ? (A)type->cerealize(A_alloc(type, 1, true), res->chars, res->len) : (A)res;
+    return type ? (A)type->with_cereal(A_alloc(type, 1, true), res->chars) : (A)res;
 }
 
 static void  string_destructor(string a)        { free(a->chars); }

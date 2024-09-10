@@ -1423,6 +1423,10 @@ static string path_cast_cstr(path a) {
     return a->chars;
 }
 
+static string path_cast_string(path a) {
+    return new(string, chars, a->chars);
+}
+
 static bool path_make_dir(path a) {
     cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);

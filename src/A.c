@@ -353,7 +353,7 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
     }
     int    i = 1;
     bool found_single = false;
-    while (i < argc) {
+    while (i < argc + 1) {
         symbol arg = argv[i];
         if (!arg) {
             i++;
@@ -363,7 +363,7 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
             // -s or --silver
             bool doub  = arg[1] == '-';
             string s_key = new(string, chars, (cstr)&arg[doub + 1]);
-            string s_val = new(string, chars, (cstr)&arg[doub + 1 + 1]);
+            string s_val = new(string, chars, (cstr)argv[i + 1]);
 
             for (item f = default_values->first; f; f = f->next) {
                 /// import A types from runtime
@@ -389,7 +389,7 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
             M(result, set, default_key, value);
             found_single = true;
         }
-        i++;
+        i += 2;
     }
     return result;
 }

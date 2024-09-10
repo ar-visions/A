@@ -35,7 +35,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../silver/silver-build/silver",
             "args": [
-                "--module",  "module.c",
+                "--module",  "WGPU.si",
                 "--install", "/home/kalen/src/silver-import"
             ],
             "stopAtEntry": false,

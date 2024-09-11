@@ -929,6 +929,7 @@ declare_class(fn)
     i_cast    (X,Y,   public, cstr) \
     i_cast    (X,Y,   public, sz) \
     i_cast    (X,Y,   public, path) \
+    i_ctr     (X,Y,   public, cstr) \
     i_index   (X,Y,   public, i32, num) \
     i_override(X,Y,   method, hash) \
     i_override(X,Y,   method, compare) \

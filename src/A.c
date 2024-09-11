@@ -829,9 +829,10 @@ static void string_init(string a) {
     }
 }
 
-static string string_with_cstr(string a, cstr value, num len) {
-    if (len == -1) len = (value ? strlen(value) : 0);
-
+static string string_with_cstr(string a, cstr value) {
+    sz len = value ? strlen(value) : 0;
+    a->chars = calloc(len + 1, 1);
+    memcpy(a->chars, value, len);
     return a;
 }
 

@@ -183,7 +183,7 @@ enum A_TRAIT {
 #define ctr(T,WITH,...)             A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
 #define ctr1(T,WITH,...)            A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
 #define alloc_ctr(T,WITH,...)       A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, false), ## __VA_ARGS__))
-#define str(CSTR)                   string_type.with_cstr((cstr)(CSTR))
+#define str(CSTR)                   string_type.with_cstr(A_alloc(&string_type, 1, true), (cstr)(CSTR))
 #define operator(I,OP,...)          ftableI(I) -> operator_##OP(I, ##__VA_ARGS__)
 
 /// arg expansion for type emission (give address of its statically defined)

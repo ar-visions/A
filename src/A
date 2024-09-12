@@ -173,11 +173,11 @@ enum A_TRAIT {
 #define inherits(left, type)        A_inherits(left, typeid(type))
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 #define invoke(T,N,...)             T##_type.N(__VA_ARGS__)
-#define M(I,N,...)                  ftableI(I) -> N(I, ##__VA_ARGS__)
+#define call(I,N,...)                  ftableI(I) -> N(I, ##__VA_ARGS__)
 #define val(T,V)                    A_primitive(typeid(T), (&(T){V}))
-#define idx_1(I,T1,V1)              M(I, index ##_## T1, V1)
-#define idx_2(I,T1,T2,V1,V2)        M(I, index ##_## T1 ##_## T2, V1, V2)
-#define idx(I,V1)                   M(I, index ##_## num, V1)
+#define idx_1(I,T1,V1)              call(I, index ##_## T1, V1)
+#define idx_2(I,T1,T2,V1,V2)        call(I, index ##_## T1 ##_## T2, V1, V2)
+#define idx(I,V1)                   call(I, index ##_## num, V1)
 #define cast(I,T)                   ftableI(I) -> cast_##T(I)
 #define meta_t(I,IDX)               isa(I) -> meta.meta_##IDX
 #define ctr(T,WITH,...)             A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
@@ -957,8 +957,8 @@ declare_enum(Exists)
 
 /// we can iterate through a collection with this strange code
 #define each(container, E, e) \
-    if (M(container, count)) for (E e = M(container, get, 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, __len = M(container, count); __i < __len; __i++, e = M(container, get, __i)) \
+    if (call(container, count)) for (E e = call(container, get, 0), e0 = 0; e0 == 0; e0++) \
+        for (num __i = 0, __len = call(container, count); __i < __len; __i++, e = call(container, get, __i)) \
 
 /// we can go through a map
 #define enumerate(MM, EE) \
@@ -967,8 +967,8 @@ declare_enum(Exists)
 
 /// possible to iterate safely through primitives
 #define primitives(arr, E, e) \
-    if (M(arr, count)) for (E e = *(E*)M(arr, get, 0), e0 = 0; e0 == 0; e0++) \
-        for (num i = 0, __len = M(arr, count); i < __len; i++, e = *(E*)M(arr, get, i)) \
+    if (call(arr, count)) for (E e = *(E*)call(arr, get, 0), e0 = 0; e0 == 0; e0++) \
+        for (num i = 0, __len = call(arr, count); i < __len; i++, e = *(E*)call(arr, get, i)) \
 
 A           A_alloc(AType type, num count, bool af_pool);
 

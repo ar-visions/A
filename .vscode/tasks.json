@@ -33,41 +33,10 @@
             }
         },
         {
-            "label": "build-tapestry",
-            "type": "shell",
-			"options": {
-                "cwd": "${workspaceFolder}/../tapestry/build"
-            },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            },
-            "presentation": {
-                "reveal": "always",
-                "panel": "shared",
-                "group": "build0",
-                "clear": true
-            },
-			"isBackground": false,
-			"problemMatcher": ["$gcc"],
-            "windows": {
-                "command": "msbuild tapestry.sln /t:tapestry"
-            },
-            "osx": {
-                "command": "make -j32"
-            },
-            "linux": {
-                "command": "make -j32",
-                "options":{
-                    "env":{"VERBOSE":"1"}
-                }
-            }
-        },
-        {
             "label": "build-silver",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../silver/build"
+                "cwd": "${workspaceFolder}/../silver/silver-build"
             },
             "group": {
                 "kind": "build",
@@ -85,10 +54,10 @@
                 "command": "msbuild silver.sln /t:silver"
             },
             "osx": {
-                "command": "make -j16"
+                "command": "make -j32"
             },
             "linux": {
-                "command": "make -j16",
+                "command": "make -j32",
                 "options":{
                     "env":{"VERBOSE":"1"}
                 }

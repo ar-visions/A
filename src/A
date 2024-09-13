@@ -82,6 +82,7 @@ enum A_TRAIT {
 };
 
 #define   enum_value_DECL(E, N)             E##_##N,
+#define   enum_value_COUNT(E, N)            1,
 #define   enum_value_IMPL(E, N) \
     E##_type.members[E## _type.member_count].name     = #N; \
     E##_type.members[E## _type.member_count].offset   = E##_##N;\
@@ -466,15 +467,17 @@ typedef struct type_member_t {
     } X##_f, *X##_t; \
     extern X##_f X##_type;
 
+#define ENUM_COUNT(...)  (sizeof((int[]){__VA_ARGS__}) / sizeof(int))
+
 #define declare_enum( E ) \
     typedef enum E { \
         E##_schema(E, DECL) \
-        E##_ENUM_COUNT \
     } E; \
     typedef struct E##_f { \
         A_f_members(A) \
         A_schema   (E, METHOD) \
     } E##_f, *E##_t; \
+    enum { E##_ENUM_COUNT = E##_schema(E, COUNT) }; \
     extern E##_f   E##_type;
 
 void A_push_type(AType type);

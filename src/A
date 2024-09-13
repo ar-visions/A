@@ -477,7 +477,7 @@ typedef struct type_member_t {
         A_f_members(A) \
         A_schema   (E, METHOD) \
     } E##_f, *E##_t; \
-    enum { E##_ENUM_COUNT = E##_schema(E, COUNT) }; \
+    enum { E##_ENUM_COUNT = ENUM_COUNT(E##_schema(E, COUNT)) }; \
     extern E##_f   E##_type;
 
 void A_push_type(AType type);

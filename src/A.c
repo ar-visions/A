@@ -970,12 +970,14 @@ static bool map_cast_bool(map a) {
     return a->count > 0;
 }
 
-static A map_index_sz(map a) {
-    return a->
+static A map_index_sz(map a, sz index) {
+    assert(sz >= 0 && sz < a->count);
+    item i = call(a, get, A_sz(index));
+    return a-
 }
 
-static A map_index_A(map a, A key) {
-    item hash_item = call(a->hmap, get, key);
+static A map_index_A(map a, A index) {
+    item hash_item = call(a->hmap, get, index);
     return hash_item ? hash_item->value : null;
 }
 

@@ -927,7 +927,6 @@ static string hashmap_cast_string(hashmap a) {
     return res;
 }
 
-
 static item map_fetch(map a, A key) {
     item i = call(a->hmap, fetch, key);
     return i;
@@ -969,6 +968,10 @@ static none map_remove(map a, A key) {
 
 static bool map_cast_bool(map a) {
     return a->count > 0;
+}
+
+static A map_index_sz(map a) {
+    return a->
 }
 
 static A map_index_A(map a, A key) {

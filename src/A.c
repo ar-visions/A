@@ -973,7 +973,7 @@ static bool map_cast_bool(map a) {
 static A map_index_sz(map a, sz index) {
     assert(index >= 0 && sz < a->count);
     item i = call(a, get, A_sz(index));
-    return a-
+    return i ? i->value : null;
 }
 
 static A map_index_A(map a, A index) {

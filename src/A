@@ -323,7 +323,7 @@ enum A_TRAIT {
 
 #define   i_index_public_INST(X, R, ...)
 #define   i_index_public_INIT(X, R, ...) \
-    X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index_, __VA_ARGS__); \
+    X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__); \
     X##_type.members[X##_type.member_count].name        = stringify(emit_idx_symbol(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(X, __VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type        = &R##_type; \
@@ -894,8 +894,8 @@ declare_class(pair)
     i_method    (X,Y, public,  none,       set,        A, A) \
     i_method    (X,Y, public,  item,       fetch,      A) \
     i_method    (X,Y, public,  bool,       contains,   A) \
-    i_index     (X,Y, public,  sz) \
-    i_index     (X,Y, public,  A) \
+    i_index     (X,Y, public,  A, sz) \
+    i_index     (X,Y, public,  A, A) \
     i_override  (X,Y, method,  get) \
     i_override  (X,Y, method,  init) \
     i_override  (X,Y, cast,    string) \

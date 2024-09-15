@@ -25,6 +25,7 @@ typedef unsigned short      u16;
 typedef unsigned int        u32;
 typedef unsigned long long  u64;
 typedef long long           num;
+typedef long long           sz;      /// a signed 64 bit size lets us act like python, so this is a type for the purpose of indexing and all valid sizes
 typedef unsigned int        bool;
 typedef float               f32;
 typedef double              f64;
@@ -34,7 +35,6 @@ typedef void*               handle;
 typedef char*               cstr;
 typedef const char*         symbol;
 typedef const char*         cereal;
-typedef num                 sz;
 typedef struct A_f*         AType;
 typedef struct A*           object;
 typedef struct A**          ARef;
@@ -675,7 +675,7 @@ typedef struct string* string;
     i_cast(  X,Y, public, bool)
 declare_base(A)
 
-#define typeid(X) ((struct A_f*)&X##_type)
+#define typeid(X) ((struct X##_f*)&X##_type)
 
 #define numeric_schema(X,Y)
 declare_abstract(numeric)
@@ -1020,7 +1020,7 @@ A           A_u16(u16);
 A           A_i32(i32);
 A           A_u32(u32);
 A           A_i64(i64);
-A           A_sz(i64);
+A           A_sz(sz);
 A           A_u64(u64);
 A           A_f32(f32);
 A           A_f64(f64);

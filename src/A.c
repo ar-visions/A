@@ -973,7 +973,7 @@ static bool map_cast_bool(map a) {
 
 static A map_index_sz(map a, sz index) {
     assert(index >= 0 && index < a->count, "index out of range");
-    item i = call(a, get, A_sz(index));
+    item i = ((list_t)typeid(list))->get(a, A_sz(index));
     return i ? i->value : null;
 }
 

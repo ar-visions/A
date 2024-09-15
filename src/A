@@ -323,7 +323,7 @@ enum A_TRAIT {
 
 #define   i_index_public_INST(X, R, ...)
 #define   i_index_public_INIT(X, R, ...) \
-    X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, X, __VA_ARGS__); \
+    X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index_, __VA_ARGS__); \
     X##_type.members[X##_type.member_count].name        = stringify(emit_idx_symbol(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(X, __VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type        = &R##_type; \
@@ -331,7 +331,7 @@ enum A_TRAIT {
     X##_type.members[X##_type.member_count].member_type = A_TYPE_INDEX; \
     X##_type.member_count++;  
 #define i_index_public_PROTO(X, R, ...)
-#define i_index_public_METHOD(X, R, ...)                R (*emit_idx_symbol(index, __VA_ARGS__))(X, ##__VA_ARGS__);
+#define i_index_public_METHOD(X, R, ...)                R (*emit_idx_symbol(index,__VA_ARGS__))(X, ##__VA_ARGS__);
 #define i_index_intern_INST(X, R, ...)
 #define i_index_intern_INIT(X, R, ...) \
     X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__);

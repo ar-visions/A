@@ -420,6 +420,7 @@ A A_u16(u16 data)   { return A_primitive(&u16_type, &data); }
 A A_i32(i32 data)   { return A_primitive(&i32_type, &data); }
 A A_u32(u32 data)   { return A_primitive(&u32_type, &data); }
 A A_i64(i64 data)   { return A_primitive(&i64_type, &data); }
+A A_sz (sz  data)   { return A_primitive(&sz_type,  &data); }
 A A_u64(u64 data)   { return A_primitive(&u64_type, &data); }
 A A_f32(f32 data)   { return A_primitive(&f32_type, &data); }
 A A_f64(f64 data)   { return A_primitive(&f64_type, &data); }

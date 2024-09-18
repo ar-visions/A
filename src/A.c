@@ -92,11 +92,27 @@ A A_new(AType type) {
     return res;
 }
 
+static void A_validator(A a) {
+    AType type = isa(a);
+    for (num i = 0; i < type->member_count; i++) {
+        type_member_t* m = &type->members[i];
+        if (m->required) {
+            u8* ptr = (u8*)a + m->offset;
+            A*  ref = ptr;
+            verify(*ref, "required arg [%s] not set for class %s", m->name, type->name);
+        }
+    }
+}
+
 A A_initialize(A a) {
     A f           = A_fields(a);
     AType a_type  = &A_type;
     AType current = f->type;
     raw last_init = null;
+
+    #ifndef NDEBUG
+    A_validator(a);
+    #endif
     while (current) {
         if ((raw)current->init != last_init) {
             current->init(a);
@@ -110,7 +126,11 @@ A A_initialize(A a) {
 }
 
 A A_alloc(AType type, num count, bool af_pool) {
-    A a           = calloc(1, sizeof(struct A) + type->size * count);
+    sz map_sz = sizeof(map);
+    sz A_sz = sizeof(struct A);
+    /// ASAN does not like this because the amount of data left between a->data and end of its allocation is less than struct A
+    /// could potentially solve with a void (does not work; adding sizeof(void*) until it can be known why this must be here.. makes zero sense)
+    A a           = calloc(1, sizeof(void*) + sizeof(struct A) + type->size * count);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
     a->origin     = a;
@@ -450,9 +470,9 @@ static void A_destructor(A a) {
         type_member_t* m = &type->members[i];
         if ((m->member_type == A_TYPE_PROP || m->member_type == A_TYPE_PRIV) && !(m->type->traits & A_TRAIT_PRIMITIVE)) {
             u8* ptr = (u8*)a + m->offset;
-            A   ref = ptr;
-            A_drop(ref);
-            *((A*)&ptr) = null;
+            A*  ref = ptr;
+            A_drop(*ref);
+            *ref = null;
         }
     }
 }
@@ -588,6 +608,7 @@ static A numeric_with_num(A a, num  v) { set_v(); }
 A A_method(A_f* type, char* method_name, array args);
 
 sz len(A a) {
+    if (!a) return 0;
     AType t = isa(a);
     if (t == typeid(string)) return ((string)a)->len;
     if (t == typeid(array))  return ((array) a)->len;
@@ -610,11 +631,11 @@ num index_of_cstr(A a, cstr f) {
 }
 
 Exists A_exists(A o) {
-    AType t = isa(o);
+    AType type = isa(o);
     path  f = null;
-    if (t == typeid(string))
-        f = cast((string)t, path);
-    else if (t == typeid(path))
+    if (type == typeid(string))
+        f = cast((string)o, path);
+    else if (type == typeid(path))
         f = o;
     assert(f, "type not supported");
     bool is_dir = call(f, is_dir);
@@ -761,7 +782,8 @@ static none  string_reserve(string a, num extra) {
 
 static none  string_append(string a, cstr b) {
     sz blen = strlen(b);
-    string_alloc_sz(a, (a->alloc << 1) + blen);
+    if (blen + a->len >= a->alloc)
+        string_alloc_sz(a, (a->alloc << 1) + blen);
     memcpy(&a->chars[a->len], b, blen);
     a->len += blen;
     a->chars[a->len] = 0;
@@ -950,7 +972,7 @@ static none map_set(map a, A key, A value) {
 
 static A map_get(map a, A key) {
     item i = call(a->hmap, lookup, key);
-    return i->value ? ((pair)i->value)->value : null;
+    return (i && i->value) ? ((pair)i->value)->value : null;
 }
 
 static bool map_contains(map a, A key) {
@@ -1065,10 +1087,12 @@ A A_data(A instance) {
 bool A_inherits(A inst, AType type) {
     AType t  = type;
     AType it = isa(inst); 
-    while (t) {
+    while (it) {
         if (it == t)
             return true;
-        t = t->parent_type; 
+        else if (it == typeid(A))
+            break;
+        it = it->parent_type; 
     }
     return false;
 }
@@ -1156,9 +1180,15 @@ static A list_pop(list a) {
 }
 
 static A list_get(list a, object at_index) {
-    num index = 0;
-    assert(isa(at_index) == typeid(i32), "invalid indexing type");
-    i32 at = *(i32*)at_index;
+    sz index = 0;
+    AType itype = isa(at_index);
+    sz at = 0;
+    if (itype == typeid(sz)) {
+        at = *(sz*)at_index;
+    } else {
+        assert(itype == typeid(i32), "invalid indexing type");
+        at = (sz)*(i32*)at_index;
+    }
     for (item i = a->first; i; i = i->next) {
         if (at == index)
             return i->value;
@@ -1654,7 +1684,47 @@ void* primitive_ffi_arb(AType ptype) {
     return null;
 }
 
+
+#define MAX_PATH_LEN 4096
+
+static array path_ls(path a, string pattern, bool recur) {
+    cstr base_dir = a->chars;
+    assert(path_is_dir(a), "ls: must be called on directory");
+    array list = new(array, alloc, 32); // Initialize array for storing paths
+    DIR *dir = opendir(base_dir);
+    char abs[MAX_PATH_LEN];
+    struct dirent *entry;
+    struct stat statbuf;
+
+    assert (dir, "opendir");
+
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        snprintf(abs, sizeof(abs), "%s/%s", base_dir, entry->d_name);
+
+        if (stat(abs, &statbuf) == 0) {
+            if (S_ISREG(statbuf.st_mode)) {
+                if (!pattern->len || strstr(abs, pattern->chars))
+                    call(list, push, new(path, chars, abs));
+                
+            } else if (S_ISDIR(statbuf.st_mode)) {
+                if (recur) {
+                    path subdir = new(path, chars, abs);
+                    array sublist = call(subdir, ls, pattern, recur);
+                    call(list, concat, sublist);
+                }
+            }
+        }
+    }
+
+    closedir(dir);
+    return list;
+}
+
 define_class(A)
+define_meta(A, object, A)
 
 define_abstract(numeric)
 define_abstract(string_like)

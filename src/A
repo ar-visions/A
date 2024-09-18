@@ -237,6 +237,7 @@ enum A_TRAIT {
 #define   i_ctr_intern_METHOD(X, ARG)      X (*with_##ARG)(X, ARG);
 #define   i_ctr(X, Y, T, ARG)              i_ctr_##T##_##Y(X, ARG)
 
+
 #define   i_prop_public_INST(X, R, N)         R N;  
 #define   i_prop_public_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].name     = #N; \
@@ -246,6 +247,14 @@ enum A_TRAIT {
     X##_type.member_count++;
 #define   i_prop_public_PROTO(X, R, N)  
 #define   i_prop_public_METHOD(X, R, N)
+
+#define   i_prop_required_INST(X, R, N)         i_prop_public_INST(X, R, N)
+#define   i_prop_required_INIT(X, R, N) \
+    X##_type.members[X##_type.member_count].required = true; \
+    i_prop_public_INIT(X, R, N)
+#define   i_prop_required_PROTO(X, R, N)  
+#define   i_prop_required_METHOD(X, R, N)
+
 #define   i_prop_intern_INST(X, R, N)         R N;  
 #define   i_prop_intern_INIT(X, R, N)
 #define   i_prop_intern_PROTO(X, R, N)  
@@ -399,6 +408,7 @@ typedef struct type_member_t {
     num             offset;
     enum A_TYPE     member_type;
     int             operator_type;
+    bool            required;
     meta_t          args;
     union {
         method_t*   method;
@@ -418,6 +428,7 @@ typedef struct type_member_t {
     void*           arb;
 
 #define declare_inst( X ) \
+    typedef struct X* X; \
     _Pragma("pack(push, 1)") \
     typedef struct X { \
         X##_schema (X, INST) \
@@ -547,7 +558,7 @@ void        A_lazy_init(global_init_fn fn);
 
 #define define_global_primitive(X,Y, TYPE_SZ, TRAIT) \
     _Pragma("pack(push, 1)") \
-    object X##_header; \
+    A      X##_header; \
     X##_f  X##_type; \
     _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##X() { \
@@ -571,7 +582,7 @@ void        A_lazy_init(global_init_fn fn);
 
 #define define_global(X,Y, TYPE_SZ, TRAIT, META) \
     _Pragma("pack(push, 1)") \
-    object X##_header; \
+    A      X##_header; \
     X##_f  X##_type; \
     _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##X() { \
@@ -636,7 +647,7 @@ void* primitive_ffi_arb(AType);
 /// define_meta(array, ListOfNumerics, u8, u16, u32, u64, i8, i16, i32, i64)
 
 #define define_meta(SRC_TYPE, ALIAS_TYPE, ...) \
-    object         ALIAS_TYPE##_header; \
+    A              ALIAS_TYPE##_header; \
     ALIAS_TYPE##_f ALIAS_TYPE##_type; \
     static __attribute__((constructor)) bool global_##ALIAS_TYPE() { \
         ALIAS_TYPE##_f* type_ref = &ALIAS_TYPE##_type; \
@@ -649,6 +660,24 @@ void* primitive_ffi_arb(AType);
             ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
             ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
             ALIAS_TYPE##_type.meta     = (meta_t) { emit_types(__VA_ARGS__) }; \
+            ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
+            return true; \
+        } \
+    }
+
+#define define_alias(SRC_TYPE, ALIAS_TYPE) \
+    A              ALIAS_TYPE##_header; \
+    ALIAS_TYPE##_f ALIAS_TYPE##_type; \
+    static __attribute__((constructor)) bool global_##ALIAS_TYPE() { \
+        ALIAS_TYPE##_f* type_ref = &ALIAS_TYPE##_type; \
+        SRC_TYPE##_f* src_ref = &SRC_TYPE##_type; \
+        if (src_ref->size == 0) { \
+            A_lazy_init((global_init_fn)&global_##ALIAS_TYPE); \
+            return false; \
+        } else { \
+            memcpy(&ALIAS_TYPE##_type, &SRC_TYPE##_type, sizeof(SRC_TYPE##_f)); \
+            ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
+            ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
             ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
             return true; \
         } \
@@ -675,7 +704,13 @@ typedef struct string* string;
     i_cast(  X,Y, public, bool)
 declare_base(A)
 
-#define typeid(X) ((struct X##_f*)&X##_type)
+typedef struct object_f {
+    A_f_members(A)
+    A_schema   (A,  METHOD)
+} object_f, *object_t;
+extern object_f object_type;
+
+#define typeid(X) ((AType)&X##_type)
 
 #define numeric_schema(X,Y)
 declare_abstract(numeric)
@@ -805,6 +840,7 @@ typedef struct string* string;
     enum_value(X,Y, mod_assign)
 declare_enum(OPType)
 
+typedef struct array* array;
 #define path_schema(X,Y) \
     i_prop      (X,Y, public, cstr,   chars) \
     i_method    (X,Y, public, bool,   exists) \
@@ -818,6 +854,7 @@ declare_enum(OPType)
     i_method    (X,Y, public, path,   parent) \
     i_method    (X,Y, public, A,      read, AType) \
     i_method    (X,Y, public, path,   change_ext, cstr) \
+    i_method    (X,Y, public, array,  ls, string, bool) \
     s_method    (X,Y, public, path,   cwd, sz) \
     i_ctr       (X,Y, public, string) \
     i_cast      (X,Y, public, cstr) \
@@ -958,7 +995,12 @@ declare_enum(Exists)
 #define        fault(t, ...) do { A_formatter(null,      stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0)
 #define  file_exists(t, ...)     (A_exists(A_formatter(null, null, false, t, ## __VA_ARGS__)) == Exists_file)
 #define   dir_exists(t, ...)     (A_exists(A_formatter(null, null, false, t, ## __VA_ARGS__)) == Exists_dir)
+#ifndef NDEBUG
 #define       assert(a, t, ...) do { if (!(a)) { A_formatter(null, stderr, true,  t, ## __VA_ARGS__); exit(1); } } while(0)
+#else
+#define       assert(a, t, ...) do { } while(0)
+#endif
+#define       verify(a, t, ...) do { if (!(a)) { A_formatter(null, stderr, true,  t, ## __VA_ARGS__); __builtin_trap(); exit(1); } } while(0)
 
 /// we can iterate through a collection with this strange code
 #define each(container, E, e) \
@@ -969,6 +1011,11 @@ declare_enum(Exists)
 #define enumerate(MM, EE) \
     if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
         for (pair EE = (pair)_i->value, e0 = EE; EE == e0; e0++) \
+
+#define enumerate_(MM, EE) \
+    if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
+        for (pair EE = (pair)_i->value, e0 = EE; EE == e0; e0++) \
+
 
 /// possible to iterate safely through primitives
 #define primitives(arr, E, e) \

@@ -165,7 +165,9 @@
 			"cerrno": "c",
 			"executionengine.h": "c",
 			"import": "c",
-			"*.ipp": "c"
+			"*.ipp": "c",
+			"analysis.h": "c",
+			"core.h": "c"
 		}
 	}
 }

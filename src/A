@@ -174,6 +174,25 @@ enum A_TRAIT {
 #define inherits(left, type)        A_inherits(left, typeid(type))
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 #define invoke(T,N,...)             T##_type.N(__VA_ARGS__)
+/// by defining these, we require their use; cant call() these methods
+/// useful in two ways, less tokens and expansion inside call()
+/// obviously we only collect so many, but they become keywords of our common language
+/// it reserves their use for methods and not scope confusion with variables
+#define set(I,...)                  ftableI(I) -> set(I, ##__VA_ARGS__)
+#define get(I,...)                  ftableI(I) -> get(I, ##__VA_ARGS__)
+#define push(I,...)                 ftableI(I) -> push(I, ##__VA_ARGS__)
+#define pop(I,...)                  ftableI(I) -> pop(I, ##__VA_ARGS__)
+#define peek(I,...)                 ftableI(I) -> peek(I, ##__VA_ARGS__)
+#define read(I,...)                 ftableI(I) -> read(I, ##__VA_ARGS__)
+#define write(I,...)                ftableI(I) -> write(I, ##__VA_ARGS__)
+#define concat(I,...)               ftableI(I) -> concat(I, ##__VA_ARGS__)
+#define mid(I,...)                  ftableI(I) -> mid(I, ##__VA_ARGS__)
+#define process(I,...)              ftableI(I) -> process(I, ##__VA_ARGS__)
+#define append(I,...)               ftableI(I) -> append(I, ##__VA_ARGS__)
+#define eq(I,...)                   ftableI(I) -> eq(I, ##__VA_ARGS__)
+#define equals(I,...)               ftableI(I) -> equals(I, ##__VA_ARGS__)
+#define compare(I,...)              ftableI(I) -> compare(I, ##__VA_ARGS__)
+#define cmp(I,...)                  ftableI(I) -> cmp(I, ##__VA_ARGS__)
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 #define call0(I,N,...)              ftableI(I) -> N(I, ##__VA_ARGS__)
 #define val(T,V)                    A_primitive(typeid(T), (&(T){V}))
@@ -516,6 +535,7 @@ void        A_lazy_init(global_init_fn fn);
         } else { \
             memcpy(type_ref, base_ref, sizeof(A_f)); \
             static type_member_t members[16 + E##_ENUM_COUNT + sizeof(E##_type) / sizeof(void*)]; \
+            memset(&E##_type, 0, sizeof(E##_type)); \
             E##_type.parent_type = & A_type; \
             E##_type.name     = #E; \
             E##_type.size     = sizeof(enum E); \
@@ -569,6 +589,7 @@ void        A_lazy_init(global_init_fn fn);
             return false; \
         } else { \
             assert(sizeof(Y##_f) >= sizeof(X##_f), "invalid sz"); \
+            memset(type_ref, 0,        sizeof(X##_f)); \
             memcpy(type_ref, base_ref, sizeof(Y##_f)); \
             X## _type.parent_type = &Y##_type; \
             X## _type.name     = #X;        \
@@ -592,6 +613,7 @@ void        A_lazy_init(global_init_fn fn);
             A_lazy_init((global_init_fn)&global_##X); \
             return false; \
         } else { \
+            memset(type_ref, 0, sizeof(X##_f)); \
             memcpy(type_ref, base_ref, sizeof(Y##_f)); \
             static type_member_t members[16 + sizeof(X##_type) / sizeof(void*)]; \
             X## _type.parent_type = &Y##_type; \
@@ -656,6 +678,7 @@ void* primitive_ffi_arb(AType);
             A_lazy_init((global_init_fn)&global_##ALIAS_TYPE); \
             return false; \
         } else { \
+            memset(type_ref, 0, sizeof(ALIAS_TYPE##_f)); \
             memcpy(&ALIAS_TYPE##_type, &SRC_TYPE##_type, sizeof(SRC_TYPE##_f)); \
             ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
             ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
@@ -675,6 +698,7 @@ void* primitive_ffi_arb(AType);
             A_lazy_init((global_init_fn)&global_##ALIAS_TYPE); \
             return false; \
         } else { \
+            memset(type_ref, 0, sizeof(ALIAS_TYPE##_f)); \
             memcpy(&ALIAS_TYPE##_type, &SRC_TYPE##_type, sizeof(SRC_TYPE##_f)); \
             ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
             ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
@@ -1004,8 +1028,8 @@ declare_enum(Exists)
 
 /// we can iterate through a collection with this strange code
 #define each(container, E, e) \
-    if (call(container, count)) for (E e = call(container, get, 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, __len = call(container, count); __i < __len; __i++, e = call(container, get, __i)) \
+    if (call(container, count)) for (E e = get(container, 0), e0 = 0; e0 == 0; e0++) \
+        for (num __i = 0, __len = call(container, count); __i < __len; __i++, e = get(container, __i)) \
 
 /// we can go through a map
 #define enumerate(MM, EE) \

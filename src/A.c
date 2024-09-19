@@ -139,7 +139,7 @@ A A_alloc(AType type, num count, bool af_pool) {
     a->alloc      = count;
     if (af_pool) {
         a->ar_index = af_top->pool->len;
-        call(af_top->pool, push, a->data);
+        push(af_top->pool, a->data);
     } else {
         a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
@@ -270,10 +270,10 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
     va_list  vargs;
     va_start(vargs, n_args);
     array args = new(array, alloc, n_args + 1);
-    call(args, push, instance);
+    push(args, instance);
     for (int i = 0; i < n_args; i++) {
         A arg = va_arg(vargs, A);
-        call(args, push, arg);
+        push(args, arg);
     }
     va_end(vargs);
     A res = A_method_call(m, args);
@@ -369,7 +369,7 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
         pair  hm = ii->value;
         object k = hm->key;
         object v = hm->value;
-        call(result, set, k, v);
+        set(result, k, v);
     }
     int    i = 1;
     bool found_single = false;
@@ -392,21 +392,21 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
                 AType   def_type = def_value ? isa(def_value) : typeid(string);
                 assert(f->key == mi->key, "keys do not match"); /// make sure we copy it over from refs
                 if ((!doub && strncmp(((string)f->key)->chars, s_key->chars, 1) == 0) ||
-                    ( doub && call(f->key, compare, s_key) == 0)) {
+                    ( doub && compare(f->key, s_key) == 0)) {
                     /// inter-op with object-based A-type sells it.
                     /// its also a guide to use the same schema
                     object value = A_formatter(def_type, null, false, "%o", s_val);
                     assert(isa(value) == def_type, "");
-                    call(result, set, f->key, value);
+                    set(result, f->key, value);
                 }
             }
         } else if (!found_single && default_key) {
             A default_key_obj = A_fields(default_key);
             string s_val     = new(string, chars, (cstr)arg);
-            object def_value = call(default_values, get, default_key);
+            object def_value = get(default_values, default_key);
             AType  def_type  = isa(def_value);
             object value     = A_formatter(def_type, null, false, "%o", s_val);
-            call(result, set, default_key, value);
+            set(result, default_key, value);
             found_single = true;
         }
         i += 2;
@@ -524,15 +524,15 @@ static void A_serialize(AType type, string res, A a) {
         else {
             fault("implement primitive cast to str: %s", type->name);
         }
-        call(res, append, buf); // should allow for a -1 or len
+        append(res, buf); // should allow for a -1 or len
     } else {
         string s = cast(a, string);
         if (s) {
-            call(res, append, "\"");
-            call(res, append, s->chars);
-            call(res, append, "\"");
+            append(res, "\"");
+            append(res, s->chars);
+            append(res, "\"");
         } else
-            call(res, append, "null");
+            append(res, "null");
     }
 }
 
@@ -545,22 +545,22 @@ static string A_cast_string(A a) {
     if (type->traits & A_TRAIT_PRIMITIVE)
         A_serialize(type, res, a);
     else {
-        call(res, append, type->name);
-        call(res, append, "[");
+        append(res, type->name);
+        append(res, "[");
         for (num i = 0; i < type->member_count; i++) {
             type_member_t* m = &type->members[i];
             // todo: intern members wont be registered
             if (m->member_type & (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN)) {
                 if (once)
-                    call(res, append, " ");
+                    append(res, " ");
                 u8* ptr = (u8*)a + m->offset;
-                call(res, append, m->name);
-                call(res, append, ":");
+                append(res, m->name);
+                append(res, ":");
                 A_serialize(m->type, res, ptr);
                 once = true;
             }
         }
-        call(res, append, "]");
+        append(res, "]");
     }
     return res;
 }
@@ -727,7 +727,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
     }
     va_end(args);
     if (f) {
-        call(res, write, f, false);
+        write(res, f, false);
         if (write_ln) {
             fwrite("\n", 1, 1, f);
             fflush(f);
@@ -865,14 +865,16 @@ static bool string_has_suffix(string a, cstr value) {
     return strcmp(&a->chars[a->len - ln], value) == 0;
 }
 
+static item list_push(list a, A e);
+
 static item hashmap_fetch(hashmap a, A key) {
     u64 h = call(key, hash);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
-        if (call(f->key, compare, key) == 0)
+        if (compare(f->key, key) == 0)
             return f;
-    item n = list_type.push(bucket, null);
+    item n = list_push(bucket, null);
     n->key = A_hold(key);
     a->count++;
     return n;
@@ -883,7 +885,7 @@ static item hashmap_lookup(hashmap a, A key) {
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
-        if (call(f->key, compare, key) == 0)
+        if (compare(f->key, key) == 0)
             return f;
     return null;
 }
@@ -910,7 +912,7 @@ static none hashmap_remove(hashmap a, A key) {
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
-        if (call(f->key, compare, key) == 0) {
+        if (compare(f->key, key) == 0) {
             list_type.remove_item(bucket, f);
             a->count--;
             break;
@@ -922,7 +924,7 @@ static bool hashmap_cast_bool(hashmap a) {
 }
 
 static A hashmap_index_A(hashmap a, A key) {
-    return call(a, get, key);
+    return get(a, key);
 }
 
 static hashmap hashmap_init(hashmap a) {
@@ -940,10 +942,10 @@ static string hashmap_cast_string(hashmap a) {
         for (item f = bucket->first; f; f = f->next) {
             string key = cast(f->key, string);
             string val = cast(f->value, string);
-            if (once) call(res, append, " ");
-            call(res, append, key->chars);
-            call(res, append, ":");
-            call(res, append, val->chars);
+            if (once) append(res, " ");
+            append(res, key->chars);
+            append(res, ":");
+            append(res, val->chars);
             once = true;
         }
     }
@@ -964,7 +966,7 @@ static none map_set(map a, A key, A value) {
         A_drop(before);
     } else {
         mi = i->value = new(pair, key, key, value, value); // todo: make pair originate in hash; remove the key from item
-        mi->ref      = call(a, push, i);
+        mi->ref      = push(a, i);
         mi->ref->key = A_hold(key);
         mi->ref->value = mi;
     }
@@ -993,14 +995,16 @@ static bool map_cast_bool(map a) {
     return a->count > 0;
 }
 
+static A list_get(list a, object at_index);
+
 static A map_index_sz(map a, sz index) {
     assert(index >= 0 && index < a->count, "index out of range");
-    item i = ((list_t)typeid(list))->get(a, A_sz(index));
+    item i = list_get(a, A_sz(index));
     return i ? i->value : null;
 }
 
 static A map_index_A(map a, A index) {
-    item hash_item = call(a->hmap, get, index);
+    item hash_item = get(a->hmap, index);
     return hash_item ? hash_item->value : null;
 }
 
@@ -1021,10 +1025,10 @@ static string map_cast_string(map a) {
         pair   kv    = i->value;
         string key   = cast(kv->key,   string);
         string value = cast(kv->value, string);
-        if (once) call(res, append, " ");
-        call(res, append, key->chars);
-        call(res, append, ":");
-        call(res, append, value->chars);
+        if (once) append(res, " ");
+        append(res, key->chars);
+        append(res, ":");
+        append(res, value->chars);
         once = true;
     }
     return res;
@@ -1161,10 +1165,13 @@ static num list_compare(list a, list b) {
     num diff  = a->count - b->count;
     if (diff != 0)
         return diff;
-    for (item ai = a->first, bi = b->first; ai; ai = ai->next, bi = bi->next) {
-        A_f* ai_t = *(A_f**)&((A)ai->value)[-1];
-        num  cmp  = ai_t->compare(ai, bi);
-        if (cmp != 0) return cmp;
+    A_f* ai_t = a->first ? isa(a->first->value) : null;
+    if (ai_t) {
+        type_member_t* m = A_member(ai_t, (A_TYPE_IMETHOD), "compare");
+        for (item ai = a->first, bi = b->first; ai; ai = ai->next, bi = bi->next) {
+            num   v  = ((num(*)(A,A))m->method->address)(ai, bi);
+            if (v != 0) return v;
+        }
     }
     return 0;
 }
@@ -1290,7 +1297,7 @@ static void array_push_symbols(array a, ...) {
     char* value;
     while ((value = va_arg(args, char*)) != null) {
         string s = new(string, chars, value);
-        call(a, push, s);
+        push(a, s);
     }
     va_end(args);
 }
@@ -1300,7 +1307,7 @@ static void array_push_objects(array a, A f, ...) {
     va_start(args, f);
     A value;
     while ((value = va_arg(args, A)) != null)
-        call(a, push, value);
+        push(a, value);
     va_end(args);
 }
 
@@ -1311,7 +1318,7 @@ map map_of(cstr first_key, ...) {
     cstr key = first_key;
     for (;;) {
         A arg = va_arg(args, A);
-        call(a, set, str(key), arg);
+        set(a, str(key), arg);
         key = va_arg(args, cstr);
         if (key == null)
             break;
@@ -1328,7 +1335,7 @@ array array_of(AType validate, ...) {
         if (!arg)
             break;
         assert(!validate || validate == isa(arg), "validation failure");
-        call(a, push, arg);
+        push(a, arg);
     }
     return a;
 }
@@ -1341,7 +1348,7 @@ array array_of_cstr(cstr first, ...) {
         cstr arg = va_arg(args, A);
         if (!arg)
             break;
-        call(a, push, allocate(string, chars, arg));
+        push(a, allocate(string, chars, arg));
     }
     return a;
 }
@@ -1360,7 +1367,7 @@ static num array_compare(array a, array b) {
     if (diff != 0)
         return diff;
     for (num i = 0; i < a->len; i++) {
-        num cmp = call(a->elements[i], compare, b->elements[i]);
+        num cmp = compare(a->elements[i], b->elements[i]);
         if (cmp != 0)
             return cmp;
     }
@@ -1378,7 +1385,7 @@ static num array_count(array a) {
 /// index of element that compares to 0 diff with item
 static num array_index_of(array a, A b) {
     for (num i = 0; i < a->len; i++) {
-        if (call(a -> elements[i], compare, b) == 0)
+        if (compare(a -> elements[i], b) == 0)
             return i;
     }
     return -1;
@@ -1707,13 +1714,13 @@ static array path_ls(path a, string pattern, bool recur) {
         if (stat(abs, &statbuf) == 0) {
             if (S_ISREG(statbuf.st_mode)) {
                 if (!pattern->len || strstr(abs, pattern->chars))
-                    call(list, push, new(path, chars, abs));
+                    push(list, new(path, chars, abs));
                 
             } else if (S_ISDIR(statbuf.st_mode)) {
                 if (recur) {
                     path subdir = new(path, chars, abs);
                     array sublist = call(subdir, ls, pattern, recur);
-                    call(list, concat, sublist);
+                    concat(list, sublist);
                 }
             }
         }

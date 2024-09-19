@@ -15,7 +15,7 @@ int main(int n_args, char* v_args[]) {
     A     fields = A_fields(key);
     i64*   value = A_i64(100);
     hashmap    m = new(hashmap, alloc, 8);
-    call(m, set, key, value);
+    set(m, key, value);
 
     print("hashmap ptr = %p\n", m);
     print("hashmap cereal = %o\n", m);

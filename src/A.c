@@ -952,6 +952,10 @@ static string hashmap_cast_string(hashmap a) {
     return res;
 }
 
+static void map_concat(map a, map b) {
+    pairs(b, e) set(a, e->key, e->value);
+}
+
 static item map_fetch(map a, A key) {
     item i = call(a->hmap, fetch, key);
     return i;
@@ -1434,7 +1438,7 @@ static void AF_destructor(AF a) {
     A_free(a->pool);
 }
 
-static AF AF_fetch(num index) {
+AF AF_fetch(num index) {
     if (af_stack && abs((int)index) < af_stack->len)
         return index < 0 ? af_stack->elements[af_stack->len + index] :
                            af_stack->elements[index];
@@ -1623,7 +1627,8 @@ static path path_change_ext(path a, cstr ext) {
     return res;
 }
 
-static path path_cwd(sz size) {
+/// public statics are not 'static'
+path path_cwd(sz size) {
     path a = new(path);
     a->chars = calloc(size, 1);
     char* res = getcwd(a->chars, size);

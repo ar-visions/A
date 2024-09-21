@@ -240,6 +240,7 @@ enum A_TRAIT {
 
 
 #define   i_ctr_public_INST(X, ARG)
+#define   i_ctr_public_DECL(X, ARG)
 #define   i_ctr_public_INIT(X, ARG) \
     X##_type.with_##ARG = & X##_with_##ARG; \
     X##_type.members[X##_type.member_count].name        = stringify(with_##ARG); \
@@ -258,6 +259,7 @@ enum A_TRAIT {
 
 
 #define   i_prop_public_INST(X, R, N)         R N;  
+#define   i_prop_public_DECL(X, R, N)
 #define   i_prop_public_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].name     = #N; \
     X##_type.members[X##_type.member_count].offset   = offsetof(struct X, N); \
@@ -268,6 +270,7 @@ enum A_TRAIT {
 #define   i_prop_public_METHOD(X, R, N)
 
 #define   i_prop_required_INST(X, R, N)         i_prop_public_INST(X, R, N)
+#define   i_prop_required_DECL(X, R, N)
 #define   i_prop_required_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].required = true; \
     i_prop_public_INIT(X, R, N)
@@ -275,12 +278,14 @@ enum A_TRAIT {
 #define   i_prop_required_METHOD(X, R, N)
 
 #define   i_prop_intern_INST(X, R, N)         R N;  
+#define   i_prop_intern_DECL(X, R, N)
 #define   i_prop_intern_INIT(X, R, N)
 #define   i_prop_intern_PROTO(X, R, N)  
 #define   i_prop_intern_METHOD(X, R, N)  
 #define   i_prop(X, Y, T, R, N) i_prop_##T##_##Y(X, R, N)
 
 #define   s_method_public_INST(X, R, N, ...)
+#define   s_method_public_DECL(X, R, N, ...)       R X##_##N(__VA_ARGS__);
 #define   s_method_public_INIT(X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
@@ -291,13 +296,16 @@ enum A_TRAIT {
     X##_type.member_count++;   
 #define   s_method_public_PROTO(X, R, N, ...)
 #define   s_method_public_METHOD(X, R, N, ...)    R (*N)(__VA_ARGS__);
+
 #define   s_method_intern_INST(X, R, N, ...)
+#define   s_method_intern_DECL(X, R, N, ...)
 #define   s_method_intern_INIT(X, R, N, ...)      X##_type . N = & X## _ ## N;
 #define   s_method_intern_PROTO(X, R, N, ...)
 #define   s_method_intern_METHOD(X, R, N, ...)    R (*N)(__VA_ARGS__);
 #define   s_method(X, Y, T, R, N, ...)            s_method_##T##_##Y(X, R, N, ##__VA_ARGS__)
 
 #define   i_method_public_INST(    X, R, N, ...)
+#define   i_method_public_DECL(    X, R, N, ...)
 #define   i_method_public_INIT(    X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
@@ -308,13 +316,16 @@ enum A_TRAIT {
     X##_type.member_count++;
 #define   i_method_public_PROTO(X, R, N, ...)
 #define   i_method_public_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
+
 #define   i_method_intern_INST(    X, R, N, ...)
+#define   i_method_intern_DECL(    X, R, N, ...)
 #define   i_method_intern_INIT(    X, R, N, ...)    X##_type . N = & X## _ ## N;
 #define   i_method_intern_PROTO(X, R, N, ...)
 #define   i_method_intern_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
 #define   i_method(X, Y, T, R, N, ...)              i_method_##T##_##Y(X, R, N, X, ##__VA_ARGS__)
 
 #define   i_operator_public_INST(X, R, N, ARG)
+#define   i_operator_public_DECL(X, R, N, ARG)
 #define   i_operator_public_INIT(X, R, N, ARG) \
     X##_type  . operator_##N = & X## _operator_ ## N; \
     X##_type.members[X##_type.member_count].name    = stringify(combine_tokens(operator_, N)); \
@@ -326,13 +337,16 @@ enum A_TRAIT {
     X##_type.member_count++; 
 #define   i_operator_public_PROTO(X, R, N, ARG)
 #define   i_operator_public_METHOD(X, R, N, ARG)    R (*operator_ ## N)(X, ARG);
-#define   i_operator_intern_INST(X, R, N, ARG)      
+
+#define   i_operator_intern_INST(X, R, N, ARG)
+#define   i_operator_intern_DECL(X, R, N, ARG)
 #define   i_operator_intern_INIT(X, R, N, ARG)      X##_type  . operator_##N = & X## _operator_ ## N;
 #define   i_operator_intern_PROTO(X, R, N, ARG)
 #define   i_operator_intern_METHOD(X, R, N, ARG)    R (*operator_ ## N)(X, ARG);
 #define   i_operator(X, Y, T, R, N, ARG)            i_operator_##T##_##Y(X, R, N, ARG)
 
 #define   i_cast_public_INST(X, R)
+#define   i_cast_public_DECL(X, R)
 #define   i_cast_public_INIT(X, R) \
     X##_type.cast_##R = & X##_cast_##R; \
     X##_type.members[X##_type.member_count].name    = stringify(combine_tokens(cast_, R)); \
@@ -343,13 +357,16 @@ enum A_TRAIT {
     X##_type.member_count++;  
 #define   i_cast_public_PROTO(X, R)
 #define   i_cast_public_METHOD(X, R)        R (*cast_##R)(X);
+
 #define   i_cast_intern_INST(X, R)
+#define   i_cast_intern_DECL(X, R)
 #define   i_cast_intern_INIT(X, R)          X##_type.cast_##R = & X##_cast_##R;
 #define   i_cast_intern_PROTO(X, R)
 #define   i_cast_intern_METHOD(X, R)        R (*cast_##R)(X);
 #define   i_cast(X, Y, T, R)                i_cast_##T##_##Y(X, R)
 
 #define   i_index_public_INST(X, R, ...)
+#define   i_index_public_DECL(X, R, ...)
 #define   i_index_public_INIT(X, R, ...) \
     X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__); \
     X##_type.members[X##_type.member_count].name        = stringify(emit_idx_symbol(index, __VA_ARGS__)); \
@@ -360,7 +377,9 @@ enum A_TRAIT {
     X##_type.member_count++;  
 #define i_index_public_PROTO(X, R, ...)
 #define i_index_public_METHOD(X, R, ...)                R (*emit_idx_symbol(index,__VA_ARGS__))(X, ##__VA_ARGS__);
+
 #define i_index_intern_INST(X, R, ...)
+#define i_index_intern_DECL(X, R, ...)
 #define i_index_intern_INIT(X, R, ...) \
     X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__);
 #define i_index_intern_PROTO(X, R, ...)
@@ -368,16 +387,20 @@ enum A_TRAIT {
 #define i_index(X, Y, T, R, ...)                        i_index_##T##_##Y(X, R, ##__VA_ARGS__)
 
 #define i_vargs_public_INST(X, R, N, ...)
+#define i_vargs_public_DECL(X, R, N, ...)
 #define i_vargs_public_INIT(X, R, N, ...)               i_method_public_INIT(X, R, N, __VA_ARGS__)  
 #define i_vargs_public_PROTO(X, R, N, ...)
 #define i_vargs_public_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
+
 #define i_vargs_intern_INST(X, R, N, ...)
+#define i_vargs_intern_DECL(X, R, N, ...)
 #define i_vargs_intern_INIT(X, R, N, ...)               i_method_intern_INIT(X, R, N, __VA_ARGS__)  
 #define i_vargs_intern_PROTO(X, R, N, ...)
 #define i_vargs_intern_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
 #define i_vargs(X, Y, T, R, N, ...)                     i_vargs_##T##_##Y(X, R, N, __VA_ARGS__)
 
 #define s_vargs_public_INST(X, R, N, ...)
+#define s_vargs_public_DECL(X, R, N, ...)               R X##_##N(__VA_ARGS__, ...);
 #define s_vargs_public_INIT(X, R, N, ...)               s_method_public_INIT(X, R, N, ##__VA_ARGS__)
 #define s_vargs_public_PROTO(X, R, N, ...)
 #define s_vargs_public_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
@@ -388,21 +411,25 @@ enum A_TRAIT {
 #define s_vargs(X, Y, T, R, N, ...)                     s_vargs_##T##_##Y(X, R, N, ##__VA_ARGS__)
 
 #define i_override_method_INST(X, N)
+#define i_override_method_DECL(X, N)
 #define i_override_method_INIT(X, N)                    X##_type . N = & X## _ ## N;
 #define i_override_method_PROTO(X, N)
 #define i_override_method_METHOD(X, N)
 
 #define i_override_ctr_INST(X, R)
+#define i_override_ctr_DECL(X, R)
 #define i_override_ctr_INIT(X, R)                       X##_type . with_##R = & X##_with_##R;
 #define i_override_ctr_PROTO(X, R)
 #define i_override_ctr_METHOD(X, R)
 
 #define i_override_cast_INST(X, R)
+#define i_override_cast_DECL(X, R)
 #define i_override_cast_INIT(X, R)                      X##_type . cast_##R = & X##_cast_##R;
 #define i_override_cast_PROTO(X, R)
 #define i_override_cast_METHOD(X, R)
 
 #define i_override_idx_INST(X, R)
+#define i_override_idx_DECL(X, R)
 #define i_override_idx_INIT(X, R)                    X##_type . idx_##R = & X##_idx_##R;
 #define i_override_idx_PROTO(X, R)
 #define i_override_idx_METHOD(X, R)
@@ -454,6 +481,7 @@ typedef struct type_member_t {
         struct X##_f* f; \
     } *X; \
     _Pragma("pack(pop)") \
+    X##_schema (X, DECL)
 
 #define declare_mod_inst( X,Y ) \
     _Pragma("pack(push, 1)") \
@@ -894,23 +922,24 @@ declare_class(path)
     i_prop           (X,Y, public, ARef, elements) \
     i_prop           (X,Y, public, i32,  alloc) \
     i_prop           (X,Y, public, i32,  len) \
-    s_vargs          (X,Y, public, X,    of, A) \
-    i_method         (X,Y, public, A,    first) \
-    i_method         (X,Y, public, A,    last) \
-    i_method         (X,Y, public, X,    pop) \
-    i_method         (X,Y, public, X,    remove, num) \
-    i_method         (X,Y, public, X,    remove_weak, num) \
-    i_method         (X,Y, public, A,    push,A) \
-    i_method         (X,Y, public, A,    push_weak,A) \
-    i_method         (X,Y, public, none, concat, array) \
-    i_method         (X,Y, public, A,    get, i32) \
-    i_method         (X,Y, public, num,  count) \
-    i_method         (X,Y, public, num,  index_of, A) \
-    i_operator       (X,Y, public, none, assign_add, A) \
-    i_operator       (X,Y, public, none, assign_sub, num) \
-    i_vargs          (X,Y, public, none, push_symbols, X, cstr) \
-    i_vargs          (X,Y, public, none, push_objects, X, A) \
-    i_index          (X,Y, public, A,    num) \
+    s_vargs          (X,Y, public, array,   of,             AType) \
+    s_vargs          (X,Y, public, array,   of_cstr,        cstr) \
+    i_method         (X,Y, public, A,       first) \
+    i_method         (X,Y, public, A,       last) \
+    i_method         (X,Y, public, X,       pop) \
+    i_method         (X,Y, public, X,       remove,         num) \
+    i_method         (X,Y, public, X,       remove_weak,    num) \
+    i_method         (X,Y, public, A,       push,           A) \
+    i_method         (X,Y, public, A,       push_weak,      A) \
+    i_method         (X,Y, public, none,    concat,         array) \
+    i_method         (X,Y, public, A,       get,            i32) \
+    i_method         (X,Y, public, num,     count) \
+    i_method         (X,Y, public, num,     index_of,       A) \
+    i_operator       (X,Y, public, none,    assign_add,     A) \
+    i_operator       (X,Y, public, none,    assign_sub,     num) \
+    i_vargs          (X,Y, public, none,    push_symbols,   X, cstr) \
+    i_vargs          (X,Y, public, none,    push_objects,   X, A) \
+    i_index          (X,Y, public, A,       num) \
     i_override       (X,Y, method, init) \
     i_override       (X,Y, cast,   bool)
 declare_class(array)
@@ -955,6 +984,7 @@ declare_class(pair)
     i_method    (X,Y, public,  none,       set,        A, A) \
     i_method    (X,Y, public,  item,       fetch,      A) \
     i_method    (X,Y, public,  bool,       contains,   A) \
+    i_method    (X,Y, public,  none,       concat,     map) \
     i_index     (X,Y, public,  A, sz) \
     i_index     (X,Y, public,  A, A) \
     i_override  (X,Y, method,  get) \
@@ -1032,11 +1062,19 @@ declare_enum(Exists)
         for (num __i = 0, __len = call(container, count); __i < __len; __i++, e = get(container, __i)) \
 
 /// we can go through a map
-#define enumerate(MM, EE) \
+#define pairs(MM, EE) \
     if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
         for (pair EE = (pair)_i->value, e0 = EE; EE == e0; e0++) \
 
-#define enumerate_(MM, EE) \
+#define evalues(MM, TT, EE) \
+    if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
+        for (TT EE = ((pair)_i->value)->value, e0 = EE; EE == e0; e0++) \
+
+#define ekeys(MM, TT, EE) \
+    if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
+        for (TT EE = ((pair)_i->value)->key, e0 = EE; EE == e0; e0++) \
+
+#define pairs_(MM, EE) \
     if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
         for (pair EE = (pair)_i->value, e0 = EE; EE == e0; e0++) \
 
@@ -1114,8 +1152,8 @@ bool create_symlink(path target, path link);
 /// todo: auto-release, no use of drop in most places
 /// push_weak is probably a reasonable idea for array
 map   map_of(cstr first_key, ...); /// cstr, A, ...
-array array_of(AType validate, ...);
-array array_of_cstr(cstr first, ...);
+//array array_of(AType validate, ...);
+//array array_of_cstr(cstr first, ...);
 void  array_weak_push(array, A);
 
 #endif

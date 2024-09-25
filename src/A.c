@@ -282,6 +282,8 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
 
 
 void A_start() {
+    AF pool = allocate(AF); /// leave pool open
+
     int remaining = call_after_count;
     while (remaining)
         for (int i = 0; i < call_after_count; i++) {
@@ -612,6 +614,7 @@ sz len(A a) {
     AType t = isa(a);
     if (t == typeid(string)) return ((string)a)->len;
     if (t == typeid(array))  return ((array) a)->len;
+    if (t == typeid(map))    return ((map)a)->count;
     if (t == typeid(cstr) || t == typeid(symbol) || t == typeid(cereal))
         return strlen(a);
     fault("len not handled for type %s", t->name);
@@ -850,6 +853,18 @@ static void string_init(string a) {
         a->chars[len] = 0;
         a->len = len;
     }
+}
+
+num clamp(num i, num mn, num mx) {
+    if (i < mn) return mn;
+    if (i > mx) return mx;
+    return i;
+}
+
+real clampf(real i, real mn, real mx) {
+    if (i < mn) return mn;
+    if (i > mx) return mx;
+    return i;
 }
 
 static string string_with_cstr(string a, cstr value) {
@@ -1213,6 +1228,31 @@ static num list_count(list a) {
     return a->count;
 }
 
+/// vector should only work with primitive or otherwise trivial model data
+/// its reduced function set is indicative of its simple use-case
+static void vector_init(vector a) {
+    if (a->alloc) {
+        a->data = A_alloc(a->type, a->alloc, true);
+    }
+}
+
+static void vector_push(vector a, A any) {
+    sz size = a->type->size;
+    verify(a->len < a->alloc, "vector out of space");
+    memcpy(&a->data[a->len * size], any, size);
+    a->len++;
+}
+
+static sz vector_count(vector a) {
+    return a->len;
+}
+
+static bool vector_cast_bool(vector a) {
+    return a->len > 0;
+}
+
+define_class(vector);
+
 bool is_meta(A a) {
     AType t = isa(a);
     return t->meta.count > 0;
@@ -1363,6 +1403,7 @@ void  array_weak_push(array a, A obj) {
 
 static A array_pop(array a) {
     assert(a->len > 0, "no items");
+    if (!a->unmanaged) drop(a->elements[a->len - 1]);
     return a->elements[a->len--];
 }
 
@@ -1692,8 +1733,8 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeid(Member)) return &ffi_type_pointer;
     if (ptype == typeid(ARef))   return &ffi_type_pointer;
     if (ptype == typeid(raw))    return &ffi_type_pointer;
-    assert(false, "primitive_ffi_arb not implemented: %s", ptype->name);
-    return null;
+    assert(ptype->size == sizeof(void*), "we may only import void* handles for now; this may be fixed with arguments given to define");
+    return &ffi_type_pointer;
 }
 
 

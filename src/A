@@ -105,8 +105,8 @@ enum A_TRAIT {
     #define TC(MEMBER, VALUE) VALUE
 #endif
 
-#define _ARG_COUNT_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, N, ...) N
-#define _ARG_COUNT(...)        _ARG_COUNT_IMPL(__VA_ARGS__, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
+#define _ARG_COUNT_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N
+#define _ARG_COUNT(...)        _ARG_COUNT_IMPL(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
 #define _COMBINE_(A, B)        A##B
 #define _COMBINE(A, B)         _COMBINE_(A, B)
 #define _N_ARGS_HELPER(N, ...) _COMBINE(EXPAND_ARGS_, N)(__VA_ARGS__)
@@ -119,7 +119,14 @@ enum A_TRAIT {
 #define _N_ARGS_10(a,b, c,d, e,f, g,h, i,j)                  _N_ARGS_8 (a,b, c,d, e,f, g,h) instance->i = TC(i,j);
 #define _N_ARGS_12(a,b, c,d, e,f, g,h, i,j, l,m)             _N_ARGS_10(a,b, c,d, e,f, g,h, i,j) instance->l = TC(l,m);
 #define _N_ARGS_14(a,b, c,d, e,f, g,h, i,j, l,m, n,o)        _N_ARGS_12(a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC(n,o);
-#define _N_ARGS_16(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q)   _N_ARGS_14(a,b, c,d, e,f, g,h, i,j, l,m, p,q) instance->p = TC(p,q);
+#define _N_ARGS_16(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q)   _N_ARGS_14(a,b, c,d, e,f, g,h, i,j, l,m, n,o) instance->p = TC(p,q);
+#define _N_ARGS_18(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) \
+    _N_ARGS_16(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) instance->r = TC(r,s);
+#define _N_ARGS_20(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) \
+    _N_ARGS_18(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC(t,u);
+#define _N_ARGS_22(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) \
+    _N_ARGS_20(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC(v,w);
+
 #define _N_ARGS(instance,...)    _N_ARGS_HELPER2(_ARG_COUNT(__VA_ARGS__), __VA_ARGS__)
 #define _N_ARGS_HELPER2(N, ...)  _COMBINE(_N_ARGS_, N)(__VA_ARGS__)
 #define new(T, ...) \
@@ -192,6 +199,8 @@ enum A_TRAIT {
 #define eq(I,...)                   ftableI(I) -> eq(I, ##__VA_ARGS__)
 #define equals(I,...)               ftableI(I) -> equals(I, ##__VA_ARGS__)
 #define compare(I,...)              ftableI(I) -> compare(I, ##__VA_ARGS__)
+#define count(I,...)                ftableI(I) -> count(I, ##__VA_ARGS__)
+#define contains(I,...)             ftableI(I) -> contains(I, ##__VA_ARGS__)
 #define cmp(I,...)                  ftableI(I) -> cmp(I, ##__VA_ARGS__)
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 #define call0(I,N,...)              ftableI(I) -> N(I, ##__VA_ARGS__)
@@ -918,8 +927,20 @@ typedef struct array* array;
     i_override  (X,Y, cast,   string)
 declare_class(path)
 
+#define vector_schema(X,Y) \
+    i_prop           (X,Y, intern,   A,     data) \
+    i_prop           (X,Y, required, i32,   alloc) \
+    i_prop           (X,Y, intern,   i32,   len) \
+    i_prop           (X,Y, required, AType, type) \
+    i_method         (X,Y, public, A,       push,           A) \
+    i_method         (X,Y, public, num,     count) \
+    i_override       (X,Y, method, init) \
+    i_override       (X,Y, cast,   bool)
+declare_class(vector)
+
 #define array_schema(X,Y) \
     i_prop           (X,Y, public, ARef, elements) \
+    i_prop           (X,Y, public, bool, unmanaged) \
     i_prop           (X,Y, public, i32,  alloc) \
     i_prop           (X,Y, public, i32,  len) \
     s_vargs          (X,Y, public, array,   of,             AType) \
@@ -1058,8 +1079,8 @@ declare_enum(Exists)
 
 /// we can iterate through a collection with this strange code
 #define each(container, E, e) \
-    if (call(container, count)) for (E e = get(container, 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, __len = call(container, count); __i < __len; __i++, e = get(container, __i)) \
+    if (count(container)) for (E e = get(container, 0), e0 = 0; e0 == 0; e0++) \
+        for (num __i = 0, __len = count(container); __i < __len; __i++, e = get(container, __i)) \
 
 /// we can go through a map
 #define pairs(MM, EE) \
@@ -1081,8 +1102,8 @@ declare_enum(Exists)
 
 /// possible to iterate safely through primitives
 #define primitives(arr, E, e) \
-    if (call(arr, count)) for (E e = *(E*)call(arr, get, 0), e0 = 0; e0 == 0; e0++) \
-        for (num i = 0, __len = call(arr, count); i < __len; i++, e = *(E*)call(arr, get, i)) \
+    if (count(arr)) for (E e = *(E*)get(arr, 0), e0 = 0; e0 == 0; e0++) \
+        for (num i = 0, __len = count(arr); i < __len; i++, e = *(E*)get(arr, i)) \
 
 A           A_alloc(AType type, num count, bool af_pool);
 
@@ -1101,7 +1122,8 @@ void        A_drop(A a);
 sz          len(A a);
 num         index_of_cstr(A a, cstr f);
 Exists      A_exists(A a);
-
+num         clamp(num i, num mn, num mx);
+real        clampf(real, real, real);
 #define     drop(a) A_drop(a)
 #define     hold(a) A_hold(a)
 

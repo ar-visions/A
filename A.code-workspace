@@ -13,9 +13,6 @@
 			"path": "../dawn"
 		},
 		{
-			"path": "../llvm-project"
-		},
-		{
 			"path": "../trinity"
 		}
 	],
@@ -167,7 +164,8 @@
 			"import": "c",
 			"*.ipp": "c",
 			"analysis.h": "c",
-			"core.h": "c"
+			"core.h": "c",
+			"index.h": "c"
 		}
 	}
 }

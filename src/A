@@ -202,6 +202,8 @@ enum A_TRAIT {
 #define count(I,...)                ftableI(I) -> count(I, ##__VA_ARGS__)
 #define contains(I,...)             ftableI(I) -> contains(I, ##__VA_ARGS__)
 #define cmp(I,...)                  ftableI(I) -> cmp(I, ##__VA_ARGS__)
+#define first(I,...)                ftableI(I) -> first(I, ##__VA_ARGS__)
+#define last(I,...)                 ftableI(I) -> last(I, ##__VA_ARGS__)
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 #define call0(I,N,...)              ftableI(I) -> N(I, ##__VA_ARGS__)
 #define val(T,V)                    A_primitive(typeid(T), (&(T){V}))
@@ -272,7 +274,7 @@ enum A_TRAIT {
 #define   i_prop_public_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].name     = #N; \
     X##_type.members[X##_type.member_count].offset   = offsetof(struct X, N); \
-    X##_type.members[X##_type.member_count].type     = &R##_type; \
+    X##_type.members[X##_type.member_count].type     = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_PROP; \
     X##_type.member_count++;
 #define   i_prop_public_PROTO(X, R, N)  
@@ -299,7 +301,7 @@ enum A_TRAIT {
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(__VA_ARGS__) }; \
-    X##_type.members[X##_type.member_count].type    = &R##_type; \
+    X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, N); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_SMETHOD; \
     X##_type.member_count++;   
@@ -319,7 +321,7 @@ enum A_TRAIT {
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X, ##__VA_ARGS__) }; \
-    X##_type.members[X##_type.member_count].type    = &R##_type; \
+    X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, N); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_IMETHOD; \
     X##_type.member_count++;
@@ -339,7 +341,7 @@ enum A_TRAIT {
     X##_type  . operator_##N = & X## _operator_ ## N; \
     X##_type.members[X##_type.member_count].name    = stringify(combine_tokens(operator_, N)); \
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X, ARG) }; \
-    X##_type.members[X##_type.member_count].type    = &R##_type; \
+    X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, operator_##N); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_OPERATOR; \
     X##_type.members[X##_type.member_count].operator_type = OPType_ ## N; \
@@ -360,7 +362,7 @@ enum A_TRAIT {
     X##_type.cast_##R = & X##_cast_##R; \
     X##_type.members[X##_type.member_count].name    = stringify(combine_tokens(cast_, R)); \
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X) }; \
-    X##_type.members[X##_type.member_count].type    = &R##_type; \
+    X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, cast_##R); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_CAST; \
     X##_type.member_count++;  
@@ -380,7 +382,7 @@ enum A_TRAIT {
     X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__); \
     X##_type.members[X##_type.member_count].name        = stringify(emit_idx_symbol(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(X, __VA_ARGS__) }; \
-    X##_type.members[X##_type.member_count].type        = &R##_type; \
+    X##_type.members[X##_type.member_count].type        = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, emit_idx_symbol(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_INDEX; \
     X##_type.member_count++;  
@@ -1165,6 +1167,7 @@ A           A_fields(A instance);
 A           A_data(A instance);
 A           A_verify(A instance, AType type);
 void        A_module_init(bool(*fn)());
+void        debug();
 
 bool      is_meta(A a);
 bool      is_meta_compatible(A a, A b);

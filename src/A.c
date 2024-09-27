@@ -104,6 +104,10 @@ static void A_validator(A a) {
     }
 }
 
+void debug() {
+    return;
+}
+
 A A_initialize(A a) {
     A f           = A_fields(a);
     AType a_type  = &A_type;

@@ -165,7 +165,10 @@
 			"*.ipp": "c",
 			"analysis.h": "c",
 			"core.h": "c",
-			"index.h": "c"
+			"index.h": "c",
+			"debuginfo.h": "c",
+			"bitwriter.h": "c",
+			"target.h": "c"
 		}
 	}
 }

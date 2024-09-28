@@ -104,6 +104,20 @@ static void A_validator(A a) {
     }
 }
 
+string A_enum_string(AType type, i32 value) {
+    int cur = 0;
+    for (num m = 0; m < type->member_count; m++) {
+        type_member_t* mem = &type->members[m];
+        if (mem->member_type & A_TYPE_ENUMV) {
+            if (cur == value)
+                return str(mem->name);
+            cur++;
+        }
+    }
+    fault ("invalid enum-value of %i for type %s", value, type->name);
+    return null;
+}
+
 void debug() {
     return;
 }

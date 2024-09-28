@@ -168,7 +168,8 @@
 			"index.h": "c",
 			"debuginfo.h": "c",
 			"bitwriter.h": "c",
-			"target.h": "c"
+			"target.h": "c",
+			"*.bak": "c"
 		}
 	}
 }

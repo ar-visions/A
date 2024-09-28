@@ -10,6 +10,7 @@
 #include <ctype.h>
 #include <libgen.h>
 #include <unistd.h>
+#include <signal.h>
 
 FILE *popen(const char *command, const char *type);
 int   pclose(FILE*);
@@ -686,7 +687,7 @@ void* primitive_ffi_arb(AType);
     )
 
 #define define_mod(MOD, CLASS) \
-    define_global(MOD, CLASS, sizeof(struct CLASS), 0, \
+    define_global(MOD, CLASS, sizeof(struct MOD), 0, \
         CLASS##_type.arb = primitive_ffi_arb(typeid(cstr)); \
           MOD##_schema(   MOD, INIT ) \
     )
@@ -1077,7 +1078,7 @@ declare_enum(Exists)
 #else
 #define       assert(a, t, ...) do { } while(0)
 #endif
-#define       verify(a, t, ...) do { if (!(a)) { A_formatter(null, stderr, true,  t, ## __VA_ARGS__); __builtin_trap(); exit(1); } } while(0)
+#define       verify(a, t, ...) do { if (!(a)) { A_formatter(null, stderr, true,  t, ## __VA_ARGS__); raise(SIGSTOP); exit(1); } } while(0)
 
 /// we can iterate through a collection with this strange code
 #define each(container, E, e) \
@@ -1112,6 +1113,9 @@ A           A_alloc(AType type, num count, bool af_pool);
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size
 #define A_struct(T) A_alloc(typeid(u8), sizeof(T), true)
+
+string      A_enum_string(AType type, i32 value);
+#define     estr(E,I) A_enum_string(typeid(E), I)
 
 A           A_new(AType type);
 A           A_construct(AType type, int n_args, ...);

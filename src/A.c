@@ -627,7 +627,7 @@ static A numeric_with_num(A a, num  v) { set_v(); }
 
 A A_method(A_f* type, char* method_name, array args);
 
-sz len(A a) {
+sz A_len(A a) {
     if (!a) return 0;
     AType t = isa(a);
     if (t == typeid(string)) return ((string)a)->len;
@@ -641,8 +641,8 @@ sz len(A a) {
 
 num index_of_cstr(A a, cstr f) {
     AType t = isa(a);
-    if (t == typeid(string)) return call((string)a, index_of, f);
-    if (t == typeid(array))  return call((array)a,  index_of, str(f));
+    if (t == typeid(string)) return index_of((string)a, f);
+    if (t == typeid(array))  return index_of((array)a, str(f));
     if (t == typeid(cstr) || t == typeid(symbol) || t == typeid(cereal)) {
         cstr v = strstr(a, f);
         return v ? (num)(v - f) : (num)-1;
@@ -660,7 +660,7 @@ Exists A_exists(A o) {
         f = o;
     assert(f, "type not supported");
     bool is_dir = call(f, is_dir);
-    bool r = call(f, exists);
+    bool r = exists(f);
     if (is_dir)
         return r ? Exists_dir  : Exists_no;
     else
@@ -705,7 +705,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
             A      arg = va_arg(args, A);
             string   a = cast(arg, string);
             num    len = a->len;
-            call(res, reserve, len);
+            reserve(res, len);
             memcpy(&res->chars[res->len], a->chars, len);
             res->len += len;
             scan     += 2; // Skip over %o
@@ -713,7 +713,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
             /// format with vsnprintf
             const char* next_percent = strchr(scan, '%');
             num segment_len = next_percent ? (num)(next_percent - scan) : (num)strlen(scan);
-            call(res, reserve, segment_len);
+            reserve(res, segment_len);
             memcpy(&res->chars[res->len], scan, segment_len);
             res->len += segment_len;
             scan     += segment_len;
@@ -736,7 +736,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
                         f_len = snprintf(
                             end, avail, formatter, va_arg(args, void*));
                     if (f_len > avail) {
-                        call(res, reserve, res->alloc << 1);
+                        reserve(res, res->alloc << 1);
                         continue;
                     }
                     res->len += f_len;
@@ -810,6 +810,8 @@ static none  string_append(string a, cstr b) {
     a->chars[a->len] = 0;
 }
 
+static sz string_len(string a) { return a->len; }
+
 static num   string_index_of(string a, cstr cs) {
     char* f = strstr(a->chars, cs);
     return f ? (num)(f - a->chars) : (num)-1;
@@ -848,7 +850,7 @@ u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
 }
 
 static u64 item_hash(item f) {
-    return call(f->key ? f->key : f->value, hash);
+    return hash(f->key ? f->key : f->value);
 }
 
 static u64 string_hash(string a) {
@@ -901,7 +903,7 @@ static bool string_has_suffix(string a, cstr value) {
 static item list_push(list a, A e);
 
 static item hashmap_fetch(hashmap a, A key) {
-    u64 h = call(key, hash);
+    u64 h = hash(key);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
@@ -914,7 +916,7 @@ static item hashmap_fetch(hashmap a, A key) {
 }
 
 static item hashmap_lookup(hashmap a, A key) {
-    u64 h = call(key, hash);
+    u64 h = hash(key);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
@@ -924,29 +926,31 @@ static item hashmap_lookup(hashmap a, A key) {
 }
 
 static none hashmap_set(hashmap a, A key, A value) {
-    item i = call(a, fetch, key);
+    item i = fetch(a, key);
     A prev = i->value;
     i->value = A_hold(value);
     A_drop(prev);
 }
 
 static A hashmap_get(hashmap a, A key) {
-    item i = call(a, lookup, key);
+    item i = lookup(a, key);
     return i ? i->value : null;
 }
 
 static bool hashmap_contains(hashmap a, A key) {
-    item i = call(a, lookup, key);
+    item i = lookup(a, key);
     return i != null;
 }
 
+static A list_remove_item(list a, item ai);
+
 static none hashmap_remove(hashmap a, A key) {
-    u64 h = call(key, hash);
+    u64 h = hash(key);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
         if (compare(f->key, key) == 0) {
-            list_type.remove_item(bucket, f);
+            list_remove_item(bucket, f);
             a->count--;
             break;
         }
@@ -990,12 +994,12 @@ static void map_concat(map a, map b) {
 }
 
 static item map_fetch(map a, A key) {
-    item i = call(a->hmap, fetch, key);
+    item i = fetch(a->hmap, key);
     return i;
 }
 
 static none map_set(map a, A key, A value) {
-    item i  = call(a->hmap, fetch, key);
+    item i  = fetch(a->hmap, key);
     pair mi = i->value;
     if (mi) {
         A before     = mi->value;
@@ -1010,21 +1014,21 @@ static none map_set(map a, A key, A value) {
 }
 
 static A map_get(map a, A key) {
-    item i = call(a->hmap, lookup, key);
+    item i = lookup(a->hmap, key);
     return (i && i->value) ? ((pair)i->value)->value : null;
 }
 
 static bool map_contains(map a, A key) {
-    item i = call(a->hmap, lookup, key);
+    item i = lookup(a->hmap, key);
     return i != null;
 }
 
 /// must store a ref to the ref item in hashmap item's value; we may call this an object map_value
 static none map_remove(map a, A key) {
-    item i = call(a->hmap, lookup, key);
+    item i = lookup(a->hmap, key);
     if (i) {
         item ref = i->value;
-        call(a, remove_item, ref);
+        remove_item(a, ref);
     }
 }
 
@@ -1033,6 +1037,10 @@ static bool map_cast_bool(map a) {
 }
 
 static A list_get(list a, object at_index);
+
+static sz map_len(map a) {
+    return a->count;
+}
 
 static A map_index_sz(map a, sz index) {
     assert(index >= 0 && index < a->count, "index out of range");
@@ -1445,6 +1453,10 @@ static num array_count(array a) {
     return a->len;
 }
 
+static sz array_len(array a) {
+    return a->len;
+}
+
 /// index of element that compares to 0 diff with item
 static num array_index_of(array a, A b) {
     for (num i = 0; i < a->len; i++) {
@@ -1482,7 +1494,7 @@ AF A_pool(sz start_size) {
 }
 
 static void AF_destructor(AF a) {
-    int f = call(af_stack, index_of, a);
+    int f = index_of(af_stack, a);
     assert(f >= 0, "invalid af-stack index");
     call(af_stack, remove_weak, f);
     if (af_top == a)

@@ -205,6 +205,19 @@ enum A_TRAIT {
 #define cmp(I,...)                  ftableI(I) -> cmp(I, ##__VA_ARGS__)
 #define first(I,...)                ftableI(I) -> first(I, ##__VA_ARGS__)
 #define last(I,...)                 ftableI(I) -> last(I, ##__VA_ARGS__)
+#define exists(I,...)               ftableI(I) -> exists(I, ##__VA_ARGS__)
+#define len(I,...)                  ftableI(I) -> len(I, ##__VA_ARGS__)
+#define fetch(I,...)                ftableI(I) -> fetch(I, ##__VA_ARGS__)
+#define lookup(I,...)               ftableI(I) -> lookup(I, ##__VA_ARGS__)
+#define remove(I,...)               ftableI(I) -> remove(I, ##__VA_ARGS__)
+#define remove_item(I,...)          ftableI(I) -> remove_item(I, ##__VA_ARGS__)
+#define index_of(I,...)             ftableI(I) -> index_of(I, ##__VA_ARGS__)
+#define reserve(I,...)              ftableI(I) -> reserve(I, ##__VA_ARGS__)
+#define hash(I,...)                 ftableI(I) -> hash(I, ##__VA_ARGS__)
+
+#define file_exists3(I,...)          ftableI(I) -> file_exists(I, ##__VA_ARGS__)
+#define file_exists4(I,...)          ftableI(I) -> file_exists(I, ##__VA_ARGS__)
+
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 #define call0(I,N,...)              ftableI(I) -> N(I, ##__VA_ARGS__)
 #define val(T,V)                    A_primitive(typeid(T), (&(T){V}))
@@ -958,6 +971,7 @@ declare_class(vector)
     i_method         (X,Y, public, none,    concat,         array) \
     i_method         (X,Y, public, A,       get,            i32) \
     i_method         (X,Y, public, num,     count) \
+    i_method         (X,Y, public, sz,      len) \
     i_method         (X,Y, public, num,     index_of,       A) \
     i_operator       (X,Y, public, none,    assign_add,     A) \
     i_operator       (X,Y, public, none,    assign_sub,     num) \
@@ -1009,6 +1023,7 @@ declare_class(pair)
     i_method    (X,Y, public,  item,       fetch,      A) \
     i_method    (X,Y, public,  bool,       contains,   A) \
     i_method    (X,Y, public,  none,       concat,     map) \
+    i_method    (X,Y, public,  sz,         len) \
     i_index     (X,Y, public,  A, sz) \
     i_index     (X,Y, public,  A, A) \
     i_override  (X,Y, method,  get) \
@@ -1037,6 +1052,7 @@ declare_class(fn)
     i_prop    (X,Y,   public, num,     ref_length) \
     i_prop    (X,Y,   public, num,     len) \
     i_prop    (X,Y,   public, u64,     h) \
+    i_method  (X,Y,   public, sz,      len) \
     i_method  (X,Y,   public, array,   split, cstr) \
     i_method  (X,Y,   public, num,     index_of, cstr) \
     i_method  (X,Y,   public, none,    append, cstr) \
@@ -1125,7 +1141,7 @@ type_member_t* A_constructor(AType type, AType first_arg); // find a constructor
 bool        A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
 A           A_hold(A a);
 void        A_drop(A a);
-sz          len(A a);
+sz          A_len(A a);
 num         index_of_cstr(A a, cstr f);
 Exists      A_exists(A a);
 num         clamp(num i, num mn, num mx);

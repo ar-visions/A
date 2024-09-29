@@ -3,7 +3,6 @@
 
 #include <stddef.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 #include <stdarg.h>
@@ -12,8 +11,7 @@
 #include <unistd.h>
 #include <signal.h>
 
-FILE *popen(const char *command, const char *type);
-int   pclose(FILE*);
+#include <A-classes>
 
 /// A-type runtime
 typedef void                none;
@@ -41,6 +39,14 @@ typedef struct A*           object;
 typedef struct A**          ARef;
 typedef struct A*           A;
 typedef struct type_member_t* Member;
+
+void*   calloc(size_t num, size_t size);
+void    free();
+void    exit(int);
+int     abs(int);
+cstr    realpath(symbol, symbol);
+FILE   *popen(const char *command, const char *type);
+int     pclose(FILE*);
 
 typedef struct meta_t {
     num             count;
@@ -206,7 +212,7 @@ enum A_TRAIT {
 #define first(I,...)                ftableI(I) -> first(I, ##__VA_ARGS__)
 #define last(I,...)                 ftableI(I) -> last(I, ##__VA_ARGS__)
 #define exists(I,...)               ftableI(I) -> exists(I, ##__VA_ARGS__)
-#define len(I,...)                  ftableI(I) -> len(I, ##__VA_ARGS__)
+#define len(I,...)                  ((I) ? (i64)ftableI(I) -> len(I, ##__VA_ARGS__) : (i64)0)
 #define fetch(I,...)                ftableI(I) -> fetch(I, ##__VA_ARGS__)
 #define lookup(I,...)               ftableI(I) -> lookup(I, ##__VA_ARGS__)
 #define remove(I,...)               ftableI(I) -> remove(I, ##__VA_ARGS__)
@@ -214,9 +220,6 @@ enum A_TRAIT {
 #define index_of(I,...)             ftableI(I) -> index_of(I, ##__VA_ARGS__)
 #define reserve(I,...)              ftableI(I) -> reserve(I, ##__VA_ARGS__)
 #define hash(I,...)                 ftableI(I) -> hash(I, ##__VA_ARGS__)
-
-#define file_exists3(I,...)          ftableI(I) -> file_exists(I, ##__VA_ARGS__)
-#define file_exists4(I,...)          ftableI(I) -> file_exists(I, ##__VA_ARGS__)
 
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 #define call0(I,N,...)              ftableI(I) -> N(I, ##__VA_ARGS__)
@@ -265,6 +268,7 @@ enum A_TRAIT {
 
 
 #define   i_ctr_public_INST(X, ARG)
+#define   i_ctr_public_INTERN(X, ARG)
 #define   i_ctr_public_DECL(X, ARG)
 #define   i_ctr_public_INIT(X, ARG) \
     X##_type.with_##ARG = & X##_with_##ARG; \
@@ -279,11 +283,12 @@ enum A_TRAIT {
 #define   i_ctr_intern_INST(X, ARG)
 #define   i_ctr_intern_INIT(X, ARG) 
 #define   i_ctr_intern_PROTO(X, ARG)
-#define   i_ctr_intern_METHOD(X, ARG)      X (*with_##ARG)(X, ARG);
+#define   i_ctr_intern_METHOD(X, ARG)
 #define   i_ctr(X, Y, T, ARG)              i_ctr_##T##_##Y(X, ARG)
 
 
 #define   i_prop_public_INST(X, R, N)         R N;  
+#define   i_prop_public_INTERN(X, R, N) 
 #define   i_prop_public_DECL(X, R, N)
 #define   i_prop_public_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].name     = #N; \
@@ -295,6 +300,7 @@ enum A_TRAIT {
 #define   i_prop_public_METHOD(X, R, N)
 
 #define   i_prop_required_INST(X, R, N)         i_prop_public_INST(X, R, N)
+#define   i_prop_required_INTERN(X, R, N)
 #define   i_prop_required_DECL(X, R, N)
 #define   i_prop_required_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].required = true; \
@@ -302,7 +308,8 @@ enum A_TRAIT {
 #define   i_prop_required_PROTO(X, R, N)  
 #define   i_prop_required_METHOD(X, R, N)
 
-#define   i_prop_intern_INST(X, R, N)         R N;  
+#define   i_prop_intern_INST(X, R, N)          
+#define   i_prop_intern_INTERN(X, R, N)         R N;
 #define   i_prop_intern_DECL(X, R, N)
 #define   i_prop_intern_INIT(X, R, N)
 #define   i_prop_intern_PROTO(X, R, N)  
@@ -310,6 +317,7 @@ enum A_TRAIT {
 #define   i_prop(X, Y, T, R, N) i_prop_##T##_##Y(X, R, N)
 
 #define   s_method_public_INST(X, R, N, ...)
+#define   s_method_public_INTERN(X, R, N, ...)
 #define   s_method_public_DECL(X, R, N, ...)       R X##_##N(__VA_ARGS__);
 #define   s_method_public_INIT(X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
@@ -323,13 +331,15 @@ enum A_TRAIT {
 #define   s_method_public_METHOD(X, R, N, ...)    R (*N)(__VA_ARGS__);
 
 #define   s_method_intern_INST(X, R, N, ...)
+#define   s_method_intern_INTERNT(X, R, N, ...)
 #define   s_method_intern_DECL(X, R, N, ...)
-#define   s_method_intern_INIT(X, R, N, ...)      X##_type . N = & X## _ ## N;
+#define   s_method_intern_INIT(X, R, N, ...)      
 #define   s_method_intern_PROTO(X, R, N, ...)
-#define   s_method_intern_METHOD(X, R, N, ...)    R (*N)(__VA_ARGS__);
+#define   s_method_intern_METHOD(X, R, N, ...)    
 #define   s_method(X, Y, T, R, N, ...)            s_method_##T##_##Y(X, R, N, ##__VA_ARGS__)
 
 #define   i_method_public_INST(    X, R, N, ...)
+#define   i_method_public_INTERN(  X, R, N, ...)
 #define   i_method_public_DECL(    X, R, N, ...)
 #define   i_method_public_INIT(    X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
@@ -343,13 +353,15 @@ enum A_TRAIT {
 #define   i_method_public_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
 
 #define   i_method_intern_INST(    X, R, N, ...)
+#define   i_method_intern_INTERN(  X, R, N, ...)
 #define   i_method_intern_DECL(    X, R, N, ...)
-#define   i_method_intern_INIT(    X, R, N, ...)    X##_type . N = & X## _ ## N;
+#define   i_method_intern_INIT(    X, R, N, ...)    
 #define   i_method_intern_PROTO(X, R, N, ...)
-#define   i_method_intern_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
+#define   i_method_intern_METHOD(X, R, N, ...)      
 #define   i_method(X, Y, T, R, N, ...)              i_method_##T##_##Y(X, R, N, X, ##__VA_ARGS__)
 
 #define   i_operator_public_INST(X, R, N, ARG)
+#define   i_operator_public_INTERN(X, R, N, ARG)
 #define   i_operator_public_DECL(X, R, N, ARG)
 #define   i_operator_public_INIT(X, R, N, ARG) \
     X##_type  . operator_##N = & X## _operator_ ## N; \
@@ -364,13 +376,15 @@ enum A_TRAIT {
 #define   i_operator_public_METHOD(X, R, N, ARG)    R (*operator_ ## N)(X, ARG);
 
 #define   i_operator_intern_INST(X, R, N, ARG)
+#define   i_operator_intern_INTERN(X, R, N, ARG)
 #define   i_operator_intern_DECL(X, R, N, ARG)
-#define   i_operator_intern_INIT(X, R, N, ARG)      X##_type  . operator_##N = & X## _operator_ ## N;
+#define   i_operator_intern_INIT(X, R, N, ARG)      
 #define   i_operator_intern_PROTO(X, R, N, ARG)
-#define   i_operator_intern_METHOD(X, R, N, ARG)    R (*operator_ ## N)(X, ARG);
+#define   i_operator_intern_METHOD(X, R, N, ARG)    
 #define   i_operator(X, Y, T, R, N, ARG)            i_operator_##T##_##Y(X, R, N, ARG)
 
 #define   i_cast_public_INST(X, R)
+#define   i_cast_public_INTERN(X, R)
 #define   i_cast_public_DECL(X, R)
 #define   i_cast_public_INIT(X, R) \
     X##_type.cast_##R = & X##_cast_##R; \
@@ -384,13 +398,15 @@ enum A_TRAIT {
 #define   i_cast_public_METHOD(X, R)        R (*cast_##R)(X);
 
 #define   i_cast_intern_INST(X, R)
+#define   i_cast_intern_INTERN(X, R)
 #define   i_cast_intern_DECL(X, R)
-#define   i_cast_intern_INIT(X, R)          X##_type.cast_##R = & X##_cast_##R;
+#define   i_cast_intern_INIT(X, R)          
 #define   i_cast_intern_PROTO(X, R)
-#define   i_cast_intern_METHOD(X, R)        R (*cast_##R)(X);
+#define   i_cast_intern_METHOD(X, R)        
 #define   i_cast(X, Y, T, R)                i_cast_##T##_##Y(X, R)
 
 #define   i_index_public_INST(X, R, ...)
+#define   i_index_public_INTERN(X, R, ...)
 #define   i_index_public_DECL(X, R, ...)
 #define   i_index_public_INIT(X, R, ...) \
     X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__); \
@@ -404,20 +420,22 @@ enum A_TRAIT {
 #define i_index_public_METHOD(X, R, ...)                R (*emit_idx_symbol(index,__VA_ARGS__))(X, ##__VA_ARGS__);
 
 #define i_index_intern_INST(X, R, ...)
+#define i_index_intern_INTERN(X, R, ...)
 #define i_index_intern_DECL(X, R, ...)
-#define i_index_intern_INIT(X, R, ...) \
-    X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__);
+#define i_index_intern_INIT(X, R, ...)
 #define i_index_intern_PROTO(X, R, ...)
 #define i_index_intern_METHOD(X, R, ...)                R (*emit_idx_symbol(index, __VA_ARGS__))(X, ##__VA_ARGS__);
 #define i_index(X, Y, T, R, ...)                        i_index_##T##_##Y(X, R, ##__VA_ARGS__)
 
 #define i_vargs_public_INST(X, R, N, ...)
+#define i_vargs_public_INTERN(X, R, N, ...)
 #define i_vargs_public_DECL(X, R, N, ...)
 #define i_vargs_public_INIT(X, R, N, ...)               i_method_public_INIT(X, R, N, __VA_ARGS__)  
 #define i_vargs_public_PROTO(X, R, N, ...)
 #define i_vargs_public_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
 
 #define i_vargs_intern_INST(X, R, N, ...)
+#define i_vargs_intern_INTERN(X, R, N, ...)
 #define i_vargs_intern_DECL(X, R, N, ...)
 #define i_vargs_intern_INIT(X, R, N, ...)               i_method_intern_INIT(X, R, N, __VA_ARGS__)  
 #define i_vargs_intern_PROTO(X, R, N, ...)
@@ -425,35 +443,42 @@ enum A_TRAIT {
 #define i_vargs(X, Y, T, R, N, ...)                     i_vargs_##T##_##Y(X, R, N, __VA_ARGS__)
 
 #define s_vargs_public_INST(X, R, N, ...)
+#define s_vargs_public_INTERN(X, R, N, ...)
 #define s_vargs_public_DECL(X, R, N, ...)               R X##_##N(__VA_ARGS__, ...);
 #define s_vargs_public_INIT(X, R, N, ...)               s_method_public_INIT(X, R, N, ##__VA_ARGS__)
 #define s_vargs_public_PROTO(X, R, N, ...)
 #define s_vargs_public_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
+
 #define s_vargs_intern_INST(X, R, N, ...)
+#define s_vargs_intern_INTERN(X, R, N, ...)
 #define s_vargs_intern_INIT(X, R, N, ...)               s_method_intern_INIT(X, R, N, ##__VA_ARGS__)
 #define s_vargs_intern_PROTO(X, R, N, ...)
 #define s_vargs_intern_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
 #define s_vargs(X, Y, T, R, N, ...)                     s_vargs_##T##_##Y(X, R, N, ##__VA_ARGS__)
 
 #define i_override_method_INST(X, N)
+#define i_override_method_INTERN(X, N)
 #define i_override_method_DECL(X, N)
 #define i_override_method_INIT(X, N)                    X##_type . N = & X## _ ## N;
 #define i_override_method_PROTO(X, N)
 #define i_override_method_METHOD(X, N)
 
 #define i_override_ctr_INST(X, R)
+#define i_override_ctr_INTERN(X, N)
 #define i_override_ctr_DECL(X, R)
 #define i_override_ctr_INIT(X, R)                       X##_type . with_##R = & X##_with_##R;
 #define i_override_ctr_PROTO(X, R)
 #define i_override_ctr_METHOD(X, R)
 
 #define i_override_cast_INST(X, R)
+#define i_override_cast_INTERN(X, N)
 #define i_override_cast_DECL(X, R)
 #define i_override_cast_INIT(X, R)                      X##_type . cast_##R = & X##_cast_##R;
 #define i_override_cast_PROTO(X, R)
 #define i_override_cast_METHOD(X, R)
 
 #define i_override_idx_INST(X, R)
+#define i_override_idx_INTERN(X, N)
 #define i_override_idx_DECL(X, R)
 #define i_override_idx_INIT(X, R)                    X##_type . idx_##R = & X##_idx_##R;
 #define i_override_idx_PROTO(X, R)
@@ -498,11 +523,14 @@ typedef struct type_member_t {
     meta_t          meta; \
     void*           arb;
 
+#define internal(X) X##_schema(X, INTERN)
+
 #define declare_inst( X ) \
     typedef struct X* X; \
     _Pragma("pack(push, 1)") \
     typedef struct X { \
         X##_schema (X, INST) \
+        i_##X \
         struct X##_f* f; \
     } *X; \
     _Pragma("pack(pop)") \
@@ -512,7 +540,9 @@ typedef struct type_member_t {
     _Pragma("pack(push, 1)") \
     typedef struct X { \
         Y##_schema (Y, INST) \
+        i_##Y \
         X##_schema (X, INST) \
+        i_##X \
         struct X##_f* f; \
     } *X; \
     _Pragma("pack(pop)") \
@@ -764,13 +794,13 @@ typedef struct string* string;
 
 /// constructors get a type forwarded from the construct macro
 #define A_schema(X,Y) \
-    i_prop  (X,Y, intern, AType,     type) \
-    i_prop  (X,Y, intern, num,       refs) \
-    i_prop  (X,Y, intern, num,       ar_index) \
-    i_prop  (X,Y, intern, A,         data) \
-    i_prop  (X,Y, intern, num,       alloc) \
-    i_prop  (X,Y, intern, num,       count) \
-    i_prop  (X,Y, intern, A,         origin) \
+    i_prop  (X,Y, public, AType,     type) \
+    i_prop  (X,Y, public, num,       refs) \
+    i_prop  (X,Y, public, num,       ar_index) \
+    i_prop  (X,Y, public, A,         data) \
+    i_prop  (X,Y, public, num,       alloc) \
+    i_prop  (X,Y, public, num,       count) \
+    i_prop  (X,Y, public, A,         origin) \
     i_method(X,Y, public, none,      init) \
     i_method(X,Y, public, none,      destructor) \
     i_method(X,Y, public, i32,       compare,    X) \
@@ -862,18 +892,18 @@ declare_primitive(Member,       raw)
 
 /// doubly-linked item type, integrated key so we dont also need a 'field' type
 #define item_schema(X,Y) \
-    i_prop    (X,Y, intern, struct X*, next) \
-    i_prop    (X,Y, intern, struct X*, prev) \
-    i_prop    (X,Y, intern, A,         value) \
-    i_prop    (X,Y, intern, A,         key) \
+    i_prop    (X,Y, public, X,         next) \
+    i_prop    (X,Y, public, X,         prev) \
+    i_prop    (X,Y, public, A,         value) \
+    i_prop    (X,Y, public, A,         key) \
     i_override(X,Y, method, hash)
 declare_class(item)
 
 /// linked-list of elemental data
 #define list_schema(X,Y) \
-    i_prop  (X,Y, intern,    item,    first) \
-    i_prop  (X,Y, intern,    item,    last)  \
-    i_prop  (X,Y, intern,    i64,     count) \
+    i_prop  (X,Y, public,    item,    first) \
+    i_prop  (X,Y, public,    item,    last)  \
+    i_prop  (X,Y, public,    i64,     count) \
     i_method(X,Y, public,    A,       pop) \
     i_method(X,Y, public,    item,    push, A) \
     i_method(X,Y, public,    num,     index_of_element, A) \
@@ -944,15 +974,22 @@ typedef struct array* array;
 declare_class(path)
 
 #define vector_schema(X,Y) \
-    i_prop           (X,Y, intern,   A,     data) \
+    i_prop           (X,Y, public,   A,     data) \
     i_prop           (X,Y, required, i32,   alloc) \
-    i_prop           (X,Y, intern,   i32,   len) \
+    i_prop           (X,Y, public,   i32,   len) \
     i_prop           (X,Y, required, AType, type) \
     i_method         (X,Y, public, A,       push,           A) \
     i_method         (X,Y, public, num,     count) \
     i_override       (X,Y, method, init) \
     i_override       (X,Y, cast,   bool)
 declare_class(vector)
+
+#define callback_schema(X,Y) \
+    i_prop           (X,Y, public,   object, ctx) \
+    i_prop           (X,Y, required, handle, addr)
+declare_class(callback)
+
+#define subproc(faddr, context) new(callback, ctx, context, addr, faddr) 
 
 #define array_schema(X,Y) \
     i_prop           (X,Y, public, ARef, elements) \
@@ -985,7 +1022,7 @@ declare_class(array)
 declare_meta(array, ATypes)
 
 #define AF_schema(X,Y) \
-    i_prop      (X,Y, intern, array, pool) \
+    i_prop      (X,Y, public, array, pool) \
     i_prop      (X,Y, public, sz,    start_size) \
     s_method    (X,Y, public, AF,    fetch, num) \
     s_method    (X,Y, public, AF,    create, sz) \
@@ -994,9 +1031,9 @@ declare_meta(array, ATypes)
 declare_class(AF)
 
 #define hashmap_schema(X,Y) \
-    i_prop      (X,Y, intern, list,  data) \
+    i_prop      (X,Y, public, list,  data) \
     i_prop      (X,Y, public, num,   alloc) \
-    i_prop      (X,Y, intern, num,   count) \
+    i_prop      (X,Y, public, num,   count) \
     i_method    (X,Y, public, none,  remove, A) \
     i_method    (X,Y, public, none,  set, A, A) \
     i_method    (X,Y, public, A,     get, A) \
@@ -1031,12 +1068,6 @@ declare_class(pair)
     i_override  (X,Y, cast,    string) \
     i_override  (X,Y, cast,    bool)
 declare_mod(map, list)
-
-/// how beneficial is it to have args in 'context' structure?
-/// we have a place for holding references
-/// no need to have temporary arg variables we pass in
-/// it could be significantly faster
-/// its compatible with lambdas; those args are just set first
 
 #define fn_schema(X,Y) \
     i_prop      (X,Y, intern, method_t*, method) \

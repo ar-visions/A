@@ -1,3 +1,15 @@
+#define i_A             internal(A)
+#define i_item          internal(item)
+#define i_path          internal(path)
+#define i_vector        internal(vector)
+#define i_array         internal(array)
+#define i_AF            internal(AF)
+#define i_hashmap       internal(hashmap)
+#define i_pair          internal(pair)
+#define i_map           internal(map)
+#define i_fn            internal(fn)
+#define i_string        internal(string)
+
 #include <A>
 #include <ffi.h>
 #include <sys/stat.h>
@@ -703,7 +715,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
         /// format %o as object's string cast
         if (*scan == '%' && *(scan + 1) == 'o') {
             A      arg = va_arg(args, A);
-            string   a = cast(arg, string);
+            string   a = arg ? cast(arg, string) : str("null");
             num    len = a->len;
             reserve(res, len);
             memcpy(&res->chars[res->len], a->chars, len);
@@ -1852,6 +1864,7 @@ define_class(hashmap)
 define_class(pair)
 define_mod(map, list) // never quite did one like this but it does make sense
 define_class(fn)
+define_class(callback)
 
 define_class(AF)
 

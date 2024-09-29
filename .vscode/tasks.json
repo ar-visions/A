@@ -54,10 +54,38 @@
                 "command": "msbuild silver.sln /t:silver"
             },
             "osx": {
-                "command": "make -j32"
+                "command": "make -j8"
             },
             "linux": {
-                "command": "make -j32",
+                "command": "make -j8",
+                "options":{
+                    "env":{"VERBOSE":"1"}
+                }
+            }
+        },
+        {
+            "label": "build-ether",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../ether/silver-build"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "osx": {
+                "command": "make -j8"
+            },
+            "linux": {
+                "command": "make -j8",
                 "options":{
                     "env":{"VERBOSE":"1"}
                 }

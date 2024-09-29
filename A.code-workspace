@@ -7,6 +7,9 @@
 			"path": "../silver"
 		},
 		{
+			"path": "../ether"
+		},
+		{
 			"path": "../ion"
 		},
 		{
@@ -169,7 +172,13 @@
 			"debuginfo.h": "c",
 			"bitwriter.h": "c",
 			"target.h": "c",
-			"*.bak": "c"
+			"*.bak": "c",
+			"classes": "c",
+			"a-classes": "c",
+			"signal.h": "c",
+			"ether": "c",
+			"ether-classes": "c",
+			"silver-classes": "c"
 		}
 	}
 }

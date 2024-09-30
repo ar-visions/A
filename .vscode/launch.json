@@ -50,6 +50,26 @@
             }
         },
         {
+            "name": "ether",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../ether/silver-build/ether",
+            "args": [
+                "--module",  "WGPU.si",
+                "--install", "/home/kalen/src/silver-import"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../ether/silver-build",
+            "environment": [
+            ],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
             "name": "canvas-test",
             "type": "cppdbg",
             "request": "launch",

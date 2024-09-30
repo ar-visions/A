@@ -11,8 +11,6 @@
 #include <unistd.h>
 #include <signal.h>
 
-#include <A-classes>
-
 /// A-type runtime
 typedef void                none;
 typedef signed char         i8;
@@ -523,14 +521,14 @@ typedef struct type_member_t {
     meta_t          meta; \
     void*           arb;
 
-#define internal(X) X##_schema(X, INTERN)
+#define intern(X) X##_schema(X, INTERN)
 
 #define declare_inst( X ) \
     typedef struct X* X; \
     _Pragma("pack(push, 1)") \
     typedef struct X { \
         X##_schema (X, INST) \
-        i_##X \
+        X##_intern \
         struct X##_f* f; \
     } *X; \
     _Pragma("pack(pop)") \
@@ -540,9 +538,9 @@ typedef struct type_member_t {
     _Pragma("pack(push, 1)") \
     typedef struct X { \
         Y##_schema (Y, INST) \
-        i_##Y \
+        Y##_intern \
         X##_schema (X, INST) \
-        i_##X \
+        X##_intern \
         struct X##_f* f; \
     } *X; \
     _Pragma("pack(pop)") \
@@ -809,6 +807,9 @@ typedef struct string* string;
     i_ctr(   X,Y, public, cereal) \
     i_cast(  X,Y, public, string) \
     i_cast(  X,Y, public, bool)
+#ifndef A_intern
+#define A_intern
+#endif
 declare_base(A)
 
 typedef struct object_f {
@@ -897,6 +898,9 @@ declare_primitive(Member,       raw)
     i_prop    (X,Y, public, A,         value) \
     i_prop    (X,Y, public, A,         key) \
     i_override(X,Y, method, hash)
+#ifndef item_intern
+#define item_intern
+#endif        
 declare_class(item)
 
 /// linked-list of elemental data
@@ -911,6 +915,9 @@ declare_class(item)
     i_method(X,Y, public,    none,    remove_item, item) \
     i_method(X,Y, public,    A,       get,  A) \
     i_method(X,Y, public,    num,     count)
+#ifndef list_intern
+#define list_intern
+#endif
 declare_class(list)
 
 /// array of elemental data
@@ -971,6 +978,9 @@ typedef struct array* array;
     i_override  (X,Y, method, init) \
     i_override  (X,Y, cast,   bool) \
     i_override  (X,Y, cast,   string)
+#ifndef path_intern
+#define path_intern
+#endif
 declare_class(path)
 
 #define vector_schema(X,Y) \
@@ -982,14 +992,20 @@ declare_class(path)
     i_method         (X,Y, public, num,     count) \
     i_override       (X,Y, method, init) \
     i_override       (X,Y, cast,   bool)
+#ifndef vector_intern
+#define vector_intern
+#endif
 declare_class(vector)
 
-#define callback_schema(X,Y) \
+#define subprocedure_schema(X,Y) \
     i_prop           (X,Y, public,   object, ctx) \
     i_prop           (X,Y, required, handle, addr)
-declare_class(callback)
+#ifndef subprocedure_intern
+#define subprocedure_intern
+#endif
+declare_class(subprocedure)
 
-#define subproc(faddr, context) new(callback, ctx, context, addr, faddr) 
+#define subproc(faddr, context) new(subprocedure, ctx, context, addr, faddr) 
 
 #define array_schema(X,Y) \
     i_prop           (X,Y, public, ARef, elements) \
@@ -1017,6 +1033,9 @@ declare_class(callback)
     i_index          (X,Y, public, A,       num) \
     i_override       (X,Y, method, init) \
     i_override       (X,Y, cast,   bool)
+#ifndef array_intern
+#define array_intern
+#endif
 declare_class(array)
 
 declare_meta(array, ATypes)
@@ -1028,6 +1047,9 @@ declare_meta(array, ATypes)
     s_method    (X,Y, public, AF,    create, sz) \
     i_override  (X,Y, method, init) \
     i_override  (X,Y, method, destructor)
+#ifndef AF_intern
+#define AF_intern
+#endif
 declare_class(AF)
 
 #define hashmap_schema(X,Y) \
@@ -1044,12 +1066,19 @@ declare_class(AF)
     i_override  (X,Y, cast,   string) \
     i_override  (X,Y, method, init) \
     i_override  (X,Y, cast,   bool)
+#ifndef hashmap_intern
+#define hashmap_intern
+#endif
+
 declare_class(hashmap)
 
 #define pair_schema(X,Y) \
     i_prop      (X,Y, public, item,    ref) \
     i_prop      (X,Y, public, A,       key) \
     i_prop      (X,Y, public, A,       value)
+#ifndef pair_intern
+#define pair_intern
+#endif
 declare_class(pair)
 
 /// hmap stores the item, and our refs list has a value that holds that (origin = hmap)
@@ -1067,6 +1096,9 @@ declare_class(pair)
     i_override  (X,Y, method,  init) \
     i_override  (X,Y, cast,    string) \
     i_override  (X,Y, cast,    bool)
+#ifndef map_intern
+#define map_intern
+#endif
 declare_mod(map, list)
 
 #define fn_schema(X,Y) \
@@ -1075,6 +1107,9 @@ declare_mod(map, list)
     i_prop      (X,Y, public, A,         context) \
     i_method    (X,Y, public, A,         call, array) \
     i_override  (X,Y, method,    hash)
+#ifndef fn_intern
+#define fn_intern
+#endif
 declare_class(fn)
 
 #define string_schema(X,Y) \
@@ -1102,6 +1137,9 @@ declare_class(fn)
     i_override(X,Y,   method, compare) \
     i_override(X,Y,   method, init) \
     i_override(X,Y,   cast,   bool)
+#ifndef string_intern
+#define string_intern
+#endif
 declare_class(string)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
@@ -1162,7 +1200,9 @@ A           A_alloc(AType type, num count, bool af_pool);
 #define A_struct(T) A_alloc(typeid(u8), sizeof(T), true)
 
 string      A_enum_string(AType type, i32 value);
+i32         A_enum_value(AType type, cstr cs);
 #define     estr(E,I) A_enum_string(typeid(E), I)
+#define     eval(E,S) A_enum_value (typeid(E), S)
 
 A           A_new(AType type);
 A           A_construct(AType type, int n_args, ...);
@@ -1204,10 +1244,13 @@ A           A_u16(u16);
 A           A_i32(i32);
 A           A_u32(u32);
 A           A_i64(i64);
+A               i(i64);
 A           A_sz(sz);
 A           A_u64(u64);
 A           A_f32(f32);
 A           A_f64(f64);
+A               f(f32);
+A               r(f64);
 A           A_cstr(cstr);
 A           A_none();
 A           A_bool(bool);

@@ -688,7 +688,7 @@ Exists A_exists(A o) {
     else if (type == typeid(path))
         f = o;
     assert(f, "type not supported");
-    bool is_dir = call(f, is_dir);
+    bool is_dir = is_dir(f);
     bool r = exists(f);
     if (is_dir)
         return r ? Exists_dir  : Exists_no;
@@ -1502,6 +1502,11 @@ static none array_init(array a) {
         array_alloc_sz(a, a->alloc);
 }
 
+static void subprocedure_invoke(subprocedure a, object arg) {
+    void(*addr)(object, object, object) = a->addr;
+    addr(a->target, arg, a->ctx);
+}
+
 static void AF_init(AF a) {
     af_top = a;
     a->pool = allocate(array, alloc, a->start_size ? a->start_size : 1024);
@@ -1824,7 +1829,7 @@ static array path_ls(path a, string pattern, bool recur) {
             } else if (S_ISDIR(statbuf.st_mode)) {
                 if (recur) {
                     path subdir = new(path, chars, abs);
-                    array sublist = call(subdir, ls, pattern, recur);
+                    array sublist = ls(subdir, pattern, recur);
                     concat(list, sublist);
                 }
             }

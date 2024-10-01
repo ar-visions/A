@@ -59,7 +59,7 @@
                 "--install", "/home/kalen/src/silver-import"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../ether/silver-build",
+            "cwd": "${workspaceFolder}/../silver/silver-build",
             "environment": [
             ],
             "MIMode": "gdb",

@@ -185,7 +185,6 @@ enum A_TRAIT {
 #define isa(INSTANCE)               ((struct A_f*)((struct A*)INSTANCE - 1)->type)
 #define inherits(left, type)        A_inherits(left, typeid(type))
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
-#define invoke(T,N,...)             T##_type.N(__VA_ARGS__)
 /// by defining these, we require their use; cant call() these methods
 /// useful in two ways, less tokens and expansion inside call()
 /// obviously we only collect so many, but they become keywords of our common language
@@ -218,6 +217,14 @@ enum A_TRAIT {
 #define index_of(I,...)             ftableI(I) -> index_of(I, ##__VA_ARGS__)
 #define reserve(I,...)              ftableI(I) -> reserve(I, ##__VA_ARGS__)
 #define hash(I,...)                 ftableI(I) -> hash(I, ##__VA_ARGS__)
+#define invoke(I,...)               ftableI(I) -> invoke(I, ##__VA_ARGS__)
+#define filename(I,...)             ftableI(I) -> filename(I, ##__VA_ARGS__)
+#define directory(I,...)            ftableI(I) -> directory(I, ##__VA_ARGS__)
+#define parent(I,...)               ftableI(I) -> parent(I, ##__VA_ARGS__)
+#define ls(I,...)                   ftableI(I) -> ls(I, ##__VA_ARGS__)
+#define is_empty(I,...)             ftableI(I) -> is_empty(I, ##__VA_ARGS__)
+#define is_dir(I,...)               ftableI(I) -> is_dir(I, ##__VA_ARGS__)
+#define make_dir(I,...)             ftableI(I) -> make_dir(I, ##__VA_ARGS__)
 
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 #define call0(I,N,...)              ftableI(I) -> N(I, ##__VA_ARGS__)
@@ -998,14 +1005,16 @@ declare_class(path)
 declare_class(vector)
 
 #define subprocedure_schema(X,Y) \
+    i_prop           (X,Y, required, object, target) \
     i_prop           (X,Y, public,   object, ctx) \
-    i_prop           (X,Y, required, handle, addr)
+    i_prop           (X,Y, required, handle, addr) \
+    i_method         (X,Y, public,   none,   invoke, object)
 #ifndef subprocedure_intern
 #define subprocedure_intern
 #endif
 declare_class(subprocedure)
 
-#define subproc(faddr, context) new(subprocedure, ctx, context, addr, faddr) 
+#define subproc(targ, faddr, context) new(subprocedure, target, targ, ctx, context, addr, faddr) 
 
 #define array_schema(X,Y) \
     i_prop           (X,Y, public, ARef, elements) \

@@ -43,8 +43,10 @@ void    free();
 void    exit(int);
 int     abs(int);
 cstr    realpath(symbol, symbol);
-FILE   *popen(const char *command, const char *type);
+FILE   *popen(symbol command, symbol type);
 int     pclose(FILE*);
+i64     strtoll(symbol str, cstr* endptr, int base);
+f64     strtod (symbol str, cstr* endptr);
 
 typedef struct meta_t {
     num             count;
@@ -225,6 +227,7 @@ enum A_TRAIT {
 #define is_empty(I,...)             ftableI(I) -> is_empty(I, ##__VA_ARGS__)
 #define is_dir(I,...)               ftableI(I) -> is_dir(I, ##__VA_ARGS__)
 #define make_dir(I,...)             ftableI(I) -> make_dir(I, ##__VA_ARGS__)
+#define cstring(I)                  cast(I, cstr)
 
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 #define call0(I,N,...)              ftableI(I) -> N(I, ##__VA_ARGS__)

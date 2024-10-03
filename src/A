@@ -205,7 +205,7 @@ enum A_TRAIT {
 #define eq(I,...)                   ftableI(I) -> eq(I, ##__VA_ARGS__)
 #define equals(I,...)               ftableI(I) -> equals(I, ##__VA_ARGS__)
 #define compare(I,...)              ftableI(I) -> compare(I, ##__VA_ARGS__)
-#define count(I,...)                ftableI(I) -> count(I, ##__VA_ARGS__)
+#define count(I,...)                ((I)?ftableI(I) -> count(I, ##__VA_ARGS__):0)
 #define contains(I,...)             ftableI(I) -> contains(I, ##__VA_ARGS__)
 #define cmp(I,...)                  ftableI(I) -> cmp(I, ##__VA_ARGS__)
 #define first(I,...)                ftableI(I) -> first(I, ##__VA_ARGS__)

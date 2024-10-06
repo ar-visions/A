@@ -189,7 +189,7 @@
             fi
 
             # choose j size
-            repo_size=$(du -sm . | cut -f1)
+            repo_size=$(du -sm .. | cut -f1)
             if [ "$repo_size" -gt 500 ]; then
                 j=8 # llvm takes up a lot of memory/swap when linking (70GB with debug on), as does many large projects
             else

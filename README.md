@@ -1,5 +1,6 @@
 # A-type runtime
-introspective types emitted directly into global initializers that do not require lookups.
+reflective types emitted directly into global initializers.
+no lookups during load, and no meta emitted for intern types
 serializing arguments to methods and expressing them for prototypes.
 
 primitives use a protocol
@@ -9,27 +10,15 @@ more compact than string output and doesnt require further processing.
 a lazy loading regime is there for insuring ordered initialization.
 
 A-type has the exact same schema as silver objects in terms of features
-(proto, class, mod), intern and public
+(proto, class, mod), intern and public.  as such we will be ABI compatible (there is just the issue of multiple context args in the silver spec)
 
-public arguments are introspectable as well as constructable with names.
-there can be a 'property' idea that remains introspectable but not constructable by name.
-for 1.0.0 we want it simple.
-
-
-projects this applies to:
-
-silver 0.44 implements the import keyword alone.  so with this we have ability to, build our C apps with A-type amongst all externals
-
-this would need to select in your .c, how cute...
+public arguments are introspectable, and intern are only accessible inside the module.  we effectively partition the interns at the end of the struct, so that it may be design-compatible with users.
 
 
 Orbiter
-simple agent atm (not updated in months will update very very shortly)
-
+an IDE being built with silver (was C++)
 [https://github.com/ar-visions/orbiter.git]
 
 Hyperspace
-spatial dev kit, ai module & training scripts at the moment no data.
-the use-case here is go pro or xavier based dev.  it has cross compilation ability in the ion::dx build system
-
+spatial dev kit, ai module & training scripts
 [https://github.com/ar-visions/hyperspace.git]

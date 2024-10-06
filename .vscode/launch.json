@@ -41,6 +41,8 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../silver/silver-build",
             "environment": [
+                {"name": "LD_LIBRARY_PATH",
+                 "value": "/home/kalen/src/llvm-18/silver-build/lib/"}
             ],
             "MIMode": "gdb",
             "presentation": {

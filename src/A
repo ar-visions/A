@@ -47,6 +47,9 @@ FILE   *popen(symbol command, symbol type);
 int     pclose(FILE*);
 i64     strtoll(symbol str, cstr* endptr, int base);
 f64     strtod (symbol str, cstr* endptr);
+int     system(symbol command);
+int     setenv(symbol key, symbol value, int);
+cstr    getenv(symbol key);
 
 typedef struct meta_t {
     num             count;
@@ -184,7 +187,7 @@ enum A_TRAIT {
     })
 #define valloc(T, N)                ((A)A_alloc(typeid(T), N, false))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
-#define isa(INSTANCE)               ((struct A_f*)((struct A*)INSTANCE - 1)->type)
+#define isa(INSTANCE)               (INSTANCE ? (struct A_f*)((struct A*)INSTANCE - 1)->type : (struct A_f*)0)
 #define inherits(left, type)        A_inherits(left, typeid(type))
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 /// by defining these, we require their use; cant call() these methods
@@ -212,6 +215,7 @@ enum A_TRAIT {
 #define last(I,...)                 ftableI(I) -> last(I, ##__VA_ARGS__)
 #define exists(I,...)               ftableI(I) -> exists(I, ##__VA_ARGS__)
 #define len(I,...)                  ((I) ? (i64)ftableI(I) -> len(I, ##__VA_ARGS__) : (i64)0)
+#define cs(I)                       ((I) ? (cstr)(I)->chars : (cstr)null)
 #define fetch(I,...)                ftableI(I) -> fetch(I, ##__VA_ARGS__)
 #define lookup(I,...)               ftableI(I) -> lookup(I, ##__VA_ARGS__)
 #define remove(I,...)               ftableI(I) -> remove(I, ##__VA_ARGS__)
@@ -228,6 +232,8 @@ enum A_TRAIT {
 #define is_dir(I,...)               ftableI(I) -> is_dir(I, ##__VA_ARGS__)
 #define make_dir(I,...)             ftableI(I) -> make_dir(I, ##__VA_ARGS__)
 #define cstring(I)                  cast(I, cstr)
+#define stem(I,...)                 ftableI(I) -> stem(I, ##__VA_ARGS__)
+#define element(I,...)              ftableI(I) -> element(I, ##__VA_ARGS__)
 
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 #define call0(I,N,...)              ftableI(I) -> N(I, ##__VA_ARGS__)
@@ -569,7 +575,7 @@ typedef struct type_member_t {
         A_f_members(SRC) \
         A_schema     (A,  METHOD) \
         SRC##_schema (AA, METHOD) \
-    } AA##_f, *AA##_t; \
+    } AA##_f, *AA##_ft; \
     extern AA##_f AA##_type;
 
 #define declare_abstract( X ) \
@@ -578,7 +584,7 @@ typedef struct type_member_t {
         A_f_members(A) \
         A_schema(A, METHOD) \
         X##_schema(X, METHOD) \
-    } X##_f, *X##_t; \
+    } X##_f, *X##_ft; \
     extern X##_f X##_type;
 
 #define declare_primitive( X, Y ) \
@@ -586,7 +592,7 @@ typedef struct type_member_t {
         A_f_members(A) \
         A_schema(A, METHOD) \
         X##_schema(X, METHOD) \
-    } X##_f, *X##_t; \
+    } X##_f, *X##_ft; \
     extern X##_f X##_type;
 
 #define ENUM_COUNT(...)  (sizeof((int[]){__VA_ARGS__}) / sizeof(int))
@@ -598,7 +604,7 @@ typedef struct type_member_t {
     typedef struct E##_f { \
         A_f_members(A) \
         A_schema   (E, METHOD) \
-    } E##_f, *E##_t; \
+    } E##_f, *E##_ft; \
     enum { E##_ENUM_COUNT = ENUM_COUNT(E##_schema(E, COUNT)) }; \
     extern E##_f   E##_type;
 
@@ -610,7 +616,7 @@ void A_push_type(AType type);
         A_f_members(A) \
         A_schema   (A, METHOD) \
         X##_schema (X, METHOD) \
-    } X##_f, *X##_t; \
+    } X##_f, *X##_ft; \
     extern X##_f  X##_type;
 
 void        A_lazy_init(global_init_fn fn);
@@ -646,7 +652,7 @@ void        A_lazy_init(global_init_fn fn);
         A_schema   (A, METHOD) \
         Y##_schema (Y, METHOD) \
         X##_schema (X, METHOD) \
-    } X##_f, *X##_t; \
+    } X##_f, *X##_ft; \
     extern X##_f   X##_type;
 
 #define declare_proto(X) \
@@ -655,7 +661,7 @@ void        A_lazy_init(global_init_fn fn);
         A_f_members(A) \
         A_schema   (A, METHOD) \
         X##_schema (X, METHOD) \
-    } X##_f, *X##_t; \
+    } X##_f, *X##_ft; \
     extern X##_f  X##_type;
 
 #define module_init(fn) \
@@ -825,7 +831,7 @@ declare_base(A)
 typedef struct object_f {
     A_f_members(A)
     A_schema   (A,  METHOD)
-} object_f, *object_t;
+} object_f, *object_ft;
 extern object_f object_type;
 
 #define typeid(X) ((AType)&X##_type)

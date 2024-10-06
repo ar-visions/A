@@ -12,9 +12,15 @@ if(DEBUG_PROJECTS)
     file                  (WRITE "${CMAKE_BINARY_DIR}/debug.txt" "${DEBUG_PROJECTS}")
 endif()
 
+# rebuild is an all, however you may rebuild with make REBUILD=llvm
 add_custom_target         (rebuild COMMAND ${CMAKE_COMMAND} -E env REBUILD=all ${CMAKE_COMMAND} -E env bash ${CMAKE_SOURCE_DIR}/../A/import.sh ${CMAKE_INSTALL_PREFIX} --deps ${CMAKE_SOURCE_DIR}/deps --debug ${CMAKE_BINARY_DIR}/debug.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_custom_target         (script COMMAND ${CMAKE_COMMAND} -E env bash ${CMAKE_SOURCE_DIR}/../A/import.sh ${CMAKE_INSTALL_PREFIX} --deps ${CMAKE_SOURCE_DIR}/deps --debug ${CMAKE_BINARY_DIR}/debug.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# copy all res to build folder
+file(GLOB_RECURSE RES_FILES "${CMAKE_SOURCE_DIR}/src/res/*")
+foreach(RES_FILE ${RES_FILES})
+    file(COPY ${RES_FILE} DESTINATION ${CMAKE_BINARY_DIR})
+endforeach()
 include_directories       (./src ${CMAKE_INSTALL_PREFIX}/include)
 link_directories          (${CMAKE_INSTALL_PREFIX}/lib)
 file                      (GLOB src "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
@@ -29,6 +35,7 @@ add_compile_options       (
 
 #add_compile_options      (-fsanitize=address -fno-omit-frame-pointer -g)
 #add_link_options         (-fsanitize=address)
+
 add_compile_options       (-I${CMAKE_INSTALL_PREFIX}/include)
 set                       (CMAKE_C_STANDARD             11)
 set                       (CMAKE_CXX_STANDARD           17)
@@ -36,7 +43,8 @@ set                       (CMAKE_CXX_STANDARD_REQUIRED  ON)
 set                       (CMAKE_C_COMPILER             gcc)
 set                       (CMAKE_CXX_COMPILER           g++)
 
-if(is_exe)
+# we make apps or libs
+if(app)
     add_executable        (${PROJECT_NAME}              ${src})
     install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin ARCHIVE DESTINATION bin)
 else()
@@ -48,5 +56,4 @@ endif()
 add_dependencies          (${PROJECT_NAME}              script)
 set                       (L ${CMAKE_INSTALL_PREFIX}/lib)
 
-message(STATUS "project = ${PROJECT_NAME}")
 target_include_directories(${PROJECT_NAME} PRIVATE . ./src)

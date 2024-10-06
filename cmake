@@ -12,7 +12,7 @@ if(DEBUG_PROJECTS)
     file                  (WRITE "${CMAKE_BINARY_DIR}/debug.txt" "${DEBUG_PROJECTS}")
 endif()
 
-add_custom_target         (rebuild COMMAND ${CMAKE_COMMAND} -E env REBUILD=1 ${CMAKE_COMMAND} -E env bash ${CMAKE_SOURCE_DIR}/../A/import.sh ${CMAKE_INSTALL_PREFIX} --deps ${CMAKE_SOURCE_DIR}/deps --debug ${CMAKE_BINARY_DIR}/debug.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_custom_target         (rebuild COMMAND ${CMAKE_COMMAND} -E env REBUILD=all ${CMAKE_COMMAND} -E env bash ${CMAKE_SOURCE_DIR}/../A/import.sh ${CMAKE_INSTALL_PREFIX} --deps ${CMAKE_SOURCE_DIR}/deps --debug ${CMAKE_BINARY_DIR}/debug.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_custom_target         (script COMMAND ${CMAKE_COMMAND} -E env bash ${CMAKE_SOURCE_DIR}/../A/import.sh ${CMAKE_INSTALL_PREFIX} --deps ${CMAKE_SOURCE_DIR}/deps --debug ${CMAKE_BINARY_DIR}/debug.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 include_directories       (./src ${CMAKE_INSTALL_PREFIX}/include)

@@ -49,9 +49,11 @@
     # only when there is a conflict between two where 
     # top wants release and middle wants debug
 
-    if [ -n "$DEBUG_FILE" ] && [ -z "$DEBUG_PROJECTS" ]; then
-        if [ -f "$DEBUG_FILE" ]; then
-            DEBUG_PROJECTS=$(cat $DEBUG_FILE)
+    if [ -z "$DEBUG_PROJECTS" ]; then
+        if [ -n "$DEBUG_FILE" ]; then
+            export DEBUG_PROJECTS=$(cat $DEBUG_FILE)
+        else
+            export DEBUG_PROJECTS=","
         fi
     fi
 
@@ -165,7 +167,8 @@
         mkdir -p $CMAKE_FOLDER
         cd $CMAKE_FOLDER
         
-        if [ -n "$REBUILD" ]; then
+
+        if [ "$REBUILD" == "all" ] || [ "$REBUILD" == "$PROJECT_NAME" ]; then
             echo "rebuilding ${TARGET_DIR}"
             cmake --build . --target clean
             rm -rf silver-token

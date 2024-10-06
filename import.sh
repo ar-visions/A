@@ -71,22 +71,11 @@
         COMMIT=$(      echo "$project" | cut -d ' ' -f 3)
         TARGET_DIR="${PROJECT_NAME}"
 
-        if [ -n "$cmake" ]; then
-            if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
-                BUILD_TYPE="-DCMAKE_BUILD_TYPE=Debug"
-                CMAKE_FOLDER="silver-debug"
-            else
-                BUILD_TYPE="-DCMAKE_BUILD_TYPE=Release"
-                CMAKE_FOLDER="silver-build"
-            fi
+        # set build folder based on release/debug
+        if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
+            CMAKE_FOLDER="silver-debug"
         else
-            if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
-                BUILD_TYPE="--enable-debug"
-                CMAKE_FOLDER="silver-debug"
-            else
-                BUILD_TYPE=""
-                CMAKE_FOLDER="silver-build"
-            fi
+            CMAKE_FOLDER="silver-build"
         fi
 
         # while 4 and on is not blank, append -f X + whitespace
@@ -140,10 +129,21 @@
         fi
 
         # check if this is a cmake project, otherwise use autotools
-        if [ -f "CMakeLists.txt" ]; then
+        # or if there is "-S " in BUILD_CONFIG
+        if [ -f "CMakeLists.txt" ] || [[ "$BUILD_CONFIG" == *-S* ]]; then
             cmake="1"
+            if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
+                BUILD_TYPE="-DCMAKE_BUILD_TYPE=Debug"
+            else
+                BUILD_TYPE="-DCMAKE_BUILD_TYPE=Release"
+            fi
         else
             cmake=""
+            if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
+                BUILD_TYPE="--enable-debug"
+            else
+                BUILD_TYPE=""
+            fi
         fi
 
         mkdir -p $CMAKE_FOLDER

@@ -50,7 +50,7 @@
     # top wants release and middle wants debug
 
     if [ -z "$DEBUG_PROJECTS" ]; then
-        if [ -n "$DEBUG_FILE" ]; then
+        if [ -f "$DEBUG_FILE" ]; then
             export DEBUG_PROJECTS=$(cat $DEBUG_FILE)
         else
             export DEBUG_PROJECTS=","
@@ -71,33 +71,37 @@
         COMMIT=$(      echo "$project" | cut -d ' ' -f 3)
         TARGET_DIR="${PROJECT_NAME}"
 
-        if [[ "$REPO_URL" == *.tar.* ]]; then
-            IS_TAR=1
+        if [ -f "CMakeLists.txt" ]; then
+            cmake="1"
         else
-            IS_TAR=0
+            cmake=""
         fi
 
-        if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
-            CMAKE_BUILD="-DCMAKE_BUILD_TYPE=Debug"
-            CMAKE_FOLDER="silver-debug"
+        if [ -n "$cmake" ]; then
+            if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
+                BUILD_TYPE="-DCMAKE_BUILD_TYPE=Debug"
+                CMAKE_FOLDER="silver-debug"
+            else
+                BUILD_TYPE="-DCMAKE_BUILD_TYPE=Release"
+                CMAKE_FOLDER="silver-build"
+            fi
         else
-            CMAKE_BUILD="-DCMAKE_BUILD_TYPE=Release"
-            CMAKE_FOLDER="silver-build"
+            if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
+                BUILD_TYPE="--enable-debug"
+                CMAKE_FOLDER="silver-debug"
+            else
+                BUILD_TYPE=""
+                CMAKE_FOLDER="silver-build"
+            fi
         fi
 
         # while 4 and on is not blank, append -f X + whitespace
-        CMAKE_CONFIG=""
-        # loop through remaining fields and append to CMAKE_CONFIG
+        BUILD_CONFIG=""
+        # loop through remaining fields and append to BUILD_CONFIG
         for i in $(seq 4 $(echo "$project" | wc -w)); do
             field=$(echo "$project" | cut -d ' ' -f $i)
-            [ -n "$field" ] && CMAKE_CONFIG+="$field "
+            [ -n "$field" ] && BUILD_CONFIG+="$field "
         done
-
-        # Trim trailing whitespace from CMAKE_CONFIG
-        CMAKE_CONFIG="${CMAKE_CONFIG% }"
-        if [ -z "$CMAKE_CONFIG" ]; then
-            CMAKE_CONFIG="-S .."
-        fi
 
         # Check if --src directory and project exist, then symlink
         if [ -n "$SRC_DIR" ] && [ -d "$SRC_DIR/$TARGET_DIR" ]; then
@@ -108,7 +112,7 @@
         else
             if [ -d "$TARGET_DIR" ]; then
                 cd "$TARGET_DIR" || exit 1
-                if [ "$PULL" == "1" ] && [ "$IS_TAR" -ne 1 ]; then
+                if [ "$PULL" == "1" ]; then
                     echo "pulling latest changes for $TARGET_DIR..."
                     PULL_HASH_0=$(git rev-parse HEAD)
                     git pull || { echo "git pull failed, exiting." >&2; exit 1; }
@@ -118,44 +122,21 @@
                     fi
                 fi
             else
-                if [ -n "$IS_TAR" ]; then
-                    src_tar="${TARGET_DIR}.tar.gz"
-                    echo "getting current dir..."
-                    pwd
-                    if [ ! -f "${src_tar}" ]; then
-                        wget -O "${src_tar}" "$REPO_URL"
-                        if [ $? -ne 0 ]; then
-                            echo "wget failed for $TARGET_DIR"
-                            exit 1
-                        fi
-                    fi
-
-                    mkdir $TARGET_DIR
-                    tar xf ${src_tar} -C $TARGET_DIR --strip-components=1
-
-                    if [ $? -ne 0 ]; then
-                        echo "tar failed for $TARGET_DIR"
-                        exit 1
-                    fi
-                else
-                    echo "cloning repository $REPO_URL into $TARGET_DIR..."
-                    git clone --no-checkout "$REPO_URL" "$TARGET_DIR"
-                    if [ $? -ne 0 ]; then
-                        echo "clone failed for $TARGET_DIR"
-                        exit 1
-                    fi
-                    git fetch origin "$COMMIT"
-                    if [ $? -ne 0 ]; then
-                        echo "fetch failed for $TARGET_DIR"
-                        exit 1
-                    fi
+                echo "cloning repository $REPO_URL into $TARGET_DIR..."
+                git clone "$REPO_URL" "$TARGET_DIR"
+                if [ $? -ne 0 ]; then
+                    echo "clone failed for $TARGET_DIR"
+                    exit 1
                 fi
-                
+                if [ $? -ne 0 ]; then
+                    echo "fetch failed for $TARGET_DIR"
+                    exit 1
+                fi
                 cd "$TARGET_DIR"
             fi
             # check out the specific commit, branch, or tag if provided
-            if [ -n "$COMMIT" ] && [ "$IS_TAR" -ne 1 ]; then
-                echo "checking out $COMMIT for $TARGET_DIR... $IS_TAR"
+            if [ -n "$COMMIT" ]; then
+                echo "checking out $COMMIT for $TARGET_DIR"
                 git checkout "$COMMIT"
                 if [ $? -ne 0 ]; then
                     echo "checkout failed for $TARGET_DIR at $COMMIT"
@@ -166,39 +147,77 @@
 
         mkdir -p $CMAKE_FOLDER
         cd $CMAKE_FOLDER
-        
 
         if [ "$REBUILD" == "all" ] || [ "$REBUILD" == "$PROJECT_NAME" ]; then
             echo "rebuilding ${TARGET_DIR}"
-            cmake --build . --target clean
+            if [ -n "$cmake" ]; then
+                cmake --build . --target clean
+            else
+                make clean
+            fi
             rm -rf silver-token
         fi
 
+        # proceed if there is a newer file than silver-token, or no silver-token
         if [ ! -f "silver-token" ] || find .. -type f -newer "silver-token" | grep -q . ; then
-            #echo cmake -B . $CMAKE_BUILD $CMAKE_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
-            cmake -B . $CMAKE_BUILD $CMAKE_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
+            #echo cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
+
+            if [ -n "$cmake" ]; then
+                BUILD_CONFIG="${BUILD_CONFIG% }"
+                if [ -z "$BUILD_CONFIG" ]; then
+                    BUILD_CONFIG="-S .."
+                fi
+                cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
+            else
+                if [ ! -f "../configure" ]; then
+                    autoupdate ..
+                    autoreconf -i ..
+                fi
+                if [ ! -f "../configure" ]; then
+                    echo "configure script not available after running autoreconf -i"
+                    exit 1
+                fi
+                ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
+            fi
+
+            # works for both cmake and configure
             if [ $? -ne 0 ]; then
-                echo "cmake gen failed for $TARGET_DIR"
+                echo "generate failed for $TARGET_DIR"
                 exit 1
             fi
+
+            # choose j size
             repo_size=$(du -sm . | cut -f1)
             if [ "$repo_size" -gt 500 ]; then
                 j=8 # llvm takes up a lot of memory/swap when linking (70GB with debug on), as does many large projects
             else
                 j=$(nproc)
             fi
+
+            # build
             echo "building $TARGET_DIR with -j$j in $CMAKE_FOLDER"
-            cmake --build . -- -j$j
+            if [ -n "$cmake" ]; then
+                cmake --build . -- -j$j
+            else
+                make
+            fi
             if [ $? -ne 0 ]; then
                 echo "build failure for $TARGET_DIR"
                 exit 1
             fi
+
+            # install to silver-import
             echo "installing ${TARGET_DIR}"
-            cmake --install .
+            if [ -n "$cmake" ]; then
+                cmake --install .
+            else
+                make install
+            fi
             if [ $? -ne 0 ]; then
                 echo "install failure for $TARGET_DIR"
                 exit 1
             fi
+
             echo "installed ${TARGET_DIR}"
             echo "im a token" >> silver-token  # only create this if all steps succeed
         fi

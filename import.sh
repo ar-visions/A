@@ -71,12 +71,6 @@
         COMMIT=$(      echo "$project" | cut -d ' ' -f 3)
         TARGET_DIR="${PROJECT_NAME}"
 
-        if [ -f "CMakeLists.txt" ]; then
-            cmake="1"
-        else
-            cmake=""
-        fi
-
         if [ -n "$cmake" ]; then
             if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
                 BUILD_TYPE="-DCMAKE_BUILD_TYPE=Debug"
@@ -145,6 +139,13 @@
             fi
         fi
 
+        # check if this is a cmake project, otherwise use autotools
+        if [ -f "CMakeLists.txt" ]; then
+            cmake="1"
+        else
+            cmake=""
+        fi
+
         mkdir -p $CMAKE_FOLDER
         cd $CMAKE_FOLDER
 
@@ -170,6 +171,7 @@
                 cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
             else
                 if [ ! -f "../configure" ]; then
+                    echo "running autoreconf -i in $PROJECT_NAME ($cmake)"
                     autoupdate ..
                     autoreconf -i ..
                 fi

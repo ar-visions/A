@@ -12,17 +12,19 @@
                 shift 2
                 ;;
             --debug)
-                DEBUG_PROJECTS="$2"
+                DEBUG_FILE="$2"
                 shift 2
                 ;;
             *)
                 BUILD_ROOT="$1"
+                echo "got build root set to $1"
                 shift
                 ;;
         esac
     done
 
     if [ -z "$DEPS" ]; then
+        echo '--deps required argument'
         exit
     else
         mapfile -t projects < "$DEPS"
@@ -31,14 +33,28 @@
     SRC_DIR="${SRC_DIR:-$SRC}"
     BUILD_ROOT="${BUILD_ROOT:-silver-import}"
 
+    echo "BUILD_ROOT = $BUILD_ROOT"
+
     #projects=(
     #    "A https://github.com/ar-visions/A.git main"
     #    "llvm https://github.com/llvm/llvm-project 3b5b5c1 -S ../llvm -G Ninja -DLLVM_ENABLE_ASSERTIONS=ON   -DLLVM_ENABLE_PROJECTS='clang;lld' -DLLVM_ENABLE_FFI=ON -DLLVM_ENABLE_RTTI=OFF -DLLVM_USE_LINKER=gold -DLLVM_BINUTILS_INCDIR=/usr/include -DCLANG_DEFAULT_CXX_STDLIB=libstdc++ -DCLANG_DEFAULT_PIE_ON_LINUX=ON -DCLANG_CONFIG_FILE_SYSTEM_DIR=/etc/clang -DLLVM_ENABLE_LIBCXX=OFF -DBUILD_SHARED_LIBS=ON -DLLVM_BUILD_LLVM_DYLIB=OFF -DLLVM_LINK_LLVM_DYLIB=OFF -DLLVM_TARGETS_TO_BUILD='host;X86'"
     #)
 
-    # we can imagine multiple projects sharing the same build root
-    # thats possible if its already set, it can filter
-    # down from cmake's binary elder directory
+    # debugging switch: --debug file.txt     [contents: project1,another]  would debug those two.
+    # the idea here is DEBUG_PROJECTS will only be set when it hasnt been set yet.
+    # so we set configuration at top level
+
+    # other projects may want their own debug info set, 
+    # which may need to append into this one, but thats 
+    # only when there is a conflict between two where 
+    # top wants release and middle wants debug
+
+    if [ -n "$DEBUG_FILE" ] && [ -z "$DEBUG_PROJECTS" ]; then
+        if [ -f "$DEBUG_FILE" ]; then
+            DEBUG_PROJECTS=$(cat $DEBUG_FILE)
+        fi
+    fi
+
     SCRIPT_DIR=$(dirname "$(realpath "$0")")
     cd      $SCRIPT_DIR || exit 1
     mkdir -p "$BUILD_ROOT" || exit 1
@@ -52,6 +68,7 @@
         REPO_URL=$(    echo "$project" | cut -d ' ' -f 2)
         COMMIT=$(      echo "$project" | cut -d ' ' -f 3)
         TARGET_DIR="${PROJECT_NAME}"
+
         if [[ "$REPO_URL" == *.tar.* ]]; then
             IS_TAR=1
         else
@@ -76,11 +93,6 @@
 
         # Trim trailing whitespace from CMAKE_CONFIG
         CMAKE_CONFIG="${CMAKE_CONFIG% }"
-
-        echo "PROJECT_NAME=${PROJECT_NAME}"
-        echo "REPO_URL=${REPO_URL}"
-        echo "COMMIT=${COMMIT}"
-        echo "CMAKE_CONFIG=${CMAKE_CONFIG}"
         if [ -z "$CMAKE_CONFIG" ]; then
             CMAKE_CONFIG="-S .."
         fi
@@ -152,31 +164,41 @@
 
         mkdir -p $CMAKE_FOLDER
         cd $CMAKE_FOLDER
+        
+        if [ -n "$REBUILD" ]; then
+            echo "rebuilding ${TARGET_DIR}"
+            cmake --build . --target clean
+            rm -rf silver-token
+        fi
 
         if [ ! -f "silver-token" ] || find .. -type f -newer "silver-token" | grep -q . ; then
-            echo cmake -B . $CMAKE_BUILD $CMAKE_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
+            #echo cmake -B . $CMAKE_BUILD $CMAKE_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
             cmake -B . $CMAKE_BUILD $CMAKE_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
             if [ $? -ne 0 ]; then
                 echo "cmake gen failed for $TARGET_DIR"
                 exit 1
             fi
-
-            cmake --build .
+            repo_size=$(du -sm . | cut -f1)
+            if [ "$repo_size" -gt 500 ]; then
+                j=8 # llvm takes up a lot of memory/swap when linking (70GB with debug on), as does many large projects
+            else
+                j=$(nproc)
+            fi
+            echo "building $TARGET_DIR with -j$j in $CMAKE_FOLDER"
+            cmake --build . -- -j$j
             if [ $? -ne 0 ]; then
                 echo "build failure for $TARGET_DIR"
                 exit 1
             fi
-
+            echo "installing ${TARGET_DIR}"
             cmake --install .
             if [ $? -ne 0 ]; then
                 echo "install failure for $TARGET_DIR"
                 exit 1
             fi
-            
+            echo "installed ${TARGET_DIR}"
             echo "im a token" >> silver-token  # only create this if all steps succeed
         fi
-
-        # Move back to checkout directory before starting the next project
         cd ../../
     done
 )

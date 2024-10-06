@@ -178,7 +178,8 @@
 			"signal.h": "c",
 			"ether": "c",
 			"ether-classes": "c",
-			"silver-classes": "c"
+			"silver-classes": "c",
+			"stddef.h": "c"
 		}
 	}
 }

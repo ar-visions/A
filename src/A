@@ -354,7 +354,7 @@ enum A_TRAIT {
 
 #define   i_method_public_INST(    X, R, N, ...)
 #define   i_method_public_INTERN(  X, R, N, ...)
-#define   i_method_public_DECL(    X, R, N, ...)
+#define   i_method_public_DECL(    X, R, N, ...)    R X##_##N(__VA_ARGS__);
 #define   i_method_public_INIT(    X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
@@ -819,7 +819,7 @@ typedef struct string* string;
     i_method(X,Y, public, none,      destructor) \
     i_method(X,Y, public, i32,       compare,    X) \
     i_method(X,Y, public, u64,       hash) \
-    i_method(X,Y, public, A,         copy, A) \
+    i_method(X,Y, public, A,         copy) \
     i_ctr(   X,Y, public, cereal) \
     i_cast(  X,Y, public, string) \
     i_cast(  X,Y, public, bool)
@@ -948,26 +948,30 @@ declare_class(list)
 typedef struct string* string;
 
 #define OPType_schema(X,Y) \
-    enum_value(X,Y, add) \
-    enum_value(X,Y, sub) \
-    enum_value(X,Y, mul) \
-    enum_value(X,Y, div) \
-    enum_value(X,Y, or) \
-    enum_value(X,Y, and) \
-    enum_value(X,Y, xor) \
-    enum_value(X,Y, right) \
-    enum_value(X,Y, left) \
-    enum_value(X,Y, assign) \
-    enum_value(X,Y, assign_add) \
-    enum_value(X,Y, assign_sub) \
-    enum_value(X,Y, assign_mul) \
-    enum_value(X,Y, assign_div) \
-    enum_value(X,Y, assign_or) \
-    enum_value(X,Y, assign_and) \
-    enum_value(X,Y, assign_xor) \
-    enum_value(X,Y, assign_right) \
-    enum_value(X,Y, assign_left) \
-    enum_value(X,Y, mod_assign)
+    enum_value(X,Y, _add) \
+    enum_value(X,Y, _sub) \
+    enum_value(X,Y, _mul) \
+    enum_value(X,Y, _div) \
+    enum_value(X,Y, _or) \
+    enum_value(X,Y, _and) \
+    enum_value(X,Y, _xor) \
+    enum_value(X,Y, _right) \
+    enum_value(X,Y, _left) \
+    enum_value(X,Y, _eq) \
+    enum_value(X,Y, _not_eq) \
+    enum_value(X,Y, _is) \
+    enum_value(X,Y, _inherits) \
+    enum_value(X,Y, _assign) \
+    enum_value(X,Y, _assign_add) \
+    enum_value(X,Y, _assign_sub) \
+    enum_value(X,Y, _assign_mul) \
+    enum_value(X,Y, _assign_div) \
+    enum_value(X,Y, _assign_or) \
+    enum_value(X,Y, _assign_and) \
+    enum_value(X,Y, _assign_xor) \
+    enum_value(X,Y, _assign_right) \
+    enum_value(X,Y, _assign_left) \
+    enum_value(X,Y, _mod_assign)
 declare_enum(OPType)
 
 typedef struct array* array;
@@ -1004,7 +1008,7 @@ declare_class(path)
     i_prop           (X,Y, required, i32,   alloc) \
     i_prop           (X,Y, public,   i32,   len) \
     i_prop           (X,Y, required, AType, type) \
-    i_method         (X,Y, public, A,       push,           A) \
+    i_method         (X,Y, public, none,    push, A) \
     i_method         (X,Y, public, num,     count) \
     i_override       (X,Y, method, init) \
     i_override       (X,Y, cast,   bool)
@@ -1034,18 +1038,18 @@ declare_class(subprocedure)
     s_vargs          (X,Y, public, array,   of_cstr,        cstr) \
     i_method         (X,Y, public, A,       first) \
     i_method         (X,Y, public, A,       last) \
-    i_method         (X,Y, public, X,       pop) \
-    i_method         (X,Y, public, X,       remove,         num) \
-    i_method         (X,Y, public, X,       remove_weak,    num) \
-    i_method         (X,Y, public, A,       push,           A) \
-    i_method         (X,Y, public, A,       push_weak,      A) \
+    i_method         (X,Y, public, A,       pop) \
+    i_method         (X,Y, public, none,    remove,         num) \
+    i_method         (X,Y, public, none,    remove_weak,    num) \
+    i_method         (X,Y, public, none,    push,           A) \
+    i_method         (X,Y, public, none,    push_weak,      A) \
     i_method         (X,Y, public, none,    concat,         array) \
-    i_method         (X,Y, public, A,       get,            i32) \
+    i_method         (X,Y, public, A,       get,            num) \
     i_method         (X,Y, public, num,     count) \
     i_method         (X,Y, public, sz,      len) \
     i_method         (X,Y, public, num,     index_of,       A) \
-    i_operator       (X,Y, public, none,    assign_add,     A) \
-    i_operator       (X,Y, public, none,    assign_sub,     num) \
+    i_operator       (X,Y, public, none,    _assign_add,    A) \
+    i_operator       (X,Y, public, none,    _assign_sub,    num) \
     i_vargs          (X,Y, public, none,    push_symbols,   X, cstr) \
     i_vargs          (X,Y, public, none,    push_objects,   X, A) \
     i_index          (X,Y, public, A,       num) \

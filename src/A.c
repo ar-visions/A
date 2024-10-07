@@ -218,7 +218,7 @@ void A_push(A a, A value) {
 #define iarray(I,M,...) array_ ## M(I, M, __VA_ARGS__)
 
 /// array -------------------------
-static void array_alloc_sz(array a, sz alloc) {
+void array_alloc_sz(array a, sz alloc) {
     A* elements = (A*)calloc(alloc, sizeof(struct A*));
     memcpy(elements, a->elements, sizeof(struct A*) * a->len);
     free(a->elements);
@@ -226,12 +226,12 @@ static void array_alloc_sz(array a, sz alloc) {
     a->alloc = alloc;
 }
 
-static void array_expand(array a) {
+void array_expand(array a) {
     num alloc = 32 + (a->alloc << 1);
     array_alloc_sz(a, alloc);
 }
 
-static A array_push_weak(array a, A b) {
+void array_push_weak(array a, A b) {
     if (a->alloc == a->len) {
         array_expand(a);
     }
@@ -239,7 +239,6 @@ static A array_push_weak(array a, A b) {
     if (is_meta(a))
         assert(is_meta_compatible(a, b), "not meta compatible");
     a->elements[a->len++] = b;
-    return b;
 }
 
 method_t* method_with_address(handle address, AType rtype, array atypes, AType method_owner) {
@@ -396,7 +395,7 @@ type_member_t* A_hold_members(A instance) {
 
 A A_set_property(A instance, symbol name, A value) {
     AType type = isa(instance);
-    type_member_t* m = A_member(type, (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN), name);
+    type_member_t* m = A_member(type, (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN), (cstr)name);
     assert(m, "%s not found on object %s", name, type->name);
     A   *mdata = (A*)((cstr)instance + m->offset);
     A prev = *mdata;
@@ -498,17 +497,8 @@ A A_none()          { return A_primitive(&none_type, NULL); }
 A A_bool(bool data) { return A_primitive(&bool_type, &data); }
 
 /// A -------------------------
-static A   A_new_default(AType type, num count) {
-    return A_alloc(type, count, true);
-}
-
-//static A A_with_cereal(A a, cereal cs) {
-//    fault("not implemented");
-//    return a;
-//}
-
-static void A_init(A a) { }
-static void A_destructor(A a) {
+void A_init(A a) { }
+void A_destructor(A a) {
     // go through objects type fields/offsets; 
     // when type is A-based, we release; 
     // this part is 'auto-release', our pool is an AF pool, or auto-free.
@@ -525,10 +515,10 @@ static void A_destructor(A a) {
         }
     }
 }
-static u64  A_hash      (A a) { return (u64)(size_t)a; }
-static bool A_cast_bool (A a) { return (bool)(size_t)a; }
+u64  A_hash      (A a) { return (u64)(size_t)a; }
+bool A_cast_bool (A a) { return (bool)(size_t)a; }
 
-static A A_with_cereal(A a, cereal cs) {
+A A_with_cereal(A a, cereal cs) {
     sz len = strlen(cs);
     A        f = A_fields(a);
     AType type = f->type;
@@ -553,7 +543,7 @@ static A A_with_cereal(A a, cereal cs) {
     return a;
 }
 
-static void A_serialize(AType type, string res, A a) {
+void A_serialize(AType type, string res, A a) {
     //AType type = isa(a);
     if (type->traits & A_TRAIT_PRIMITIVE) {
         char buf[128];
@@ -585,7 +575,7 @@ static void A_serialize(AType type, string res, A a) {
     }
 }
 
-static string A_cast_string(A a) {
+string A_cast_string(A a) {
     AType type = isa(a);
     if (type == typeid(string))
         return a;
@@ -628,10 +618,10 @@ static string A_cast_string(A a) {
     if (type == typeid(f64)) *(f64*)a = (f64)v; \
     return a;
 
-static A numeric_with_i8 (A a, i8   v) { set_v(); }
-static A numeric_with_i16(A a, i16  v) { set_v(); }
-static A numeric_with_i32(A a, i32  v) { set_v(); }
-static A numeric_with_i64(A a, i64  v) {
+A numeric_with_i8 (A a, i8   v) { set_v(); }
+A numeric_with_i16(A a, i16  v) { set_v(); }
+A numeric_with_i32(A a, i32  v) { set_v(); }
+A numeric_with_i64(A a, i64  v) {
     AType type = isa(a);
     if (type == typeid(i8))  *(i8*) a = (i8) v;
     if (type == typeid(i16)) *(i16*)a = (i16)v;
@@ -645,14 +635,14 @@ static A numeric_with_i64(A a, i64  v) {
     if (type == typeid(f64)) *(f64*)a = (f64)v; \
     return a;
 }
-static A numeric_with_u8 (A a, u8   v) { set_v(); }
-static A numeric_with_u16(A a, u16  v) { set_v(); }
-static A numeric_with_u32(A a, u32  v) { set_v(); }
-static A numeric_with_u64(A a, u64  v) { set_v(); }
-static A numeric_with_f32(A a, f32  v) { set_v(); }
-static A numeric_with_f64(A a, f64  v) { set_v(); }
-static A numeric_with_bool(A a, bool v) { set_v(); }
-static A numeric_with_num(A a, num  v) { set_v(); }
+A numeric_with_u8 (A a, u8   v) { set_v(); }
+A numeric_with_u16(A a, u16  v) { set_v(); }
+A numeric_with_u32(A a, u32  v) { set_v(); }
+A numeric_with_u64(A a, u64  v) { set_v(); }
+A numeric_with_f32(A a, f32  v) { set_v(); }
+A numeric_with_f64(A a, f64  v) { set_v(); }
+A numeric_with_bool(A a, bool v) { set_v(); }
+A numeric_with_num(A a, num  v) { set_v(); }
 
 A A_method(A_f* type, char* method_name, array args);
 
@@ -697,7 +687,7 @@ Exists A_exists(A o) {
 }
 
 /// these pointers are invalid for A since they are in who-knows land, but the differences would be the same
-static i32 A_compare(A a, A b) {
+i32 A_compare(A a, A b) {
     return (i32)((sz)(void*)a - (sz)(void*)b);
 }
 
@@ -787,12 +777,12 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
     return type ? (A)type->with_cereal(A_alloc(type, 1, true), res->chars) : (A)res;
 }
 
-static void  string_destructor(string a)        { free(a->chars); }
-static num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
-static num   string_cmp(string a, cstr b)       { return strcmp(a->chars, b); }
-static bool  string_eq(string a, cstr b)        { return strcmp(a->chars, b) == 0; }
+void  string_destructor(string a)        { free(a->chars); }
+num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
+num   string_cmp(string a, cstr b)       { return strcmp(a->chars, b); }
+bool  string_eq(string a, cstr b)        { return strcmp(a->chars, b) == 0; }
 
-static i32   string_index_num(string a, num index) {
+i32   string_index_num(string a, num index) {
     if (index < 0)
         index += a->len;
     if (index >= a->len)
@@ -800,7 +790,7 @@ static i32   string_index_num(string a, num index) {
     return (i32)a->chars[index];
 }
 
-static array string_split(string a, cstr sp) {
+array string_split(string a, cstr sp) {
     cstr next = a->chars;
     sz   slen = strlen(sp);
     while (next) {
@@ -811,7 +801,7 @@ static array string_split(string a, cstr sp) {
     return null;
 }
 
-static void string_alloc_sz(string a, sz alloc) {
+void string_alloc_sz(string a, sz alloc) {
     char* chars = calloc(1 + alloc, sizeof(char));
     memcpy(chars, a->chars, sizeof(char) * a->len);
     chars[a->len] = 0;
@@ -820,17 +810,17 @@ static void string_alloc_sz(string a, sz alloc) {
     a->alloc = alloc;
 }
 
-static string string_mid(string a, num start, num len) {
+string string_mid(string a, num start, num len) {
     return new(string, chars, &a->chars[start], ref_length, len);
 }
 
-static none  string_reserve(string a, num extra) {
+none  string_reserve(string a, num extra) {
     if (a->alloc - a->len >= extra)
         return;
     string_alloc_sz(a, a->alloc + extra);
 }
 
-static none  string_append(string a, cstr b) {
+none  string_append(string a, cstr b) {
     sz blen = strlen(b);
     if (blen + a->len >= a->alloc)
         string_alloc_sz(a, (a->alloc << 1) + blen);
@@ -839,14 +829,14 @@ static none  string_append(string a, cstr b) {
     a->chars[a->len] = 0;
 }
 
-static sz string_len(string a) { return a->len; }
+sz string_len(string a) { return a->len; }
 
-static num   string_index_of(string a, cstr cs) {
+num   string_index_of(string a, cstr cs) {
     char* f = strstr(a->chars, cs);
     return f ? (num)(f - a->chars) : (num)-1;
 }
 
-static bool string_cast_bool(string a) {
+bool string_cast_bool(string a) {
     return a->len > 0;
 }
 
@@ -858,14 +848,14 @@ cstr string_cast_cstr(string a) {
     return a->chars;
 }
 
-static none string_write(string a, handle f, bool new_line) {
+none string_write(string a, handle f, bool new_line) {
     FILE* output = f ? f : stdout;
     fwrite(a->chars, a->len, 1, output);
     if (new_line) fwrite("\n", 1, 1, output);
     fflush(output);
 }
 
-static path string_cast_path(string a) {
+path string_cast_path(string a) {
     return new(path, chars, a->chars);
 }
 
@@ -878,17 +868,17 @@ u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
     return hash;
 }
 
-static u64 item_hash(item f) {
+u64 item_hash(item f) {
     return hash(f->key ? f->key : f->value);
 }
 
-static u64 string_hash(string a) {
+u64 string_hash(string a) {
     if (a->h) return a->h;
     a->h = fnv1a_hash(a->chars, a->len, OFFSET_BASIS);
     return a->h;
 }
 
-static void string_init(string a) {
+void string_init(string a) {
     cstr value = a->chars;
     if (a->alloc)
         a->chars = (char*)calloc(1, 1 + a->alloc);
@@ -916,22 +906,22 @@ real clampf(real i, real mn, real mx) {
     return i;
 }
 
-static string string_with_cstr(string a, cstr value) {
+string string_with_cstr(string a, cstr value) {
     a->len   = value ? strlen(value) : 0;
     a->chars = calloc(a->len + 1, 1);
     memcpy(a->chars, value, a->len);
     return a;
 }
 
-static bool string_has_suffix(string a, cstr value) {
+bool string_has_suffix(string a, cstr value) {
     sz ln = strlen(value);
     if (!ln || ln > a->len) return false;
     return strcmp(&a->chars[a->len - ln], value) == 0;
 }
 
-static item list_push(list a, A e);
+item list_push(list a, A e);
 
-static item hashmap_fetch(hashmap a, A key) {
+item hashmap_fetch(hashmap a, A key) {
     u64 h = hash(key);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
@@ -944,7 +934,7 @@ static item hashmap_fetch(hashmap a, A key) {
     return n;
 }
 
-static item hashmap_lookup(hashmap a, A key) {
+item hashmap_lookup(hashmap a, A key) {
     u64 h = hash(key);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
@@ -954,26 +944,24 @@ static item hashmap_lookup(hashmap a, A key) {
     return null;
 }
 
-static none hashmap_set(hashmap a, A key, A value) {
+none hashmap_set(hashmap a, A key, A value) {
     item i = fetch(a, key);
     A prev = i->value;
     i->value = A_hold(value);
     A_drop(prev);
 }
 
-static A hashmap_get(hashmap a, A key) {
+A hashmap_get(hashmap a, A key) {
     item i = lookup(a, key);
     return i ? i->value : null;
 }
 
-static bool hashmap_contains(hashmap a, A key) {
+bool hashmap_contains(hashmap a, A key) {
     item i = lookup(a, key);
     return i != null;
 }
 
-static A list_remove_item(list a, item ai);
-
-static none hashmap_remove(hashmap a, A key) {
+none hashmap_remove(hashmap a, A key) {
     u64 h = hash(key);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
@@ -985,22 +973,22 @@ static none hashmap_remove(hashmap a, A key) {
         }
 }
 
-static bool hashmap_cast_bool(hashmap a) {
+bool hashmap_cast_bool(hashmap a) {
     return a->count > 0;
 }
 
-static A hashmap_index_A(hashmap a, A key) {
+A hashmap_index_A(hashmap a, A key) {
     return get(a, key);
 }
 
-static hashmap hashmap_init(hashmap a) {
+hashmap hashmap_init(hashmap a) {
     if (!a->alloc)
          a->alloc = 16;
     a->data  = (list)calloc(a->alloc, sizeof(struct list)); /// we can zero-init a vectorized set of objects with A-type
     return a;
 }
 
-static string hashmap_cast_string(hashmap a) {
+string hashmap_cast_string(hashmap a) {
     string res  = new(string, alloc, 1024);
     bool   once = false;
     for (int i = 0; i < a->alloc; i++) {
@@ -1018,16 +1006,16 @@ static string hashmap_cast_string(hashmap a) {
     return res;
 }
 
-static void map_concat(map a, map b) {
+void map_concat(map a, map b) {
     pairs(b, e) set(a, e->key, e->value);
 }
 
-static item map_fetch(map a, A key) {
+item map_fetch(map a, A key) {
     item i = fetch(a->hmap, key);
     return i;
 }
 
-static none map_set(map a, A key, A value) {
+none map_set(map a, A key, A value) {
     item i  = fetch(a->hmap, key);
     pair mi = i->value;
     if (mi) {
@@ -1042,18 +1030,18 @@ static none map_set(map a, A key, A value) {
     }
 }
 
-static A map_get(map a, A key) {
+A map_get(map a, A key) {
     item i = lookup(a->hmap, key);
     return (i && i->value) ? ((pair)i->value)->value : null;
 }
 
-static bool map_contains(map a, A key) {
+bool map_contains(map a, A key) {
     item i = lookup(a->hmap, key);
     return i != null;
 }
 
 /// must store a ref to the ref item in hashmap item's value; we may call this an object map_value
-static none map_remove(map a, A key) {
+none map_remove(map a, A key) {
     item i = lookup(a->hmap, key);
     if (i) {
         item ref = i->value;
@@ -1061,38 +1049,38 @@ static none map_remove(map a, A key) {
     }
 }
 
-static bool map_cast_bool(map a) {
+bool map_cast_bool(map a) {
     return a->count > 0;
 }
 
-static A list_get(list a, object at_index);
+A list_get(list a, object at_index);
 
-static sz map_len(map a) {
+sz map_len(map a) {
     return a->count;
 }
 
-static A map_index_sz(map a, sz index) {
+A map_index_sz(map a, sz index) {
     assert(index >= 0 && index < a->count, "index out of range");
     item i = list_get(a, A_sz(index));
     return i ? i->value : null;
 }
 
-static A map_index_A(map a, A index) {
+A map_index_A(map a, A index) {
     item hash_item = get(a->hmap, index);
     return hash_item ? hash_item->value : null;
 }
 
-static map map_with_sz(map a, sz size) {
+map map_with_sz(map a, sz size) {
     a->hsize = size;
     return a;
 }
 
-static void map_init(map a) {
+void map_init(map a) {
     if (!a->hsize) a->hsize = 1024;
     a->hmap  = new(hashmap, alloc, a->hsize);
 }
 
-static string map_cast_string(map a) {
+string map_cast_string(map a) {
     string res  = new(string, alloc, 1024);
     bool   once = false;
     for (item i = a->first; i; i = i->next) {
@@ -1176,7 +1164,7 @@ bool A_inherits(A inst, AType type) {
 }
 
 /// list -------------------------
-static item list_push(list a, A e) {
+item list_push(list a, A e) {
     item n = new(item);
     n->value = e; /// held already by caller
     if (a->last) {
@@ -1192,7 +1180,7 @@ static item list_push(list a, A e) {
 
 /// we need index_of_element and index_of
 /// this is not calling compare for now, and we really need to be able to control that if it did (argument-based is fine)
-static num list_index_of_element(list a, A value) {
+num list_index_of_element(list a, A value) {
     num index = 0;
     for (item ai = a->first; ai; ai = ai->next) {
         if (ai->value == value)
@@ -1202,7 +1190,7 @@ static num list_index_of_element(list a, A value) {
     return -1;
 }
 
-static A list_remove(list a, num index) {
+void list_remove(list a, num index) {
     num i = 0;
     item res = null;
     for (item ai = a->first; ai; ai = ai->next) {
@@ -1217,10 +1205,9 @@ static A list_remove(list a, num index) {
             res->next = null;
         }
     }
-    return res;
 }
 
-static A list_remove_item(list a, item ai) {
+void list_remove_item(list a, item ai) {
     item res = null;
     num i = 0;
     if (ai) {
@@ -1232,10 +1219,9 @@ static A list_remove_item(list a, item ai) {
         res->prev = null;
         res->next = null;
     }
-    return res;
 }
 
-static num list_compare(list a, list b) {
+num list_compare(list a, list b) {
     num diff  = a->count - b->count;
     if (diff != 0)
         return diff;
@@ -1250,7 +1236,7 @@ static num list_compare(list a, list b) {
     return 0;
 }
 
-static A list_pop(list a) {
+A list_pop(list a) {
     item l = a->last;
     a->last = a->last->prev;
     if (!a->last)
@@ -1260,7 +1246,7 @@ static A list_pop(list a) {
     return l;
 }
 
-static A list_get(list a, object at_index) {
+A list_get(list a, object at_index) {
     sz index = 0;
     AType itype = isa(at_index);
     sz at = 0;
@@ -1279,30 +1265,30 @@ static A list_get(list a, object at_index) {
     return null;
 }
 
-static num list_count(list a) {
+num list_count(list a) {
     return a->count;
 }
 
 /// vector should only work with primitive or otherwise trivial model data
 /// its reduced function set is indicative of its simple use-case
-static void vector_init(vector a) {
+void vector_init(vector a) {
     if (a->alloc) {
         a->data = A_alloc(a->type, a->alloc, true);
     }
 }
 
-static void vector_push(vector a, A any) {
+void vector_push(vector a, A any) {
     sz size = a->type->size;
     verify(a->len < a->alloc, "vector out of space");
     memcpy(&a->data[a->len * size], any, size);
     a->len++;
 }
 
-static sz vector_count(vector a) {
+sz vector_count(vector a) {
     return a->len;
 }
 
-static bool vector_cast_bool(vector a) {
+bool vector_cast_bool(vector a) {
     return a->len > 0;
 }
 
@@ -1328,7 +1314,7 @@ bool is_meta_compatible(A a, A b) {
     return false;
 }
 
-static A array_push(array a, A b) {
+void array_push(array a, A b) {
     if (a->alloc == a->len) {
         array_expand(a);
     }
@@ -1336,14 +1322,13 @@ static A array_push(array a, A b) {
     if (is_meta(a))
         assert(is_meta_compatible(a, b), "not meta compatible");
     a->elements[a->len++] = A_hold(b);
-    return b;
 }
 
-static none array_concat(array a, array b) {
+none array_concat(array a, array b) {
     each(b, A, e) array_push(a, e);
 }
 
-static A array_index_num(array a, num i) {
+A array_index_num(array a, num i) {
     if (i < 0)
         i += a->len;
     if (i >= a->len)
@@ -1351,46 +1336,42 @@ static A array_index_num(array a, num i) {
     return a->elements[i];
 }
 
-static A array_remove(array a, num b) {
-    A before = a->elements[b];
+void array_remove(array a, num b) {
     for (num i = b; i < a->len; i++) {
         A prev = a->elements[b];
         a->elements[b] = a->elements[b + 1];
         A_drop(prev);
     }
     a->elements[--a->len] = null;
-    return before;
 }
 
-static A array_remove_weak(array a, num b) {
-    A before = a->elements[b];
+void array_remove_weak(array a, num b) {
     for (num i = b; i < a->len; i++) {
         A prev = a->elements[b];
         a->elements[b] = a->elements[b + 1];
     }
     a->elements[--a->len] = null;
-    return before;
 }
 
-static void array_operator_assign_add(array a, A b) {
+void array_operator__assign_add(array a, A b) {
     array_push(a, b);
 }
 
-static void array_operator_assign_sub(array a, num b) {
+void array_operator__assign_sub(array a, num b) {
     array_remove(a, b);
 }
 
-static A array_first(array a) {
+A array_first(array a) {
     assert(a->len, "no items");
     return a->elements[a->len - 1];
 }
 
-static A array_last(array a) {
+A array_last(array a) {
     assert(a->len, "no items");
     return a->elements[a->len - 1];
 }
 
-static void array_push_symbols(array a, ...) {
+void array_push_symbols(array a, ...) {
     va_list args;
     va_start(args, a);
     char* value;
@@ -1401,7 +1382,7 @@ static void array_push_symbols(array a, ...) {
     va_end(args);
 }
 
-static void array_push_objects(array a, A f, ...) {
+void array_push_objects(array a, A f, ...) {
     va_list args;
     va_start(args, f);
     A value;
@@ -1456,13 +1437,13 @@ void  array_weak_push(array a, A obj) {
     a->elements[a->len++] = obj;
 }
 
-static A array_pop(array a) {
+A array_pop(array a) {
     assert(a->len > 0, "no items");
     if (!a->unmanaged) drop(a->elements[a->len - 1]);
     return a->elements[a->len--];
 }
 
-static num array_compare(array a, array b) {
+num array_compare(array a, array b) {
     num diff = a->len - b->len;
     if (diff != 0)
         return diff;
@@ -1474,20 +1455,20 @@ static num array_compare(array a, array b) {
     return 0;
 }
 
-static A array_get(array a, num i) {
+A array_get(array a, num i) {
     return a->elements[i];
 }
 
-static num array_count(array a) {
+num array_count(array a) {
     return a->len;
 }
 
-static sz array_len(array a) {
+sz array_len(array a) {
     return a->len;
 }
 
 /// index of element that compares to 0 diff with item
-static num array_index_of(array a, A b) {
+num array_index_of(array a, A b) {
     for (num i = 0; i < a->len; i++) {
         if (compare(a -> elements[i], b) == 0)
             return i;
@@ -1495,19 +1476,19 @@ static num array_index_of(array a, A b) {
     return -1;
 }
 
-static bool array_cast_bool(array a) { return a && a->len > 0; }
+bool array_cast_bool(array a) { return a && a->len > 0; }
 
-static none array_init(array a) {
+none array_init(array a) {
     if (a->alloc)
         array_alloc_sz(a, a->alloc);
 }
 
-static void subprocedure_invoke(subprocedure a, object arg) {
+void subprocedure_invoke(subprocedure a, object arg) {
     void(*addr)(object, object, object) = a->addr;
     addr(a->target, arg, a->ctx);
 }
 
-static void AF_init(AF a) {
+void AF_init(AF a) {
     af_top = a;
     a->pool = allocate(array, alloc, a->start_size ? a->start_size : 1024);
     call(a->pool, push_weak, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
@@ -1527,7 +1508,7 @@ AF A_pool(sz start_size) {
     return AF_create(start_size);
 }
 
-static void AF_destructor(AF a) {
+void AF_destructor(AF a) {
     int f = index_of(af_stack, a);
     assert(f >= 0, "invalid af-stack index");
     call(af_stack, remove_weak, f);
@@ -1551,11 +1532,11 @@ AF AF_fetch(num index) {
         return null;
 }
 
-static u64 fn_hash(fn f) {
+u64 fn_hash(fn f) {
     return (u64)f->method->address;
 }
 
-static A fn_call(fn f, array args) {
+A fn_call(fn f, array args) {
     return A_method_call(f->method, args);
 }
 
@@ -1564,7 +1545,7 @@ bool create_symlink(path target, path link) {
     return !is_err;
 }
 
-static none path_init(path a) {
+none path_init(path a) {
     cstr arg = a->chars;
     num  len = arg ? strlen(arg) : 0;
     a->chars = calloc(len + 1, 1);
@@ -1572,33 +1553,33 @@ static none path_init(path a) {
         memcpy(a->chars, arg, len + 1);
 }
 
-static path path_with_string(path a, string s) {
+path path_with_string(path a, string s) {
     a->chars = copy_cstr(s->chars);
     return a;
 }
 
-static bool path_cast_bool(path a) {
+bool path_cast_bool(path a) {
     return a->chars && strlen(a->chars) > 0;
 }
 
-static sz path_cast_sz(path a) {
+sz path_cast_sz(path a) {
     return strlen(a->chars);
 }
 
-static cstr path_cast_cstr(path a) {
+cstr path_cast_cstr(path a) {
     return a->chars;
 }
 
-static string path_cast_string(path a) {
+string path_cast_string(path a) {
     return new(string, chars, a->chars);
 }
 
-static path path_with_cereal(path a, cereal cs) {
+path path_with_cereal(path a, cereal cs) {
     a->chars = copy_cstr(cs);
     return a;
 }
 
-static bool path_make_dir(path a) {
+bool path_make_dir(path a) {
     cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
     for (num i = 1; i < len; i++) {
@@ -1613,7 +1594,7 @@ static bool path_make_dir(path a) {
     return stat(cs, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
-static bool path_is_dir(path a) {
+bool path_is_dir(path a) {
     DIR   *dir = opendir(a->chars);
     if (dir == NULL)
         return false;
@@ -1622,7 +1603,7 @@ static bool path_is_dir(path a) {
 }
 
 
-static bool path_is_empty(path a) {
+bool path_is_empty(path a) {
     int    n = 0;
     struct dirent *d;
     DIR   *dir = opendir(a->chars);
@@ -1638,7 +1619,7 @@ static bool path_is_empty(path a) {
     return n <= 2;  // Returns true if the directory is empty (only '.' and '..' are present)
 }
 
-static string path_stem(path a) {
+string path_stem(path a) {
     cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
     string res = new(string, alloc, 256);
@@ -1658,7 +1639,7 @@ static string path_stem(path a) {
     return res;
 }
 
-static string path_filename(path a) {
+string path_filename(path a) {
     cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
     string res = new(string, alloc, 256);
@@ -1674,7 +1655,7 @@ static string path_filename(path a) {
     return res;
 }
 
-static path path_absolute(path a) {
+path path_absolute(path a) {
     path  result   = new(path);
     cstr  rpath    = realpath(a->chars, null);
     result->chars  = rpath ? strdup(rpath) : copy_cstr("");
@@ -1682,13 +1663,13 @@ static path path_absolute(path a) {
 }
 
 
-static path path_directory(path a) {
+path path_directory(path a) {
     path result = new(path);
     result->chars = dirname(strdup(a->chars));
     return result;
 }
 
-static path path_parent(path a) {
+path path_parent(path a) {
     int len = strlen(a->chars);
     char *cp = calloc(len + 4, 1);
     memcpy(cp, a->chars, len);
@@ -1702,7 +1683,7 @@ static path path_parent(path a) {
     return result;
 }
 
-static path path_change_ext(path a, cstr ext) {
+path path_change_ext(path a, cstr ext) {
     int   e_len = strlen(ext);
     int     len = strlen(a->chars);
     int ext_pos = -1;
@@ -1741,7 +1722,7 @@ path path_cwd(sz size) {
     return a;
 }
 
-static bool path_exists(path a) {
+bool path_exists(path a) {
     FILE *file = fopen(a->chars, "r");
     if (file) {
         fclose(file);
@@ -1750,12 +1731,12 @@ static bool path_exists(path a) {
     return false; // File does not exist
 }
 
-static u64 path_hash(path a) {
+u64 path_hash(path a) {
     return fnv1a_hash(a->chars, strlen(a->chars), OFFSET_BASIS);
 }
 
 // implement several useful 
-static A path_read(path a, AType type) {
+A path_read(path a, AType type) {
     FILE* f = fopen(a->chars, "rb");
     if (!f) return null;
     if (type == typeid(string)) {
@@ -1804,7 +1785,7 @@ void* primitive_ffi_arb(AType ptype) {
 
 #define MAX_PATH_LEN 4096
 
-static array path_ls(path a, string pattern, bool recur) {
+array path_ls(path a, string pattern, bool recur) {
     cstr base_dir = a->chars;
     assert(path_is_dir(a), "ls: must be called on directory");
     array list = new(array, alloc, 32); // Initialize array for storing paths

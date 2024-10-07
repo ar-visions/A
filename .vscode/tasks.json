@@ -67,7 +67,7 @@
             "label": "build-ether",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../ether/silver-build"
+                "cwd": "${workspaceFolder}/../ether/silver-debug"
             },
             "group": {
                 "kind": "build",
@@ -82,10 +82,10 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make -j8"
+                "command": "make install -j8"
             },
             "linux": {
-                "command": "make -j8",
+                "command": "make install -j8",
                 "options":{
                     "env":{"VERBOSE":"1"}
                 }

@@ -27,7 +27,11 @@
         echo '--deps required argument'
         exit
     else
-        mapfile -t projects < "$DEPS"
+        projects=()  # Initialize an empty array
+        while IFS= read -r line || [ -n "$line" ]; do
+            projects+=("$line")
+            echo "$line"
+        done < "$DEPS"
     fi
 
     SRC_DIR="${SRC_DIR:-$SRC}"
@@ -69,6 +73,7 @@
         PROJECT_NAME=$(echo "$project" | cut -d ' ' -f 1)
         REPO_URL=$(    echo "$project" | cut -d ' ' -f 2)
         COMMIT=$(      echo "$project" | cut -d ' ' -f 3)
+        BUILD_CONFIG=$(echo "$project" | cut -d ' ' -f 4-)
         TARGET_DIR="${PROJECT_NAME}"
 
         # set build folder based on release/debug
@@ -77,15 +82,7 @@
         else
             CMAKE_FOLDER="silver-build"
         fi
-
-        # while 4 and on is not blank, append -f X + whitespace
-        BUILD_CONFIG=""
-        # loop through remaining fields and append to BUILD_CONFIG
-        for i in $(seq 4 $(echo "$project" | wc -w)); do
-            field=$(echo "$project" | cut -d ' ' -f $i)
-            [ -n "$field" ] && BUILD_CONFIG+="$field "
-        done
-
+        
         # Check if --src directory and project exist, then symlink
         if [ -n "$SRC_DIR" ] && [ -d "$SRC_DIR/$TARGET_DIR" ]; then
             rm -rf "$TARGET_DIR"
@@ -179,6 +176,7 @@
                     echo "configure script not available after running autoreconf -i"
                     exit 1
                 fi
+                echo ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
                 ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
             fi
 

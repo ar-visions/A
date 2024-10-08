@@ -1,4 +1,5 @@
 cmake_policy              (SET CMP0042 NEW)
+cmake_policy              (SET CMP0068 NEW)
 
 if(DEFINED ENV{SRC})
     set(CMAKE_INSTALL_PREFIX $ENV{SRC}/silver-import)
@@ -24,6 +25,8 @@ set                       (DEBUG_PROJECTS "" CACHE STRING "comma-separated list 
 if(DEBUG_PROJECTS)
     file                  (WRITE "${CMAKE_BINARY_DIR}/debug.txt" "${DEBUG_PROJECTS}")
 endif()
+
+message(STATUS "import.sh is in this file")
 
 # rebuild is an all, however you may rebuild with make REBUILD=llvm
 add_custom_target         (rebuild COMMAND ${CMAKE_COMMAND} -E env REBUILD=all ${CMAKE_COMMAND} -E env bash ${CMAKE_SOURCE_DIR}/../A/import.sh ${CMAKE_INSTALL_PREFIX} --deps ${CMAKE_SOURCE_DIR}/deps --debug ${CMAKE_BINARY_DIR}/debug.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

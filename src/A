@@ -86,9 +86,11 @@ enum A_TRAIT {
     A_TRAIT_PRIMITIVE = 1,
     A_TRAIT_INTEGRAL  = 2,
     A_TRAIT_REALISTIC = 4,
-    A_TRAIT_ENUM      = 8,
-    A_TRAIT_ALIAS     = 16,
-    A_TRAIT_ABSTRACT  = 32
+    A_TRAIT_SIGNED    = 8,
+    A_TRAIT_UNSIGNED  = 16,
+    A_TRAIT_ENUM      = 32,
+    A_TRAIT_ALIAS     = 64,
+    A_TRAIT_ABSTRACT  = 128
 };
 
 #define   enum_value_DECL(E, N)             E##_##N,

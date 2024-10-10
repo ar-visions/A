@@ -76,6 +76,9 @@
         BUILD_CONFIG=$(echo "$project" | cut -d ' ' -f 4-)
         TARGET_DIR="${PROJECT_NAME}"
 
+        echo " -----> build config = $BUILD_CONFIG"
+
+
         # set build folder based on release/debug
         if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
             CMAKE_FOLDER="silver-debug"
@@ -165,7 +168,11 @@
                 if [ -z "$BUILD_CONFIG" ]; then
                     BUILD_CONFIG="-S .."
                 fi
+                echo cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
+
                 cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
+
+                echo "! did gen"
             else
                 if [ ! -f "../configure" ]; then
                     echo "running autoreconf -i in $PROJECT_NAME ($cmake)"

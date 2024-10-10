@@ -1575,7 +1575,7 @@ string path_cast_string(path a) {
 }
 
 path path_with_cereal(path a, cereal cs) {
-    a->chars = copy_cstr(cs);
+    a->chars = copy_cstr((cstr)cs);
     return a;
 }
 
@@ -1776,7 +1776,7 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeid(AType)) return &ffi_type_pointer;
     if (ptype == typeid(handle)) return &ffi_type_pointer;
     if (ptype == typeid(Member)) return &ffi_type_pointer;
-    if (ptype == typeid(ARef))   return &ffi_type_pointer;
+    //if (ptype == typeid(ARef))   return &ffi_type_pointer;
     if (ptype == typeid(raw))    return &ffi_type_pointer;
     assert(ptype->size == sizeof(void*), "we may only import void* handles for now; this may be fixed with arguments given to define");
     return &ffi_type_pointer;
@@ -1822,7 +1822,7 @@ array path_ls(path a, string pattern, bool recur) {
 }
 
 define_class(A)
-define_meta(A, object, A)
+define_meta(object, A, A)
 
 define_abstract(numeric)
 define_abstract(string_like)
@@ -1871,7 +1871,7 @@ define_class(subprocedure)
 
 define_class(AF)
 
-define_meta(array, ATypes, AType)
+define_meta(ATypes, array, AType)
 
 /*
 map map_parse(map a, int argc, cstr *argv, map def) {

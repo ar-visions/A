@@ -136,7 +136,6 @@ enum A_TRAIT {
     _N_ARGS_18(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC(t,u);
 #define _N_ARGS_22(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) \
     _N_ARGS_20(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC(v,w);
-
 #define _N_ARGS(instance,...)    _N_ARGS_HELPER2(_ARG_COUNT(__VA_ARGS__), __VA_ARGS__)
 #define _N_ARGS_HELPER2(N, ...)  _COMBINE(_N_ARGS_, N)(__VA_ARGS__)
 #define new(T, ...) \
@@ -148,18 +147,25 @@ enum A_TRAIT {
     })
 
 
-#define _CTR_ARGS_0()
-#define _CTR_ARGS_1()                   
-#define _CTR_ARGS_2(a,b)                                       A_set_properties(instance, a, b, null);
-#define _CTR_ARGS_4(a,b, c,d)                                  A_set_properties(instance, a,b, c,d, null);
-#define _CTR_ARGS_6(a,b, c,d, e,f)                             A_set_properties(instance, a,b, c,d, e,f, null);
-#define _CTR_ARGS_8(a,b, c,d, e,f, g,h)                        A_set_properties(instance, a,b, c,d, e,f, g,h, null);
-#define _CTR_ARGS_10(a,b, c,d, e,f, g,h, i,j)                  A_set_properties(instance, a,b, c,d, e,f, g,h, i,j, null);
-#define _CTR_ARGS_12(a,b, c,d, e,f, g,h, i,j, l,m)             A_set_properties(instance, a,b, c,d, e,f, g,h, i,j, l,m, null);
-#define _CTR_ARGS_14(a,b, c,d, e,f, g,h, i,j, l,m, n,o)        A_set_properties(instance, a,b, c,d, e,f, g,h, i,j, l,m, n,o, null);
-#define _CTR_ARGS_16(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q)   A_set_properties(instance, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, null);
-#define _CTR_ARGS(instance,...)    _N_ARGS_HELPER2(_ARG_COUNT(__VA_ARGS__), __VA_ARGS__)
-#define _CTR_ARGS_HELPER2(N, ...)  _COMBINE(_CTR_ARGS_, N)(__VA_ARGS__)
+
+#define _ARG_COUNT_IMPL2(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N
+#define _ARG_COUNT2(...)        _ARG_COUNT_IMPL2(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
+#define _COMBINE_2(A, B)        A##B
+#define _COMBINE2(A, B)         _COMBINE_2(A, B)
+#define _F(T, a,b)              (((1 << (i64)T##_##a) * b)) 
+#define _F_ARGS_0(T)
+#define _F_ARGS_1(T)                  
+#define _F_ARGS_2(T, a,b)                    _F(T, a, b)
+#define _F_ARGS_4(T, a,b, c,d)               _F_ARGS_2 (a,b) | _F(T, c,d)
+#define _F_ARGS_6(T, a,b, c,d, e,f)          _F_ARGS_4 (a,b, c, d) | _F(T, e,f)
+#define _F_ARGS_8(T, a,b, c,d, e,f, g,h)     _F_ARGS_6 (a,b, c, d, e, f) | _F(T, g,h)
+#define _F_ARGS(T,...)    _F_ARGS_HELPER2(T, _ARG_COUNT2(__VA_ARGS__), __VA_ARGS__)
+#define _F_ARGS_HELPER2(T, N, ...)  _COMBINE2(_F_ARGS_, N)(T, __VA_ARGS__)
+#define flags(T, ...) _F_ARGS(T, __VA_ARGS__);
+
+
+
+
 
 /// with construct we give it a dynamic type, symbols and A-values
 #define construct(type, ...) \
@@ -569,7 +575,7 @@ typedef struct type_member_t {
     } X##_f; \
     extern X##_f X##_type;
 
-#define declare_meta(SRC, AA ) \
+#define declare_meta(AA, SRC ) \
     typedef struct SRC* AA; \
     typedef struct AA##_f { \
         A_f_members(SRC) \
@@ -622,8 +628,13 @@ void A_push_type(AType type);
 void        A_lazy_init(global_init_fn fn);
 
 #define define_enum( E ) \
+    _Pragma("pack(push, 1)") \
+    struct A  E ## _redirect; \
     E ## _f   E ## _type; \
+    _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##E() { \
+        memset(&E ## _redirect, 0, sizeof(E ## _redirect)); \
+        E ## _redirect.type = &E ## _type; \
         E ## _f* type_ref = &E ## _type; \
         A_f* base_ref     = &A_type; \
         if ((AType)type_ref != (AType)base_ref && base_ref->size == 0) { \
@@ -675,10 +686,12 @@ void        A_lazy_init(global_init_fn fn);
 
 #define define_global_primitive(X,Y, TYPE_SZ, TRAIT) \
     _Pragma("pack(push, 1)") \
-    A      X##_header; \
-    X##_f  X##_type; \
+    struct A X##_redirect; \
+    X##_f    X##_type; \
     _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##X() { \
+        memset(&X##_redirect, 0, sizeof(X##_redirect)); \
+        X ## _redirect.type = &X ## _type; \
         X##_f* type_ref = &X##_type; \
         Y##_f* base_ref = &Y##_type; \
         if ((AType)type_ref != (AType)base_ref && base_ref->name == null) { \
@@ -765,7 +778,7 @@ void* primitive_ffi_arb(AType);
 
 /// define_meta(array, ListOfNumerics, u8, u16, u32, u64, i8, i16, i32, i64)
 
-#define define_meta(SRC_TYPE, ALIAS_TYPE, ...) \
+#define define_meta(ALIAS_TYPE, SRC_TYPE, ...) \
     A              ALIAS_TYPE##_header; \
     ALIAS_TYPE##_f ALIAS_TYPE##_type; \
     static __attribute__((constructor)) bool global_##ALIAS_TYPE() { \
@@ -785,7 +798,7 @@ void* primitive_ffi_arb(AType);
         } \
     }
 
-#define define_alias(SRC_TYPE, ALIAS_TYPE) \
+#define define_alias(ALIAS_TYPE, SRC_TYPE) \
     A              ALIAS_TYPE##_header; \
     ALIAS_TYPE##_f ALIAS_TYPE##_type; \
     static __attribute__((constructor)) bool global_##ALIAS_TYPE() { \
@@ -1060,7 +1073,7 @@ declare_class(subprocedure)
 #endif
 declare_class(array)
 
-declare_meta(array, ATypes)
+declare_meta(ATypes, array)
 
 #define AF_schema(X,Y) \
     i_prop      (X,Y, public, array, pool) \

@@ -179,7 +179,11 @@
 			"ether": "c",
 			"ether-classes": "c",
 			"silver-classes": "c",
-			"stddef.h": "c"
+			"stddef.h": "c",
+			"ranges": "c",
+			"source_location": "c",
+			"hash_map": "c",
+			"hash_set": "c"
 		}
 	}
 }

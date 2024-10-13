@@ -54,7 +54,7 @@ cstr    getenv(symbol key);
 typedef struct meta_t {
     num             count;
     AType           meta_0, meta_1, meta_2, meta_3, 
-                    meta_4, meta_5, meta_6, meta_7;
+                    meta_4, meta_5, meta_6, meta_7, meta_8, meta_9;
 } meta_t;
 
 typedef bool(*global_init_fn)();
@@ -196,7 +196,9 @@ enum A_TRAIT {
 #define valloc(T, N)                ((A)A_alloc(typeid(T), N, false))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
 #define isa(INSTANCE)               (INSTANCE ? (struct A_f*)((struct A*)INSTANCE - 1)->type : (struct A_f*)0)
-#define inherits(left, type)        A_inherits(left, typeid(type))
+#define inherits(left, type)        (A_instanceof(left, typeid(type)) != null)
+/// see: javascript; returns null if its not an instance-of; faults if you give it a null
+#define instanceof(left, type)      A_instanceof(left, typeid(type))
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 /// by defining these, we require their use; cant call() these methods
 /// useful in two ways, less tokens and expansion inside call()
@@ -271,9 +273,11 @@ enum A_TRAIT {
 #define EXPAND_ARGS_5(a, b, c, d, e)            5, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type
 #define EXPAND_ARGS_6(a, b, c, d, e, f)         6, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type
 #define EXPAND_ARGS_7(a, b, c, d, e, f, g)      7, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type
-#define EXPAND_ARGS_8(a, b, c, d, e, f, g, h)   8, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type, &h##_type
-#define COUNT_ARGS_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, N, ...) N
-#define COUNT_ARGS(...)             COUNT_ARGS_IMPL(__VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1)
+#define EXPAND_ARGS_8(a, b, c, d, e, f, g, h)          8,  &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type, &h##_type
+#define EXPAND_ARGS_9(a, b, c, d, e, f, g, h, ii)       9,  &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type, &h##_type, &ii##_type
+#define EXPAND_ARGS_10(a, b, c, d, e, f, g, h, ii, j)   10, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type, &h##_type, &ii##_type, &j##_type
+#define COUNT_ARGS_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, N, ...) N
+#define COUNT_ARGS(...)             COUNT_ARGS_IMPL(__VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
 
 //#define EXPAND_ARGS2_0()                       
 #define EXPAND_ARGS2_1(a)                        a
@@ -547,7 +551,8 @@ typedef struct type_member_t {
 
 #define intern(X) X##_schema(X, INTERN)
 
-#define declare_inst( X ) \
+
+#define declare_base( X ) \
     typedef struct X* X; \
     _Pragma("pack(push, 1)") \
     typedef struct X { \
@@ -556,26 +561,13 @@ typedef struct type_member_t {
         struct X##_f* f; \
     } *X; \
     _Pragma("pack(pop)") \
-    X##_schema (X, DECL)
-
-#define declare_mod_inst( X,Y ) \
-    _Pragma("pack(push, 1)") \
-    typedef struct X { \
-        Y##_schema (Y, INST) \
-        Y##_intern \
-        X##_schema (X, INST) \
-        X##_intern \
-        struct X##_f* f; \
-    } *X; \
-    _Pragma("pack(pop)") \
-
-#define declare_base( X ) \
-    declare_inst(X) \
+    X##_schema (X, DECL) \
     typedef struct X##_f { \
         A_f_members(A) \
         X##_schema (X, METHOD) \
     } X##_f; \
     extern X##_f X##_type;
+
 
 #define declare_meta(AA, SRC ) \
     typedef struct SRC* AA; \
@@ -586,6 +578,7 @@ typedef struct type_member_t {
     } AA##_f, *AA##_ft; \
     extern AA##_f AA##_type;
 
+
 #define declare_abstract( X ) \
     typedef struct X *X; \
     typedef struct X##_f { \
@@ -595,6 +588,7 @@ typedef struct type_member_t {
     } X##_f, *X##_ft; \
     extern X##_f X##_type;
 
+
 #define declare_primitive( X, Y ) \
     typedef struct X##_f { \
         A_f_members(A) \
@@ -602,6 +596,7 @@ typedef struct type_member_t {
         X##_schema(X, METHOD) \
     } X##_f, *X##_ft; \
     extern X##_f X##_type;
+
 
 #define ENUM_COUNT(...)  (sizeof((int[]){__VA_ARGS__}) / sizeof(int))
 
@@ -617,15 +612,6 @@ typedef struct type_member_t {
     extern E##_f   E##_type;
 
 void A_push_type(AType type);
-
-#define declare_class(X) \
-    declare_inst(X) \
-    typedef struct X##_f { \
-        A_f_members(A) \
-        A_schema   (A, METHOD) \
-        X##_schema (X, METHOD) \
-    } X##_f, *X##_ft; \
-    extern X##_f  X##_type;
 
 void        A_lazy_init(global_init_fn fn);
 
@@ -658,24 +644,105 @@ void        A_lazy_init(global_init_fn fn);
         } \
     }
 
-#define declare_mod(X,Y) \
-    declare_mod_inst(X,Y) \
-    typedef struct X##_f { \
-        A_f_members(Y) \
-        A_schema   (A, METHOD) \
-        Y##_schema (Y, METHOD) \
-        X##_schema (X, METHOD) \
-    } X##_f, *X##_ft; \
-    extern X##_f   X##_type;
 
-#define declare_proto(X) \
-    declare_inst(X) \
-    typedef struct X##_f { \
-        A_f_members(A) \
-        A_schema   (A, METHOD) \
-        X##_schema (X, METHOD) \
-    } X##_f, *X##_ft; \
-    extern X##_f  X##_type;
+/// expand structure definitions for polymorphic types
+/// usage: declare_class(Top, Middle, Base);
+#define declare_class(AA) \
+    typedef struct AA* AA; \
+    _Pragma("pack(push, 1)") \
+    typedef struct AA { \
+        AA##_schema (AA, INST) AA##_intern \
+        struct AA##_f* f; \
+    } *AA; \
+    _Pragma("pack(pop)") \
+    AA##_schema (AA, DECL) \
+    typedef struct AA##_f { \
+        A_f_members(BB) \
+        A_schema(A, METHOD) \
+        AA##_schema (AA, METHOD) \
+    } AA##_f, *AA##_ft; \
+    extern AA##_f   AA##_type;
+
+
+/// expand structure definitions for polymorphic types
+/// usage: declare_mod(Top, Middle, Base);
+#define declare_mod(AA, BB, ...) \
+    declare_subclass_ex(AA, BB, dm_count(AA, BB, ## __VA_ARGS__), AA, BB, ## __VA_ARGS__)
+
+#define declare_subclass_ex(AA, BB, N, ...) \
+    typedef struct AA* AA; \
+    _Pragma("pack(push, 1)") \
+    typedef struct AA { \
+        _COMBINE(dm_f_, N)(__VA_ARGS__) \
+        struct AA##_f* f; \
+    } *AA; \
+    _Pragma("pack(pop)") \
+    typedef struct AA##_f { \
+        A_f_members(BB) \
+        A_schema(A, METHOD) \
+        _COMBINE(dm_i_, N)(__VA_ARGS__) \
+    } AA##_f, *AA##_ft; \
+    extern AA##_f   AA##_type;
+#define dm_count_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, N, ...) N
+#define dm_count(...) dm_count_IMPL(__VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+
+/// six levels of sub-class should be fine --gates 1985 [not bill]
+#define dm_f_1(A0)                      A0##_schema (A0, INST) A0##_intern
+#define dm_f_2(A0, A1)                  dm_f_1(A1)              dm_f_1(A0)
+#define dm_f_3(A0, A1, A2)              dm_f_2(A2, A1)          dm_f_1(A0)
+#define dm_f_4(A0, A1, A2, A3)          dm_f_2(A2, A3)          dm_f_2(A0, A1)
+#define dm_f_5(A0, A1, A2, A3, A4)      dm_f_4(A1, A2, A3, A4)  dm_f_1(A0)
+#define dm_f_6(A0, A1, A2, A3, A4, A5)  dm_f_4(A2, A3, A4, A5)  dm_f_2(A0, A1)
+#define dm_i_1(A0)                      A0##_schema (A0, METHOD)
+#define dm_i_2(A0, A1)                  dm_i_1(A1)             dm_i_1(A0)
+#define dm_i_3(A0, A1, A2)              dm_i_2(A2, A1)         dm_i_1(A0)
+#define dm_i_4(A0, A1, A2, A3)          dm_i_2(A2, A3)         dm_i_2(A0, A1)
+#define dm_i_5(A0, A1, A2, A3, A4)      dm_i_4(A1, A2, A3, A4) dm_i_1(A0)
+#define dm_i_6(A0, A1, A2, A3, A4, A5)  dm_i_4(A2, A3, A4, A5) dm_i_2(A0, A1)
+
+
+#define define_mod(A0, A1) \
+    define_arb(A0, A1, sizeof(A0), 0, primitive_ffi_arb(typeid(cstr)))
+
+#define define_class(A0) \
+    define_mod(A0, A)
+
+/// primitives dont have construct/method support, but its abstract does
+#define define_primitive(X, Y, traits) \
+    define_arb(X, Y, sizeof(X), traits | A_TRAIT_PRIMITIVE, primitive_ffi_arb(typeid(X)))
+
+#define define_abstract(X) \
+    define_arb(X, A, 0, A_TRAIT_ABSTRACT, null)
+
+// lazy loading and copying of the table only requires knowledge of our parent class
+#define define_arb(A0, A1, TYPE_SZ, TRAIT, FFI) \
+    _Pragma("pack(push, 1)") \
+    A       A0##_header; \
+    A0##_f  A0##_type; \
+    _Pragma("pack(pop)") \
+    static __attribute__((constructor)) bool global_##A0() { \
+        A0##_f* type_ref = &A0##_type; \
+        A1##_f* base_ref = &A1##_type; \
+        if ((AType)type_ref != (AType)base_ref && (!base_ref->traits && !base_ref->size)) { \
+            printf("base_ref = %s\n", base_ref ? base_ref->name : "null"); \
+            A_lazy_init((global_init_fn)&global_##A0); \
+            return false; \
+        } else { \
+            memset(type_ref, 0,        sizeof(A0##_f)); \
+            memcpy(type_ref, base_ref, sizeof(A1##_f)); \
+            static type_member_t members[16 + sizeof(A0##_type) / sizeof(void*)]; \
+            A0## _type.parent_type = &A1##_type; \
+            A0## _type.name     = #A0;       \
+            A0## _type.members  = members;   \
+            A0## _type.size     = TYPE_SZ;   \
+            A0## _type.traits   = TRAIT;     \
+            A0##_type.arb       = FFI;       \
+            A0##_schema( A0, INIT )          \
+            A_push_type(&A0##_type);         \
+            return true;                     \
+        }                                    \
+    }
+
 
 #define module_init(fn) \
     static bool _module_init() { \
@@ -686,86 +753,8 @@ void        A_lazy_init(global_init_fn fn);
         A_module_init((global_init_fn)&_module_init); \
     }
 
-#define define_global_primitive(X,Y, TYPE_SZ, TRAIT) \
-    _Pragma("pack(push, 1)") \
-    struct A X##_redirect; \
-    X##_f    X##_type; \
-    _Pragma("pack(pop)") \
-    static __attribute__((constructor)) bool global_##X() { \
-        memset(&X##_redirect, 0, sizeof(X##_redirect)); \
-        X ## _redirect.type = &X ## _type; \
-        X##_f* type_ref = &X##_type; \
-        Y##_f* base_ref = &Y##_type; \
-        if ((AType)type_ref != (AType)base_ref && base_ref->name == null) { \
-            A_lazy_init((global_init_fn)&global_##X); \
-            return false; \
-        } else { \
-            assert(sizeof(Y##_f) >= sizeof(X##_f), "invalid sz"); \
-            memset(type_ref, 0,        sizeof(X##_f)); \
-            memcpy(type_ref, base_ref, sizeof(Y##_f)); \
-            X## _type.parent_type = &Y##_type; \
-            X## _type.name     = #X;        \
-            X## _type.size     = TYPE_SZ;   \
-            X## _type.traits   = TRAIT;     \
-            X## _type.arb = primitive_ffi_arb(typeid(X)); \
-            A_push_type(&X##_type);         \
-            return true;                    \
-        }                                   \
-    }
-
-#define define_global(X,Y, TYPE_SZ, TRAIT, META) \
-    _Pragma("pack(push, 1)") \
-    A      X##_header; \
-    X##_f  X##_type; \
-    _Pragma("pack(pop)") \
-    static __attribute__((constructor)) bool global_##X() { \
-        X##_f* type_ref = &X##_type; \
-        Y##_f* base_ref = &Y##_type; \
-        if ((AType)type_ref != (AType)base_ref && base_ref->size == 0) { \
-            A_lazy_init((global_init_fn)&global_##X); \
-            return false; \
-        } else { \
-            memset(type_ref, 0, sizeof(X##_f)); \
-            memcpy(type_ref, base_ref, sizeof(Y##_f)); \
-            static type_member_t members[16 + sizeof(X##_type) / sizeof(void*)]; \
-            X## _type.parent_type = &Y##_type; \
-            X## _type.name     = #X;        \
-            X## _type.size     = TYPE_SZ;   \
-            X## _type.members  = members;   \
-            X## _type.traits   = TRAIT;     \
-            META;                           \
-            A_push_type(&X##_type);         \
-            return true;                    \
-        }                                   \
-    }
-
-/// primitives dont have construct/method support, but its abstract does
-#define define_primitive(X, Y, traits) \
-    define_global_primitive(X, Y, sizeof(X), traits | A_TRAIT_PRIMITIVE)
-
-/// with abstracts we dont require ffi, so a pretty minimal global
-#define define_abstract(X) \
-    define_global(X, A, 0, A_TRAIT_ABSTRACT, \
-        X##_type.arb = null; \
-        X##_schema( X, INIT ) \
-    )
 
 void* primitive_ffi_arb(AType);
-
-#define define_class(CLASS) \
-    define_global(CLASS, A, sizeof(struct CLASS), 0, \
-        CLASS##_type.arb = primitive_ffi_arb(typeid(cstr)); \
-        CLASS##_schema( CLASS, INIT ) \
-    )
-
-#define define_mod(MOD, CLASS) \
-    define_global(MOD, CLASS, sizeof(struct MOD), 0, \
-        CLASS##_type.arb = primitive_ffi_arb(typeid(cstr)); \
-          MOD##_schema(   MOD, INIT ) \
-    )
-
-#define define_proto(X) \
-    define_global(X, A, sizeof(struct X), 0, X##_schema(X, PROTO ))
 
 
 /// alias let us meta describe things without adding any code.  just a bit of cloning of the function table.  which is definitely bloat
@@ -1188,8 +1177,8 @@ object A_formatter(AType rtype, FILE* f, bool write_ln, cstr template, ...);
     enum_value(X,Y, dir)
 declare_enum(Exists)
 
-#define         form(T, t, ...)   A_formatter(typeid(T), null,   false, t, ## __VA_ARGS__)
-#define       format(t, ...)      A_formatter(null,      null,   false, t, ## __VA_ARGS__)
+#define         form(T, t, ...)   (T)A_formatter(typeid(T), null,   false, t, ## __VA_ARGS__)
+#define       format(t, ...)      (string)A_formatter(null,      null,   false, t, ## __VA_ARGS__)
 #define        print(t,    ...)   A_formatter(null,      stdout, true,  t, ## __VA_ARGS__)
 #define        error(t, ...)      A_formatter(null,      stderr, true,  t, ## __VA_ARGS__)
 #define        fault(t, ...) do { A_formatter(null,      stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0)
@@ -1246,7 +1235,7 @@ A           A_construct(AType type, int n_args, ...);
 A           A_initialize(A a); /// called after 'construction' ... this is so we do something generic in init, and support named args
 A           A_convert(AType type, A input);
 type_member_t* A_constructor(AType type, AType first_arg); // find a constructor method (used for dynamic construction)
-bool        A_inherits(A left, AType type); // would be nice to actually allow typeid vs typeid here
+A           A_instanceof(A left, AType type); // would be nice to actually allow typeid vs typeid here
 A           A_hold(A a);
 void        A_drop(A a);
 sz          A_len(A a);

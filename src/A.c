@@ -1150,17 +1150,18 @@ A A_data(A instance) {
     return obj->data;
 }
 
-bool A_inherits(A inst, AType type) {
+A A_instanceof(A inst, AType type) {
+    verify(inst, "instanceof given a null value");
     AType t  = type;
     AType it = isa(inst); 
     while (it) {
         if (it == t)
-            return true;
+            return t;
         else if (it == typeid(A))
             break;
         it = it->parent_type; 
     }
-    return false;
+    return null;
 }
 
 /// list -------------------------

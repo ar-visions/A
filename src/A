@@ -702,7 +702,7 @@ void        A_lazy_init(global_init_fn fn);
 
 
 #define define_mod(A0, A1) \
-    define_arb(A0, A1, sizeof(A0), 0, primitive_ffi_arb(typeid(cstr)))
+    define_arb(A0, A1, sizeof(struct A0), 0, primitive_ffi_arb(typeid(cstr)))
 
 #define define_class(A0) \
     define_mod(A0, A)
@@ -724,11 +724,9 @@ void        A_lazy_init(global_init_fn fn);
         A0##_f* type_ref = &A0##_type; \
         A1##_f* base_ref = &A1##_type; \
         if ((AType)type_ref != (AType)base_ref && (!base_ref->traits && !base_ref->size)) { \
-            printf("base_ref = %s\n", base_ref ? base_ref->name : "null"); \
             A_lazy_init((global_init_fn)&global_##A0); \
             return false; \
         } else { \
-            printf("init: %s\n", #A0); \
             memset(type_ref, 0,        sizeof(A0##_f)); \
             memcpy(type_ref, base_ref, sizeof(A1##_f)); \
             static type_member_t members[16 + sizeof(A0##_type) / sizeof(void*)]; \

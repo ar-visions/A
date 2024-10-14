@@ -172,17 +172,8 @@ A A_initialize(A a) {
 A A_alloc(AType type, num count, bool af_pool) {
     sz map_sz = sizeof(map);
     sz A_sz = sizeof(struct A);
-    /// ASAN does not like this because the amount of data left between a->data and end of its allocation is less than struct A
-    /// could potentially solve with a void (does not work; adding sizeof(void*) until it can be known why this must be here.. makes zero sense
-    static int total_so_far = 0;
 
-    total_so_far++;
-    int extra = 1;
-
-    if (total_so_far > 0)
-        extra = 0;
-
-    A a           = calloc(1, sizeof(void*) + sizeof(struct A) + type->size * (count + extra));
+    A a           = calloc(1, 2 * sizeof(struct A) + type->size * count);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
     a->origin     = a;
@@ -227,10 +218,7 @@ void A_push(A a, A value) {
 
 /// array -------------------------
 void array_alloc_sz(array a, sz alloc) {
-    printf("array_alloc_sz: %p %i", a, alloc);
-    fflush(stdout);
     A* elements = (A*)calloc(alloc, sizeof(struct A*));
-    printf("memcpy: %p %p %i", elements, a->elements, a->len);
     memcpy(elements, a->elements, sizeof(struct A*) * a->len);
     
     free(a->elements);
@@ -817,7 +805,7 @@ void string_alloc_sz(string a, sz alloc) {
     char* chars = calloc(1 + alloc, sizeof(char));
     memcpy(chars, a->chars, sizeof(char) * a->len);
     chars[a->len] = 0;
-    free(a->chars);
+    //free(a->chars);
     a->chars = chars;
     a->alloc = alloc;
 }
@@ -1125,7 +1113,7 @@ A A_copy(A a) {
 
 A A_hold(A a) {
     if (a) {
-        A f = a - 1;
+        A f = A_fields(a);
         if (f->refs++ == 1 && f->ar_index > 0)
             af_top->pool->elements[f->ar_index] = null; // index of 0 is occupied by the pool itself; just a sentinel 
     }
@@ -1133,7 +1121,7 @@ A A_hold(A a) {
 }
 
 void A_free(A a) {
-    A       aa = (a - 1);
+    A       aa = A_fields(a);
     A_f*  type = aa->type;
     void* prev = null;
     while (type) {
@@ -1149,7 +1137,7 @@ void A_free(A a) {
 }
 
 void A_drop(A a) {
-    if (a && --(a - 1)->refs == -1)
+    if (a && --A_fields(a)->refs == -1)
         A_free(a);
 }
 
@@ -1530,11 +1518,11 @@ void AF_destructor(AF a) {
     for (int i = 1; i < a->pool->len; i++) {
         A ref = a->pool->elements[i];
         if (ref) {
-            A f = A_fields(ref);
             A_free(ref);
         }
     }
     A_free(a->pool);
+    a->pool = null;
 }
 
 AF AF_fetch(num index) {

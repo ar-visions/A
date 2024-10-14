@@ -728,6 +728,7 @@ void        A_lazy_init(global_init_fn fn);
             A_lazy_init((global_init_fn)&global_##A0); \
             return false; \
         } else { \
+            printf("init: %s\n", #A0); \
             memset(type_ref, 0,        sizeof(A0##_f)); \
             memcpy(type_ref, base_ref, sizeof(A1##_f)); \
             static type_member_t members[16 + sizeof(A0##_type) / sizeof(void*)]; \

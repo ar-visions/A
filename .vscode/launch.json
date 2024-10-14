@@ -14,12 +14,12 @@
             "name": "a-test",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../A/silver-build/a-test",
+            "program": "${workspaceFolder}/../A/silver-debug/a-test",
             "args": [
                 "module.c"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../A/silver-build",
+            "cwd": "${workspaceFolder}/../A/silver-debug",
             "environment": [
             ],
             "MIMode": "gdb",

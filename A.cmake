@@ -49,15 +49,15 @@ add_compile_options       (
     -Wfatal-errors
     -fPIC)
 
-#add_compile_options      (-fsanitize=address -fno-omit-frame-pointer -g)
-#add_link_options         (-fsanitize=address)
+add_compile_options      (-fsanitize=address -fno-omit-frame-pointer -g)
+add_link_options         (-fsanitize=address)
 
 add_compile_options       (-I${CMAKE_INSTALL_PREFIX}/include)
 set                       (CMAKE_C_STANDARD             11)
 set                       (CMAKE_CXX_STANDARD           17)
 set                       (CMAKE_CXX_STANDARD_REQUIRED  ON)
-set                       (CMAKE_C_COMPILER             clang)
-set                       (CMAKE_CXX_COMPILER           clang++)
+set                       (CMAKE_C_COMPILER             clang-18)
+set                       (CMAKE_CXX_COMPILER           clang-18++)
 
 # we make apps or libs
 if(app)

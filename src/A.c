@@ -173,7 +173,7 @@ A A_alloc(AType type, num count, bool af_pool) {
     sz map_sz = sizeof(map);
     sz A_sz = sizeof(struct A);
 
-    A a           = calloc(1, 2 * sizeof(struct A) + type->size * count);
+    A a           = calloc(1, sizeof(struct A) + type->size * count);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
     a->origin     = a;

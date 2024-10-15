@@ -677,6 +677,7 @@ void        A_lazy_init(global_init_fn fn);
         struct AA##_f* f; \
     } *AA; \
     _Pragma("pack(pop)") \
+    AA##_schema (AA, DECL) \
     typedef struct AA##_f { \
         A_f_members(BB) \
         A_schema(A, METHOD) \
@@ -687,15 +688,19 @@ void        A_lazy_init(global_init_fn fn);
 #define dm_count(...) dm_count_IMPL(__VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 
 /// six levels of sub-class should be fine --gates 1985 [not bill]
-#define dm_f_1(A0)                      A0##_schema (A0, INST) A0##_intern
-#define dm_f_2(A0, A1)                  dm_f_1(A1)              dm_f_1(A0)
-#define dm_f_3(A0, A1, A2)              dm_f_2(A2, A1)          dm_f_1(A0)
+#define dm_f_1(A0)          A0##_schema (A0, INST) A0##_intern
+#define dm_f_2(A0, A1)      dm_f_1(A1)     dm_f_1(A0)
+#define dm_f_3(A0, A1, A2)  dm_f_2(A1, A2) dm_f_1(A0)
+
 #define dm_f_4(A0, A1, A2, A3)          dm_f_2(A2, A3)          dm_f_2(A0, A1)
 #define dm_f_5(A0, A1, A2, A3, A4)      dm_f_4(A1, A2, A3, A4)  dm_f_1(A0)
 #define dm_f_6(A0, A1, A2, A3, A4, A5)  dm_f_4(A2, A3, A4, A5)  dm_f_2(A0, A1)
-#define dm_i_1(A0)                      A0##_schema (A0, METHOD)
-#define dm_i_2(A0, A1)                  dm_i_1(A1)             dm_i_1(A0)
-#define dm_i_3(A0, A1, A2)              dm_i_2(A2, A1)         dm_i_1(A0)
+
+#define dm_i_1(A0) A0##_schema (A0, METHOD)
+
+#define dm_i_2(A0, A1) dm_i_1(A1) dm_i_1(A0)
+
+#define dm_i_3(A0, A1, A2)              dm_i_2(A1, A2)         dm_i_1(A0)
 #define dm_i_4(A0, A1, A2, A3)          dm_i_2(A2, A3)         dm_i_2(A0, A1)
 #define dm_i_5(A0, A1, A2, A3, A4)      dm_i_4(A1, A2, A3, A4) dm_i_1(A0)
 #define dm_i_6(A0, A1, A2, A3, A4, A5)  dm_i_4(A2, A3, A4, A5) dm_i_2(A0, A1)
@@ -960,8 +965,8 @@ typedef struct string* string;
     enum_value(X,Y, _xor) \
     enum_value(X,Y, _right) \
     enum_value(X,Y, _left) \
-    enum_value(X,Y, _eq) \
-    enum_value(X,Y, _not_eq) \
+    enum_value(X,Y, _compare_equal) \
+    enum_value(X,Y, _compare_not) \
     enum_value(X,Y, _is) \
     enum_value(X,Y, _inherits) \
     enum_value(X,Y, _assign) \

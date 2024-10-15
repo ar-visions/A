@@ -148,24 +148,20 @@ void debug() {
     return;
 }
 
+void A_init_recur(A a, AType current, raw last_init) {
+    if (current == &A_type) return;
+    A_init_recur(a, current->parent_type, current->init);
+    if (current->init)      current->init(a);
+}
+
 A A_initialize(A a) {
     A f           = A_fields(a);
-    AType a_type  = &A_type;
-    AType current = f->type;
-    raw last_init = null;
 
     #ifndef NDEBUG
     A_validator(a);
     #endif
-    while (current) {
-        if ((raw)current->init != last_init) {
-            current->init(a);
-            last_init = current->init;
-        }
-        if (current == a_type)
-            break;
-        current = current->parent_type;
-    }
+
+    A_init_recur(a, f->type, null);
     return a;
 }
 
@@ -242,12 +238,13 @@ void array_push_weak(array a, A b) {
 }
 
 method_t* method_with_address(handle address, AType rtype, array atypes, AType method_owner) {
-    const num max_args = 8;
+    const num max_args = (sizeof(meta_t) - sizeof(num)) / sizeof(AType);
     method_t* method = calloc(1, sizeof(method_t));
     method->ffi_cif  = calloc(1,        sizeof(ffi_cif));
     method->ffi_args = calloc(max_args, sizeof(ffi_type*));
     method->atypes   = allocate(array);
     method->rtype    = rtype;
+    //assert(atypes->len <= max_args, "adjust arg maxima");
     ffi_type **ffi_args = (ffi_type**)method->ffi_args;
     for (num i = 0; i < atypes->len; i++) {
         A_f* a_type   = atypes->elements[i];

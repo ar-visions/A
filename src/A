@@ -111,7 +111,7 @@ enum A_TRAIT {
 #ifndef NDEBUG
     //intern needs to be effectively switched on to introspect for debug-only
     //it would be useful to runtime verify args, though
-    //#define TC(MEMBER, VALUE) A_verify(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)
+    //#define TC(MEMBER, VALUE) A_validate_type(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)
     #define TC(MEMBER, VALUE) VALUE
 #else
     #define TC(MEMBER, VALUE) VALUE
@@ -231,6 +231,7 @@ enum A_TRAIT {
 #define remove(I,...)               ftableI(I) -> remove(I, ##__VA_ARGS__)
 #define remove_item(I,...)          ftableI(I) -> remove_item(I, ##__VA_ARGS__)
 #define index_of(I,...)             ftableI(I) -> index_of(I, ##__VA_ARGS__)
+#define item_of(I,...)              ftableI(I) -> item_of(I, ##__VA_ARGS__)
 #define reserve(I,...)              ftableI(I) -> reserve(I, ##__VA_ARGS__)
 #define hash(I,...)                 ftableI(I) -> hash(I, ##__VA_ARGS__)
 #define invoke(I,...)               ftableI(I) -> invoke(I, ##__VA_ARGS__)
@@ -244,7 +245,7 @@ enum A_TRAIT {
 #define cstring(I)                  cast(I, cstr)
 #define stem(I,...)                 ftableI(I) -> stem(I, ##__VA_ARGS__)
 #define element(I,...)              ftableI(I) -> element(I, ##__VA_ARGS__)
-
+#define resolve(I,...)              ftableI(I) -> resolve(I, ##__VA_ARGS__)
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
 #define call0(I,N,...)              ftableI(I) -> N(I, ##__VA_ARGS__)
 #define val(T,V)                    A_primitive(typeid(T), (&(T){V}))
@@ -295,6 +296,7 @@ enum A_TRAIT {
 
 #define   i_ctr_public_INST(X, ARG)
 #define   i_ctr_public_INTERN(X, ARG)
+#define   i_ctr_public_ISIZE(X, ARG)
 #define   i_ctr_public_DECL(X, ARG)
 #define   i_ctr_public_INIT(X, ARG) \
     X##_type.with_##ARG = & X##_with_##ARG; \
@@ -307,6 +309,8 @@ enum A_TRAIT {
 #define   i_ctr_public_PROTO(X, ARG)
 #define   i_ctr_public_METHOD(X, ARG)      X (*with_##ARG)(X, ARG);
 #define   i_ctr_intern_INST(X, ARG)
+#define   i_ctr_intern_INTERN(X, ARG)
+#define   i_ctr_intern_ISIZE(X, ARG)
 #define   i_ctr_intern_INIT(X, ARG) 
 #define   i_ctr_intern_PROTO(X, ARG)
 #define   i_ctr_intern_METHOD(X, ARG)
@@ -315,6 +319,7 @@ enum A_TRAIT {
 
 #define   i_prop_public_INST(X, R, N)         R N;  
 #define   i_prop_public_INTERN(X, R, N) 
+#define   i_prop_public_ISIZE(X, R, N)        
 #define   i_prop_public_DECL(X, R, N)
 #define   i_prop_public_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].name     = #N; \
@@ -327,6 +332,7 @@ enum A_TRAIT {
 
 #define   i_prop_required_INST(X, R, N)         i_prop_public_INST(X, R, N)
 #define   i_prop_required_INTERN(X, R, N)
+#define   i_prop_required_ISIZE(X, R, N)        
 #define   i_prop_required_DECL(X, R, N)
 #define   i_prop_required_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].required = true; \
@@ -336,6 +342,7 @@ enum A_TRAIT {
 
 #define   i_prop_intern_INST(X, R, N)          
 #define   i_prop_intern_INTERN(X, R, N)         R N;
+#define   i_prop_intern_ISIZE(X, R, N)          +sizeof(void*)
 #define   i_prop_intern_DECL(X, R, N)
 #define   i_prop_intern_INIT(X, R, N)
 #define   i_prop_intern_PROTO(X, R, N)  
@@ -344,6 +351,7 @@ enum A_TRAIT {
 
 #define   s_method_public_INST(X, R, N, ...)
 #define   s_method_public_INTERN(X, R, N, ...)
+#define   s_method_public_ISIZE(X, R, N)          
 #define   s_method_public_DECL(X, R, N, ...)       R X##_##N(__VA_ARGS__);
 #define   s_method_public_INIT(X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
@@ -357,7 +365,8 @@ enum A_TRAIT {
 #define   s_method_public_METHOD(X, R, N, ...)    R (*N)(__VA_ARGS__);
 
 #define   s_method_intern_INST(X, R, N, ...)
-#define   s_method_intern_INTERNT(X, R, N, ...)
+#define   s_method_intern_INTERN(X, R, N, ...)
+#define   s_method_intern_ISIZE(X, R, N, ...)
 #define   s_method_intern_DECL(X, R, N, ...)
 #define   s_method_intern_INIT(X, R, N, ...)      
 #define   s_method_intern_PROTO(X, R, N, ...)
@@ -366,6 +375,7 @@ enum A_TRAIT {
 
 #define   i_method_public_INST(    X, R, N, ...)
 #define   i_method_public_INTERN(  X, R, N, ...)
+#define   i_method_public_ISIZE(  X, R, N, ...)
 #define   i_method_public_DECL(    X, R, N, ...)    R X##_##N(__VA_ARGS__);
 #define   i_method_public_INIT(    X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
@@ -380,6 +390,7 @@ enum A_TRAIT {
 
 #define   i_method_intern_INST(    X, R, N, ...)
 #define   i_method_intern_INTERN(  X, R, N, ...)
+#define   i_method_intern_ISIZE(  X, R, N, ...)
 #define   i_method_intern_DECL(    X, R, N, ...)
 #define   i_method_intern_INIT(    X, R, N, ...)    
 #define   i_method_intern_PROTO(X, R, N, ...)
@@ -388,6 +399,7 @@ enum A_TRAIT {
 
 #define   i_operator_public_INST(X, R, N, ARG)
 #define   i_operator_public_INTERN(X, R, N, ARG)
+#define   i_operator_public_ISIZE(X, R, N, ARG)
 #define   i_operator_public_DECL(X, R, N, ARG)
 #define   i_operator_public_INIT(X, R, N, ARG) \
     X##_type  . operator_##N = & X## _operator_ ## N; \
@@ -403,6 +415,7 @@ enum A_TRAIT {
 
 #define   i_operator_intern_INST(X, R, N, ARG)
 #define   i_operator_intern_INTERN(X, R, N, ARG)
+#define   i_operator_intern_ISIZE(X, R, N, ARG)
 #define   i_operator_intern_DECL(X, R, N, ARG)
 #define   i_operator_intern_INIT(X, R, N, ARG)      
 #define   i_operator_intern_PROTO(X, R, N, ARG)
@@ -411,6 +424,7 @@ enum A_TRAIT {
 
 #define   i_cast_public_INST(X, R)
 #define   i_cast_public_INTERN(X, R)
+#define   i_cast_public_ISIZE(X, R)
 #define   i_cast_public_DECL(X, R)
 #define   i_cast_public_INIT(X, R) \
     X##_type.cast_##R = & X##_cast_##R; \
@@ -425,6 +439,7 @@ enum A_TRAIT {
 
 #define   i_cast_intern_INST(X, R)
 #define   i_cast_intern_INTERN(X, R)
+#define   i_cast_intern_ISIZE(X, R)
 #define   i_cast_intern_DECL(X, R)
 #define   i_cast_intern_INIT(X, R)          
 #define   i_cast_intern_PROTO(X, R)
@@ -433,6 +448,7 @@ enum A_TRAIT {
 
 #define   i_index_public_INST(X, R, ...)
 #define   i_index_public_INTERN(X, R, ...)
+#define   i_index_public_ISIZE(X, R, ...)
 #define   i_index_public_DECL(X, R, ...)
 #define   i_index_public_INIT(X, R, ...) \
     X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__); \
@@ -447,6 +463,7 @@ enum A_TRAIT {
 
 #define i_index_intern_INST(X, R, ...)
 #define i_index_intern_INTERN(X, R, ...)
+#define i_index_intern_ISIZE(X, R, ...)
 #define i_index_intern_DECL(X, R, ...)
 #define i_index_intern_INIT(X, R, ...)
 #define i_index_intern_PROTO(X, R, ...)
@@ -455,6 +472,8 @@ enum A_TRAIT {
 
 #define i_vargs_public_INST(X, R, N, ...)
 #define i_vargs_public_INTERN(X, R, N, ...)
+#define i_vargs_public_ISIZE(X, R, N, ...)
+#define i_vargs_public_ISIZE(X, R, N, ...)
 #define i_vargs_public_DECL(X, R, N, ...)
 #define i_vargs_public_INIT(X, R, N, ...)               i_method_public_INIT(X, R, N, __VA_ARGS__)  
 #define i_vargs_public_PROTO(X, R, N, ...)
@@ -462,6 +481,7 @@ enum A_TRAIT {
 
 #define i_vargs_intern_INST(X, R, N, ...)
 #define i_vargs_intern_INTERN(X, R, N, ...)
+#define i_vargs_intern_ISIZE(X, R, N, ...)
 #define i_vargs_intern_DECL(X, R, N, ...)
 #define i_vargs_intern_INIT(X, R, N, ...)               i_method_intern_INIT(X, R, N, __VA_ARGS__)  
 #define i_vargs_intern_PROTO(X, R, N, ...)
@@ -470,6 +490,7 @@ enum A_TRAIT {
 
 #define s_vargs_public_INST(X, R, N, ...)
 #define s_vargs_public_INTERN(X, R, N, ...)
+#define s_vargs_public_ISIZE(X, R, N, ...)
 #define s_vargs_public_DECL(X, R, N, ...)               R X##_##N(__VA_ARGS__, ...);
 #define s_vargs_public_INIT(X, R, N, ...)               s_method_public_INIT(X, R, N, ##__VA_ARGS__)
 #define s_vargs_public_PROTO(X, R, N, ...)
@@ -477,6 +498,7 @@ enum A_TRAIT {
 
 #define s_vargs_intern_INST(X, R, N, ...)
 #define s_vargs_intern_INTERN(X, R, N, ...)
+#define s_vargs_intern_ISIZE(X, R, N, ...)
 #define s_vargs_intern_INIT(X, R, N, ...)               s_method_intern_INIT(X, R, N, ##__VA_ARGS__)
 #define s_vargs_intern_PROTO(X, R, N, ...)
 #define s_vargs_intern_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
@@ -484,6 +506,7 @@ enum A_TRAIT {
 
 #define i_override_method_INST(X, N)
 #define i_override_method_INTERN(X, N)
+#define i_override_method_ISIZE(X, N)
 #define i_override_method_DECL(X, N)
 #define i_override_method_INIT(X, N)                    X##_type . N = & X## _ ## N;
 #define i_override_method_PROTO(X, N)
@@ -491,20 +514,23 @@ enum A_TRAIT {
 
 #define i_override_ctr_INST(X, R)
 #define i_override_ctr_INTERN(X, N)
+#define i_override_ctr_ISIZE(X, N)
 #define i_override_ctr_DECL(X, R)
 #define i_override_ctr_INIT(X, R)                       X##_type . with_##R = & X##_with_##R;
 #define i_override_ctr_PROTO(X, R)
 #define i_override_ctr_METHOD(X, R)
 
 #define i_override_cast_INST(X, R)
-#define i_override_cast_INTERN(X, N)
+#define i_override_cast_INTERN(X, R)
+#define i_override_cast_ISIZE(X, R)
 #define i_override_cast_DECL(X, R)
 #define i_override_cast_INIT(X, R)                      X##_type . cast_##R = & X##_cast_##R;
 #define i_override_cast_PROTO(X, R)
 #define i_override_cast_METHOD(X, R)
 
 #define i_override_idx_INST(X, R)
-#define i_override_idx_INTERN(X, N)
+#define i_override_idx_INTERN(X, R)
+#define i_override_idx_ISIZE(X, R)
 #define i_override_idx_DECL(X, R)
 #define i_override_idx_INIT(X, R)                    X##_type . idx_##R = & X##_idx_##R;
 #define i_override_idx_PROTO(X, R)
@@ -549,8 +575,10 @@ typedef struct type_member_t {
     meta_t          meta; \
     void*           arb;
 
-#define intern(X) X##_schema(X, INTERN)
-
+#define intern(X)  X##_schema(X, INTERN)
+/// this gives you a kind of design-time check for intern access,  i suppose..
+/// however we would need to emit it in both cases
+#define  isize(X) u8 __##X##_intern[0 X##_schema(X, ISIZE)];
 
 #define declare_base( X ) \
     typedef struct X* X; \
@@ -934,7 +962,8 @@ declare_class(item)
     i_prop  (X,Y, public,    i64,     count) \
     i_method(X,Y, public,    A,       pop) \
     i_method(X,Y, public,    item,    push, A) \
-    i_method(X,Y, public,    num,     index_of_element, A) \
+    i_method(X,Y, public,    num,     index_of, A) \
+    i_method(X,Y, public,    item,     item_of, A) \
     i_method(X,Y, public,    none,    remove, num) \
     i_method(X,Y, public,    none,    remove_item, item) \
     i_method(X,Y, public,    A,       get,  A) \
@@ -1029,7 +1058,7 @@ declare_class(vector)
     i_prop           (X,Y, required, object, target) \
     i_prop           (X,Y, public,   object, ctx) \
     i_prop           (X,Y, required, handle, addr) \
-    i_method         (X,Y, public,   none,   invoke, object)
+    i_method         (X,Y, public,   object, invoke, object)
 #ifndef subprocedure_intern
 #define subprocedure_intern
 #endif
@@ -1110,6 +1139,13 @@ declare_class(hashmap)
 #define pair_intern
 #endif
 declare_class(pair)
+
+extern int fault_level;
+#define level_schema(X,Y) \
+    enum_value(X,Y, info) \
+    enum_value(X,Y, warn) \
+    enum_value(X,Y, err)
+declare_enum(level)
 
 /// hmap stores the item, and our refs list has a value that holds that (origin = hmap)
 #define map_schema(X,Y) \
@@ -1193,7 +1229,16 @@ declare_enum(Exists)
 #else
 #define       assert(a, t, ...) do { } while(0)
 #endif
-#define       verify(a, t, ...) do { if (!(a)) { A_formatter(null, stderr, true,  t, ## __VA_ARGS__); raise(SIGSTOP); exit(1); } } while(0)
+#define       verify(a, t, ...) \
+    do { \
+        if (!(a)) { \
+            A_formatter(null, stderr, true,  t, ## __VA_ARGS__); \
+            if (level_err >= fault_level) { \
+                raise(SIGSTOP); \
+                exit(1); \
+            } \
+        } \
+    } while(0)
 
 /// we can iterate through a collection with this strange code
 #define each(container, E, e) \
@@ -1227,7 +1272,7 @@ A           A_alloc(AType type, num count, bool af_pool);
 
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size
-#define A_struct(T) A_alloc(typeid(u8), sizeof(T), true)
+#define A_struct(T) A_alloc(typeid(u8), sizeof(struct T), true)
 
 string      A_enum_string(AType type, i32 value);
 i32         A_enum_value(AType type, cstr cs);
@@ -1241,6 +1286,7 @@ A           A_convert(AType type, A input);
 type_member_t* A_constructor(AType type, AType first_arg); // find a constructor method (used for dynamic construction)
 A           A_instanceof(A left, AType type); // would be nice to actually allow typeid vs typeid here
 A           A_hold(A a);
+AType       A_lookup_type(cstr);
 void        A_drop(A a);
 sz          A_len(A a);
 num         index_of_cstr(A a, cstr f);

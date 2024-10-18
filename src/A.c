@@ -82,7 +82,7 @@ void A_push_type(A_f* type) {
 
 /// verify type is compatible with newly created object given from user
 /// if a null is given by user, we do nothing
-A A_verify(A instance, AType type) {
+A A_validate_type(A instance, AType type) {
     if (!instance) return null;
     AType itype = isa(instance);
     do {
@@ -96,6 +96,15 @@ A A_verify(A instance, AType type) {
 A_f** A_types(num* length) {
     *length = types_len;
     return types;
+}
+
+AType A_find_type(cstr name) {
+    for (int i = 0; i < types_len; i++) {
+        AType type = types[i];
+        if (strcmp(type->name, name) == 0)
+            return type;
+    }
+    return null;
 }
 
 A A_new(AType type) {
@@ -321,7 +330,11 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
 }
 
 
+int fault_level;
+
 void A_start() {
+    fault_level = level_err;
+
     AF pool = allocate(AF); /// leave pool open
 
     int remaining = call_after_count;
@@ -1151,6 +1164,7 @@ A A_instanceof(A inst, AType type) {
     verify(inst, "instanceof given a null value");
     AType t  = type;
     AType it = isa(inst); 
+    AType it_copy = it;
     while (it) {
         if (it == t)
             return t;
@@ -1178,7 +1192,7 @@ item list_push(list a, A e) {
 
 /// we need index_of_element and index_of
 /// this is not calling compare for now, and we really need to be able to control that if it did (argument-based is fine)
-num list_index_of_element(list a, A value) {
+num list_index_of(list a, A value) {
     num index = 0;
     for (item ai = a->first; ai; ai = ai->next) {
         if (ai->value == value)
@@ -1186,6 +1200,18 @@ num list_index_of_element(list a, A value) {
         index++;
     }
     return -1;
+}
+
+item list_item_of(list a, A value) {
+    num index = 0;
+    for (item ai = a->first; ai; ai = ai->next) {
+        if (ai->value == value) {
+            ai->key = A_i64(index);
+            return ai;
+        }
+        index++;
+    }
+    return null;
 }
 
 void list_remove(list a, num index) {
@@ -1481,9 +1507,9 @@ none array_init(array a) {
         array_alloc_sz(a, a->alloc);
 }
 
-void subprocedure_invoke(subprocedure a, object arg) {
-    void(*addr)(object, object, object) = a->addr;
-    addr(a->target, arg, a->ctx);
+object subprocedure_invoke(subprocedure a, object arg) {
+    object(*addr)(object, object, object) = a->addr;
+    return addr(a->target, arg, a->ctx);
 }
 
 void AF_init(AF a) {
@@ -1854,6 +1880,7 @@ define_primitive(ARef,   ref, 0);
 
 define_enum(OPType)
 define_enum(Exists)
+define_enum(level)
 
 define_class(path)
 define_class(string)

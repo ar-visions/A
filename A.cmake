@@ -26,8 +26,6 @@ if(DEBUG_PROJECTS)
     file                  (WRITE "${CMAKE_BINARY_DIR}/debug.txt" "${DEBUG_PROJECTS}")
 endif()
 
-message(STATUS "import.sh is in this file")
-
 # rebuild is an all, however you may rebuild with make REBUILD=llvm
 add_custom_target         (rebuild COMMAND ${CMAKE_COMMAND} -E env REBUILD=all ${CMAKE_COMMAND} -E env bash ${CMAKE_SOURCE_DIR}/../A/import.sh ${CMAKE_INSTALL_PREFIX} --deps ${CMAKE_SOURCE_DIR}/deps --debug ${CMAKE_BINARY_DIR}/debug.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_custom_target         (script COMMAND ${CMAKE_COMMAND} -E env bash ${CMAKE_SOURCE_DIR}/../A/import.sh ${CMAKE_INSTALL_PREFIX} --deps ${CMAKE_SOURCE_DIR}/deps --debug ${CMAKE_BINARY_DIR}/debug.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
@@ -49,8 +47,8 @@ add_compile_options       (
     -Wfatal-errors
     -fPIC)
 
-add_compile_options      (-fsanitize=address -fno-omit-frame-pointer -g)
-add_link_options         (-fsanitize=address)
+#add_compile_options      (-fsanitize=address -fno-omit-frame-pointer -g)
+#add_link_options         (-fsanitize=address)
 
 add_compile_options       (-I${CMAKE_INSTALL_PREFIX}/include)
 set                       (CMAKE_C_STANDARD             11)

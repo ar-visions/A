@@ -17,6 +17,9 @@
 		},
 		{
 			"path": "../trinity"
+		},
+		{
+			"path": "../llvm"
 		}
 	],
 	"settings": {
@@ -183,7 +186,8 @@
 			"ranges": "c",
 			"source_location": "c",
 			"hash_map": "c",
-			"hash_set": "c"
+			"hash_set": "c",
+			"zlib.h": "c"
 		}
 	}
 }

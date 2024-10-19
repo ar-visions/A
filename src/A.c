@@ -499,7 +499,8 @@ A     i(i64 data)   { return A_primitive(&i64_type, &data); }
 A A_sz (sz  data)   { return A_primitive(&sz_type,  &data); }
 A A_u64(u64 data)   { return A_primitive(&u64_type, &data); }
 A A_f32(f32 data)   { return A_primitive(&f32_type, &data); }
-A A_f64(f64 data)   { return A_primitive(&f64_type, &data); }
+A  A_f64(f64 data)  { return A_primitive(&f64_type, &data); }
+A A_f128(f64 data)  { return A_primitive(&f128_type, &data); }
 A     f(f32 data)   { return A_primitive(&f32_type, &data); }
 A     r(f64 data)   { return A_primitive(&f64_type, &data); }
 A A_cstr(cstr data) { return A_primitive(&cstr_type, &data); }
@@ -567,6 +568,7 @@ void A_serialize(AType type, string res, A a) {
         else if (type == typeid(u32)) len = sprintf(buf, "%u",   *(u32*)a);
         else if (type == typeid(u16)) len = sprintf(buf, "%hu",  *(u16*)a);
         else if (type == typeid(u8))  len = sprintf(buf, "%hhu", *(u8*) a);
+        else if (type == typeid(f128)) len = sprintf(buf, "%f",  (f64)*(f128*)a);
         else if (type == typeid(f64)) len = sprintf(buf, "%f",   *(f64*)a);
         else if (type == typeid(f32)) len = sprintf(buf, "%f",   *(f32*)a);
         else if (type == typeid(cstr)) len = sprintf(buf, "%s",  *(cstr*)a);
@@ -1167,7 +1169,7 @@ A A_instanceof(A inst, AType type) {
     AType it_copy = it;
     while (it) {
         if (it == t)
-            return t;
+            return inst;
         else if (it == typeid(A))
             break;
         it = it->parent_type; 
@@ -1789,7 +1791,7 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeid(i64)) return &ffi_type_sint64;
     if (ptype == typeid(f32)) return &ffi_type_float;
     if (ptype == typeid(f64)) return &ffi_type_double;
-    //if (ptype == typeid(f128)) return &ffi_type_longdouble;
+    if (ptype == typeid(f128)) return &ffi_type_longdouble;
     if (ptype == typeid(cstr)) return &ffi_type_pointer;
     if (ptype == typeid(symbol)) return &ffi_type_pointer;
     if (ptype == typeid(cereal)) return &ffi_type_pointer;
@@ -1868,7 +1870,7 @@ define_primitive(num,    numeric, A_TRAIT_INTEGRAL | A_TRAIT_SIGNED)
 define_primitive(sz,     numeric, A_TRAIT_INTEGRAL | A_TRAIT_SIGNED)
 define_primitive(f32,    numeric, A_TRAIT_REALISTIC)
 define_primitive(f64,    numeric, A_TRAIT_REALISTIC)
-//define_primitive(f128,   numeric, A_TRAIT_REALISTIC)
+define_primitive(f128,   numeric, A_TRAIT_REALISTIC)
 define_primitive(cstr,   string_like, 0)
 define_primitive(symbol, string_like, 0)
 define_primitive(cereal, string_like, 0)

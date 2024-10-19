@@ -21,10 +21,10 @@ set(CMAKE_INSTALL_RPATH                 ${CMAKE_INSTALL_PREFIX}/lib)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH   TRUE)
 set(CMAKE_FIND_USE_SYSTEM_PATH          FALSE)
 
-set                       (DEBUG_PROJECTS "" CACHE STRING "comma-separated list of projects to debug in silver-import")
-if(DEBUG_PROJECTS)
-    file                  (WRITE "${CMAKE_BINARY_DIR}/debug.txt" "${DEBUG_PROJECTS}")
-endif()
+#set                       (DEBUG_PROJECTS "" CACHE STRING "comma-separated list of projects to debug in silver-import")
+#if(DEBUG_PROJECTS)
+#    file                  (WRITE "${CMAKE_BINARY_DIR}/debug.txt" "${DEBUG_PROJECTS}")
+#endif()
 
 # rebuild is an all, however you may rebuild with make REBUILD=llvm
 add_custom_target         (rebuild COMMAND ${CMAKE_COMMAND} -E env REBUILD=all ${CMAKE_COMMAND} -E env bash ${CMAKE_SOURCE_DIR}/../A/import.sh ${CMAKE_INSTALL_PREFIX} --deps ${CMAKE_SOURCE_DIR}/deps --debug ${CMAKE_BINARY_DIR}/debug.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

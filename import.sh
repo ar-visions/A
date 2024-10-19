@@ -133,8 +133,10 @@
         if [ -f "CMakeLists.txt" ] || [[ "$BUILD_CONFIG" == *-S* ]]; then
             cmake="1"
             if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
+                echo "selecting DEBUG for $PROJECT_NAME"
                 BUILD_TYPE="-DCMAKE_BUILD_TYPE=Debug"
             else
+                echo "selecting RELEASE for $PROJECT_NAME"
                 BUILD_TYPE="-DCMAKE_BUILD_TYPE=Release"
             fi
         else

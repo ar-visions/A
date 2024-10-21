@@ -1245,8 +1245,8 @@ declare_enum(Exists)
 
 /// we can iterate through a collection with this strange code
 #define each(container, E, e) \
-    if (count(container)) for (E e = get(container, 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, __len = count(container); __i < __len; __i++, e = get(container, __i)) \
+    if (len(container)) for (E e = get(container, 0), e0 = 0; e0 == 0; e0++) \
+        for (num __i = 0, __len = len(container); __i < __len; __i++, e = get(container, __i)) \
 
 /// we can go through a map
 #define pairs(MM, EE) \
@@ -1268,8 +1268,8 @@ declare_enum(Exists)
 
 /// possible to iterate safely through primitives
 #define primitives(arr, E, e) \
-    if (count(arr)) for (E e = *(E*)get(arr, 0), e0 = 0; e0 == 0; e0++) \
-        for (num i = 0, __len = count(arr); i < __len; i++, e = *(E*)get(arr, i)) \
+    if (len(arr)) for (E e = *(E*)get(arr, 0), e0 = 0; e0 == 0; e0++) \
+        for (num i = 0, __len = len(arr); i < __len; i++, e = *(E*)get(arr, i)) \
 
 A           A_alloc(AType type, num count, bool af_pool);
 
@@ -1341,6 +1341,7 @@ A           A_data(A instance);
 A           A_verify(A instance, AType type);
 void        A_module_init(bool(*fn)());
 void        debug();
+void        br();
 
 bool      is_meta(A a);
 bool      is_meta_compatible(A a, A b);

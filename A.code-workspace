@@ -187,7 +187,8 @@
 			"source_location": "c",
 			"hash_map": "c",
 			"hash_set": "c",
-			"zlib.h": "c"
+			"zlib.h": "c",
+			"print": "c"
 		}
 	}
 }

@@ -1502,6 +1502,10 @@ num array_index_of(array a, A b) {
     return -1;
 }
 
+void br() {
+    usleep(0);
+}
+
 bool array_cast_bool(array a) { return a && a->len > 0; }
 
 none array_init(array a) {

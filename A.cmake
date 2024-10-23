@@ -58,7 +58,7 @@ set                       (CMAKE_C_COMPILER             clang-18)
 set                       (CMAKE_CXX_COMPILER           clang-18++)
 
 add_executable            (A-reflect ${CMAKE_SOURCE_DIR}/../A/src/meta/A-reflect.c)
-target_link_libraries     (A-reflect A ffi)
+target_link_libraries     (A-reflect ffi)
 
 # we make apps or libs
 if(app)

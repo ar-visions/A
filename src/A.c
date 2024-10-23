@@ -1623,6 +1623,11 @@ void file_init(file f) {
 }
 
 
+void file_set(file f, path src, bool writing) {
+    f->write = writing;
+    f->src = src;
+}
+
 bool file_write(file f, object o) {
     AType type = isa(o);
     if (type == typeid(string)) {

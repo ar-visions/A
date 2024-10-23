@@ -33,12 +33,12 @@
             "name": "A-reflect",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../ether/silver-debug/A-reflect",
+            "program": "${workspaceFolder}/../A/silver-debug/A-reflect",
             "args": [
-                "/home/kalen/src/silver-import/checkout/ether/silver-debug/libether.so"
+                "/home/kalen/src/silver-import/checkout/A/silver-debug/libA.so"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../ether/silver-debug",
+            "cwd": "${workspaceFolder}/../A/silver-debug",
             "environment": [
             ],
             "MIMode": "gdb",

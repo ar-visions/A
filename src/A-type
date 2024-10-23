@@ -18,6 +18,7 @@ typedef struct meta_t {
 typedef struct ftable_t {
     struct ftable_t* parent_type;
     char*           name;
+    char*           module;
     int             size;
     int             member_count;
     struct type_member_t* members;

@@ -555,6 +555,7 @@ typedef struct method_t {
 #define A_f_members(B) \
     struct B ## _f* parent_type; \
     char*           name; \
+    char*           module; \
     int             size; \
     int             member_count; \
     type_member_t*  members; \
@@ -656,12 +657,13 @@ void        A_lazy_init(global_init_fn fn);
             memcpy(type_ref, base_ref, sizeof(A_f)); \
             static type_member_t members[16 + E##_ENUM_COUNT + sizeof(E##_type) / sizeof(void*)]; \
             memset(&E##_type, 0, sizeof(E##_type)); \
-            E##_type.parent_type = & A_type; \
-            E##_type.name     = #E; \
-            E##_type.size     = sizeof(enum E); \
-            E##_type.members  = members; \
-            E##_type.member_count = 0; \
-            E##_type.traits   = A_TRAIT_ENUM; \
+            E##_type.parent_type = & A_type;        \
+            E##_type.name     = #E;                 \
+            E##_type.module   = MODULE;             \
+            E##_type.size     = sizeof(enum E);     \
+            E##_type.members  = members;            \
+            E##_type.member_count = 0;              \
+            E##_type.traits   = A_TRAIT_ENUM;       \
             E##_type.arb      = primitive_ffi_arb(typeid(i32)); \
             E##_schema( E, IMPL ); \
             A_push_type(&E##_type); \
@@ -762,6 +764,7 @@ void        A_lazy_init(global_init_fn fn);
             static type_member_t members[16 + sizeof(A0##_type) / sizeof(void*)]; \
             A0## _type.parent_type = &A1##_type; \
             A0## _type.name     = #A0;       \
+            A0## _type.module   = MODULE;    \
             A0## _type.members  = members;   \
             A0## _type.member_count = 0; \
             A0## _type.size     = TYPE_SZ;   \

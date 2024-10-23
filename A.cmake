@@ -67,7 +67,6 @@ if(app)
     install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin ARCHIVE DESTINATION bin)
 else()
     add_library           (${PROJECT_NAME} SHARED       ${src})
-
     # generate meta-info [ libLibrary.m ] after lib is built
     set(target_so ${CMAKE_BINARY_DIR}/lib${PROJECT_NAME}.so)
     add_custom_command(
@@ -82,7 +81,7 @@ else()
     install               (FILES src/${PROJECT_NAME} DESTINATION include)
 endif()
 
+add_definitions           (-DMODULE="${PROJECT_NAME}")
 add_dependencies          (${PROJECT_NAME}              script)
 set                       (L ${CMAKE_INSTALL_PREFIX}/lib)
-
 target_include_directories(${PROJECT_NAME} PRIVATE . ./src)

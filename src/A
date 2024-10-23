@@ -996,7 +996,6 @@ typedef struct path* path;
 
 /// .m file is everything a module [body] needs without looking like what they ate onboard the Nebuchadnezzar
 #define file_schema(X,Y) \
-    i_method(X,Y, public,   bool, set, cstr, bool) \
     i_method(X,Y, public,   bool, write, object) \
     i_method(X,Y, public,   bool, read,  AType) \
     i_method(X,Y, public,   none, close) \

@@ -21,12 +21,6 @@ set(CMAKE_INSTALL_RPATH                 ${CMAKE_INSTALL_PREFIX}/lib)
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH   TRUE)
 set(CMAKE_FIND_USE_SYSTEM_PATH          FALSE)
 
-#set                       (DEBUG_PROJECTS "" CACHE STRING "comma-separated list of projects to debug in silver-import")
-#if(DEBUG_PROJECTS)
-#    file                  (WRITE "${CMAKE_BINARY_DIR}/debug.txt" "${DEBUG_PROJECTS}")
-#endif()
-
-# rebuild is an all, however you may rebuild with make REBUILD=llvm
 add_custom_target         (rebuild COMMAND ${CMAKE_COMMAND} -E env REBUILD=all ${CMAKE_COMMAND} -E env bash ${CMAKE_SOURCE_DIR}/../A/import.sh ${CMAKE_INSTALL_PREFIX} --deps ${CMAKE_SOURCE_DIR}/deps --debug ${CMAKE_BINARY_DIR}/debug.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_custom_target         (script COMMAND ${CMAKE_COMMAND} -E env bash ${CMAKE_SOURCE_DIR}/../A/import.sh ${CMAKE_INSTALL_PREFIX} --deps ${CMAKE_SOURCE_DIR}/deps --debug ${CMAKE_BINARY_DIR}/debug.txt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
@@ -35,9 +29,11 @@ file(GLOB_RECURSE RES_FILES "${CMAKE_SOURCE_DIR}/src/res/*")
 foreach(RES_FILE ${RES_FILES})
     file(COPY ${RES_FILE} DESTINATION ${CMAKE_BINARY_DIR})
 endforeach()
+
 include_directories       (./src ${CMAKE_INSTALL_PREFIX}/include)
-link_directories          (${CMAKE_INSTALL_PREFIX}/lib)
-file                      (GLOB src "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+link_directories         (${CMAKE_INSTALL_PREFIX}/lib)
+file                     (GLOB src "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+
 add_compile_options       (-fno-exceptions -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS)
 add_compile_options       (
     -Wno-write-strings
@@ -47,9 +43,6 @@ add_compile_options       (
     -Wfatal-errors
     -fPIC)
 
-#add_compile_options      (-fsanitize=address -fno-omit-frame-pointer -g)
-#add_link_options         (-fsanitize=address)
-
 add_compile_options       (-I${CMAKE_INSTALL_PREFIX}/include)
 set                       (CMAKE_C_STANDARD             11)
 set                       (CMAKE_CXX_STANDARD           17)
@@ -57,36 +50,38 @@ set                       (CMAKE_CXX_STANDARD_REQUIRED  ON)
 set                       (CMAKE_C_COMPILER             clang-18)
 set                       (CMAKE_CXX_COMPILER           clang-18++)
 
-add_executable            (A-reflect ${CMAKE_SOURCE_DIR}/../A/src/meta/A-reflect.c)
-target_link_libraries     (A-reflect ffi)
-
-# we make apps or libs
+# First create the main project
 if(app)
-    add_executable        (${PROJECT_NAME}              ${src})
+    add_executable        (${PROJECT_NAME} ${src})
     install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin ARCHIVE DESTINATION bin)
 else()
-    add_library           (${PROJECT_NAME} SHARED       ${src})
+    add_library           (${PROJECT_NAME} SHARED ${src})
+endif()
+
+# Then create reflect tool (always created)
+add_executable           (${PROJECT_NAME}-reflect ${CMAKE_SOURCE_DIR}/../A/src/meta/A-reflect.c)
+target_link_libraries    (${PROJECT_NAME}-reflect $<TARGET_FILE:${PROJECT_NAME}> ffi)
+
+# Configure library-specific settings after both targets exist
+if(NOT app)
     # generate meta-info [ libLibrary.m ] after lib is built
     set(target_so ${CMAKE_BINARY_DIR}/lib${PROJECT_NAME}.so)
     add_custom_command(
         TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_BINARY_DIR}/A-reflect ${target_so})
+        COMMAND ${CMAKE_BINARY_DIR}/${PROJECT_NAME}-reflect ${PROJECT_NAME}
+        DEPENDS ${PROJECT_NAME}-reflect)
     get_filename_component(target_name ${target_so} NAME_WLE)
     get_filename_component(target_dir  ${target_so} DIRECTORY)
-    set(target_m "${target_dir}/${target_name}.m")
-
+    set                   (target_m "${target_dir}/${target_name}.m")
     install               (FILES ${target_m} DESTINATION lib)  
     install               (TARGETS ${PROJECT_NAME} LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
     install               (FILES src/${PROJECT_NAME} DESTINATION include)
     if(PROJECT_NAME STREQUAL "A")
-        install              (FILES src/${PROJECT_NAME}-type DESTINATION include)
-        add_library          (${PROJECT_NAME}-static STATIC ${src})
-        set_target_properties(${PROJECT_NAME}-static PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
-        install              (TARGETS ${PROJECT_NAME}-static LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
+        install           (FILES src/${PROJECT_NAME}-type DESTINATION include)
     endif() 
 endif()
 
-add_definitions           (-DMODULE="${PROJECT_NAME}")
-add_dependencies          (${PROJECT_NAME}              script)
-set                       (L ${CMAKE_INSTALL_PREFIX}/lib)
+add_definitions          (-DMODULE="${PROJECT_NAME}")
+add_dependencies         (${PROJECT_NAME} script)
+set                      (L ${CMAKE_INSTALL_PREFIX}/lib)
 target_include_directories(${PROJECT_NAME} PRIVATE . ./src)

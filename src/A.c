@@ -336,6 +336,11 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
 
 int fault_level;
 
+
+int A_total_types_len() {
+    return types_len;
+}
+
 void A_start() {
     fault_level = level_err;
 
@@ -1786,6 +1791,13 @@ path path_directory(path a) {
 
 path path_parent(path a) {
     int len = strlen(a->chars);
+    for (int i = len - 2; i >= 0; i--) { /// -2 because we dont mind the first /
+        char ch = a->chars[i];
+        if  (ch == '/') {
+            string trim = new(string, chars, a->chars, ref_length, i);
+            return new(path, chars, trim->chars);
+        }
+    }
     char *cp = calloc(len + 4, 1);
     memcpy(cp, a->chars, len);
     if (a->chars[len - 1] == '\\' || a->chars[len - 1] == '/')

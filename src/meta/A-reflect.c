@@ -3,13 +3,14 @@
 
 typedef AType*(*A_types_fn)  (num*);
 typedef void  (*A_start_fn)  ();
+typedef int   (*A_total_types_len_fn)  ();
 
-static A_start_fn   _A_start;
-static A_types_fn   _A_types;
+static A_start_fn             _A_start;
+static A_types_fn             _A_types;
+static A_total_types_len_fn   _A_total_types_len;
 
-bool reflect(symbol module, symbol loc) {
-    path m_location = new(path, chars, (cstr)loc);
-    file f = new(file, src, m_location, write, true);
+bool reflect(string module, path loc) {
+    file f = new(file, src, loc, write, true);
     if(!f->f)
         return false;
 
@@ -19,7 +20,7 @@ bool reflect(symbol module, symbol loc) {
     AType* types     = _A_types(&types_len);
     for (int i = 0; i < types_len; i++) {
         AType type = types[i];
-        if (strcmp(type->module, module) != 0)
+        if (cmp(module, type->module) != 0)
             continue;
         /// process type name
         string type_symbol = str(type->name);
@@ -115,24 +116,28 @@ bool reflect(symbol module, symbol loc) {
 }
 
 int main(int argc, cstr argv[]) {
-    A_start();
-    
     if (argc != 2)
         fault("usage: %s libA.so", argv[0]);
 
-    path   so_file = new(path, chars, argv[1]);
-    string      so = stem(so_file);
-    string  module = copy(so);
+    handle f = dlopen(argv[1], RTLD_LAZY); // so we'll simply use A-type in this dlopen-way
+    if   (!f) return 0; // tell cmake to keep the library it has made; without a .m the install fails
+    _A_start = dlsym (f, "A_start");
+    _A_types = dlsym (f, "A_types");
+    _A_total_types_len = dlsym (f, "A_total_types_len");
+    _A_start();
 
-    // load library with dlopen
-    //void* handle = dlopen(so_file, RTLD_LAZY);
-    //_A_start     = dlsym (handle, "A_start");
-    //_A_types     = dlsym (handle, "A_types");
-    //_A_start();
+    path   so_file =    new(path, chars, argv[1]);
+    path       dir = parent(so_file);
+    string      so =   stem(so_file);
+    string  module =    mid(so, 3, len(so) - 3);
+    path    m_file =   form(path, "%o/lib%o.m", dir, module);
 
-    
+    verify(file_exists("%o", so_file), "shared-module not found: %o", so_file);
+
     // call our reflect function to iterate through the types
-    // notice we are using a separate from the one we load
-    //bool     res = reflect(module, m_file);
-    return 0;//  res ? 0 : 1;
+    // notice this A-module is separate from our own we designed with
+    // filter results by type->module == module
+    bool     res = reflect(module, m_file);
+    dlclose(f);
+    return 0; /// again do not fail with this command.  its annoying when it does, egg gets its chicken erased
 }

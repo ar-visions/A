@@ -747,6 +747,8 @@ void        A_lazy_init(global_init_fn fn);
 #define define_abstract(X) \
     define_arb(X, A, 0, A_TRAIT_ABSTRACT, null)
 
+int A_total_types_len();
+
 // lazy loading and copying of the table only requires knowledge of our parent class
 #define define_arb(A0, A1, TYPE_SZ, TRAIT, FFI) \
     _Pragma("pack(push, 1)") \
@@ -772,6 +774,7 @@ void        A_lazy_init(global_init_fn fn);
             A0## _type.traits   = TRAIT;     \
             A0##_type.arb       = FFI;       \
             A0##_schema( A0, INIT )          \
+            printf("registering class: %s\n", #A0);     \
             A_push_type(&A0##_type);         \
             return true;                     \
         }                                    \

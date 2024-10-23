@@ -57,9 +57,8 @@ set                       (CMAKE_CXX_STANDARD_REQUIRED  ON)
 set                       (CMAKE_C_COMPILER             clang-18)
 set                       (CMAKE_CXX_COMPILER           clang-18++)
 
-add_executable            (A-reflect ${CMAKE_SOURCE_DIR}/../A/src/A.c
-                                     ${CMAKE_SOURCE_DIR}/../A/src/meta/A-reflect.c)
-target_link_libraries     (A-reflect ffi)
+add_executable            (A-reflect ${CMAKE_SOURCE_DIR}/../A/src/meta/A-reflect.c)
+target_link_libraries     (A-reflect A ffi)
 
 # we make apps or libs
 if(app)
@@ -78,7 +77,13 @@ else()
 
     install               (FILES ${target_m} DESTINATION lib)  
     install               (TARGETS ${PROJECT_NAME} LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
-    install               (FILES src/${PROJECT_NAME} src/${PROJECT_NAME}-type DESTINATION include)
+    install               (FILES src/${PROJECT_NAME} DESTINATION include)
+    if(PROJECT_NAME STREQUAL "A")
+        install              (FILES src/${PROJECT_NAME}-type DESTINATION include)
+        add_library          (${PROJECT_NAME}-static STATIC ${src})
+        set_target_properties(${PROJECT_NAME}-static PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
+        install              (TARGETS ${PROJECT_NAME}-static LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
+    endif() 
 endif()
 
 add_definitions           (-DMODULE="${PROJECT_NAME}")

@@ -7,7 +7,7 @@ typedef void  (*A_start_fn)  ();
 static A_start_fn   _A_start;
 static A_types_fn   _A_types;
 
-bool reflect(symbol loc) {
+bool reflect(symbol module, symbol loc) {
     path m_location = new(path, chars, (cstr)loc);
     file f = new(file, src, m_location, write, true);
     if(!f->f)
@@ -19,7 +19,8 @@ bool reflect(symbol loc) {
     AType* types     = _A_types(&types_len);
     for (int i = 0; i < types_len; i++) {
         AType type = types[i];
-
+        if (strcmp(type->module, module) != 0)
+            continue;
         /// process type name
         string type_symbol = str(type->name);
         if (!contains(type_symbols, type_symbol)) {
@@ -52,7 +53,8 @@ bool reflect(symbol loc) {
     // output info on types, their type id, name
     for (int i = 0; i < types_len; i++) {
         AType type = types[i];
-
+        if (strcmp(type->module, module) != 0)
+            continue;
         // write type ident (this is implicit but useful for verification)
         u16 *type_ident = get(type_symbols, str(type->name));
         write(f, type_ident);
@@ -118,23 +120,19 @@ int main(int argc, cstr argv[]) {
     if (argc != 2)
         fault("usage: %s libA.so", argv[0]);
 
-    cstr   so_file = argv[1];
-    char   m_file[1024];
-    strcpy(m_file, so_file);
-    char*  ext = strstr(m_file, ".so");
-    strcpy(ext, ".m");
-
-    print("so_file: %s", so_file);
-    print(" m_file: %s", m_file);
+    path   so_file = new(path, chars, argv[1]);
+    string      so = stem(so_file);
+    string  module = copy(so);
 
     // load library with dlopen
-    void* handle = dlopen(so_file, RTLD_LAZY);
-    _A_start     = dlsym (handle, "A_start");
-    _A_types     = dlsym (handle, "A_types");
-    _A_start();
+    //void* handle = dlopen(so_file, RTLD_LAZY);
+    //_A_start     = dlsym (handle, "A_start");
+    //_A_types     = dlsym (handle, "A_types");
+    //_A_start();
 
+    
     // call our reflect function to iterate through the types
     // notice we are using a separate from the one we load
-    bool     res = reflect(m_file);
-    return   res ? 0 : 1;
+    //bool     res = reflect(module, m_file);
+    return 0;//  res ? 0 : 1;
 }

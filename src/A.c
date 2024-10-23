@@ -798,6 +798,23 @@ num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
 num   string_cmp(string a, cstr b)       { return strcmp(a->chars, b); }
 bool  string_eq(string a, cstr b)        { return strcmp(a->chars, b) == 0; }
 
+string string_copy(string a) {
+    return str(a->chars);
+}
+
+array  array_copy(array a) {
+    array  b = new(array, alloc, len(a));
+    concat(b, a);
+    return b;
+}
+
+list   list_copy(list a) {
+    list  b = new(list);
+    for (item i = a->first; i; i = i->next)
+        push(b, i->value);
+    return b;
+}
+
 i32   string_index_num(string a, num index) {
     if (index < 0)
         index += a->len;

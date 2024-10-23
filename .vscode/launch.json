@@ -30,10 +30,10 @@
             }
         },
         {
-            "name": "meta-info",
+            "name": "A-reflect",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../A/silver-debug/meta-info",
+            "program": "${workspaceFolder}/../A/silver-debug/A-reflect",
             "args": [
                 "/home/kalen/src/silver-import/checkout/A/silver-debug/libA.so"
             ],

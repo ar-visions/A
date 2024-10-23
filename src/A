@@ -207,6 +207,7 @@ enum A_TRAIT {
 #define pop(I,...)                  ftableI(I) -> pop(I, ##__VA_ARGS__)
 #define peek(I,...)                 ftableI(I) -> peek(I, ##__VA_ARGS__)
 #define read(I,...)                 ftableI(I) -> read(I, ##__VA_ARGS__)
+#define copy(I,...)                 ftableI(I) -> copy(I, ##__VA_ARGS__)
 #define write(I,...)                ftableI(I) -> write(I, ##__VA_ARGS__)
 #define close(I,...)                ftableI(I) -> close(I, ##__VA_ARGS__)
 #define concat(I,...)               ftableI(I) -> concat(I, ##__VA_ARGS__)
@@ -1227,7 +1228,8 @@ declare_class(fn)
     i_override(X,Y,   method, hash) \
     i_override(X,Y,   method, compare) \
     i_override(X,Y,   method, init) \
-    i_override(X,Y,   cast,   bool)
+    i_override(X,Y,   cast,   bool) \
+    i_override(X,Y,   method, copy)
 #ifndef string_intern
 #define string_intern
 #endif

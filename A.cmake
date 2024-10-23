@@ -78,7 +78,7 @@ else()
 
     install               (FILES ${target_m} DESTINATION lib)  
     install               (TARGETS ${PROJECT_NAME} LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
-    install               (FILES src/${PROJECT_NAME} DESTINATION include)
+    install               (FILES src/${PROJECT_NAME} src/${PROJECT_NAME}-type DESTINATION include)
 endif()
 
 add_definitions           (-DMODULE="${PROJECT_NAME}")

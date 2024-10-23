@@ -6,6 +6,6 @@ include                   (A.cmake)
 
 target_link_libraries     (A ffi)
 
-add_executable            (a-test src/a-test.c)
+add_executable            (a-test src/test/a-test.c)
 target_link_libraries     (a-test /home/kalen/src/A/silver-debug/libA.so)
 target_include_directories(a-test PRIVATE . ./src)

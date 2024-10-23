@@ -1,0 +1,44 @@
+#ifndef _A_TYPE_
+#define _A_TYPE_
+
+typedef struct A_f* AType;
+
+struct type_member_t;
+struct array;
+struct A_f;
+
+_Pragma("pack(push, 1)")
+
+typedef struct meta_t {
+    long long       count;
+    AType           meta_0, meta_1, meta_2, meta_3, 
+                    meta_4, meta_5, meta_6, meta_7, meta_8, meta_9;
+} meta_t;
+
+typedef struct ftable_t {
+    struct ftable_t* parent_type;
+    char*           name;
+    int             size;
+    int             member_count;
+    struct type_member_t* members;
+    int             traits;
+    AType           src;
+    void*           arb;
+    meta_t          meta;
+} ftable_t;
+
+typedef struct type_member_t {
+    char*           name;
+    AType           type;
+    int             offset;
+    int             member_type;
+    int             operator_type;
+    int             required;
+    meta_t          args;
+    void*           ptr;
+    void*           method;
+} type_member_t;
+
+_Pragma("pack(pop)")
+
+#endif

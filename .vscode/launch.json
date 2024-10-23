@@ -30,6 +30,25 @@
             }
         },
         {
+            "name": "meta-info",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../A/silver-debug/meta-info",
+            "args": [
+                "/home/kalen/src/silver-import/checkout/A/silver-debug/libA.so"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../A/silver-debug",
+            "environment": [
+            ],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
             "name": "silver",
             "type": "cppdbg",
             "request": "launch",

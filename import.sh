@@ -170,11 +170,8 @@
                 if [ -z "$BUILD_CONFIG" ]; then
                     BUILD_CONFIG="-S .."
                 fi
-                echo cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
-
+                echo '[import.sh]' cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
                 cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
-
-                echo "! did gen"
             else
                 if [ ! -f "../configure" ]; then
                     echo "running autoreconf -i in $PROJECT_NAME ($cmake)"

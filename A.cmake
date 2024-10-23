@@ -57,12 +57,27 @@ set                       (CMAKE_CXX_STANDARD_REQUIRED  ON)
 set                       (CMAKE_C_COMPILER             clang-18)
 set                       (CMAKE_CXX_COMPILER           clang-18++)
 
+add_executable            (A-reflect ${CMAKE_SOURCE_DIR}/../A/src/A.c
+                                     ${CMAKE_SOURCE_DIR}/../A/src/meta/A-reflect.c)
+target_link_libraries     (A-reflect ffi)
+
 # we make apps or libs
 if(app)
     add_executable        (${PROJECT_NAME}              ${src})
     install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin ARCHIVE DESTINATION bin)
 else()
     add_library           (${PROJECT_NAME} SHARED       ${src})
+
+    # generate meta-info [ libLibrary.m ] after lib is built
+    set(target_so ${CMAKE_BINARY_DIR}/lib${PROJECT_NAME}.so)
+    add_custom_command(
+        TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_BINARY_DIR}/A-reflect ${target_so})
+    get_filename_component(target_name ${target_so} NAME_WLE)
+    get_filename_component(target_dir  ${target_so} DIRECTORY)
+    set(target_m "${target_dir}/${target_name}.m")
+
+    install               (FILES ${target_m} DESTINATION lib)  
     install               (TARGETS ${PROJECT_NAME} LIBRARY DESTINATION lib ARCHIVE DESTINATION lib)
     install               (FILES src/${PROJECT_NAME} DESTINATION include)
 endif()

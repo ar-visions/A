@@ -14,6 +14,7 @@
 #include <ffi.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <endian.h>
 
 __thread array     af_stack;
 __thread   AF      af_top;
@@ -66,7 +67,7 @@ static A_f**           types;
 static num             types_alloc;
 static num             types_len;
 
-void A_push_type(A_f* type) {
+void A_push_type(AType type) {
     if (types_alloc == types_len) {
         A_f** prev = types;
         num   alloc_prev = types_alloc;
@@ -159,8 +160,9 @@ void debug() {
 
 void A_init_recur(A a, AType current, raw last_init) {
     if (current == &A_type) return;
-    A_init_recur(a, current->parent_type, current->init);
-    if (current->init)      current->init(a);
+    void(*init)(A) = ((A_f*)current)->init;
+    A_init_recur(a, current->parent_type, init);
+    if (init) init(a);
 }
 
 A A_initialize(A a) {
@@ -221,6 +223,7 @@ void A_push(A a, A value) {
 
 #define iarray(I,M,...) array_ ## M(I, M, __VA_ARGS__)
 
+
 /// array -------------------------
 void array_alloc_sz(array a, sz alloc) {
     A* elements = (A*)calloc(alloc, sizeof(struct A*));
@@ -253,7 +256,8 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     method->ffi_args = calloc(max_args, sizeof(ffi_type*));
     method->atypes   = allocate(array);
     method->rtype    = rtype;
-    //assert(atypes->len <= max_args, "adjust arg maxima");
+    method->address  = address;
+    assert(atypes->len <= max_args, "adjust arg maxima");
     ffi_type **ffi_args = (ffi_type**)method->ffi_args;
     for (num i = 0; i < atypes->len; i++) {
         A_f* a_type   = atypes->elements[i];
@@ -263,7 +267,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     }
     ffi_status status = ffi_prep_cif(
         (ffi_cif*) method->ffi_cif, FFI_DEFAULT_ABI, atypes->len,
-        (ffi_type*)(rtype->traits & A_TRAIT_ABSTRACT) ? method_owner->arb : rtype->arb, ffi_args);
+        (ffi_type*)((rtype->traits & A_TRAIT_ABSTRACT) ? method_owner->arb : rtype->arb), ffi_args);
     assert(status == FFI_OK, "status == %i", (i32)status);
     return method;
 }
@@ -297,7 +301,7 @@ A A_method_call(method_t* a, array args) {
 }
 
 /// this calls type methods
-A A_method(A_f* type, cstr method_name, array args) {
+A A_method(AType type, cstr method_name, array args) {
     type_member_t* mem = A_member(type, A_TYPE_IMETHOD | A_TYPE_SMETHOD, method_name);
     assert(mem->method, "method not set");
     method_t* m = mem->method;
@@ -382,7 +386,7 @@ void A_start() {
     }
 }
 
-type_member_t* A_member(A_f* type, enum A_TYPE member_type, char* name) {
+type_member_t* A_member(AType type, enum A_TYPE member_type, char* name) {
     for (num i = 0; i < type->member_count; i++) {
         type_member_t* mem = &type->members[i];
         if (mem->member_type & member_type && strcmp(mem->name, name) == 0)
@@ -473,14 +477,14 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
 /// primitives are based on A alone
 /// i wonder if we can add more constructors or even methods to the prims
 
-A A_primitive(A_f* type, void* data) {
+A A_primitive(AType type, void* data) {
     assert(type->traits & A_TRAIT_PRIMITIVE, "must be primitive");
     A copy = A_alloc(type, type->size, true);
     memcpy(copy, data, type->size);
     return copy;
 }
 
-A A_enum(A_f* type, i32 data) {
+A A_enum(AType type, i32 data) {
     assert(type->traits & A_TRAIT_ENUM, "must be enum");
     assert(type->size == sizeof(i32), "enum size invalid");
     A copy = A_alloc(type, type->size, true);
@@ -656,7 +660,7 @@ A numeric_with_f64(A a, f64  v) { set_v(); }
 A numeric_with_bool(A a, bool v) { set_v(); }
 A numeric_with_num(A a, num  v) { set_v(); }
 
-A A_method(A_f* type, char* method_name, array args);
+A A_method(AType type, cstr method_name, array args);
 
 sz A_len(A a) {
     if (!a) return 0;
@@ -786,7 +790,7 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
         }
     }
     /// cereal is pretty available, and we only need this on string and path
-    return type ? (A)type->with_cereal(A_alloc(type, 1, true), res->chars) : (A)res;
+    return type ? (A)((A_f*)type)->with_cereal(A_alloc(type, 1, true), res->chars) : (A)res;
 }
 
 void  string_destructor(string a)        { free(a->chars); }
@@ -1023,7 +1027,14 @@ void map_concat(map a, map b) {
 }
 
 item map_fetch(map a, A key) {
+    num prev = a->hmap->count;
     item i = fetch(a->hmap, key);
+    if (prev != a->hmap->count) {
+        pair mi = i->value = new(pair, key, key); // todo: make pair originate in hash; remove the key from item
+        mi->ref = push(a, i);
+        mi->ref->key = A_hold(key);
+        mi->ref->value = mi; //
+    }
     return i;
 }
 
@@ -1255,7 +1266,7 @@ num list_compare(list a, list b) {
     if (ai_t) {
         type_member_t* m = A_member(ai_t, (A_TYPE_IMETHOD), "compare");
         for (item ai = a->first, bi = b->first; ai; ai = ai->next, bi = bi->next) {
-            num   v  = ((num(*)(A,A))m->method->address)(ai, bi);
+            num   v  = ((num(*)(A,A))((method_t*)m->method)->address)(ai, bi);
             if (v != 0) return v;
         }
     }
@@ -1348,6 +1359,14 @@ void array_push(array a, A b) {
     if (is_meta(a))
         assert(is_meta_compatible(a, b), "not meta compatible");
     a->elements[a->len++] = A_hold(b);
+}
+
+void array_clear(array a) {
+    for (num i = 0; i < a->len; i++) {
+        A_drop(a->elements[i]);
+        a->elements[i] = null;
+    }
+    a->len = 0;
 }
 
 none array_concat(array a, array b) {
@@ -1520,7 +1539,6 @@ object subprocedure_invoke(subprocedure a, object arg) {
 
 void AF_init(AF a) {
     af_top = a;
-    &AF_type;
     a->pool = allocate(array, alloc, a->start_size ? a->start_size : 1024);
     call(a->pool, push_weak, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
 
@@ -1573,6 +1591,49 @@ A fn_call(fn f, array args) {
 bool create_symlink(path target, path link) {
     bool is_err = symlink(target, link) == -1;
     return !is_err;
+}
+
+void file_init(file f) {
+    verify(!(f->read && f->write), "cannot open for both read and write");
+    cstr src = f->src->chars;
+    if (f->read || f->write)
+        f->f = fopen(src, f->read ? "rb" : "wb");
+}
+
+
+bool file_write(file f, object o) {
+    AType type = isa(o);
+    if (type == typeid(string)) {
+        u16 nbytes = ((string)o)->len;
+        u16 le_nbytes = htole16(nbytes);
+        fwrite(&le_nbytes, 2, 1, f->f);
+        return fwrite(((string)o)->chars, 1, nbytes, f->f) == nbytes;
+    }
+    verify(type->traits & A_TRAIT_PRIMITIVE, "not a primitive type");
+    return fwrite(o, isa(o)->size, 1, f->f) == 1;
+}
+
+bool file_read(file f, AType type) {
+    object o = A_alloc(type, 1, true);
+    if (type == typeid(string)) {
+        u16 nbytes;
+        verify(fread(&nbytes, 2, 1, f->f) == 1, "failed to read byte count");
+        nbytes = le16toh(nbytes);
+        return fread(o, 1, nbytes, f->f) == nbytes; 
+    }
+    verify(type->traits & A_TRAIT_PRIMITIVE, "not a primitive type");
+    return fread(o, isa(o)->size, 1, f->f) == 1; 
+}
+
+void file_close(file f) {
+    if (f->f) {
+        fclose(f->f);
+        f->f = null;
+    }
+}
+
+void file_destructor(file f) {
+    file_close(f);
 }
 
 none path_init(path a) {
@@ -1647,6 +1708,13 @@ bool path_is_empty(path a) {
     }
     closedir(dir);
     return n <= 2;  // Returns true if the directory is empty (only '.' and '..' are present)
+}
+
+string path_ext(path a) {
+    for (int i = strlen(a->chars) - 1; i >= 0; i--)
+        if (a->chars[i] == '.')
+            return str(&a->chars[i + 1]);
+    return str(null);
 }
 
 string path_stem(path a) {
@@ -1785,29 +1853,29 @@ A path_read(path a, AType type) {
 }
 
 void* primitive_ffi_arb(AType ptype) {
-    if (ptype == typeid(u8)) return &ffi_type_uint8;
-    if (ptype == typeid(i8)) return &ffi_type_sint8;
-    if (ptype == typeid(u16)) return &ffi_type_uint16;
-    if (ptype == typeid(i16)) return &ffi_type_sint16;
-    if (ptype == typeid(u32)) return &ffi_type_uint32;
-    if (ptype == typeid(i32)) return &ffi_type_sint32;
-    if (ptype == typeid(u64)) return &ffi_type_uint64;
-    if (ptype == typeid(i64)) return &ffi_type_sint64;
-    if (ptype == typeid(f32)) return &ffi_type_float;
-    if (ptype == typeid(f64)) return &ffi_type_double;
-    if (ptype == typeid(f128)) return &ffi_type_longdouble;
-    if (ptype == typeid(cstr)) return &ffi_type_pointer;
-    if (ptype == typeid(symbol)) return &ffi_type_pointer;
-    if (ptype == typeid(cereal)) return &ffi_type_pointer;
-    if (ptype == typeid(bool)) return &ffi_type_uint32;
-    if (ptype == typeid(num)) return &ffi_type_sint64;
-    if (ptype == typeid(sz)) return &ffi_type_sint64;
-    if (ptype == typeid(none)) return &ffi_type_void;
-    if (ptype == typeid(AType)) return &ffi_type_pointer;
-    if (ptype == typeid(handle)) return &ffi_type_pointer;
-    if (ptype == typeid(Member)) return &ffi_type_pointer;
-    //if (ptype == typeid(ARef))   return &ffi_type_pointer;
-    if (ptype == typeid(raw))    return &ffi_type_pointer;
+    if (ptype == typeid(u8))        return &ffi_type_uint8;
+    if (ptype == typeid(i8))        return &ffi_type_sint8;
+    if (ptype == typeid(u16))       return &ffi_type_uint16;
+    if (ptype == typeid(i16))       return &ffi_type_sint16;
+    if (ptype == typeid(u32))       return &ffi_type_uint32;
+    if (ptype == typeid(i32))       return &ffi_type_sint32;
+    if (ptype == typeid(u64))       return &ffi_type_uint64;
+    if (ptype == typeid(i64))       return &ffi_type_sint64;
+    if (ptype == typeid(f32))       return &ffi_type_float;
+    if (ptype == typeid(f64))       return &ffi_type_double;
+    if (ptype == typeid(f128))      return &ffi_type_longdouble;
+    if (ptype == typeid(cstr))      return &ffi_type_pointer;
+    if (ptype == typeid(symbol))    return &ffi_type_pointer;
+    if (ptype == typeid(cereal))    return &ffi_type_pointer;
+    if (ptype == typeid(bool))      return &ffi_type_uint32;
+    if (ptype == typeid(num))       return &ffi_type_sint64;
+    if (ptype == typeid(sz))        return &ffi_type_sint64;
+    if (ptype == typeid(none))      return &ffi_type_void;
+    if (ptype == typeid(AType))     return &ffi_type_pointer;
+    if (ptype == typeid(handle))    return &ffi_type_pointer;
+    if (ptype == typeid(Member))    return &ffi_type_pointer;
+    //if (ptype == typeid(ARef))    return &ffi_type_pointer;
+    if (ptype == typeid(raw))       return &ffi_type_pointer;
     assert(ptype->size == sizeof(void*), "we may only import void* handles for now; this may be fixed with arguments given to define");
     return &ffi_type_pointer;
 }
@@ -1889,6 +1957,7 @@ define_enum(Exists)
 define_enum(level)
 
 define_class(path)
+define_class(file)
 define_class(string)
 define_class(item)
 //define_proto(collection) -- disabling for now during reduction to base + class + mod

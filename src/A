@@ -32,7 +32,7 @@ typedef void*               handle;
 typedef char*               cstr;
 typedef const char*         symbol;
 typedef const char*         cereal;
-typedef struct A_f*         AType;
+//typedef struct A_f*       AType;
 typedef struct A*           object;
 typedef struct A**          ARef;
 typedef struct A*           A;
@@ -51,11 +51,6 @@ int     system(symbol command);
 int     setenv(symbol key, symbol value, int);
 cstr    getenv(symbol key);
 
-typedef struct meta_t {
-    num             count;
-    AType           meta_0, meta_1, meta_2, meta_3, 
-                    meta_4, meta_5, meta_6, meta_7, meta_8, meta_9;
-} meta_t;
 
 typedef bool(*global_init_fn)();
 
@@ -79,8 +74,9 @@ enum A_TYPE {
     A_TYPE_OPERATOR  = 64,
     A_TYPE_CAST      = 128,
     A_TYPE_INDEX     = 256,
-    A_TYPE_ENUMV     = 512
-};
+    A_TYPE_ENUMV     = 512,
+    A_TYPE_OVERRIDE  = 1024 /// being explicit with this is important, because we only infer by memory checks otherwise
+};                          /// its not that its annoying to write its just more important for the override to be a real member with reference
 
 enum A_TRAIT {
     A_TRAIT_PRIMITIVE = 1,
@@ -207,10 +203,12 @@ enum A_TRAIT {
 #define set(I,...)                  ftableI(I) -> set(I, ##__VA_ARGS__)
 #define get(I,...)                  ftableI(I) -> get(I, ##__VA_ARGS__)
 #define push(I,...)                 ftableI(I) -> push(I, ##__VA_ARGS__)
+#define clear(I,...)                ftableI(I) -> clear(I, ##__VA_ARGS__)
 #define pop(I,...)                  ftableI(I) -> pop(I, ##__VA_ARGS__)
 #define peek(I,...)                 ftableI(I) -> peek(I, ##__VA_ARGS__)
 #define read(I,...)                 ftableI(I) -> read(I, ##__VA_ARGS__)
 #define write(I,...)                ftableI(I) -> write(I, ##__VA_ARGS__)
+#define close(I,...)                ftableI(I) -> close(I, ##__VA_ARGS__)
 #define concat(I,...)               ftableI(I) -> concat(I, ##__VA_ARGS__)
 #define mid(I,...)                  ftableI(I) -> mid(I, ##__VA_ARGS__)
 #define process(I,...)              ftableI(I) -> process(I, ##__VA_ARGS__)
@@ -247,6 +245,7 @@ enum A_TRAIT {
 #define make_dir(I,...)             ftableI(I) -> make_dir(I, ##__VA_ARGS__)
 #define cstring(I)                  cast(I, cstr)
 #define stem(I,...)                 ftableI(I) -> stem(I, ##__VA_ARGS__)
+#define ext(I,...)                  ftableI(I) -> ext(I, ##__VA_ARGS__)
 #define element(I,...)              ftableI(I) -> element(I, ##__VA_ARGS__)
 #define resolve(I,...)              ftableI(I) -> resolve(I, ##__VA_ARGS__)
 #define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
@@ -511,7 +510,9 @@ enum A_TRAIT {
 #define i_override_method_INTERN(X, N)
 #define i_override_method_ISIZE(X, N)
 #define i_override_method_DECL(X, N)
-#define i_override_method_INIT(X, N)                    X##_type . N = & X## _ ## N;
+#define i_override_method_INIT(X, N) \
+    X##_type . N = & X## _ ## N;
+
 #define i_override_method_PROTO(X, N)
 #define i_override_method_METHOD(X, N)
 
@@ -541,6 +542,8 @@ enum A_TRAIT {
 
 #define i_override(X, Y, OT, N)                        i_override_##OT##_##Y(X, N)
 
+#include <A-type>
+
 typedef struct method_t {
     struct array*   atypes;
     struct A_f*     rtype;
@@ -549,34 +552,16 @@ typedef struct method_t {
     void*           ffi_args; /// ffi-data types for args
 } method_t;
 
-typedef struct prop_t {
-    void*           address;
-} prop_t;
-
-typedef struct type_member_t {
-    char*           name;
-    AType           type;
-    num             offset;
-    enum A_TYPE     member_type;
-    int             operator_type;
-    bool            required;
-    meta_t          args;
-    union {
-        method_t*   method;
-        prop_t*     prop;
-    };
-} type_member_t;
-
 #define A_f_members(B) \
     struct B ## _f* parent_type; \
     char*           name; \
-    num             size; \
-    num             member_count; \
+    int             size; \
+    int             member_count; \
     type_member_t*  members; \
-    u64             traits; \
+    int             traits; \
     AType           src; \
+    void*           arb; \
     meta_t          meta; \
-    void*           arb;
 
 #define intern(X)  X##_schema(X, INTERN)
 /// this gives you a kind of design-time check for intern access,  i suppose..
@@ -591,41 +576,47 @@ typedef struct type_member_t {
         X##_intern \
         struct X##_f* f; \
     } *X; \
-    _Pragma("pack(pop)") \
     X##_schema (X, DECL) \
     typedef struct X##_f { \
         A_f_members(A) \
         X##_schema (X, METHOD) \
     } X##_f; \
+    _Pragma("pack(pop)") \
     extern X##_f X##_type;
 
 
 #define declare_meta(AA, SRC ) \
     typedef struct SRC* AA; \
+    _Pragma("pack(push, 1)") \
     typedef struct AA##_f { \
         A_f_members(SRC) \
         A_schema     (A,  METHOD) \
         SRC##_schema (AA, METHOD) \
     } AA##_f, *AA##_ft; \
+    _Pragma("pack(pop)") \
     extern AA##_f AA##_type;
 
 
 #define declare_abstract( X ) \
     typedef struct X *X; \
+    _Pragma("pack(push, 1)") \
     typedef struct X##_f { \
         A_f_members(A) \
         A_schema(A, METHOD) \
         X##_schema(X, METHOD) \
     } X##_f, *X##_ft; \
+    _Pragma("pack(pop)") \
     extern X##_f X##_type;
 
 
 #define declare_primitive( X, Y ) \
+    _Pragma("pack(push, 1)") \
     typedef struct X##_f { \
         A_f_members(A) \
         A_schema(A, METHOD) \
         X##_schema(X, METHOD) \
     } X##_f, *X##_ft; \
+    _Pragma("pack(pop)") \
     extern X##_f X##_type;
 
 
@@ -635,10 +626,12 @@ typedef struct type_member_t {
     typedef enum E { \
         E##_schema(E, DECL) \
     } E; \
+    _Pragma("pack(push, 1)") \
     typedef struct E##_f { \
         A_f_members(A) \
         A_schema   (E, METHOD) \
     } E##_f, *E##_ft; \
+    _Pragma("pack(pop)") \
     enum { E##_ENUM_COUNT = ENUM_COUNT(E##_schema(E, COUNT)) }; \
     extern E##_f   E##_type;
 
@@ -667,6 +660,7 @@ void        A_lazy_init(global_init_fn fn);
             E##_type.name     = #E; \
             E##_type.size     = sizeof(enum E); \
             E##_type.members  = members; \
+            E##_type.member_count = 0; \
             E##_type.traits   = A_TRAIT_ENUM; \
             E##_type.arb      = primitive_ffi_arb(typeid(i32)); \
             E##_schema( E, IMPL ); \
@@ -685,15 +679,14 @@ void        A_lazy_init(global_init_fn fn);
         AA##_schema (AA, INST) AA##_intern \
         struct AA##_f* f; \
     } *AA; \
-    _Pragma("pack(pop)") \
     AA##_schema (AA, DECL) \
     typedef struct AA##_f { \
         A_f_members(BB) \
         A_schema(A, METHOD) \
         AA##_schema (AA, METHOD) \
     } AA##_f, *AA##_ft; \
-    extern AA##_f   AA##_type;
-
+    extern AA##_f   AA##_type; \
+    _Pragma("pack(pop)")
 
 /// expand structure definitions for polymorphic types
 /// usage: declare_mod(Top, Middle, Base);
@@ -707,14 +700,15 @@ void        A_lazy_init(global_init_fn fn);
         _COMBINE(dm_f_, N)(__VA_ARGS__) \
         struct AA##_f* f; \
     } *AA; \
-    _Pragma("pack(pop)") \
     AA##_schema (AA, DECL) \
     typedef struct AA##_f { \
         A_f_members(BB) \
         A_schema(A, METHOD) \
         _COMBINE(dm_i_, N)(__VA_ARGS__) \
     } AA##_f, *AA##_ft; \
-    extern AA##_f   AA##_type;
+    extern AA##_f   AA##_type; \
+    _Pragma("pack(pop)")
+
 #define dm_count_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, N, ...) N
 #define dm_count(...) dm_count_IMPL(__VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 
@@ -769,6 +763,7 @@ void        A_lazy_init(global_init_fn fn);
             A0## _type.parent_type = &A1##_type; \
             A0## _type.name     = #A0;       \
             A0## _type.members  = members;   \
+            A0## _type.member_count = 0; \
             A0## _type.size     = TYPE_SZ;   \
             A0## _type.traits   = TRAIT;     \
             A0##_type.arb       = FFI;       \
@@ -820,6 +815,7 @@ void* primitive_ffi_arb(AType);
             ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
             ALIAS_TYPE##_type.meta     = (meta_t) { emit_types(__VA_ARGS__) }; \
             ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
+            A_push_type(&ALIAS_TYPE##_type);         \
             return true; \
         } \
     }
@@ -839,6 +835,7 @@ void* primitive_ffi_arb(AType);
             ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
             ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
             ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
+            A_push_type(&ALIAS_TYPE##_type);         \
             return true; \
         } \
     }
@@ -867,11 +864,13 @@ typedef struct string* string;
 #endif
 declare_base(A)
 
+_Pragma("pack(push, 1)") \
 typedef struct object_f {
     A_f_members(A)
     A_schema   (A,  METHOD)
 } object_f, *object_ft;
 extern object_f object_type;
+ _Pragma("pack(pop)") \
 
 #define typeid(X) ((AType)&X##_type)
 
@@ -1014,6 +1013,24 @@ typedef struct string* string;
     enum_value(X,Y, _mod_assign)
 declare_enum(OPType)
 
+typedef struct path* path;
+
+/// .m file is everything a module [body] needs without looking like what they ate onboard the Nebuchadnezzar
+#define file_schema(X,Y) \
+    i_method(X,Y, public,   bool, write, object) \
+    i_method(X,Y, public,   bool, read,  AType) \
+    i_method(X,Y, public,   none, close) \
+    i_prop(X,Y,   required, path, src) \
+    i_prop(X,Y,   public,   bool, read) \
+    i_prop(X,Y,   public,   bool, write) \
+    i_prop(X,Y,   intern,   int, f) \
+    i_override(X,Y, method, init) \
+    i_override(X,Y, method, destructor)
+#ifndef file_intern
+#define file_intern
+#endif
+declare_class(file)
+
 typedef struct array* array;
 #define path_schema(X,Y) \
     i_prop      (X,Y, public, cstr,   chars) \
@@ -1023,6 +1040,7 @@ typedef struct array* array;
     i_method    (X,Y, public, bool,   is_dir) \
     i_method    (X,Y, public, path,   directory) \
     i_method    (X,Y, public, string, stem) \
+    i_method    (X,Y, public, string, ext) \
     i_method    (X,Y, public, string, filename) \
     i_method    (X,Y, public, path,   absolute) \
     i_method    (X,Y, public, path,   parent) \
@@ -1061,7 +1079,7 @@ declare_class(vector)
     i_prop           (X,Y, required, object, target) \
     i_prop           (X,Y, public,   object, ctx) \
     i_prop           (X,Y, required, handle, addr) \
-    i_method         (X,Y, public,   object, invoke, object)
+    i_method         (X,Y, public,   A, invoke, A)
 #ifndef subprocedure_intern
 #define subprocedure_intern
 #endif
@@ -1083,6 +1101,7 @@ declare_class(subprocedure)
     i_method         (X,Y, public, none,    remove_weak,    num) \
     i_method         (X,Y, public, none,    push,           A) \
     i_method         (X,Y, public, none,    push_weak,      A) \
+    i_method         (X,Y, public, none,    clear) \
     i_method         (X,Y, public, none,    concat,         array) \
     i_method         (X,Y, public, A,       get,            num) \
     i_method         (X,Y, public, num,     count) \
@@ -1342,6 +1361,7 @@ A           A_verify(A instance, AType type);
 void        A_module_init(bool(*fn)());
 void        debug();
 void        br();
+bool        A_reflect(symbol location);
 
 bool      is_meta(A a);
 bool      is_meta_compatible(A a, A b);

@@ -7,58 +7,61 @@
                 SRC_DIR="$2"
                 shift 2
                 ;;
-            --deps)
-                DEPS="$2"
-                shift 2
-                ;;
-            --debug)
-                DEBUG_FILE="$2"
+            --i)
+                IMPORT="$2"
                 shift 2
                 ;;
             *)
                 BUILD_ROOT="$1"
-                echo "got build root set to $1"
                 shift
                 ;;
         esac
     done
 
-    if [ -z "$DEPS" ]; then
-        echo '--deps required argument'
+    if [ -z "$IMPORT" ]; then
+        echo '--i required argument (import file)'
         exit
     else
         projects=()  # Initialize an empty array
-        while IFS= read -r line || [ -n "$line" ]; do
-            projects+=("$line")
-            echo "$line"
-        done < "$DEPS"
+        found_deps=1
+        ws_count=0
+        current_line=""
+
+        while IFS= read -r raw_line || [ -n "$raw_line" ]; do
+            line=$(echo "$raw_line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            if [ -z "$line" ]; then
+                continue
+            fi
+            if [[ $line =~ ^[[:alnum:]][[:alnum:]_-]*: ]]; then
+                found_deps=0
+            fi
+            if [[ $found_deps -eq 1 ]]; then
+                ws=$(echo "$raw_line" | expand -t 4 | sed -E 's/^( *).*/\1/' | wc -c)
+                if [ $ws -le 1 ]; then
+                    if [ ! -z "$current_line" ]; then
+                        projects+=("$current_line")
+                        echo "import: $current_line"
+                    fi
+                    current_line="$line"
+                elif [ $ws -ge 2 ]; then
+                    current_line="$current_line $line"
+                fi
+                
+            fi
+        done < $IMPORT
+
+        # Add the last current_line if it exists
+        if [ ! -z "$current_line" ]; then
+            projects+=("$current_line")
+            echo "import: $current_line"
+        fi
     fi
 
     SRC_DIR="${SRC_DIR:-$SRC}"
     BUILD_ROOT="${BUILD_ROOT:-silver-import}"
 
-    echo "BUILD_ROOT = $BUILD_ROOT"
-
-    #projects=(
-    #    "A https://github.com/ar-visions/A.git main"
-    #    "llvm https://github.com/llvm/llvm-project 3b5b5c1 -S ../llvm -G Ninja -DLLVM_ENABLE_ASSERTIONS=ON   -DLLVM_ENABLE_PROJECTS='clang;lld' -DLLVM_ENABLE_FFI=ON -DLLVM_ENABLE_RTTI=OFF -DLLVM_USE_LINKER=gold -DLLVM_BINUTILS_INCDIR=/usr/include -DCLANG_DEFAULT_CXX_STDLIB=libstdc++ -DCLANG_DEFAULT_PIE_ON_LINUX=ON -DCLANG_CONFIG_FILE_SYSTEM_DIR=/etc/clang -DLLVM_ENABLE_LIBCXX=OFF -DBUILD_SHARED_LIBS=ON -DLLVM_BUILD_LLVM_DYLIB=OFF -DLLVM_LINK_LLVM_DYLIB=OFF -DLLVM_TARGETS_TO_BUILD='host;X86'"
-    #)
-
-    # debugging switch: --debug file.txt     [contents: project1,another]  would debug those two.
-    # the idea here is DEBUG_PROJECTS will only be set when it hasnt been set yet.
-    # so we set configuration at top level
-
-    # other projects may want their own debug info set, 
-    # which may need to append into this one, but thats 
-    # only when there is a conflict between two where 
-    # top wants release and middle wants debug
-
-    if [ -z "$DEBUG_PROJECTS" ]; then
-        if [ -f "$DEBUG_FILE" ]; then
-            export DEBUG_PROJECTS=$(cat $DEBUG_FILE)
-        else
-            export DEBUG_PROJECTS=","
-        fi
+    if [ -z "$DEB" ]; then
+        DEB=","
     fi
 
     SCRIPT_DIR=$(dirname "$(realpath "$0")")
@@ -75,22 +78,23 @@
         COMMIT=$(      echo "$project" | cut -d ' ' -f 3)
         BUILD_CONFIG=$(echo "$project" | cut -d ' ' -f 4-)
         TARGET_DIR="${PROJECT_NAME}"
-
-        echo " -----> build config = $BUILD_CONFIG"
-
+        A_MAKE="0" # A-type projects use Make, but with a build-folder and no configuration; DEBUG=1 to enable debugging
 
         # set build folder based on release/debug
-        if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
-            CMAKE_FOLDER="silver-debug"
+        if [[ ",$DEB," == *",$PROJECT_NAME,"* ]]; then
+            BUILD_FOLDER="silver-debug"
         else
-            CMAKE_FOLDER="silver-build"
+            BUILD_FOLDER="silver-build"
         fi
         
         # Check if --src directory and project exist, then symlink
         if [ -n "$SRC_DIR" ] && [ -d "$SRC_DIR/$TARGET_DIR" ]; then
-            rm -rf "$TARGET_DIR"
-            echo "symlinking $TARGET_DIR to $SRC_DIR/$TARGET_DIR..."
-            ln -s "$SRC_DIR/$TARGET_DIR" "$TARGET_DIR" || exit 1
+            SYMLINK_TARGET=$(readlink "$TARGET_DIR")
+            if [ "$SYMLINK_TARGET" != "$SRC_DIR/$TARGET_DIR" ]; then
+                rm -rf "$TARGET_DIR"
+                echo "symlinking $TARGET_DIR to $SRC_DIR/$TARGET_DIR..."
+                ln -s "$SRC_DIR/$TARGET_DIR" "$TARGET_DIR" || exit 1
+            fi
             cd "$TARGET_DIR"
         else
             if [ -d "$TARGET_DIR" ]; then
@@ -101,7 +105,7 @@
                     git pull || { echo "git pull failed, exiting." >&2; exit 1; }
                     PULL_HASH_1=$(git rev-parse HEAD)
                     if [ "$PULL_HASH_0" != "$PULL_HASH_1" ]; then
-                        rm -f "$CMAKE_FOLDER/silver-token" || { echo "silver-token failed to rm" >&2; exit 1; }
+                        rm -f "$BUILD_FOLDER/silver-token" || { echo "silver-token failed to rm" >&2; exit 1; }
                     fi
                 fi
             else
@@ -132,7 +136,7 @@
         # or if there is "-S " in BUILD_CONFIG
         if [ -f "CMakeLists.txt" ] || [[ "$BUILD_CONFIG" == *-S* ]]; then
             cmake="1"
-            if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
+            if [[ ",$DEB," == *",$PROJECT_NAME,"* ]]; then
                 echo "selecting DEBUG for $PROJECT_NAME"
                 BUILD_TYPE="-DCMAKE_BUILD_TYPE=Debug"
             else
@@ -141,23 +145,31 @@
             fi
         else
             cmake=""
-            if [[ ",$DEBUG_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
-                BUILD_TYPE="--enable-debug"
+            if [ -f "configure.ac" ] || [ -f "configure.in" ] || [ -f "configure" ]; then
+                if [[ ",$DEB," == *",$PROJECT_NAME,"* ]]; then
+                    BUILD_TYPE="--enable-debug"
+                else
+                    BUILD_TYPE=""
+                fi
             else
-                BUILD_TYPE=""
+                A_MAKE="1"
+                BUILD_TYPE="-g2"
             fi
         fi
 
-        mkdir -p $CMAKE_FOLDER
-        cd $CMAKE_FOLDER
+        mkdir -p $BUILD_FOLDER
+        cd $BUILD_FOLDER
 
         if [ "$REBUILD" == "all" ] || [ "$REBUILD" == "$PROJECT_NAME" ]; then
             echo "rebuilding ${TARGET_DIR}"
             if [ -n "$cmake" ]; then
                 cmake --build . --target clean
+            elif [ "$A_MAKE" = "1" ]; then
+                make -f ../Makefile clean
             else
                 make clean
             fi
+
             rm -rf silver-token
         fi
 
@@ -172,18 +184,25 @@
                 fi
                 echo '[import.sh]' cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
                 cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
+            elif [ "$A_MAKE" = "1" ]; then
+                echo "$PROJECT_NAME: simple Makefile [ no configuration needed ]"
             else
-                if [ ! -f "../configure" ]; then
-                    echo "running autoreconf -i in $PROJECT_NAME ($cmake)"
-                    autoupdate ..
-                    autoreconf -i ..
-                fi
-                if [ ! -f "../configure" ]; then
-                    echo "configure script not available after running autoreconf -i"
+                if [ -f "../configure.ac" ]; then
+                    if [ ! -f "../configure" ]; then
+                        echo "running autoreconf -i in $PROJECT_NAME ($cmake)"
+                        autoupdate ..
+                        autoreconf -i ..
+                    fi
+                    if [ ! -f "../configure" ]; then
+                        echo "configure script not available after running autoreconf -i"
+                        exit 1
+                    fi
+                    echo ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
+                    ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
+                else
+                    echo "error: no configure.ac found for $PROJECT_NAME"
                     exit 1
                 fi
-                echo ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
-                ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
             fi
 
             # works for both cmake and configure
@@ -201,9 +220,11 @@
             fi
 
             # build
-            echo "building $TARGET_DIR with -j$j in $CMAKE_FOLDER"
+            echo "building $TARGET_DIR with -j$j in $BUILD_FOLDER"
             if [ -n "$cmake" ]; then
                 cmake --build . -- -j$j
+            elif [ "$A_MAKE" = "1" ]; then
+                make -f ../Makefile
             else
                 make
             fi
@@ -216,6 +237,8 @@
             echo "installing ${TARGET_DIR}"
             if [ -n "$cmake" ]; then
                 cmake --install .
+            elif [ "$A_MAKE" = "1" ]; then
+                make -f ../Makefile install
             else
                 make install
             fi
@@ -225,7 +248,7 @@
             fi
 
             echo "installed ${TARGET_DIR}"
-            echo "im a token" >> silver-token  # only create this if all steps succeed
+            echo "im-a-token" >> silver-token  # only create this if all steps succeed
         fi
         cd ../../
     done

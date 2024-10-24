@@ -35,7 +35,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../A/silver-debug/A-reflect",
             "args": [
-                "/home/kalen/src/silver-import/checkout/A/silver-debug/libA.so"
+                
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../A/silver-debug",

@@ -378,7 +378,7 @@ typedef bool(*global_init_fn)();
 #define   i_operator_public_DECL(X, R, N, ARG)
 #define   i_operator_public_INIT(X, R, N, ARG) \
     X##_type  . operator_##N = & X## _operator_ ## N; \
-    X##_type.members[X##_type.member_count].name    = stringify(combine_tokens(operator_, N)); \
+    X##_type.members[X##_type.member_count].name    = stringify(operator_##N); \
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X, ARG) }; \
     X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, operator_##N); \
@@ -403,7 +403,7 @@ typedef bool(*global_init_fn)();
 #define   i_cast_public_DECL(X, R)
 #define   i_cast_public_INIT(X, R) \
     X##_type.cast_##R = & X##_cast_##R; \
-    X##_type.members[X##_type.member_count].name    = stringify(combine_tokens(cast_, R)); \
+    X##_type.members[X##_type.member_count].name    = stringify(cast_##R); \
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X) }; \
     X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, cast_##R); \
@@ -746,7 +746,6 @@ int A_total_types_len();
             A0## _type.traits   = TRAIT;     \
             A0##_type.arb       = FFI;       \
             A0##_schema( A0, INIT )          \
-            printf("registering class: %s\n", #A0);     \
             A_push_type(&A0##_type);         \
             return true;                     \
         }                                    \
@@ -997,16 +996,19 @@ typedef struct path* path;
 /// .m file is everything a module [body] needs without looking like what they ate onboard the Nebuchadnezzar
 #define file_schema(X,Y) \
     i_method(X,Y, public,   bool, write, object) \
-    i_method(X,Y, public,   bool, read,  AType) \
+    i_method(X,Y, public,   object, read,  AType) \
     i_method(X,Y, public,   none, close) \
     i_prop(X,Y,   required, path, src) \
     i_prop(X,Y,   public,   bool, read) \
     i_prop(X,Y,   public,   bool, write) \
-    i_prop(X,Y,   intern,   int, f) \
+    i_prop(X,Y,   public,   num,  size) \
+    i_prop(X,Y,   public,   num,  location) \
+    i_prop(X,Y,   public,   handle, file) \
     i_override(X,Y, method, init) \
-    i_override(X,Y, method, destructor)
+    i_override(X,Y, method, destructor) \
+    i_override(X,Y, cast,   bool)
 #ifndef file_intern
-#define file_intern
+#define file_intern isize(file)
 #endif
 declare_class(file)
 
@@ -1164,7 +1166,7 @@ declare_enum(level)
     i_override  (X,Y, cast,    string) \
     i_override  (X,Y, cast,    bool)
 #ifndef map_intern
-#define map_intern
+#define map_intern  isize(map)
 #endif
 declare_mod(map, list)
 
@@ -1175,7 +1177,7 @@ declare_mod(map, list)
     i_method    (X,Y, public, A,         call, array) \
     i_override  (X,Y, method,    hash)
 #ifndef fn_intern
-#define fn_intern
+#define fn_intern isize(fn)
 #endif
 declare_class(fn)
 
@@ -1281,6 +1283,7 @@ i32         A_enum_value(AType type, cstr cs);
 #define     estr(E,I) A_enum_string(typeid(E), I)
 #define     eval(E,S) A_enum_value (typeid(E), S)
 
+bool        isname(char n);
 A           A_new(AType type);
 A           A_construct(AType type, int n_args, ...);
 A           A_initialize(A a); /// called after 'construction' ... this is so we do something generic in init, and support named args

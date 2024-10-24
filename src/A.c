@@ -1,6 +1,7 @@
 #define       A_intern  intern(A)
 #define    item_intern  intern(item)
 #define    path_intern  intern(path)
+#define    file_intern  intern(file)
 #define  vector_intern  intern(vector)
 #define   array_intern  intern(array)
 #define      AF_intern  intern(AF)
@@ -1602,6 +1603,11 @@ AF AF_fetch(num index) {
         return null;
 }
 
+bool isname(char n) {
+    return (n >= 'a' && n <= 'z') || (n >= 'A' && n <= 'Z') || (n == '_');
+}
+
+
 u64 fn_hash(fn f) {
     return (u64)f->method->address;
 }
@@ -1619,38 +1625,52 @@ void file_init(file f) {
     verify(!(f->read && f->write), "cannot open for both read and write");
     cstr src = f->src->chars;
     if (f->read || f->write)
-        f->f = fopen(src, f->read ? "rb" : "wb");
+        f->file = fopen(src, f->read ? "rb" : "wb");
 }
 
+bool file_cast_bool(file f) {
+    return f->file != null;
+}
 
 bool file_write(file f, object o) {
     AType type = isa(o);
     if (type == typeid(string)) {
         u16 nbytes = ((string)o)->len;
         u16 le_nbytes = htole16(nbytes);
-        fwrite(&le_nbytes, 2, 1, f->f);
-        return fwrite(((string)o)->chars, 1, nbytes, f->f) == nbytes;
+        fwrite(&le_nbytes, 2, 1, f->file);
+        f->size += (num)nbytes;
+        return fwrite(((string)o)->chars, 1, nbytes, f->file) == nbytes;
     }
+    sz size = isa(o)->size;
+    f->size += (num)size;
     verify(type->traits & A_TRAIT_PRIMITIVE, "not a primitive type");
-    return fwrite(o, isa(o)->size, 1, f->f) == 1;
+    return fwrite(o, size, 1, f->file) == 1;
 }
 
-bool file_read(file f, AType type) {
-    object o = A_alloc(type, 1, true);
+object file_read(file f, AType type) {
     if (type == typeid(string)) {
         u16 nbytes;
-        verify(fread(&nbytes, 2, 1, f->f) == 1, "failed to read byte count");
+        verify(fread(&nbytes, 2, 1, f->file) == 1, "failed to read byte count");
         nbytes = le16toh(nbytes);
-        return fread(o, 1, nbytes, f->f) == nbytes; 
+        f->location += nbytes;
+        char bytes[65536];
+        verify(nbytes < 1024, "overflow");
+        verify(fread(bytes, 1, nbytes, f->file) == nbytes, "read failure");
+        bytes[nbytes] = 0;
+        return str(bytes); 
     }
+    object o = A_alloc(type, 1, true);
+    sz size = isa(o)->size;
+    f->location += size;
     verify(type->traits & A_TRAIT_PRIMITIVE, "not a primitive type");
-    return fread(o, isa(o)->size, 1, f->f) == 1; 
+    bool success = fread(o, size, 1, f->file) == 1;
+    return success ? o : null;
 }
 
 void file_close(file f) {
-    if (f->f) {
-        fclose(f->f);
-        f->f = null;
+    if (f->file) {
+        fclose(f->file);
+        f->file = null;
     }
 }
 

@@ -50,7 +50,8 @@ f64     strtod (symbol str, cstr* endptr);
 int     system(symbol command);
 int     setenv(symbol key, symbol value, int);
 cstr    getenv(symbol key);
-
+i32       rand();
+void     srand(u32 seed);
 
 typedef bool(*global_init_fn)();
 
@@ -180,6 +181,7 @@ typedef bool(*global_init_fn)();
 #define peek(I,...)                 ftableI(I) -> peek(I, ##__VA_ARGS__)
 #define read(I,...)                 ftableI(I) -> read(I, ##__VA_ARGS__)
 #define copy(I,...)                 ftableI(I) -> copy(I, ##__VA_ARGS__)
+#define move(I,...)                 ftableI(I) -> move(I, ##__VA_ARGS__)
 #define write(I,...)                ftableI(I) -> write(I, ##__VA_ARGS__)
 #define close(I,...)                ftableI(I) -> close(I, ##__VA_ARGS__)
 #define concat(I,...)               ftableI(I) -> concat(I, ##__VA_ARGS__)
@@ -995,14 +997,14 @@ typedef struct path* path;
 
 /// .m file is everything a module [body] needs without looking like what they ate onboard the Nebuchadnezzar
 #define file_schema(X,Y) \
-    i_method(X,Y, public,   bool, write, object) \
+    i_method(X,Y, public,   bool,   write, object) \
     i_method(X,Y, public,   object, read,  AType) \
-    i_method(X,Y, public,   none, close) \
-    i_prop(X,Y,   required, path, src) \
-    i_prop(X,Y,   public,   bool, read) \
-    i_prop(X,Y,   public,   bool, write) \
-    i_prop(X,Y,   public,   num,  size) \
-    i_prop(X,Y,   public,   num,  location) \
+    i_method(X,Y, public,   none,   close) \
+    i_prop(X,Y,   public,   path,   src) \
+    i_prop(X,Y,   public,   bool,   read) \
+    i_prop(X,Y,   public,   bool,   write) \
+    i_prop(X,Y,   public,   num,    size) \
+    i_prop(X,Y,   public,   num,    location) \
     i_prop(X,Y,   public,   handle, file) \
     i_override(X,Y, method, init) \
     i_override(X,Y, method, destructor) \
@@ -1028,6 +1030,7 @@ typedef struct array* array;
     i_method    (X,Y, public, A,      read, AType) \
     i_method    (X,Y, public, path,   change_ext, cstr) \
     i_method    (X,Y, public, array,  ls, string, bool) \
+    i_method    (X,Y, public, bool,   move, path) \
     s_method    (X,Y, public, path,   cwd, sz) \
     i_ctr       (X,Y, public, string) \
     i_cast      (X,Y, public, cstr) \

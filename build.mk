@@ -67,17 +67,17 @@ import:
 
 # install targets and run reflect with integrity check
 install: all
-	@install -d $(SILVER_IMPORT)/lib
-	@install -d $(SILVER_IMPORT)/include
-	@install -d $(SILVER_IMPORT)/bin
-	@install -m 644 $(LIB_TARGET) 			  $(SILVER_IMPORT)/lib/
-	@install -m 644 $(SRC_DIR)/$(PROJECT_NAME) $(SILVER_IMPORT)/include/
+	install -d $(SILVER_IMPORT)/lib
+	install -d $(SILVER_IMPORT)/include
+	install -d $(SILVER_IMPORT)/bin
+	install -m 644 $(LIB_TARGET) 			  $(SILVER_IMPORT)/lib/
+	install -m 644 $(SRC_DIR)/$(PROJECT_NAME) $(SILVER_IMPORT)/include/
 	@if [ "$(PROJECT_NAME)" = "A" ]; then \
 		install -m 644 $(SRC_DIR)/$(PROJECT_NAME)-type $(SILVER_IMPORT)/include/; \
 	fi
 	@cd $(BUILD_DIR) && ./$(PROJECT_NAME)-reflect || true
-	@if [ -f $(BUILD_DIR)/lib$(PROJECT_NAME).m ]; then \
-		install -m 644 $(BUILD_DIR)/lib/lib$(PROJECT_NAME).m $(SILVER_IMPORT)/lib/; \
+	if [ -f $(BUILD_DIR)/lib$(PROJECT_NAME).m ]; then \
+		install -m 644 $(BUILD_DIR)/lib$(PROJECT_NAME).m $(SILVER_IMPORT)/lib/; \
 	fi
 
 # clean build artifacts

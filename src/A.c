@@ -1623,9 +1623,26 @@ bool create_symlink(path target, path link) {
 
 void file_init(file f) {
     verify(!(f->read && f->write), "cannot open for both read and write");
-    cstr src = f->src->chars;
-    if (f->read || f->write)
+    cstr src = f->src ? f->src->chars : null;
+    if (f->read || f->write) {
+        verify (src || f->write, "can only create temporary files for write");
+
+        if (!src) {
+            i64    h      = 0;
+            bool   exists = false;
+            string r      = null;
+            path   p      = null;
+            do {
+                h   = (i64)rand() << 32 | (i64)rand();
+                r   = format("/tmp/f%p", (void*)h);
+                src = r->chars;
+                p   = new(path, chars, r);
+            } while (exists(p));
+        }
         f->file = fopen(src, f->read ? "rb" : "wb");
+        if (!f->src)
+             f->src = new(path, chars, src);
+    }
 }
 
 bool file_cast_bool(file f) {
@@ -1710,6 +1727,10 @@ string path_cast_string(path a) {
 path path_with_cereal(path a, cereal cs) {
     a->chars = copy_cstr((cstr)cs);
     return a;
+}
+
+bool path_move(path a, path b) {
+    return rename(a->chars, b->chars) == 0;
 }
 
 bool path_make_dir(path a) {

@@ -49,6 +49,25 @@
             }
         },
         {
+            "name": "ether-reflect",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../ether/silver-debug/ether-reflect",
+            "args": [
+                
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../ether/silver-debug",
+            "environment": [
+            ],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
             "name": "silver",
             "type": "cppdbg",
             "request": "launch",

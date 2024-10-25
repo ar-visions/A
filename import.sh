@@ -53,7 +53,7 @@
         # Add the last current_line if it exists
         if [ ! -z "$current_line" ]; then
             projects+=("$current_line")
-            echo "import: $current_line"
+            #echo "import: $current_line"
         fi
     fi
 

@@ -36,7 +36,7 @@
             "label": "build-silver",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../silver/silver-build"
+                "cwd": "${workspaceFolder}/../silver/silver-debug"
             },
             "group": {
                 "kind": "build",
@@ -54,10 +54,10 @@
                 "command": "msbuild silver.sln /t:silver"
             },
             "osx": {
-                "command": "make -j8"
+                "command": "make -f ../Makefile -j8"
             },
             "linux": {
-                "command": "make -j8",
+                "command": "make -f ../Makefile -j8",
                 "options":{
                     "env":{"VERBOSE":"1"}
                 }
@@ -82,10 +82,10 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make install -j8"
+                "command": "make -f ../Makefile install -j8"
             },
             "linux": {
-                "command": "make install -j8",
+                "command": "make -f ../Makefile install -j8",
                 "options":{
                     "env":{"VERBOSE":"1"}
                 }
@@ -110,13 +110,13 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make install -j8",
+                "command": "make -f ../Makefile install -j8",
                 "options":{
                     "env":{"VERBOSE":"1"}
                 }
             },
             "linux": {
-                "command": "make install -j8",
+                "command": "make -f ../Makefile install -j8",
                 "options":{
                     "env":{"VERBOSE":"1"}
                 }

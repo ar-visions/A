@@ -71,17 +71,13 @@
             "name": "silver",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../silver/silver-build/silver",
+            "program": "${workspaceFolder}/../silver/silver-debug/silver",
             "args": [
                 "WGPU.si",
                 "--install", "/home/kalen/src/silver-import"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../silver/silver-build",
-            "environment": [
-                {"name": "LD_LIBRARY_PATH",
-                 "value": "/home/kalen/src/llvm-18/silver-build/lib/"}
-            ],
+            "cwd": "${workspaceFolder}/../silver/silver-debug",
             "MIMode": "gdb",
             "presentation": {
                 "hidden": false,
@@ -93,13 +89,13 @@
             "name": "ether",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../ether/silver-build/ether",
+            "program": "${workspaceFolder}/../ether/silver-debug/ether",
             "args": [
                 "--module",  "WGPU.si",
                 "--install", "/home/kalen/src/silver-import"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../silver/silver-build",
+            "cwd": "${workspaceFolder}/../silver/silver-debug",
             "environment": [
             ],
             "MIMode": "gdb",

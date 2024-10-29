@@ -14,6 +14,7 @@ A-type has the exact same schema as silver objects in terms of features
 
 public arguments are introspectable, and intern are only accessible inside the module.  we effectively partition the interns at the end of the struct, so that it may be design-compatible with users.
 
+![A workflow](https://github.com/ar-visions/A/.github/actions/workflows/build.yml/badge.svg)
 
 Orbiter
 an IDE being built with silver (was C++)

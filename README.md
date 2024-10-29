@@ -1,5 +1,7 @@
 # A-type runtime
-A-type C library brings modern object-oriented capabilities to systems programming, offering classes, reflection, and smart memory management while maintaining predictable performance and ABI compatibility. It implements a low-overhead type system that emits reflective information directly into global initializers, minimizing runtime type costs while still providing rich introspection capabilities for public interfaces. The library includes implementations of essential data structures (arrays, hashmaps, strings) alongside a practical approach to encapsulation that cleanly separates public and private interfaces. A-type is suitable for everything from embedded systems to high-performance servers where predictable behavior and efficient resource usage are critical.
+A-type is a C-based object system designed for efficient reflection and robust interface clarity, balancing the flexibility of dynamic languages with the precision of systems programming. Use familiar OOP patterns to C without sacrificing low-level control or ABI stability, enabling powerful runtime control and scalable performance.
+
+A-type is a friendly tool for developers seeking practical object-oriented functionality in C, A-type supports clean, extensible interfaces and introspective capabilities essential for modern systems and application development.
 
 <a href="https://github.com/ar-visions/A/actions/workflows/build.yml">
   <img src="https://github.com/ar-visions/A/actions/workflows/build.yml/badge.svg" alt="A-type build" width="444">

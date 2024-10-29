@@ -1,18 +1,5 @@
 # A-type runtime
-reflective types emitted directly into global initializers.
-no lookups during load, and no meta emitted for intern types
-serializing arguments to methods and expressing them for prototypes.
-
-primitives use a protocol
-for naming that allows them to be defined as prototypes with their types occupying another symbol of *_f (function table) and *_type (data name)
-more compact than string output and doesnt require further processing.
-
-a lazy loading regime is there for insuring ordered initialization.
-
-A-type has the exact same schema as silver objects in terms of features
-(proto, class, mod), intern and public.  as such we will be ABI compatible (there is just the issue of multiple context args in the silver spec)
-
-public arguments are introspectable, and intern are only accessible inside the module.  we effectively partition the interns at the end of the struct, so that it may be design-compatible with users.
+This pragmatic C library brings modern object-oriented capabilities to systems programming, offering classes, reflection, and smart memory management while maintaining predictable performance and ABI compatibility. It implements a low-overhead type system that emits reflective information directly into global initializers, minimizing runtime type costs while still providing rich introspection capabilities for public interfaces. The library includes production-ready implementations of essential data structures (arrays, hashmaps, strings) alongside a practical approach to encapsulation that cleanly separates public and private interfaces. All of this is achieved with careful attention to memory layout and initialization order, making it suitable for everything from embedded systems to high-performance servers where predictable behavior and efficient resource usage are critical.
 
 <a href="https://github.com/ar-visions/A/actions/workflows/build.yml">
   <img src="https://github.com/ar-visions/A/actions/workflows/build.yml/badge.svg" alt="A-type build" width="444">

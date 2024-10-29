@@ -1,5 +1,5 @@
 # A-type runtime
-A-type is a C-based object system designed for clear maintainable code that is reflective and adaptive. Use familiar OOP patterns in C with less boilerplate.  Far more leniant than most Object-Oriented languages, so less code can do more.  Reflective API and meta types allow for sophisticated controls in compact code.  The result of that is scalable performance.  It's javascript meeting C and python in self expanding fashion.
+A-type is a C-based object system designed for clear maintainable code that is reflective and adaptive. Use familiar OOP patterns in C with less boilerplate.  Far more leniant than most Object-Oriented languages. It's in C, and here less code can do more. Just add a few macros. Reflective members of classes, enums methods and props enable for sophisticated control in compact design. The result of that is scalable performance you can take to more platforms. It's javascript meeting C and python in self expanding fashion.
 
 <a href="https://github.com/ar-visions/A/actions/workflows/build.yml">
   <img src="https://github.com/ar-visions/A/actions/workflows/build.yml/badge.svg" alt="A-type build" width="444">

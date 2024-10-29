@@ -5,7 +5,7 @@ A-type is a C-based object system designed for efficient reflection and robust i
   <img src="https://github.com/ar-visions/A/actions/workflows/build.yml/badge.svg" alt="A-type build" width="444">
 </a>
 
-```
+```c
 #include <A>
 
 int main(int argc, char **argv) {

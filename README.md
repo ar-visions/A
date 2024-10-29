@@ -14,10 +14,8 @@ A-type has the exact same schema as silver objects in terms of features
 
 public arguments are introspectable, and intern are only accessible inside the module.  we effectively partition the interns at the end of the struct, so that it may be design-compatible with users.
 
-![A-type build](https://github.com/ar-visions/A/actions/workflows/build.yml/badge.svg)
-
 <a href="https://github.com/ar-visions/A/actions/workflows/build.yml">
-  <img src="https://github.com/ar-visions/A/actions/workflows/build.yml/badge.svg" alt="A-type build" width="250">
+  <img src="https://github.com/ar-visions/A/actions/workflows/build.yml/badge.svg" alt="A-type build" width="444">
 </a>
 
 Orbiter

@@ -16,6 +16,10 @@ public arguments are introspectable, and intern are only accessible inside the m
 
 ![A-type build](https://github.com/ar-visions/A/actions/workflows/build.yml/badge.svg)
 
+<a href="https://github.com/ar-visions/A/actions/workflows/build.yml">
+  <img src="https://github.com/ar-visions/A/actions/workflows/build.yml/badge.svg" alt="A-type build" width="250">
+</a>
+
 Orbiter
 an IDE being built with silver (was C++)
 [https://github.com/ar-visions/orbiter.git]

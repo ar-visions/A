@@ -20,7 +20,8 @@
 		},
 		{
 			"path": "../llvm"
-		}
+		},
+		{ "path": "../llvm-main" }
 	],
 	"settings": {
 		"files.associations": {
@@ -191,7 +192,8 @@
 			"print": "c",
 			"stdio.h": "c",
 			"a-type": "cpp",
-			"dlfcn.h": "c"
+			"dlfcn.h": "c",
+			"propagate_const": "c"
 		}
 	}
 }

@@ -1,5 +1,8 @@
 #!/bin/bash
 (
+    # built projects from environment
+    BUILT_PROJECTS="${BUILT_PROJECTS:-}"
+
     # parse args
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -17,6 +20,12 @@
                 ;;
         esac
     done
+
+    print() {
+        if [ "${VERBOSE}" = "1" ]; then
+            echo "$@"
+        fi
+    }
 
     if [ -z "$IMPORT" ]; then
         echo '--i required argument (import file)'
@@ -40,7 +49,7 @@
                 if [ $ws -le 1 ]; then
                     if [ ! -z "$current_line" ]; then
                         projects+=("$current_line")
-                        echo "import: $current_line"
+                        print "import: $current_line"
                     fi
                     current_line="$line"
                 elif [ $ws -ge 2 ]; then
@@ -59,6 +68,11 @@
 
     SRC_DIR="${SRC_DIR:-$SRC}"
     BUILD_ROOT="${BUILD_ROOT:-silver-import}"
+    if [ "${VERBOSE}" = "1" ]; then
+        MFLAGS=""
+    else
+        MFLAGS="-s"
+    fi
 
     if [ -z "$DEB" ]; then
         DEB=","
@@ -74,6 +88,13 @@
     # iterate through projects, cloning and building
     for project in "${projects[@]}"; do
         PROJECT_NAME=$(echo "$project" | cut -d ' ' -f 1)
+
+        # check if project already built during this command stack
+        if [[ ",$BUILT_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
+            print "skipping $PROJECT_NAME - already built"
+            continue
+        fi
+
         REPO_URL=$(    echo "$project" | cut -d ' ' -f 2)
         COMMIT=$(      echo "$project" | cut -d ' ' -f 3)
         BUILD_CONFIG=$(echo "$project" | cut -d ' ' -f 4-)
@@ -137,10 +158,10 @@
         if [ -f "CMakeLists.txt" ] || [[ "$BUILD_CONFIG" == *-S* ]]; then
             cmake="1"
             if [[ ",$DEB," == *",$PROJECT_NAME,"* ]]; then
-                echo "selecting DEBUG for $PROJECT_NAME"
+                print "selecting DEBUG for $PROJECT_NAME"
                 BUILD_TYPE="-DCMAKE_BUILD_TYPE=Debug"
             else
-                echo "selecting RELEASE for $PROJECT_NAME"
+                print "selecting RELEASE for $PROJECT_NAME"
                 BUILD_TYPE="-DCMAKE_BUILD_TYPE=Release"
             fi
         else
@@ -153,7 +174,7 @@
                 fi
             else
                 A_MAKE="1"
-                BUILD_TYPE="-g2"
+                BUILD_TYPE="-g"
             fi
         fi
 
@@ -165,28 +186,30 @@
             if [ -n "$cmake" ]; then
                 cmake --build . --target clean
             elif [ "$A_MAKE" = "1" ]; then
-                make -f ../Makefile clean
+                make $MFLAGS -f ../Makefile clean
             else
                 make clean
             fi
-
             rm -rf silver-token
         fi
 
         # proceed if there is a newer file than silver-token, or no silver-token
-        if [ ! -f "silver-token" ] || find .. -type f -newer "silver-token" | grep -q . ; then
-            #echo cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
+        #if [ ! -f "silver-token" ] || find .. -type f -newer "silver-token" | grep -q . ; then
+        print cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
 
-            if [ -n "$cmake" ]; then
+        if [ -n "$cmake" ]; then
+            if [ ! -f "CMakeCache.txt" ] || [ "$IMPORT" -nt "silver-token" ]; then
                 BUILD_CONFIG="${BUILD_CONFIG% }"
                 if [ -z "$BUILD_CONFIG" ]; then
                     BUILD_CONFIG="-S .."
                 fi
                 echo '[import.sh]' cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
                 cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
-            elif [ "$A_MAKE" = "1" ]; then
-                echo "$PROJECT_NAME: simple Makefile [ no configuration needed ]"
-            else
+            fi
+        elif [ "$A_MAKE" = "1" ]; then
+            print "$PROJECT_NAME: simple Makefile [ no configuration needed ]"
+        else
+            if [ ! -f "../configure" ] || [ "$IMPORT" -nt "silver-token" ]; then
                 if [ -f "../configure.ac" ]; then
                     if [ ! -f "../configure" ]; then
                         echo "running autoreconf -i in $PROJECT_NAME ($cmake)"
@@ -204,52 +227,59 @@
                     exit 1
                 fi
             fi
-
-            # works for both cmake and configure
-            if [ $? -ne 0 ]; then
-                echo "generate failed for $TARGET_DIR"
-                exit 1
-            fi
-
-            # choose j size
-            repo_size=$(du -sm .. | cut -f1)
-            if [ "$repo_size" -gt 500 ]; then
-                j=8 # llvm takes up a lot of memory/swap when linking (70GB with debug on), as does many large projects
-            else
-                j=$(nproc)
-            fi
-
-            # build
-            echo "building $TARGET_DIR with -j$j in $BUILD_FOLDER"
-            if [ -n "$cmake" ]; then
-                cmake --build . -- -j$j
-            elif [ "$A_MAKE" = "1" ]; then
-                make -f ../Makefile
-            else
-                make
-            fi
-            if [ $? -ne 0 ]; then
-                echo "build failure for $TARGET_DIR"
-                exit 1
-            fi
-
-            # install to silver-import
-            echo "installing ${TARGET_DIR}"
-            if [ -n "$cmake" ]; then
-                cmake --install .
-            elif [ "$A_MAKE" = "1" ]; then
-                make -f ../Makefile install
-            else
-                make install
-            fi
-            if [ $? -ne 0 ]; then
-                echo "install failure for $TARGET_DIR"
-                exit 1
-            fi
-
-            echo "installed ${TARGET_DIR}"
-            echo "im-a-token" >> silver-token  # only create this if all steps succeed
         fi
+
+        # works for both cmake and configure
+        if [ $? -ne 0 ]; then
+            echo "generate failed for $TARGET_DIR"
+            exit 1
+        fi
+
+        # choose j size
+        repo_size=$(du -sm .. | cut -f1)
+        if [ "$repo_size" -gt 500 ]; then
+            j=8 # llvm takes up a lot of memory/swap when linking (70GB with debug on), as does many large projects
+        else
+            j=$(($(nproc) / 2))
+        fi
+
+        export MAKEFLAGS="-j$j --no-print-directory"
+
+        # build
+        print "building $TARGET_DIR with -j$j in $BUILD_FOLDER"
+        if [ -n "$cmake" ]; then
+            cmake --build . -- -j$j
+        elif [ "$A_MAKE" = "1" ]; then
+            make $MFLAGS -f ../Makefile
+        else
+            make $MFLAGS -j$j
+        fi
+        if [ $? -ne 0 ]; then
+            echo "build failure for $TARGET_DIR"
+            exit 1
+        fi
+
+        export MAKEFLAGS="-j1 --no-print-directory"
+
+        # install to silver-import
+        print "install ${TARGET_DIR}"
+        if [ -n "$cmake" ]; then
+            cmake --install . > /dev/null
+        elif [ "$A_MAKE" = "1" ]; then
+            make $MFLAGS -f ../Makefile install > /dev/null
+        else
+            make $MFLAGS install > /dev/null
+        fi
+        if [ $? -ne 0 ]; then
+            echo "install failure for $TARGET_DIR"
+            exit 1
+        fi
+        echo "im-a-token" >> silver-token  # only create this if all steps succeed
+        #fi
+
+        BUILT_PROJECTS+=",${PROJECT_NAME}"
+        export BUILT_PROJECTS
+
         cd ../../
     done
 )

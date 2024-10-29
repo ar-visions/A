@@ -24,6 +24,8 @@ static global_init_fn* call_after;
 static num             call_after_alloc;
 static num             call_after_count;
 
+static map             log_fields;
+
 void A_lazy_init(global_init_fn fn) {
     if (call_after_count == call_after_alloc) {
         global_init_fn* prev      = call_after;
@@ -47,6 +49,10 @@ cstr copy_cstr(cstr input) {
     cstr res = calloc(len + 1, 1);
     memcpy(res, input, len);
     return res;
+}
+
+A A_header(A instance) {
+    return (((struct A*)instance) - 1);
 }
 
 void A_module_init(bool(*fn)()) {
@@ -167,7 +173,7 @@ void A_init_recur(A a, AType current, raw last_init) {
 }
 
 A A_initialize(A a) {
-    A f           = A_fields(a);
+    A f           = A_header(a);
 
     #ifndef NDEBUG
     A_validator(a);
@@ -184,7 +190,6 @@ A A_alloc(AType type, num count, bool af_pool) {
     A a           = calloc(1, sizeof(struct A) + type->size * count);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
-    a->origin     = a;
     a->data       = &a[1];
     a->count      = count;
     a->alloc      = count;
@@ -195,31 +200,6 @@ A A_alloc(AType type, num count, bool af_pool) {
         a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
     return a->data;
-}
-
-
-A A_realloc(A a, num alloc) {
-    A obj = A_fields(a);
-    assert(obj->type->traits == A_TRAIT_PRIMITIVE, "realloc must be called on a primitive type");
-    A   re    = calloc(1, sizeof(struct A) + obj->type->size * alloc);
-    num count = obj->count < alloc ? obj->count : alloc;
-    memcpy(&re[1], obj->data, obj->type->size * count);
-    if (obj->data != &obj[1])
-        free(&obj->data[-1]);
-    re->origin = obj; /// we do not want to keep the counts/alloc in sync between these
-    obj->data  = &re[1];
-    obj->count = count;
-    obj->alloc = alloc;
-    return obj->data;
-}
-
-void A_push(A a, A value) {
-    A   obj = A_fields(a);
-    assert(obj->type->traits == A_TRAIT_PRIMITIVE, "must be called on a primitive type");
-    num sz  = obj->type->size;
-    if (obj->count == obj->alloc)
-        A_realloc(a, 32 + (obj->alloc << 1));
-    memcpy(&((u8*)obj->data)[obj->count++ * sz], value, sz);
 }
 
 #define iarray(I,M,...) array_ ## M(I, M, __VA_ARGS__)
@@ -264,7 +244,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
         A_f* a_type   = atypes->elements[i];
         bool is_prim  = a_type->traits & A_TRAIT_PRIMITIVE;
         ffi_args[i]   = is_prim ? a_type->arb : &ffi_type_pointer;
-        call(method->atypes, push_weak, a_type);
+        push_weak(method->atypes, a_type);
     }
     ffi_status status = ffi_prep_cif(
         (ffi_cif*) method->ffi_cif, FFI_DEFAULT_ABI, atypes->len,
@@ -337,15 +317,11 @@ A A_method_vargs(A instance, cstr method_name, int n_args, ...) {
 
 int fault_level;
 
-
-int A_total_types_len() {
-    return types_len;
-}
-
 void A_start() {
     fault_level = level_err;
 
-    AF pool = allocate(AF); /// leave pool open
+    AF pool    = allocate(AF); /// leave pool open
+    log_fields = new(map, hsize, 32);
 
     int remaining = call_after_count;
     while (remaining)
@@ -392,6 +368,31 @@ void A_start() {
     }
 }
 
+map A_args(int argc, symbol argv[], symbol default_arg, ...) {
+    va_list  args;
+    va_start(args, default_arg);
+    symbol arg = default_arg;
+    map    defaults = new(map);
+    while (arg) {
+        object val = va_arg(args, object);
+        set(defaults, str(arg), val);
+        arg = va_arg(args, symbol);
+    }
+    va_end(args);
+    return A_arguments(argc, argv, defaults,
+        default_arg ? str(default_arg) : null);
+}
+
+none A_tap(symbol f, subprocedure sub) {
+    string fname = str(f);
+    set(log_fields, fname, sub ? (object)sub : (object)A_bool(true)); /// if subprocedure, then it may receive calls for the logging
+}
+
+none A_untap(symbol f) {
+    string fname = str(f);
+    set(log_fields, fname, A_bool(false));
+}
+
 type_member_t* A_member(AType type, enum A_TYPE member_type, char* name) {
     for (num i = 0; i < type->member_count; i++) {
         type_member_t* mem = &type->members[i];
@@ -428,7 +429,7 @@ A A_set_property(A instance, symbol name, A value) {
 /// should be adapted to work with schemas 
 /// what a weird thing it would be to have map access to properties
 /// everything should be A-based, and forget about the argument hacks?
-map A_args(int argc, symbol argv[], map default_values, object default_key) {
+map A_arguments(int argc, symbol argv[], map default_values, object default_key) {
     map result = new(map, hsize, 16);
     for (item ii = default_values->first; ii; ii = ii->next) {
         pair  hm = ii->value;
@@ -460,17 +461,17 @@ map A_args(int argc, symbol argv[], map default_values, object default_key) {
                     ( doub && compare(f->key, s_key) == 0)) {
                     /// inter-op with object-based A-type sells it.
                     /// its also a guide to use the same schema
-                    object value = A_formatter(def_type, null, false, "%o", s_val);
+                    object value = A_formatter(def_type, null, (object)false, "%o", s_val);
                     assert(isa(value) == def_type, "");
                     set(result, f->key, value);
                 }
             }
         } else if (!found_single && default_key) {
-            A default_key_obj = A_fields(default_key);
+            A default_key_obj = A_header(default_key);
             string s_val     = new(string, chars, (cstr)arg);
             object def_value = get(default_values, default_key);
             AType  def_type  = isa(def_value);
-            object value     = A_formatter(def_type, null, false, "%o", s_val);
+            object value     = A_formatter(def_type, null, (object)false, "%o", s_val);
             set(result, default_key, value);
             found_single = true;
         }
@@ -525,7 +526,8 @@ void A_destructor(A a) {
     // this part is 'auto-release', our pool is an AF pool, or auto-free.
     // when new() is made, the reference goes into a pool
     // 
-    AType type = isa(a);
+    A        f = A_header(a);
+    AType type = f->type;
     for (num i = 0; i < type->member_count; i++) {
         type_member_t* m = &type->members[i];
         if ((m->member_type == A_TYPE_PROP || m->member_type == A_TYPE_PRIV) && !(m->type->traits & A_TRAIT_PRIMITIVE)) {
@@ -535,13 +537,17 @@ void A_destructor(A a) {
             *ref = null;
         }
     }
+    if (f->data) {
+        A_drop(f->data);
+        f->data = null;
+    }
 }
 u64  A_hash      (A a) { return (u64)(size_t)a; }
-bool A_cast_bool (A a) { return (bool)(size_t)a; }
+bool A_cast_bool (A a) { return A_header(a)->count > 0; }
 
 A A_with_cereal(A a, cereal cs) {
     sz len = strlen(cs);
-    A        f = A_fields(a);
+    A        f = A_header(a);
     AType type = f->type;
     if      (type == typeid(f64)) sscanf(cs, "%lf",  (f64*)a);
     else if (type == typeid(f32)) sscanf(cs, "%f",   (f32*)a);
@@ -734,12 +740,14 @@ num parse_formatter(cstr start, cstr res, num sz) {
 }
 
 /// does not seem possible to proxy args around in C99, so we are wrapping this in a macro
-object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
+object A_formatter(AType type, FILE* f, object opt, cstr template, ...) {
     va_list args;
     va_start(args, template);
     string  res  = new(string, alloc, 1024);
     cstr    scan = template;
-
+    bool write_ln = (i64)opt == true;
+    string  field = (!write_ln && opt) ? instanceof(opt, string) : null;
+    
     while (*scan) {
         /// format %o as object's string cast
         if (*scan == '%' && *(scan + 1) == 'o') {
@@ -788,6 +796,20 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
         }
     }
     va_end(args);
+    if (f && field) {
+        object fvalue = get(log_fields, field); // make get be harmless to map; null is absolutely fine identity wise to understand that
+        if (!fvalue) return null;
+        verify(fvalue, "map integrity failure");
+        bool b = fvalue ? cast(fvalue, bool) : false;
+        if (!b) return null; /// need to guard for this in string opt callers
+        string ff = instanceof(fvalue, string);
+        
+        /// if logging is set to a blank string then you simply get all log messages
+        /// if logging is set to a bool of true you get a breakpoint
+        /// if logging is set to a non-blank string, it breaks at your filter
+        if (!ff || (ff->chars[0] && index_of(res, ff->chars) >= 0))
+            raise(SIGTRAP);
+    }
     if (f) {
         write(res, f, false);
         if (write_ln) {
@@ -797,6 +819,15 @@ object A_formatter(AType type, FILE* f, bool write_ln, cstr template, ...) {
     }
     /// cereal is pretty available, and we only need this on string and path
     return type ? (A)((A_f*)type)->with_cereal(A_alloc(type, 1, true), res->chars) : (A)res;
+}
+
+u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
+    const u8* bytes = (const u8*)data;
+    for (size_t i = 0; i < length; ++i) {
+        hash ^= bytes[i];  // xor bottom with current byte
+        hash *= FNV_PRIME; // multiply by FNV prime
+    }
+    return hash;
 }
 
 void  string_destructor(string a)        { free(a->chars); }
@@ -853,6 +884,29 @@ string string_mid(string a, num start, num len) {
     return new(string, chars, &a->chars[start], ref_length, len);
 }
 
+string2 string2_mid(string2 a, num start, num len) {
+    return slice(a, start, len);
+}
+
+cstr string2_cast_cstr(string2 a) {
+    return (cstr)data(a);
+}
+
+i8 string2_index_num(string2 a, num index) {
+    return ((cstr)data(a))[index];
+}
+
+string2 string2_with_cstr(string2 a, cstr str) {
+    num len = strlen(str);
+    return a;
+}
+
+i64 string2_hash(string2 a) {
+    if (a->h) return a->h;
+    a->h = fnv1a_hash(data(a), a->len, OFFSET_BASIS);
+    return a->h;
+}
+
 none  string_reserve(string a, num extra) {
     if (a->alloc - a->len >= extra)
         return;
@@ -898,15 +952,6 @@ path string_cast_path(string a) {
     return new(path, chars, a->chars);
 }
 
-u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
-    const u8* bytes = (const u8*)data;
-    for (size_t i = 0; i < length; ++i) {
-        hash ^= bytes[i];  // xor bottom with current byte
-        hash *= FNV_PRIME; // multiply by FNV prime
-    }
-    return hash;
-}
-
 u64 item_hash(item f) {
     return hash(f->key ? f->key : f->value);
 }
@@ -950,6 +995,12 @@ string string_with_cstr(string a, cstr value) {
     a->chars = calloc(a->len + 1, 1);
     memcpy(a->chars, value, a->len);
     return a;
+}
+
+bool string_has_prefix(string a, cstr value) {
+    sz ln = strlen(value);
+    if (!ln || ln > a->len) return false;
+    return strncmp(&a->chars[0], value, ln) == 0;
 }
 
 bool string_has_suffix(string a, cstr value) {
@@ -1144,7 +1195,7 @@ string map_cast_string(map a) {
 
 /// copy member by member; bit copy the primitives
 A A_copy(A a) {
-    A f = A_fields(a);
+    A f = A_header(a);
     assert(f->count > 0, "invalid count");
     AType type = isa(a);
     A b = A_alloc(type, f->count, true);
@@ -1159,7 +1210,7 @@ A A_copy(A a) {
 
 A A_hold(A a) {
     if (a) {
-        A f = A_fields(a);
+        A f = A_header(a);
         if (f->refs++ == 1 && f->ar_index > 0)
             af_top->pool->elements[f->ar_index] = null; // index of 0 is occupied by the pool itself; just a sentinel 
     }
@@ -1167,7 +1218,7 @@ A A_hold(A a) {
 }
 
 void A_free(A a) {
-    A       aa = A_fields(a);
+    A       aa = A_header(a);
     A_f*  type = aa->type;
     void* prev = null;
     while (type) {
@@ -1183,20 +1234,18 @@ void A_free(A a) {
 }
 
 void A_drop(A a) {
-    if (a && --A_fields(a)->refs == -1)
+    if (a && --A_header(a)->refs == -1)
         A_free(a);
 }
 
-A A_fields(A instance) {
-    return (instance - 1)->origin;
-}
-
 A A_data(A instance) {
-    A obj = A_fields(instance);
+    A obj = A_header(instance);
     return obj->data;
 }
 
 A A_instanceof(A inst, AType type) {
+    if (!inst) return null;
+
     verify(inst, "instanceof given a null value");
     AType t  = type;
     AType it = isa(inst); 
@@ -1329,30 +1378,6 @@ num list_count(list a) {
     return a->count;
 }
 
-/// vector should only work with primitive or otherwise trivial model data
-/// its reduced function set is indicative of its simple use-case
-void vector_init(vector a) {
-    if (a->alloc) {
-        a->data = A_alloc(a->type, a->alloc, true);
-    }
-}
-
-void vector_push(vector a, A any) {
-    sz size = a->type->size;
-    verify(a->len < a->alloc, "vector out of space");
-    memcpy(&a->data[a->len * size], any, size);
-    a->len++;
-}
-
-sz vector_count(vector a) {
-    return a->len;
-}
-
-bool vector_cast_bool(vector a) {
-    return a->len > 0;
-}
-
-define_class(vector);
 
 bool is_meta(A a) {
     AType t = isa(a);
@@ -1373,6 +1398,84 @@ bool is_meta_compatible(A a, A b) {
     }
     return false;
 }
+
+object* A_realloc(object a, sz count) {
+    A   i = A_header(a);
+    if (count > i->alloc) {
+        sz  size  = (i->type->traits & A_TRAIT_PRIMITIVE) ? i->type->size : sizeof(A);
+        sz  alloc = (count << 1) + 32;
+        u8* data  = calloc(alloc, size);
+        u8* prev  = i->data;
+        memcpy(data, prev, i->count * size);
+        i->data = data;
+        free(prev);
+    }
+    return i->data;
+}
+
+/// just 1 meta is supported in allocation, at the moment
+/// its certainly useful to have more and we may split data
+/// fields for parsing while enabling contiguous memory
+/// mixed allocation of objects and primitives will involve some tricky
+/// allocating
+void vector_init(vector a) {
+    A f = A_header(a);
+    a->data_type = f->type->meta.meta_0 ? f->type->meta.meta_0 : typeid(object);
+    if (a->alloc)
+        f->data = A_alloc(a->data_type, a->alloc, false);
+    a->stride = (a->data_type->traits & A_TRAIT_PRIMITIVE) ? 
+        a->data_type->size : sizeof(A);
+}
+
+void vector_concat(vector a, ARef any, num count) {
+    if (count <= 0) return;
+    A f = A_header(a);
+    if (f->count == f->alloc) {
+        object data = A_alloc(a->data_type, (a->alloc << 1) + 32, false);
+        A_drop(f->data);
+    }
+    /// realloc on A objects is for their data, not the object memory
+    /// if we did that, they lose identity, or, they 
+    u8* ptr = A_realloc(a, f->count + count);
+    sz  size;
+    if (a->data_type->traits & A_TRAIT_PRIMITIVE)
+        size = a->data_type->size;
+    else
+        size = sizeof(A);
+
+    memcpy(&ptr[f->count * size], any, size * count);
+    f->count += count;
+}
+
+void vector_push(vector a, A any) {
+    vector_concat(a, &any, 1);
+}
+
+vector vector_slice(vector a, num from, num to) {
+    A      f   = A_header(a);
+    vector res = A_alloc(f->type, 0, true);
+    if (from != to) {
+        num diff  = to - from;
+        num count = diff < 0 ? (from - to) : diff;
+        u8* src   = f->data;
+        u8* dst   = A_realloc(res, count);
+        if (from <  to)
+            memcpy(dst, &src[from * a->stride], count * a->stride);
+        else
+            for (int i = from; i > to; i--, dst++)
+                memcpy(dst, &src[i * a->stride], count * a->stride);
+    }
+    return res;
+}
+
+sz vector_count(vector a) {
+    A f = A_header(a);
+    return f->count;
+}
+
+define_class(vector);
+
+
 
 void array_push(array a, A b) {
     if (a->alloc == a->len) {
@@ -1563,10 +1666,10 @@ object subprocedure_invoke(subprocedure a, object arg) {
 void AF_init(AF a) {
     af_top = a;
     a->pool = allocate(array, alloc, a->start_size ? a->start_size : 1024);
-    call(a->pool, push_weak, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
+    push_weak(a->pool, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
 
     if (!af_stack) af_stack = allocate(array, alloc, 16);
-    call(af_stack, push_weak, a);
+    push_weak(af_stack, a);
 }
 
 AF AF_create(sz start_size) {
@@ -1934,19 +2037,11 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeid(f32))       return &ffi_type_float;
     if (ptype == typeid(f64))       return &ffi_type_double;
     if (ptype == typeid(f128))      return &ffi_type_longdouble;
-    if (ptype == typeid(cstr))      return &ffi_type_pointer;
-    if (ptype == typeid(symbol))    return &ffi_type_pointer;
-    if (ptype == typeid(cereal))    return &ffi_type_pointer;
+    if (ptype == typeid(AFlag))     return &ffi_type_sint32;
     if (ptype == typeid(bool))      return &ffi_type_uint32;
     if (ptype == typeid(num))       return &ffi_type_sint64;
     if (ptype == typeid(sz))        return &ffi_type_sint64;
     if (ptype == typeid(none))      return &ffi_type_void;
-    if (ptype == typeid(AType))     return &ffi_type_pointer;
-    if (ptype == typeid(handle))    return &ffi_type_pointer;
-    if (ptype == typeid(Member))    return &ffi_type_pointer;
-    //if (ptype == typeid(ARef))    return &ffi_type_pointer;
-    if (ptype == typeid(raw))       return &ffi_type_pointer;
-    assert(ptype->size == sizeof(void*), "we may only import void* handles for now; this may be fixed with arguments given to define");
     return &ffi_type_pointer;
 }
 
@@ -2013,6 +2108,7 @@ define_primitive(sz,     numeric, A_TRAIT_INTEGRAL | A_TRAIT_SIGNED)
 define_primitive(f32,    numeric, A_TRAIT_REALISTIC)
 define_primitive(f64,    numeric, A_TRAIT_REALISTIC)
 define_primitive(f128,   numeric, A_TRAIT_REALISTIC)
+define_primitive(AFlag,  numeric, A_TRAIT_INTEGRAL | A_TRAIT_UNSIGNED)
 define_primitive(cstr,   string_like, 0)
 define_primitive(symbol, string_like, 0)
 define_primitive(cereal, string_like, 0)
@@ -2028,7 +2124,12 @@ define_enum(level)
 
 define_class(path)
 define_class(file)
+
+
 define_class(string)
+
+define_vector(string2, i8)
+
 define_class(item)
 //define_proto(collection) -- disabling for now during reduction to base + class + mod
 define_class(list)
@@ -2043,47 +2144,3 @@ define_class(AF)
 
 define_meta(ATypes, array, AType)
 
-/*
-map map_parse(map a, int argc, cstr *argv, map def) {
-    map iargs = new(map);
-    for (int ai = 0; ai < argc; ai++) {
-        cstr ps = argv[ai];
-        ///
-        if (ps[0] == '-') {
-            bool   is_single = ps[1] != '-';
-            mx key {
-                cstr(&ps[is_single ? 1 : 2]), typeid(char)
-            };
-            field* found;
-            if (is_single) {
-                for (field &df: def.fields()) {
-                    symbol s = symbol(df.key.mem->origin);
-                    if (ps[1] == s[0]) {
-                        found = &df;
-                        break;
-                    }
-                }
-            } else found = def->lookup(key);
-            ///
-            if (found) {
-                str     aval = str(argv[ai + 1]);
-                type_t  type = found->value.mem->type;
-                /// from_string should use const str&
-                /// 
-                iargs[key] = mx::from_string((cstr)aval.mem->origin, type); /// static method on mx that performs the busy work of this
-            } else {
-                printf("arg not found: %s\n", key.mem->get<char>(0)); // shouldnt do this dangerous thing with strings
-                return {};
-            }
-        }
-    }
-    ///
-    /// return results in order of defaults, with default value given
-    map res = map();
-    for(field &df:def.data->fields.elements<field>()) {
-        field *ov = iargs->lookup(df.key);
-        res.data->fields += field { ion::hold(df.key), ov ? ion::hold(ov->value) : ion::hold(df.value) };
-    }
-    return res;
-}
-*/

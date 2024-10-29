@@ -64,20 +64,21 @@ struct A_f;
 
 /// our A-type classes have many types of methods
 /// constructor, i[nstance]-method, s[tatic]-method, operator (these are enumerable!), and index.  we index by 1 argument only in C but we may allow for more in silver
-enum A_TYPE {
+typedef enum A_TYPE {
     A_TYPE_NONE      = 0,
     A_TYPE_CONSTRUCT = 1,
     A_TYPE_PROP      = 2,
     A_TYPE_PRIV      = 4,
     A_TYPE_INTERN    = 8,
-    A_TYPE_IMETHOD   = 16,
-    A_TYPE_SMETHOD   = 32,
-    A_TYPE_OPERATOR  = 64,
-    A_TYPE_CAST      = 128,
-    A_TYPE_INDEX     = 256,
-    A_TYPE_ENUMV     = 512,
-    A_TYPE_OVERRIDE  = 1024 /// being explicit with this is important, because we only infer by memory checks otherwise
-};                          /// its not that its annoying to write its just more important for the override to be a real member with reference
+    A_TYPE_READ_ONLY = 16,
+    A_TYPE_IMETHOD   = 32,
+    A_TYPE_SMETHOD   = 64,
+    A_TYPE_OPERATOR  = 128,
+    A_TYPE_CAST      = 256,
+    A_TYPE_INDEX     = 512,
+    A_TYPE_ENUMV     = 1024,
+    A_TYPE_OVERRIDE  = 2048 /// being explicit with this is important, because we only infer by memory checks otherwise
+} AFlag;                    /// its not that its annoying to write its just more important for the override to be a real member with reference                   /// its not that its annoying to write its just more important for the override to be a real member with reference
 
 enum A_TRAIT {
     A_TRAIT_PRIMITIVE = 1,
@@ -87,7 +88,8 @@ enum A_TRAIT {
     A_TRAIT_UNSIGNED  = 16,
     A_TRAIT_ENUM      = 32,
     A_TRAIT_ALIAS     = 64,
-    A_TRAIT_ABSTRACT  = 128
+    A_TRAIT_ABSTRACT  = 128,
+    A_TRAIT_VECTOR    = 256
 };
 
 _Pragma("pack(push, 1)")
@@ -103,6 +105,7 @@ typedef struct ftable_t {
     char*           name;
     char*           module;
     int             size;
+    int             msize;
     int             member_count;
     struct type_member_t* members;
     int             traits;
@@ -242,6 +245,12 @@ typedef bool(*global_init_fn)();
 #define set(I,...)                  ftableI(I) -> set(I, ##__VA_ARGS__)
 #define get(I,...)                  ftableI(I) -> get(I, ##__VA_ARGS__)
 #define push(I,...)                 ftableI(I) -> push(I, ##__VA_ARGS__)
+#define push_weak(I,...)            ftableI(I) -> push_weak(I, ##__VA_ARGS__)
+#define slice(I,...)                ftableI(I) -> slice(I, ##__VA_ARGS__)
+#define load(I,...)                 ftableI(I) -> load(I, ##__VA_ARGS__)
+#define save(I,...)                 ftableI(I) -> save(I, ##__VA_ARGS__)
+#define include(I,...)              ftableI(I) -> include(I, ##__VA_ARGS__)
+#define compile(I,...)              ftableI(I) -> compile(I, ##__VA_ARGS__)
 #define clear(I,...)                ftableI(I) -> clear(I, ##__VA_ARGS__)
 #define pop(I,...)                  ftableI(I) -> pop(I, ##__VA_ARGS__)
 #define peek(I,...)                 ftableI(I) -> peek(I, ##__VA_ARGS__)
@@ -253,6 +262,8 @@ typedef bool(*global_init_fn)();
 #define concat(I,...)               ftableI(I) -> concat(I, ##__VA_ARGS__)
 #define mid(I,...)                  ftableI(I) -> mid(I, ##__VA_ARGS__)
 #define process(I,...)              ftableI(I) -> process(I, ##__VA_ARGS__)
+#define operand(I,...)              ftableI(I) -> operand(I, ##__VA_ARGS__)
+#define convert(I,...)              ftableI(I) -> convert(I, ##__VA_ARGS__)
 #define append(I,...)               ftableI(I) -> append(I, ##__VA_ARGS__)
 #define eq(I,...)                   ftableI(I) -> eq(I, ##__VA_ARGS__)
 #define equals(I,...)               ftableI(I) -> equals(I, ##__VA_ARGS__)
@@ -596,6 +607,7 @@ typedef struct method_t {
     char*           name; \
     char*           module; \
     int             size; \
+    int             msize; \
     int             member_count; \
     type_member_t*  members; \
     int             traits; \
@@ -710,9 +722,24 @@ void        A_lazy_init(global_init_fn fn);
         } \
     }
 
+#define declare_vector(AA) \
+    typedef struct AA* AA; \
+    _Pragma("pack(push, 1)") \
+    typedef struct AA { \
+        vector_schema (AA, INST) vector_intern \
+        AA##_schema   (AA, INST) AA##_intern \
+        struct AA##_f* f; \
+    } *AA; \
+    AA##_schema (AA, DECL) \
+    typedef struct AA##_f { \
+        A_f_members  (BB) \
+        A_schema     (AA, METHOD) \
+        vector_schema(AA, METHOD) \
+        AA##_schema  (AA, METHOD) \
+    } AA##_f, *AA##_ft; \
+    extern AA##_f   AA##_type; \
+    _Pragma("pack(pop)")
 
-/// expand structure definitions for polymorphic types
-/// usage: declare_class(Top, Middle, Base);
 #define declare_class(AA) \
     typedef struct AA* AA; \
     _Pragma("pack(push, 1)") \
@@ -729,8 +756,6 @@ void        A_lazy_init(global_init_fn fn);
     extern AA##_f   AA##_type; \
     _Pragma("pack(pop)")
 
-/// expand structure definitions for polymorphic types
-/// usage: declare_mod(Top, Middle, Base);
 #define declare_mod(AA, BB, ...) \
     declare_subclass_ex(AA, BB, dm_count(AA, BB, ## __VA_ARGS__), AA, BB, ## __VA_ARGS__)
 
@@ -771,26 +796,116 @@ void        A_lazy_init(global_init_fn fn);
 #define dm_i_5(A0, A1, A2, A3, A4)      dm_i_4(A1, A2, A3, A4) dm_i_1(A0)
 #define dm_i_6(A0, A1, A2, A3, A4, A5)  dm_i_4(A2, A3, A4, A5) dm_i_2(A0, A1)
 
+#define module_init(fn) \
+    static bool _module_init() { \
+        fn(); \
+        return true; \
+    } \
+    static __attribute__((constructor)) void _module_register() { \
+        A_module_init((global_init_fn)&_module_init); \
+    }
+
+
+void* primitive_ffi_arb(AType);
+
+/// alias lets use tag types with an array of types, enabling 
+/// template-like functionality with run-time
+
+#define define_meta(ALIAS_TYPE, SRC_TYPE, ...) \
+    A              ALIAS_TYPE##_head; \
+    ALIAS_TYPE##_f ALIAS_TYPE##_type; \
+    static __attribute__((constructor)) bool global_##ALIAS_TYPE() { \
+        ALIAS_TYPE##_f* type_ref = &ALIAS_TYPE##_type; \
+        SRC_TYPE##_f* src_ref = &SRC_TYPE##_type; \
+        if (src_ref->size == 0) { \
+            A_lazy_init((global_init_fn)&global_##ALIAS_TYPE); \
+            return false; \
+        } else { \
+            memset(type_ref, 0, sizeof(ALIAS_TYPE##_f)); \
+            memcpy(&ALIAS_TYPE##_type, &SRC_TYPE##_type, sizeof(SRC_TYPE##_f)); \
+            ALIAS_TYPE## _type.module  = MODULE; \
+            ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
+            ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
+            ALIAS_TYPE##_type.meta     = (meta_t) { emit_types(__VA_ARGS__) }; \
+            ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
+            A_push_type(&ALIAS_TYPE##_type);         \
+            return true; \
+        } \
+    }
+
+#define define_vector(VTYPE, ...) \
+    A         VTYPE##_head; \
+    VTYPE##_f VTYPE##_type; \
+    static __attribute__((constructor)) bool global_##VTYPE() { \
+        VTYPE##_f* type_ref = &VTYPE##_type; \
+        vector_f*  base_ref  = &vector_type; \
+        if (base_ref->size == 0) { \
+            A_lazy_init((global_init_fn)&global_##VTYPE); \
+            return false; \
+        } else { \
+            memset(type_ref, 0, sizeof(VTYPE##_f)); \
+            memcpy(&VTYPE##_type, &vector_type, sizeof(vector_f)); \
+            memset(type_ref, 0,        sizeof(VTYPE##_f)); \
+            memcpy(type_ref, base_ref, sizeof(vector_f)); \
+            static type_member_t members[16 + sizeof(VTYPE##_type) / sizeof(void*)]; \
+            VTYPE## _type.parent_type = &vector_type; \
+            VTYPE## _type.name     = #VTYPE; \
+            VTYPE## _type.module   = MODULE; \
+            VTYPE## _type.members  = members; \
+            VTYPE## _type.meta     = (meta_t) { emit_types(__VA_ARGS__) }; \
+            VTYPE## _type.msize    = 0; \
+            for (int i = 0; i < VTYPE## _type.meta.count; i++) { \
+                AType mtype = (&VTYPE##_type.meta.meta_0)[i]; \
+                VTYPE##_type.msize += (mtype->traits & A_TRAIT_PRIMITIVE) ? mtype->size : sizeof(object); \
+            } \
+            VTYPE## _type.member_count = 0; \
+            VTYPE## _type.size     = sizeof(VTYPE); \
+            VTYPE## _type.traits   = A_TRAIT_VECTOR; \
+            VTYPE##_type.arb       = primitive_ffi_arb(typeid(VTYPE)); \
+            VTYPE##_schema( VTYPE, INIT ) \
+            A_push_type(&VTYPE##_type); \
+            return true; \
+        } \
+    }
+
+#define define_alias(ALIAS_TYPE, SRC_TYPE) \
+    A              ALIAS_TYPE##_head; \
+    ALIAS_TYPE##_f ALIAS_TYPE##_type; \
+    static __attribute__((constructor)) bool global_##ALIAS_TYPE() { \
+        ALIAS_TYPE##_f* type_ref = &ALIAS_TYPE##_type; \
+        SRC_TYPE##_f* src_ref = &SRC_TYPE##_type; \
+        if (src_ref->size == 0) { \
+            A_lazy_init((global_init_fn)&global_##ALIAS_TYPE); \
+            return false; \
+        } else { \
+            memset(type_ref, 0, sizeof(ALIAS_TYPE##_f)); \
+            memcpy(&ALIAS_TYPE##_type, &SRC_TYPE##_type, sizeof(SRC_TYPE##_f)); \
+            ALIAS_TYPE##_type.module   = MODULE; \
+            ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
+            ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
+            ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
+            A_push_type(&ALIAS_TYPE##_type);         \
+            return true; \
+        } \
+    }
 
 #define define_mod(A0, A1) \
-    define_arb(A0, A1, sizeof(struct A0), 0, primitive_ffi_arb(typeid(cstr)))
+    define_arb(A0, A1, sizeof(struct A0), 0)
 
 #define define_class(A0) \
     define_mod(A0, A)
 
 /// primitives dont have construct/method support, but its abstract does
 #define define_primitive(X, Y, traits) \
-    define_arb(X, Y, sizeof(X), traits | A_TRAIT_PRIMITIVE, primitive_ffi_arb(typeid(X)))
+    define_arb(X, Y, sizeof(X), traits | A_TRAIT_PRIMITIVE)
 
 #define define_abstract(X) \
-    define_arb(X, A, 0, A_TRAIT_ABSTRACT, null)
-
-int A_total_types_len();
+    define_arb(X, A, 0, A_TRAIT_ABSTRACT)
 
 // lazy loading and copying of the table only requires knowledge of our parent class
-#define define_arb(A0, A1, TYPE_SZ, TRAIT, FFI) \
+#define define_arb(A0, A1, TYPE_SZ, TRAIT) \
     _Pragma("pack(push, 1)") \
-    A       A0##_header; \
+    A       A0##_head; \
     A0##_f  A0##_type; \
     _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##A0() { \
@@ -810,78 +925,11 @@ int A_total_types_len();
             A0## _type.member_count = 0; \
             A0## _type.size     = TYPE_SZ;   \
             A0## _type.traits   = TRAIT;     \
-            A0##_type.arb       = FFI;       \
+            A0##_type.arb       = primitive_ffi_arb(typeid(A0)); \
             A0##_schema( A0, INIT )          \
             A_push_type(&A0##_type);         \
             return true;                     \
         }                                    \
-    }
-
-
-#define module_init(fn) \
-    static bool _module_init() { \
-        fn(); \
-        return true; \
-    } \
-    static __attribute__((constructor)) void _module_register() { \
-        A_module_init((global_init_fn)&_module_init); \
-    }
-
-
-void* primitive_ffi_arb(AType);
-
-
-/// alias let us meta describe things without adding any code.  just a bit of cloning of the function table.  which is definitely bloat
-/// however we can reduce 
-/// in this case, array accepts meta types and based on the instance's 
-/// type it will use these to filter the list and throw assertions when 
-/// an incompatible type is seen
-
-/// so this introduces some new programming for us, in that our types are 
-/// defined as optional meta's in series.  Its very useful to anyone who wants to
-/// keep codesize down.  silver output can use pointers directly to the table when we cast
-
-/// define_meta(array, ListOfNumerics, u8, u16, u32, u64, i8, i16, i32, i64)
-
-#define define_meta(ALIAS_TYPE, SRC_TYPE, ...) \
-    A              ALIAS_TYPE##_header; \
-    ALIAS_TYPE##_f ALIAS_TYPE##_type; \
-    static __attribute__((constructor)) bool global_##ALIAS_TYPE() { \
-        ALIAS_TYPE##_f* type_ref = &ALIAS_TYPE##_type; \
-        SRC_TYPE##_f* src_ref = &SRC_TYPE##_type; \
-        if (src_ref->size == 0) { \
-            A_lazy_init((global_init_fn)&global_##ALIAS_TYPE); \
-            return false; \
-        } else { \
-            memset(type_ref, 0, sizeof(ALIAS_TYPE##_f)); \
-            memcpy(&ALIAS_TYPE##_type, &SRC_TYPE##_type, sizeof(SRC_TYPE##_f)); \
-            ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
-            ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
-            ALIAS_TYPE##_type.meta     = (meta_t) { emit_types(__VA_ARGS__) }; \
-            ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
-            A_push_type(&ALIAS_TYPE##_type);         \
-            return true; \
-        } \
-    }
-
-#define define_alias(ALIAS_TYPE, SRC_TYPE) \
-    A              ALIAS_TYPE##_header; \
-    ALIAS_TYPE##_f ALIAS_TYPE##_type; \
-    static __attribute__((constructor)) bool global_##ALIAS_TYPE() { \
-        ALIAS_TYPE##_f* type_ref = &ALIAS_TYPE##_type; \
-        SRC_TYPE##_f* src_ref = &SRC_TYPE##_type; \
-        if (src_ref->size == 0) { \
-            A_lazy_init((global_init_fn)&global_##ALIAS_TYPE); \
-            return false; \
-        } else { \
-            memset(type_ref, 0, sizeof(ALIAS_TYPE##_f)); \
-            memcpy(&ALIAS_TYPE##_type, &SRC_TYPE##_type, sizeof(SRC_TYPE##_f)); \
-            ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
-            ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
-            ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
-            A_push_type(&ALIAS_TYPE##_type);         \
-            return true; \
-        } \
     }
 
 typedef struct string* string;
@@ -894,7 +942,6 @@ typedef struct string* string;
     i_prop  (X,Y, public, A,         data) \
     i_prop  (X,Y, public, num,       alloc) \
     i_prop  (X,Y, public, num,       count) \
-    i_prop  (X,Y, public, A,         origin) \
     i_method(X,Y, public, none,      init) \
     i_method(X,Y, public, none,      destructor) \
     i_method(X,Y, public, i32,       compare,    X) \
@@ -950,6 +997,7 @@ declare_abstract(imported)
 #define f32_schema(X,Y)         numeric_schema(X,Y)
 #define f64_schema(X,Y)         numeric_schema(X,Y)
 #define f128_schema(X,Y)        numeric_schema(X,Y)
+#define AFlag_schema(X,Y)       numeric_schema(X,Y)
 #define bool_schema(X,Y)        numeric_schema(X,Y)
 #define num_schema(X,Y)         numeric_schema(X,Y)
 #define sz_schema(X,Y)          numeric_schema(X,Y)
@@ -975,6 +1023,7 @@ declare_primitive(u64,          numeric)
 declare_primitive(f32,          numeric)
 declare_primitive(f64,          numeric)
 declare_primitive(f128,         numeric)
+declare_primitive(AFlag,        numeric)
 declare_primitive(cstr,         string_like)
 declare_primitive(symbol,       string_like)
 declare_primitive(cereal,       string_like)
@@ -1044,6 +1093,8 @@ typedef struct string* string;
     enum_value(X,Y, _compare_not) \
     enum_value(X,Y, _is) \
     enum_value(X,Y, _inherits) \
+    enum_value(X,Y, _value_default) \
+    enum_value(X,Y, _cond_value) \
     enum_value(X,Y, _assign) \
     enum_value(X,Y, _assign_add) \
     enum_value(X,Y, _assign_sub) \
@@ -1110,18 +1161,34 @@ typedef struct array* array;
 declare_class(path)
 
 #define vector_schema(X,Y) \
-    i_prop           (X,Y, public,   A,     data) \
-    i_prop           (X,Y, required, i32,   alloc) \
-    i_prop           (X,Y, public,   i32,   len) \
-    i_prop           (X,Y, required, AType, type) \
+    i_prop           (X,Y, public, num,     alloc) \
+    i_prop           (X,Y, public, AType,   data_type) \
+    i_prop           (X,Y, public, sz,      stride) \
+    i_method         (X,Y, public, none,    concat, ARef, num) \
     i_method         (X,Y, public, none,    push, A) \
-    i_method         (X,Y, public, num,     count) \
-    i_override       (X,Y, method, init) \
-    i_override       (X,Y, cast,   bool)
+    i_method         (X,Y, public, vector,  slice, num, num) \
+    i_override       (X,Y, method, init)
 #ifndef vector_intern
 #define vector_intern
 #endif
 declare_class(vector)
+
+#define vector_fields(I) A_header(I)->fields
+
+// let us declare our vector with string
+// object, user space is simply the cstring
+
+#define string2_schema(X,Y) \
+    i_prop    (X,Y,   public, num, len) \
+    i_prop    (X,Y,   public, i64, h) \
+    i_cast    (X,Y,   public, cstr) \
+    i_ctr     (X,Y,   public, cstr) \
+    i_index   (X,Y,   public, i32, num) \
+    i_override(X,Y,   method, hash)
+#ifndef string2_intern
+#define string2_intern
+#endif
+declare_vector(string2)
 
 #define subprocedure_schema(X,Y) \
     i_prop           (X,Y, required, object, target) \
@@ -1261,6 +1328,7 @@ declare_class(fn)
     i_method  (X,Y,   public, string,  mid, num, num) \
     i_method  (X,Y,   public, none,    reserve, num) \
     i_method  (X,Y,   public, none,    write, handle, bool) \
+    i_method  (X,Y,   public, bool,    has_prefix, cstr) \
     i_method  (X,Y,   public, bool,    has_suffix, cstr) \
     i_method  (X,Y,   public, num,     cmp, cstr) \
     i_method  (X,Y,   public, bool,    eq,  cstr) \
@@ -1280,7 +1348,7 @@ declare_class(fn)
 declare_class(string)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
-object A_formatter(AType rtype, FILE* f, bool write_ln, cstr template, ...);
+object A_formatter(AType rtype, FILE* f, object opt, cstr template, ...);
 
 #define Exists_schema(X,Y) \
     enum_value(X,Y, no) \
@@ -1288,22 +1356,28 @@ object A_formatter(AType rtype, FILE* f, bool write_ln, cstr template, ...);
     enum_value(X,Y, dir)
 declare_enum(Exists)
 
-#define         form(T, t, ...)   (T)A_formatter(typeid(T), null,   false, t, ## __VA_ARGS__)
-#define       format(t, ...)      (string)A_formatter(null,      null,   false, t, ## __VA_ARGS__)
-#define        print(t,    ...)   A_formatter(null,      stdout, true,  t, ## __VA_ARGS__)
-#define        error(t, ...)      A_formatter(null,      stderr, true,  t, ## __VA_ARGS__)
-#define        fault(t, ...) do { A_formatter(null,      stderr, true,  t, ## __VA_ARGS__); exit(1); } while(0)
-#define  file_exists(t, ...)     (A_exists(A_formatter(null, null, false, t, ## __VA_ARGS__)) == Exists_file)
-#define   dir_exists(t, ...)     (A_exists(A_formatter(null, null, false, t, ## __VA_ARGS__)) == Exists_dir)
+extern FILE* logger;
+
+#define         form(T, t, ...)   (T)A_formatter(typeid(T), null,   (object)false, t, ## __VA_ARGS__)
+#define       format(t, ...)      ((string)A_formatter(null,      null,   (object)false, t, ## __VA_ARGS__))
+#define          run(t, ...)      system(((string)A_formatter(null, null, (object)false, t, ## __VA_ARGS__))->chars)
+#define          tap(L)           (A_tap(L))
+#define        untap(L)           (A_untap(L))
+#define          log(L, t, ...)   A_formatter(null,      stdout, str(L),  t, ## __VA_ARGS__)
+#define        print(t,    ...)   A_formatter(null,      stdout, (object)true,  t, ## __VA_ARGS__)
+#define        error(t, ...)      A_formatter(null,      stderr, (object)true,  t, ## __VA_ARGS__)
+#define        fault(t, ...) do { A_formatter(null,      stderr, (object)true,  t, ## __VA_ARGS__); exit(1); } while(0)
+#define  file_exists(t, ...)     (A_exists(A_formatter(null, null, (object)false, t, ## __VA_ARGS__)) == Exists_file)
+#define   dir_exists(t, ...)     (A_exists(A_formatter(null, null, (object)false, t, ## __VA_ARGS__)) == Exists_dir)
 #ifndef NDEBUG
-#define       assert(a, t, ...) do { if (!(a)) { A_formatter(null, stderr, true,  t, ## __VA_ARGS__); exit(1); } } while(0)
+#define       assert(a, t, ...) do { if (!(a)) { A_formatter(null, stderr, (object)true,  t, ## __VA_ARGS__); exit(1); } } while(0)
 #else
 #define       assert(a, t, ...) do { } while(0)
 #endif
 #define       verify(a, t, ...) \
     do { \
         if (!(a)) { \
-            A_formatter(null, stderr, true,  t, ## __VA_ARGS__); \
+            A_formatter(null, stderr, (object)true,  t, ## __VA_ARGS__); \
             if (level_err >= fault_level) { \
                 raise(SIGSTOP); \
                 exit(1); \
@@ -1313,6 +1387,10 @@ declare_enum(Exists)
 
 /// we can iterate through a collection with this strange code
 #define each(container, E, e) \
+    if (len(container)) for (E e = get(container, 0), e0 = 0; e0 == 0; e0++) \
+        for (num __i = 0, __len = len(container); __i < __len; __i++, e = get(container, __i)) \
+
+#define each_(container, E, e) \
     if (len(container)) for (E e = get(container, 0), e0 = 0; e0 == 0; e0++) \
         for (num __i = 0, __len = len(container); __i < __len; __i++, e = get(container, __i)) \
 
@@ -1351,16 +1429,18 @@ i32         A_enum_value(AType type, cstr cs);
 #define     eval(E,S) A_enum_value (typeid(E), S)
 
 bool        isname(char n);
-A           A_new(AType type);
-A           A_construct(AType type, int n_args, ...);
-A           A_initialize(A a); /// called after 'construction' ... this is so we do something generic in init, and support named args
-A           A_convert(AType type, A input);
-type_member_t* A_constructor(AType type, AType first_arg); // find a constructor method (used for dynamic construction)
-A           A_instanceof(A left, AType type); // would be nice to actually allow typeid vs typeid here
+A           A_new(AType);
+A           A_construct(AType, int, ...);
+A           A_initialize(A); /// called after 'construction' ... this is so we do something generic in init, and support named args
+A           A_convert(AType, A);
+type_member_t* A_constructor(AType, AType); // find a constructor method (used for dynamic construction)
+A           A_instanceof(A, AType); // would be nice to actually allow typeid vs typeid here
 A           A_hold(A a);
 AType       A_lookup_type(cstr);
 void        A_drop(A a);
 sz          A_len(A a);
+none        A_tap(symbol, subprocedure);
+none        A_untap(symbol);
 num         index_of_cstr(A a, cstr f);
 Exists      A_exists(A a);
 num         clamp(num i, num mn, num mx);
@@ -1373,7 +1453,7 @@ real        clampf(real, real, real);
 /// what a weird thing it would be to have map access to properties
 /// everything should be A-based, and forget about the argument hacks?
 AType       A_find_type(cstr name);
-map         A_args(int argc, symbol argv[], map default_values, object default_key);
+map         A_arguments(int argc, symbol argv[], map default_values, object default_key);
 AF          A_pool(sz size);
 void        A_free(A a);
 A_f**       A_types(num* length);
@@ -1402,16 +1482,19 @@ A               r(f64);
 A           A_cstr(cstr);
 A           A_none();
 A           A_bool(bool);
-A           A_realloc(A, num);
+A*          A_realloc(object, sz);
 void        A_push(A, A);
 void        A_start();
-A           A_fields(A instance);
+map         A_args(int argc, symbol argv[], symbol default_arg, ...);
+A           A_header(A instance);
 A           A_data(A instance);
 A           A_verify(A instance, AType type);
 void        A_module_init(bool(*fn)());
 void        debug();
 void        br();
 bool        A_reflect(symbol location);
+
+#define data(instance) A_header(instance)->data
 
 bool      is_meta(A a);
 bool      is_meta_compatible(A a, A b);

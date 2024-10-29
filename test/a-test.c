@@ -7,8 +7,9 @@ typedef struct user {
 
 int main(int n_args, char* v_args[]) {
     A_start();
+    /*
     AF pool   = A_pool(1024);
-    A  fields = A_fields(pool);
+    A  fields = A_header(pool);
     /// access the A-header direct, start of allocation, behind user memory
 
     user    u = A_struct(user);
@@ -18,5 +19,7 @@ int main(int n_args, char* v_args[]) {
     print("m = %o", m);
     
     A_free(pool);
+    */
+    print("a-test");
     return 0;
 }

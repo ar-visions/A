@@ -45,7 +45,7 @@ release		  ?= 0
 LIBS           = $(foreach dep,$(IMPORT),$(if $(findstring .so,$(dep)),$(SILVER_IMPORT)/lib/$(dep),-l$(dep)))
 APP			  ?= 0
 SILVER_IMPORT ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)
-CC 			   = clang-18
+CC 			   = clang-20
 MAKEFLAGS     += --no-print-directory
 INCLUDES 	   = -I$(SRC_ROOT)/src -I$(SILVER_IMPORT)/include
 LDFLAGS 	   = -L$(SILVER_IMPORT)/lib -Wl,-rpath,$(SILVER_IMPORT)/lib
@@ -61,27 +61,31 @@ CFLAGS 		   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 ifeq ($(BUILD_TYPE),LIB)
 	TARGET 	     = $(BUILD_DIR)/lib$(PROJECT_NAME).so
 	TARGET_FLAGS = -shared
-	ALL_TARGETS  = import $(TARGET) $(REFLECT_TARGET) $(BUILD_DIR)/$(PROJECT_NAME)-flat
+	ALL_TARGETS  = import $(TARGET) $(REFLECT_TARGET) $(BUILD_DIR)/$(PROJECT_NAME)-flat $(BUILD_DIR)/$(PROJECT_NAME)-includes tests verify
 endif
 
 ifeq ($(BUILD_TYPE),APP)
 	TARGET 	     = $(BUILD_DIR)/$(PROJECT_NAME)
 	TARGET_FLAGS = 
-	ALL_TARGETS  = import $(TARGET)
+	ALL_TARGETS  = import $(TARGET) tests
 endif
 
-$(info $(PROJECT_NAME) $(BUILD_TYPE): $(IMPORT) -- $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --i $(SRC_ROOT)/import)
-
-.PHONY: all clean install import
+.PHONY: all clean install import tests verify
 
 all: $(ALL_TARGETS)
 
 import:
 	@bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --i $(SRC_ROOT)/import
 
+$(BUILD_DIR)/$(PROJECT_NAME)-includes:
+	@echo "#include <$(PROJECT_NAME)>" > $@.tmp.c
+	@$(CC) $(CFLAGS) $(INCLUDES) -E -dD -C -P $@.tmp.c | \
+		awk '/\/\/\/ start-trim/ {in_trim=1; next} /\/\/\/ end-trim/ {in_trim=0; next} in_trim {print}' > $@
+	@rm $@.tmp.c
+
 $(BUILD_DIR)/$(PROJECT_NAME)-flat:
 	@echo "#include <$(PROJECT_NAME)>" > $@.tmp.c
-	@$(CC) $(CFLAGS) $(INCLUDES) -E -dD -C $@.tmp.c | \
+	@$(CC) $(CFLAGS) $(INCLUDES) -E -dD -C -P $@.tmp.c | \
 	awk '/\/\/\/ start-trim/ {print; in_trim=1; next} /\/\/\/ end-trim/ {in_trim=0; print; next} !in_trim {print}' > $@
 	@rm $@.tmp.c
 
@@ -94,6 +98,32 @@ $(TARGET): $(OBJS)
 $(REFLECT_TARGET): $(SRC_ROOT)/../A/src/meta/A-reflect.c $(TARGET)
 	$(CC) $(CFLAGS) $(INCLUDES) $< -o $@ -L$(BUILD_DIR) $(LDFLAGS) -l$(PROJECT_NAME) $(LIBS)
 
+
+TEST_DIR  = $(SRC_ROOT)/test
+TEST_SRCS = $(wildcard $(TEST_DIR)/*.c)
+TEST_OBJS = $(TEST_SRCS:$(TEST_DIR)/%.c=$(BUILD_DIR)/%.test.o)
+
+
+# Rule to link individual test executables
+$(BUILD_DIR)/%_test: $(TEST_DIR)/%.c $(TARGET)
+	$(CC) $(CFLAGS) $(INCLUDES) $< -o $@ $(LDFLAGS) $(TARGET) $(LIBS)
+
+TEST_TARGETS := $(patsubst $(TEST_DIR)/%.c,$(BUILD_DIR)/%_test,$(TEST_SRCS))
+
+# Build all tests individually
+tests: $(TEST_TARGETS)
+
+verify: $(TEST_TARGETS)
+	@for test_exec in $(TEST_TARGETS); do \
+		echo "test: $$test_exec..."; \
+		$$test_exec; \
+		if [ $$? -ne 0 ]; then \
+			echo "$$test_exec failed"; \
+			exit 1; \
+		fi; \
+	done
+	@echo "all tests passed."
+
 # install targets and run reflect with integrity check
 install: all
 	install -d $(SILVER_IMPORT)/lib
@@ -102,6 +132,7 @@ install: all
 	install -m 644 $(TARGET) $(SILVER_IMPORT)/lib/
 	install -m 644 $(SRC_DIR)/$(PROJECT_NAME) $(SILVER_IMPORT)/include/
 	@if [ "$(BUILD_TYPE)" = "LIB" ]; then \
+		install -m 644 $(BUILD_DIR)/$(PROJECT_NAME)-includes $(SILVER_IMPORT)/include/; \
 		install -m 644 $(BUILD_DIR)/$(PROJECT_NAME)-flat $(SILVER_IMPORT)/include/; \
 	fi
 	@cd $(BUILD_DIR) && ./$(PROJECT_NAME)-reflect || true
@@ -112,3 +143,8 @@ install: all
 # clean build artifacts
 clean:
 	rm -f $(BUILD_DIR)/*.o $(TARGET) $(REFLECT_TARGET) $(BUILD_DIR)/*-flat $(BUILD_DIR)/*.tmp.c
+
+
+ifeq ($(VERBOSE),1)
+	$(info $(PROJECT_NAME) $(BUILD_TYPE): $(IMPORT) -- $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --i $(SRC_ROOT)/import)
+endif

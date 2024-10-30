@@ -190,16 +190,16 @@ A A_alloc(AType type, num count, bool af_pool) {
     A a           = calloc(1, sizeof(struct A) + type->size * count);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
-    a->data       = &a[1];
+    //a->data       = &a[1];
     a->count      = count;
     a->alloc      = count;
     if (af_pool) {
         a->ar_index = af_top->pool->len;
-        push(af_top->pool, a->data);
+        push(af_top->pool, &a[1]);
     } else {
         a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
-    return a->data;
+    return &a[1];
 }
 
 #define iarray(I,M,...) array_ ## M(I, M, __VA_ARGS__)
@@ -1401,6 +1401,7 @@ bool is_meta_compatible(A a, A b) {
 
 object* A_realloc(object a, sz count) {
     A   i = A_header(a);
+    print("a refs = %i", i->refs);
     if (count > i->alloc) {
         sz  size  = (i->type->traits & A_TRAIT_PRIMITIVE) ? i->type->size : sizeof(A);
         sz  alloc = (count << 1) + 32;
@@ -1408,7 +1409,8 @@ object* A_realloc(object a, sz count) {
         u8* prev  = i->data;
         memcpy(data, prev, i->count * size);
         i->data = data;
-        free(prev);
+        print("prev = %p", prev);
+        //free(prev);
     }
     return i->data;
 }

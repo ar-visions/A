@@ -64,6 +64,8 @@ bool validate(path mfile) {
             string  type_ident_symbol = type_ordered->elements[*type_ident];
             verify(contains(type_symbols, type_ident_symbol), "invalid data");
 
+            printf("name = %s\n", name_ident_symbol->chars);
+
             if (*member_type & A_TYPE_PROP) {
                 // write member offset
                 u16 *offset  = read(f, typeid(u16));
@@ -201,6 +203,7 @@ path reflect(string module) {
 
 int main(int argc, cstr argv[]) {
     A_start();
+    return 0;
     if (argc != 1)
         fault("usage: %s module-name", argv[1]);
     

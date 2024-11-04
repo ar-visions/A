@@ -37,7 +37,7 @@
         current_line=""
 
         while IFS= read -r raw_line || [ -n "$raw_line" ]; do
-            line=$(echo "$raw_line" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+            line=$(echo "$raw_line" | tr '\t' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
             if [ -z "$line" ]; then
                 continue
             fi
@@ -45,7 +45,8 @@
                 found_deps=0
             fi
             if [[ $found_deps -eq 1 ]]; then
-                ws=$(echo "$raw_line" | expand -t 4 | sed -E 's/^( *).*/\1/' | wc -c)
+                ws=$(echo "$raw_line" | tr '\t' ' ' | sed -E 's/^( *).*/\1/' | wc -c)
+                echo "ws = $ws"
                 if [ $ws -le 1 ]; then
                     if [ ! -z "$current_line" ]; then
                         projects+=("$current_line")
@@ -132,6 +133,7 @@
             else
                 echo "cloning repository $REPO_URL into $TARGET_DIR..."
                 git clone "$REPO_URL" "$TARGET_DIR"
+                
                 if [ $? -ne 0 ]; then
                     echo "clone failed for $TARGET_DIR"
                     exit 1
@@ -141,6 +143,10 @@
                     exit 1
                 fi
                 cd "$TARGET_DIR"
+                if [ -f silver-init.sh ]; then
+                    echo 'running silver-init.sh'
+                    bash silver-init.sh
+                fi
             fi
             # check out the specific commit, branch, or tag if provided
             if [ -n "$COMMIT" ]; then
@@ -195,16 +201,13 @@
 
         # proceed if there is a newer file than silver-token, or no silver-token
         #if [ ! -f "silver-token" ] || find .. -type f -newer "silver-token" | grep -q . ; then
-        print cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
-
         if [ -n "$cmake" ]; then
             if [ ! -f "CMakeCache.txt" ] || [ "$IMPORT" -nt "silver-token" ]; then
                 BUILD_CONFIG="${BUILD_CONFIG% }"
                 if [ -z "$BUILD_CONFIG" ]; then
                     BUILD_CONFIG="-S .."
                 fi
-                echo '[import.sh]' cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
-                cmake -B . $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
+                cmake -B . -S .. $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
             fi
         elif [ "$A_MAKE" = "1" ]; then
             print "$PROJECT_NAME: simple Makefile [ no configuration needed ]"

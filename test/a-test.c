@@ -20,10 +20,21 @@ int main(int n_args, char* v_args[]) {
     
     A_free(pool);
     */
+
+    int sz1 = sizeof(struct string);
+    int sz2 = sizeof(struct vector);
+    AType str_type = typeid(string);
+    string s1 = new(string, alloc, 64);
     print("a-test");
 
-    string2 s = new(string2, alloc, 64);
+    /// convert string to vector string
+    /// cs macro may use data(v)
+    string s = new(string, chars, "test1-");
+    append(s, "test2");
+    print("str = %o", s);
 
+    string m = mid(s, 1, len(s) - 2);
+    
     A header = A_header(s);
     print("string2: %i, refs: %i, data: %p", s->alloc, header->refs, header->data);
 

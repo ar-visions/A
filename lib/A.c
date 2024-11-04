@@ -190,7 +190,7 @@ A A_alloc(AType type, num count, bool af_pool) {
     A a           = calloc(1, sizeof(struct A) + type->size * count);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
-    //a->data       = &a[1];
+    a->data       = null;
     a->count      = count;
     a->alloc      = count;
     if (af_pool) {
@@ -199,7 +199,7 @@ A A_alloc(AType type, num count, bool af_pool) {
     } else {
         a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
-    return &a[1];
+    return &a[1]; /// return fields (object)
 }
 
 #define iarray(I,M,...) array_ ## M(I, M, __VA_ARGS__)
@@ -871,52 +871,37 @@ array string_split(string a, cstr sp) {
     return null;
 }
 
-void string_alloc_sz(string a, sz alloc) {
-    char* chars = calloc(1 + alloc, sizeof(char));
-    memcpy(chars, a->chars, sizeof(char) * a->len);
-    chars[a->len] = 0;
-    //free(a->chars);
-    a->chars = chars;
-    a->alloc = alloc;
+void string_realloc(string a, sz alloc) {
+    vector_realloc(a, alloc);
+    verify(a->len < a->alloc, "str len invalid");
+    a->chars = data(a);
+    a->chars[a->len] = 0;
 }
 
-string string_mid(string a, num start, num len) {
-    return new(string, chars, &a->chars[start], ref_length, len);
+sz string_vector_size(string a, sz alloc) {
+    return alloc + 1;
 }
 
-string2 string2_mid(string2 a, num start, num len) {
-    return slice(a, start, len);
-}
-
-cstr string2_cast_cstr(string2 a) {
-    return (cstr)data(a);
-}
-
-i8 string2_index_num(string2 a, num index) {
-    return ((cstr)data(a))[index];
-}
-
-string2 string2_with_cstr(string2 a, cstr str) {
-    num len = strlen(str);
-    return a;
-}
-
-i64 string2_hash(string2 a) {
+u64 string_hash(string a) {
     if (a->h) return a->h;
     a->h = fnv1a_hash(data(a), a->len, OFFSET_BASIS);
     return a->h;
 }
 
+string string_mid(string a, num start, num len) {
+    return slice(a, start, len);
+}
+
 none  string_reserve(string a, num extra) {
     if (a->alloc - a->len >= extra)
         return;
-    string_alloc_sz(a, a->alloc + extra);
+    realloc(a, a->alloc + extra);
 }
 
 none  string_append(string a, cstr b) {
     sz blen = strlen(b);
     if (blen + a->len >= a->alloc)
-        string_alloc_sz(a, (a->alloc << 1) + blen);
+        realloc(a, (a->alloc << 1) + blen);
     memcpy(&a->chars[a->len], b, blen);
     a->len += blen;
     a->chars[a->len] = 0;
@@ -956,22 +941,18 @@ u64 item_hash(item f) {
     return hash(f->key ? f->key : f->value);
 }
 
-u64 string_hash(string a) {
-    if (a->h) return a->h;
-    a->h = fnv1a_hash(a->chars, a->len, OFFSET_BASIS);
-    return a->h;
-}
-
 void string_init(string a) {
     cstr value = a->chars;
     if (a->alloc)
-        a->chars = (char*)calloc(1, 1 + a->alloc);
+        a->chars = (cstr)data(a);
     if (value) {
         sz len = a->ref_length ? a->ref_length : strlen(value);
         if (!a->alloc)
             a->alloc = len;
-        if (a->chars == value)
-            a->chars = (char*)calloc(1, len + 1);
+        if (a->chars == value) {
+            realloc(a, len);
+            a->chars = (cstr)data(a);
+        }
         memcpy(a->chars, value, len);
         a->chars[len] = 0;
         a->len = len;
@@ -997,13 +978,13 @@ string string_with_cstr(string a, cstr value) {
     return a;
 }
 
-bool string_has_prefix(string a, cstr value) {
+bool string_starts_with(string a, cstr value) {
     sz ln = strlen(value);
     if (!ln || ln > a->len) return false;
     return strncmp(&a->chars[0], value, ln) == 0;
 }
 
-bool string_has_suffix(string a, cstr value) {
+bool string_ends_with(string a, cstr value) {
     sz ln = strlen(value);
     if (!ln || ln > a->len) return false;
     return strcmp(&a->chars[a->len - ln], value) == 0;
@@ -1415,7 +1396,7 @@ object* A_realloc(object a, sz count) {
     return i->data;
 }
 
-/// just 1 meta is supported in allocation, at the moment
+/// just 1 meta is supported in allocation
 /// its certainly useful to have more and we may split data
 /// fields for parsing while enabling contiguous memory
 /// mixed allocation of objects and primitives will involve some tricky
@@ -1423,10 +1404,27 @@ object* A_realloc(object a, sz count) {
 void vector_init(vector a) {
     A f = A_header(a);
     a->data_type = f->type->meta.meta_0 ? f->type->meta.meta_0 : typeid(object);
-    if (a->alloc)
-        f->data = A_alloc(a->data_type, a->alloc, false);
+    if (a->alloc) {
+        sz vsize = call(a, vector_size, a->alloc);
+        f->data = A_alloc(a->data_type, vsize, false);
+    }
     a->stride = (a->data_type->traits & A_TRAIT_PRIMITIVE) ? 
         a->data_type->size : sizeof(A);
+}
+
+void vector_realloc(vector a, sz size) {
+    A f = A_header(a);
+    object prev = f->data;
+    f->data = A_alloc(a->data_type, size, false);
+    if (prev) {
+        int amount = size >= a->alloc ? a->alloc : size;
+        memcpy(f->data, prev, amount * a->data_type->size);
+    }
+    a->alloc = size;
+}
+
+sz vector_vector_size(vector a, sz alloc) {
+    return alloc; // we override this in string
 }
 
 void vector_concat(vector a, ARef any, num count) {
@@ -1453,21 +1451,37 @@ void vector_push(vector a, A any) {
     vector_concat(a, &any, 1);
 }
 
+num abs(num i) { 
+    return (i < 0) ? -i : i;
+}
+
 vector vector_slice(vector a, num from, num to) {
+    /*
     A      f   = A_header(a);
-    vector res = A_alloc(f->type, 0, true);
-    if (from != to) {
-        num diff  = to - from;
-        num count = diff < 0 ? (from - to) : diff;
-        u8* src   = f->data;
-        u8* dst   = A_realloc(res, count);
-        if (from <  to)
-            memcpy(dst, &src[from * a->stride], count * a->stride);
-        else
-            for (int i = from; i > to; i--, dst++)
-                memcpy(dst, &src[i * a->stride], count * a->stride);
-    }
+    /// allocate the data type (no i8 bytes)
+    AType  data_type = f->type->meta.meta_0 ? f->type->meta.meta_0 : typeid(object);
+    num count = (1 + abs(from - to)) + 31 & ~31;
+    raw_t res = A_alloc(f->type, 1, true);
+
+    /// get data type (default to object)
+    
+    verify (data_type, "no data-type");
+
+    /// allocate 
+    
+    num adj   = call(a, vector_size, count);
+    verify(adj >= count, "invalid vector adjustment");
+    u8* src   = f->data;
+    u8* dst   = A_realloc(res, adj);
+    if (from <  to)
+        memcpy(dst, &src[from * a->stride], count * a->stride);
+    else
+        for (int i = from; i > to; i--, dst++)
+            memcpy(dst, &src[i * a->stride], count * a->stride);
+
     return res;
+    */
+   return null;
 }
 
 sz vector_count(vector a) {
@@ -2128,9 +2142,7 @@ define_class(path)
 define_class(file)
 
 
-define_class(string)
-
-define_vector(string2, i8)
+define_vector(string, i8)
 
 define_class(item)
 //define_proto(collection) -- disabling for now during reduction to base + class + mod

@@ -43,7 +43,7 @@ typedef struct type_member_t* Member;
 void*   calloc(size_t num, size_t size);
 void    free();
 void    exit(int);
-int     abs(int);
+//int     abs(int);
 cstr    realpath(symbol, symbol);
 FILE   *popen(symbol command, symbol type);
 int     pclose(FILE*);
@@ -244,6 +244,12 @@ typedef bool(*global_init_fn)();
 /// it reserves their use for methods and not scope confusion with variables
 #define set(I,...)                  ftableI(I) -> set(I, ##__VA_ARGS__)
 #define get(I,...)                  ftableI(I) -> get(I, ##__VA_ARGS__)
+#define realloc(I,...)              ftableI(I) -> realloc(I, ##__VA_ARGS__)
+#define alias(I,...)                ftableI(I) -> alias(I, ##__VA_ARGS__)
+#define ends_with(I,...)            ftableI(I) -> ends_with(I, ##__VA_ARGS__)
+#define starts_with(I,...)          ftableI(I) -> starts_with(I, ##__VA_ARGS__)
+#define set_value(I,...)            ftableI(I) -> set_value(I, ##__VA_ARGS__)
+#define run(I,...)                  ftableI(I) -> run(I, ##__VA_ARGS__)
 #define push(I,...)                 ftableI(I) -> push(I, ##__VA_ARGS__)
 #define push_weak(I,...)            ftableI(I) -> push_weak(I, ##__VA_ARGS__)
 #define slice(I,...)                ftableI(I) -> slice(I, ##__VA_ARGS__)
@@ -859,7 +865,8 @@ void* primitive_ffi_arb(AType);
                 VTYPE##_type.msize += (mtype->traits & A_TRAIT_PRIMITIVE) ? mtype->size : sizeof(object); \
             } \
             VTYPE## _type.member_count = 0; \
-            VTYPE## _type.size     = sizeof(VTYPE); \
+            VTYPE## _type.size     = sizeof(struct VTYPE); \
+            printf("setting size of vector %s to %i\n", #VTYPE, VTYPE## _type.size); \
             VTYPE## _type.traits   = A_TRAIT_VECTOR; \
             VTYPE##_type.arb       = primitive_ffi_arb(typeid(VTYPE)); \
             VTYPE##_schema( VTYPE, INIT ) \
@@ -1167,34 +1174,22 @@ declare_class(path)
     i_method         (X,Y, public, none,    concat, ARef, num) \
     i_method         (X,Y, public, none,    push, A) \
     i_method         (X,Y, public, vector,  slice, num, num) \
+    i_method         (X,Y, public, sz,      vector_size, sz) \
+    i_method         (X,Y, public, none,    realloc, sz) \
     i_override       (X,Y, method, init)
 #ifndef vector_intern
 #define vector_intern
 #endif
 declare_class(vector)
 
-#define vector_fields(I) A_header(I)->fields
-
 // let us declare our vector with string
 // object, user space is simply the cstring
 
-#define string2_schema(X,Y) \
-    i_prop    (X,Y,   public, num, len) \
-    i_prop    (X,Y,   public, i64, h) \
-    i_cast    (X,Y,   public, cstr) \
-    i_ctr     (X,Y,   public, cstr) \
-    i_index   (X,Y,   public, i32, num) \
-    i_override(X,Y,   method, hash)
-#ifndef string2_intern
-#define string2_intern
-#endif
-declare_vector(string2)
-
 #define subprocedure_schema(X,Y) \
-    i_prop           (X,Y, required, object, target) \
-    i_prop           (X,Y, public,   object, ctx) \
-    i_prop           (X,Y, required, handle, addr) \
-    i_method         (X,Y, public,   A, invoke, A)
+    i_prop    (X,Y, required, object, target) \
+    i_prop    (X,Y, public,   object, ctx) \
+    i_prop    (X,Y, required, handle, addr) \
+    i_method  (X,Y, public,   A, invoke, A)
 #ifndef subprocedure_intern
 #define subprocedure_intern
 #endif
@@ -1317,7 +1312,6 @@ declare_class(fn)
 
 #define string_schema(X,Y) \
     i_prop    (X,Y,   public, cstr,    chars) \
-    i_prop    (X,Y,   public, num,     alloc) \
     i_prop    (X,Y,   public, num,     ref_length) \
     i_prop    (X,Y,   public, num,     len) \
     i_prop    (X,Y,   public, u64,     h) \
@@ -1328,8 +1322,8 @@ declare_class(fn)
     i_method  (X,Y,   public, string,  mid, num, num) \
     i_method  (X,Y,   public, none,    reserve, num) \
     i_method  (X,Y,   public, none,    write, handle, bool) \
-    i_method  (X,Y,   public, bool,    has_prefix, cstr) \
-    i_method  (X,Y,   public, bool,    has_suffix, cstr) \
+    i_method  (X,Y,   public, bool,    starts_with, cstr) \
+    i_method  (X,Y,   public, bool,    ends_with, cstr) \
     i_method  (X,Y,   public, num,     cmp, cstr) \
     i_method  (X,Y,   public, bool,    eq,  cstr) \
     i_cast    (X,Y,   public, cstr) \
@@ -1341,11 +1335,13 @@ declare_class(fn)
     i_override(X,Y,   method, compare) \
     i_override(X,Y,   method, init) \
     i_override(X,Y,   cast,   bool) \
-    i_override(X,Y,   method, copy)
+    i_override(X,Y,   method, copy) \
+    i_override(X,Y,   method, realloc) \
+    i_override(X,Y,   method, vector_size)
 #ifndef string_intern
 #define string_intern
 #endif
-declare_class(string)
+declare_vector(string)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
 object A_formatter(AType rtype, FILE* f, object opt, cstr template, ...);
@@ -1360,7 +1356,7 @@ extern FILE* logger;
 
 #define         form(T, t, ...)   (T)A_formatter(typeid(T), null,   (object)false, t, ## __VA_ARGS__)
 #define       format(t, ...)      ((string)A_formatter(null,      null,   (object)false, t, ## __VA_ARGS__))
-#define          run(t, ...)      system(((string)A_formatter(null, null, (object)false, t, ## __VA_ARGS__))->chars)
+#define         exec(t, ...)      system(((string)A_formatter(null, null, (object)false, t, ## __VA_ARGS__))->chars)
 #define          tap(L)           (A_tap(L))
 #define        untap(L)           (A_untap(L))
 #define          log(L, t, ...)   A_formatter(null,      stdout, str(L),  t, ## __VA_ARGS__)

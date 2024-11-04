@@ -123,6 +123,37 @@
             }
         },
         {
+            "label": "build-trinity",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../trinity/silver-debug"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "osx": {
+                "command": "make -f ../Makefile install -j8",
+                "options":{
+                    "env":{"VERBOSE":"1"}
+                }
+            },
+            "linux": {
+                "command": "make -f ../Makefile install -j8",
+                "options":{
+                    "env":{"VERBOSE":"1"}
+                }
+            }
+        },
+        {
             "label": "build-canvas-test",
             "type": "shell",
 			"options": {

@@ -14,7 +14,26 @@
             "name": "a-test",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../A/silver-debug/a-test",
+            "program": "${workspaceFolder}/../A/silver-debug/a-test-test",
+            "args": [
+                "module.c"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../A/silver-debug",
+            "environment": [
+            ],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
+            "name": "trinity-test",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../A/silver-debug/a-test-test",
             "args": [
                 "module.c"
             ],

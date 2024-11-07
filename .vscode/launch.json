@@ -33,12 +33,12 @@
             "name": "trinity-test",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../A/silver-debug/a-test-test",
+            "program": "${workspaceFolder}/../trinity/silver-debug/app/hi",
             "args": [
                 "module.c"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../A/silver-debug",
+            "cwd": "${workspaceFolder}/../trinity/silver-debug",
             "environment": [
             ],
             "MIMode": "gdb",

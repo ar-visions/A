@@ -46,7 +46,6 @@
             fi
             if [[ $found_deps -eq 1 ]]; then
                 ws=$(echo "$raw_line" | tr '\t' ' ' | sed -E 's/^( *).*/\1/' | wc -c)
-                echo "ws = $ws"
                 if [ $ws -le 1 ]; then
                     if [ ! -z "$current_line" ]; then
                         projects+=("$current_line")
@@ -69,6 +68,9 @@
 
     SRC_DIR="${SRC_DIR:-$SRC}"
     BUILD_ROOT="${BUILD_ROOT:-silver-import}"
+
+    export SILVER_IMPORT="$BUILD_ROOT"
+
     if [ "${VERBOSE}" = "1" ]; then
         MFLAGS=""
     else
@@ -101,10 +103,11 @@
         BUILD_CONFIG=$(echo "$project" | cut -d ' ' -f 4-)
         TARGET_DIR="${PROJECT_NAME}"
         A_MAKE="0" # A-type projects use Make, but with a build-folder and no configuration; DEBUG=1 to enable debugging
-
+        IS_DEBUG=
         # set build folder based on release/debug
         if [[ ",$DEB," == *",$PROJECT_NAME,"* ]]; then
             BUILD_FOLDER="silver-debug"
+            IS_DEBUG=1
         else
             BUILD_FOLDER="silver-build"
         fi
@@ -132,7 +135,7 @@
                 fi
             else
                 echo "cloning repository $REPO_URL into $TARGET_DIR..."
-                git clone "$REPO_URL" "$TARGET_DIR"
+                git clone --recursive "$REPO_URL" "$TARGET_DIR"
                 
                 if [ $? -ne 0 ]; then
                     echo "clone failed for $TARGET_DIR"
@@ -158,10 +161,21 @@
                 fi
             fi
         fi
-
+        if [ -n "$IS_DEBUG" ]; then
+            build="debug"
+        else
+            build="release"
+        fi
+        rust=""
+        cmake=""
+        BUILD_TYPE=""
+        silver_build=""
         # check if this is a cmake project, otherwise use autotools
         # or if there is "-S " in BUILD_CONFIG
-        if [ -f "CMakeLists.txt" ] || [[ "$BUILD_CONFIG" == *-S* ]]; then
+        if [ -f "silver-build.sh" ]; then
+            silver_build="1"
+            echo "[$PROJECT_NAME] silver-build"
+        elif [ -f "CMakeLists.txt" ] || [[ "$BUILD_CONFIG" == *-S* ]]; then
             cmake="1"
             if [[ ",$DEB," == *",$PROJECT_NAME,"* ]]; then
                 print "selecting DEBUG for $PROJECT_NAME"
@@ -170,13 +184,12 @@
                 print "selecting RELEASE for $PROJECT_NAME"
                 BUILD_TYPE="-DCMAKE_BUILD_TYPE=Release"
             fi
+        elif [ -f "Cargo.toml" ]; then
+            rust="1"
         else
-            cmake=""
-            if [ -f "configure.ac" ] || [ -f "configure.in" ] || [ -f "configure" ]; then
+            if [ -f "configure.ac" ] || [ -f "config" ] ||[ -f "configure.in" ] || [ -f "configure" ]; then
                 if [[ ",$DEB," == *",$PROJECT_NAME,"* ]]; then
                     BUILD_TYPE="--enable-debug"
-                else
-                    BUILD_TYPE=""
                 fi
             else
                 A_MAKE="1"
@@ -187,95 +200,126 @@
         mkdir -p $BUILD_FOLDER
         cd $BUILD_FOLDER
 
-        if [ "$REBUILD" == "all" ] || [ "$REBUILD" == "$PROJECT_NAME" ]; then
-            echo "rebuilding ${TARGET_DIR}"
-            if [ -n "$cmake" ]; then
-                cmake --build . --target clean
-            elif [ "$A_MAKE" = "1" ]; then
-                make $MFLAGS -f ../Makefile clean
-            else
-                make clean
-            fi
-            rm -rf silver-token
-        fi
-
-        # proceed if there is a newer file than silver-token, or no silver-token
-        #if [ ! -f "silver-token" ] || find .. -type f -newer "silver-token" | grep -q . ; then
-        if [ -n "$cmake" ]; then
-            if [ ! -f "CMakeCache.txt" ] || [ "$IMPORT" -nt "silver-token" ]; then
-                BUILD_CONFIG="${BUILD_CONFIG% }"
-                if [ -z "$BUILD_CONFIG" ]; then
-                    BUILD_CONFIG="-S .."
-                fi
-                cmake -B . -S .. $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
-            fi
-        elif [ "$A_MAKE" = "1" ]; then
-            print "$PROJECT_NAME: simple Makefile [ no configuration needed ]"
+        if [ -n "$silver_build" ]; then
+            # arbitrary build process is sometimes needed; some repos have no Make, etc
+            echo 'running silver-build.sh'
+            (cd .. && bash silver-build.sh)
         else
-            if [ ! -f "../configure" ] || [ "$IMPORT" -nt "silver-token" ]; then
-                if [ -f "../configure.ac" ]; then
-                    if [ ! -f "../configure" ]; then
-                        echo "running autoreconf -i in $PROJECT_NAME ($cmake)"
-                        autoupdate ..
-                        autoreconf -i ..
-                    fi
-                    if [ ! -f "../configure" ]; then
-                        echo "configure script not available after running autoreconf -i"
-                        exit 1
-                    fi
-                    echo ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
-                    ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
+            if [ "$REBUILD" == "all" ] || [ "$REBUILD" == "$PROJECT_NAME" ]; then
+                echo "rebuilding ${TARGET_DIR}"
+                if [ -n "$cmake" ]; then
+                    cmake --build . --target clean
+                elif [ -n "$rust" ]; then
+                    cargo clean
+                elif [ "$A_MAKE" = "1" ]; then
+                    make $MFLAGS -f ../Makefile clean
                 else
-                    echo "error: no configure.ac found for $PROJECT_NAME"
-                    exit 1
+                    make clean
+                fi
+                rm -rf silver-token
+            fi
+
+            # proceed if there is a newer file than silver-token, or no silver-token
+            #if [ ! -f "silver-token" ] || find .. -type f -newer "silver-token" | grep -q . ; then
+            
+            BUILD_CONFIG=$(echo "$BUILD_CONFIG" | sed "s|\$SILVER_IMPORT|$SILVER_IMPORT|g")
+
+            if [ -n "$cmake" ]; then
+                if [ ! -f "CMakeCache.txt" ] || [ "$IMPORT" -nt "silver-token" ]; then
+                    BUILD_CONFIG="${BUILD_CONFIG% }"
+                    if [ -z "$BUILD_CONFIG" ]; then
+                        BUILD_CONFIG="-S .."
+                    fi
+                    cmake -B . -S .. $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
+                fi
+            elif [ -n "$rust" ]; then
+                rust="$rust"
+            elif [ "$A_MAKE" = "1" ]; then
+                print "$PROJECT_NAME: simple Makefile [ no configuration needed ]"
+            else
+                if [ ! -f "../configure" ] || [ "$IMPORT" -nt "silver-token" ]; then
+                    if [ -f "../configure.ac" ]; then
+                        if [ ! -f "../configure" ]; then
+                            echo "running autoreconf -i in $PROJECT_NAME ($cmake)"
+                            autoupdate ..
+                            autoreconf -i ..
+                        fi
+                        if [ ! -f "../configure" ]; then
+                            echo "configure script not available after running autoreconf -i"
+                            exit 1
+                        fi
+                        echo ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
+                        ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
+                    else
+                        if [ -f "../config" ]; then
+                            if [ ! -f "Makefile" ]; then
+                                echo ../config $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
+                                ../config $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
+                            fi
+                        else
+                            echo "error: no configure.ac found for $PROJECT_NAME"
+                            exit 1
+                        fi
+                    fi
                 fi
             fi
-        fi
 
-        # works for both cmake and configure
-        if [ $? -ne 0 ]; then
-            echo "generate failed for $TARGET_DIR"
-            exit 1
-        fi
+            # works for both cmake and configure
+            if [ $? -ne 0 ]; then
+                echo "generate failed for $TARGET_DIR"
+                exit 1
+            fi
 
-        # choose j size
-        repo_size=$(du -sm .. | cut -f1)
-        if [ "$repo_size" -gt 500 ]; then
-            j=8 # llvm takes up a lot of memory/swap when linking (70GB with debug on), as does many large projects
-        else
-            j=$(($(nproc) / 2))
-        fi
+            # choose j size
+            repo_size=$(du -sm .. | cut -f1)
+            if [ "$repo_size" -gt 500 ]; then
+                j=8 # llvm takes up a lot of memory/swap when linking (70GB with debug on), as does many large projects
+            else
+                j=$(($(nproc) / 2))
+            fi
 
-        export MAKEFLAGS="-j$j --no-print-directory"
+            export MAKEFLAGS="-j$j --no-print-directory"
 
-        # build
-        print "building $TARGET_DIR with -j$j in $BUILD_FOLDER"
-        if [ -n "$cmake" ]; then
-            cmake --build . -- -j$j
-        elif [ "$A_MAKE" = "1" ]; then
-            make $MFLAGS -f ../Makefile
-        else
-            make $MFLAGS -j$j
-        fi
-        if [ $? -ne 0 ]; then
-            echo "build failure for $TARGET_DIR"
-            exit 1
-        fi
+            # build
+            print "building $TARGET_DIR with -j$j in $BUILD_FOLDER"
+            if [ -n "$cmake" ]; then
+                cmake --build . -- -j$j
+            elif [ -n "$rust" ]; then
+                cargo build --$build --manifest-path ../Cargo.toml --target-dir .
+            elif [ "$A_MAKE" = "1" ]; then
+                make $MFLAGS -f ../Makefile
+            else
+                make $MFLAGS -j$j
+            fi
 
-        export MAKEFLAGS="-j1 --no-print-directory"
+            if [ $? -ne 0 ]; then
+                echo "build failure for $TARGET_DIR"
+                exit 1
+            fi
 
-        # install to silver-import
-        print "install ${TARGET_DIR}"
-        if [ -n "$cmake" ]; then
-            cmake --install . > /dev/null
-        elif [ "$A_MAKE" = "1" ]; then
-            make $MFLAGS -f ../Makefile install > /dev/null
-        else
-            make $MFLAGS install > /dev/null
-        fi
-        if [ $? -ne 0 ]; then
-            echo "install failure for $TARGET_DIR"
-            exit 1
+            export MAKEFLAGS="-j1 --no-print-directory"
+
+            # install to silver-import
+            print "install ${TARGET_DIR}"
+
+            if [ -n "$cmake" ]; then
+                cmake --install . > /dev/null
+            elif [ -n "$rust" ]; then
+                cp -r ./$build/*.so $SILVER_IMPORT/lib/
+            elif [ "$A_MAKE" = "1" ]; then
+                make $MFLAGS -f ../Makefile install > /dev/null
+            else
+                make $MFLAGS install > /dev/null
+            fi
+            if [ $? -ne 0 ]; then
+                echo "install failure for $TARGET_DIR"
+                exit 1
+            fi
+
+            if [ -f ../silver-post.sh ]; then
+                echo "running silver-post.sh $BUILD_FOLDER"
+                (cd .. && bash silver-post.sh $BUILD_FOLDER)
+            fi
         fi
         echo "im-a-token" >> silver-token  # only create this if all steps succeed
         #fi

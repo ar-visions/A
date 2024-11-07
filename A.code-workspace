@@ -13,7 +13,7 @@
 			"path": "../ion"
 		},
 		{
-			"path": "../dawn"
+			"path": "../silver-import/checkout/WGPU"
 		},
 		{
 			"path": "../trinity"
@@ -21,7 +21,12 @@
 		{
 			"path": "../llvm"
 		},
-		{ "path": "../llvm-main" }
+		{
+			"path": "../llvm-main"
+		},
+		{
+			"path": "../wgpu-native"
+		}
 	],
 	"settings": {
 		"files.associations": {

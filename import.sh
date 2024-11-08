@@ -282,6 +282,8 @@
 
             # build
             print "building $TARGET_DIR with -j$j in $BUILD_FOLDER"
+
+            ts0=$(find . -type f -exec stat -c %Y {} + | sort -n | tail -1)
             if [ -n "$cmake" ]; then
                 cmake --build . -- -j$j
             elif [ -n "$rust" ]; then
@@ -291,6 +293,7 @@
             else
                 make $MFLAGS -j$j
             fi
+            ts1=$(find . -type f -exec stat -c %Y {} + | sort -n | tail -1)
 
             if [ $? -ne 0 ]; then
                 echo "build failure for $TARGET_DIR"
@@ -300,25 +303,25 @@
             export MAKEFLAGS="-j1 --no-print-directory"
 
             # install to silver-import
-            print "install ${TARGET_DIR}"
-
-            if [ -n "$cmake" ]; then
-                cmake --install . > /dev/null
-            elif [ -n "$rust" ]; then
-                cp -r ./$build/*.so $SILVER_IMPORT/lib/
-            elif [ "$A_MAKE" = "1" ]; then
-                make $MFLAGS -f ../Makefile install > /dev/null
-            else
-                make $MFLAGS install > /dev/null
-            fi
-            if [ $? -ne 0 ]; then
-                echo "install failure for $TARGET_DIR"
-                exit 1
-            fi
-
-            if [ -f ../silver-post.sh ]; then
-                echo "running silver-post.sh $BUILD_FOLDER"
-                (cd .. && bash silver-post.sh $BUILD_FOLDER)
+            if [ "$ts0" != "$ts1" ]; then
+                print "install ${TARGET_DIR}"
+                if [ -n "$cmake" ]; then
+                    cmake --install .
+                elif [ -n "$rust" ]; then
+                    cp -r ./$build/*.so $SILVER_IMPORT/lib/
+                elif [ "$A_MAKE" = "1" ]; then
+                    make $MFLAGS -f ../Makefile install
+                else
+                    make $MFLAGS install
+                fi
+                if [ $? -ne 0 ]; then
+                    echo "install failure for $TARGET_DIR"
+                    exit 1
+                fi
+                if [ -f ../silver-post.sh ]; then
+                    echo "running silver-post.sh $BUILD_FOLDER"
+                    (cd .. && bash silver-post.sh $BUILD_FOLDER)
+                fi
             fi
         fi
         echo "im-a-token" >> silver-token  # only create this if all steps succeed

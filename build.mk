@@ -36,13 +36,14 @@ endef
 
 # 
 define process_libs # ( module map )
-	$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,lib)"')), \
+	$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
 		$(if $(findstring .so,$(dep)), $(SILVER_IMPORT)/lib/$(dep),-l$(dep)))
 endef
 
-LIB_LIBS 	   = $(call process_libs, lib)
-APPS_LIBS      = $(call process_libs, app)
-TEST_LIBS      = $(call process_libs, test)
+
+APPS_LIBS      = $(call process_libs,app)
+LIB_LIBS 	   = $(call process_libs,lib)
+TEST_LIBS      = $(call process_libs,test)
 
 release		  ?= 0
 APP			  ?= 0
@@ -60,7 +61,7 @@ LIB_SRCS 	   = $(wildcard $(SRCLIB_DIR)/*.c)
 LIB_OBJS 	   = $(LIB_SRCS:$(SRCLIB_DIR)/%.c=$(BUILD_DIR)/lib/%.o)
 APP_SRCS 	   = $(wildcard $(SRCAPP_DIR)/*.c)
 APP_OBJS 	   = $(APP_SRCS:$(SRCAPP_DIR)/%.c=$(BUILD_DIR)/app/%.o)
-REFLECT_TARGET = $(BUILD_DIR)/$(PROJECT)-reflect
+#REFLECT_TARGET = $(BUILD_DIR)/$(PROJECT)-reflect
 
 # should be in same stream as dependencies; anything with a minus would be a cflag
 CFLAGS 		   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
@@ -69,15 +70,12 @@ CFLAGS 		   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-Wno-incompatible-pointer-types -Wfatal-errors -std=gnu11 -DMODULE="\"$(PROJECT)\"" \
 	-Wno-incompatible-library-redeclaration
 
-ifeq ($(strip $(APP_OBJS)),)
-	LIB_TARGET =
-else
-	LIB_TARGET = $(BUILD_DIR)/lib/lib$(PROJECT).so
-endif
 
+#[method arg:2]
+LIB_TARGET   = $(if $(strip $(LIB_OBJS)),$(BUILD_DIR)/lib/lib$(PROJECT).so)
 APP_TARGETS	 = $(patsubst $(SRCAPP_DIR)/%.c, $(BUILD_DIR)/app/%, $(wildcard $(SRCAPP_DIR)/*.c))
 TARGET_FLAGS = -shared
-ALL_TARGETS  = import $(LIB_TARGET) $(APP_TARGETS) $(REFLECT_TARGET) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
+ALL_TARGETS  = import $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
 APP_FLAGS    = 
 
 ifneq ($(release),0)
@@ -89,10 +87,14 @@ endif
 
 all: prepare_dirs $(ALL_TARGETS)
 
+
 prepare_dirs:
 	mkdir -p $(BUILD_DIR)/app $(BUILD_DIR)/test $(BUILD_DIR)/lib
 	@if [ -d "$(SRC_ROOT)/res" ]; then \
 		cp -r $(SRC_ROOT)/res/* $(BUILD_DIR); \
+	fi
+	@if [ -d "$(SRC_ROOT)/lib" ]; then \
+		find $(SRC_ROOT)/lib ! -name '*.c' -exec cp -r {} $(BUILD_DIR) \; ; \
 	fi
 
 import:
@@ -127,14 +129,15 @@ $(LIB_TARGET): $(LIB_OBJS)
 endif
 
 $(BUILD_DIR)/app/%: $(BUILD_DIR)/app/%.o $(LIB_TARGET)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIB_LIBS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIB_TARGET) $(APPS_LIBS)
 
 $(BUILD_DIR)/test/%: $(BUILD_DIR)/test/%.o $(LIB_TARGET)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIB_LIBS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(LIB_TARGET) $(TEST_LIBS)
 
-
-$(REFLECT_TARGET): $(SRC_ROOT)/../A/meta/A-reflect.c $(LIB_TARGET)
-	$(CC) $(CFLAGS) $(INCLUDES) $< -o $@ -L$(BUILD_DIR)/lib $(LDFLAGS) -l$(PROJECT) $(LIB_LIBS)
+#ifneq ($(strip $(LIB_TARGET)),)
+#$(REFLECT_TARGET): $(SRC_ROOT)/../A/meta/A-reflect.c $(LIB_TARGET)
+#	$(CC) $(CFLAGS) $(INCLUDES) $< -o $@ -L$(BUILD_DIR)/lib $(LDFLAGS) -l$(PROJECT) $(LIB_LIBS)
+#endif
 
 TEST_TARGETS := $(patsubst $(TEST_DIR)/%.c,$(BUILD_DIR)/test/%,$(TEST_SRCS))
 
@@ -157,12 +160,13 @@ install: all
 	install --directory $(SILVER_IMPORT)/lib
 	install --directory $(SILVER_IMPORT)/include
 	install --directory $(SILVER_IMPORT)/bin
-
-	@if [ -f $(BUILD_DIR)/$(PROJECT)-includes ]; then \
-		install -m 644 $(LIB_TARGET)  $(SILVER_IMPORT)/lib/; \
+	@if [ -n "$(LIB_TARGET)" ]; then \
+		if [ -f $(BUILD_DIR)/$(PROJECT)-includes ]; then \
+			install -m 644 $(LIB_TARGET)  $(SILVER_IMPORT)/lib/; \
+		fi \
 	fi
 
-	@if [ -n $(APP_TARGETS) ]; then \
+	@if [ -n "$(APP_TARGETS)" ]; then \
 		install -m 644 $(APP_TARGETS) $(SILVER_IMPORT)/bin/; \
 	fi
 
@@ -175,7 +179,7 @@ install: all
 		install -m 644 $(BUILD_DIR)/$(PROJECT)-flat $(SILVER_IMPORT)/include/; \
 	fi
 
-	@cd $(BUILD_DIR) && ./$(PROJECT)-reflect || true
+	@cd $(BUILD_DIR) # && ./$(PROJECT)-reflect || true
 	if [ -f $(BUILD_DIR)/lib$(PROJECT).m ]; then \
 		install -m 644 $(BUILD_DIR)/lib$(PROJECT).m $(SILVER_IMPORT)/lib/; \
 	fi

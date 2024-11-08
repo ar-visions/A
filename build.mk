@@ -48,7 +48,7 @@ TEST_LIBS      = $(call process_libs,test)
 release		  ?= 0
 APP			  ?= 0
 SILVER_IMPORT ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)
-CC 			   = $(SILVER_IMPORT)/bin/clang
+CC 			   = clang-18 # $(SILVER_IMPORT)/bin/clang
 MAKEFLAGS     += --no-print-directory
 INCLUDES 	   = -I$(SRC_ROOT)/lib -I$(SRC_ROOT)/app -I$(SILVER_IMPORT)/include
 LDFLAGS 	   = -L$(SILVER_IMPORT)/lib -Wl,-rpath,$(SILVER_IMPORT)/lib
@@ -70,6 +70,8 @@ CFLAGS 		   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-Wno-incompatible-pointer-types -Wfatal-errors -std=gnu11 -DMODULE="\"$(PROJECT)\"" \
 	-Wno-incompatible-library-redeclaration
 
+CFLAGS  := $(CFLAGS) -fsanitize=address
+LDFLAGS := $(LDFLAGS) -fsanitize=address
 
 #[method arg:2]
 LIB_TARGET   = $(if $(strip $(LIB_OBJS)),$(BUILD_DIR)/lib/lib$(PROJECT).so)

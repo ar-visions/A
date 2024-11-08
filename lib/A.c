@@ -873,7 +873,7 @@ array string_split(string a, cstr sp) {
 
 void string_realloc(string a, sz alloc) {
     vector_realloc(a, alloc);
-    verify(a->len < a->alloc, "str len invalid");
+    verify(a->len <= a->alloc, "str len invalid");
     a->chars = data(a);
     a->chars[a->len] = 0;
 }
@@ -943,8 +943,12 @@ u64 item_hash(item f) {
 
 void string_init(string a) {
     cstr value = a->chars;
-    if (a->alloc)
-        a->chars = (cstr)data(a);
+    if (a->alloc) {
+        A header = A_header(a);
+        A data_header = A_header(header->data);
+        a->chars = (cstr)header->data;
+        a->len   = strlen(a->chars);
+    }
     if (value) {
         sz len = a->ref_length ? a->ref_length : strlen(value);
         if (!a->alloc)
@@ -971,10 +975,12 @@ real clampf(real i, real mn, real mx) {
     return i;
 }
 
+void vector_init(vector a);
+
 string string_with_cstr(string a, cstr value) {
-    a->len   = value ? strlen(value) : 0;
-    a->chars = calloc(a->len + 1, 1);
-    memcpy(a->chars, value, a->len);
+    vector_init(a);
+    a->chars = value;
+    string_init(a);
     return a;
 }
 
@@ -1404,7 +1410,11 @@ object* A_realloc(object a, sz count) {
 void vector_init(vector a) {
     A f = A_header(a);
     a->data_type = f->type->meta.meta_0 ? f->type->meta.meta_0 : typeid(object);
-    if (a->alloc) {
+    if (f->data) {
+        verify(a->alloc == 0, "vector data provided already");
+        A data_f = A_header(f->data);
+        a->alloc = data_f->alloc;
+    } else if (a->alloc) {
         sz vsize = call(a, vector_size, a->alloc);
         f->data = A_alloc(a->data_type, vsize, false);
     }
@@ -1456,32 +1466,29 @@ num abs(num i) {
 }
 
 vector vector_slice(vector a, num from, num to) {
-    /*
     A      f   = A_header(a);
     /// allocate the data type (no i8 bytes)
     AType  data_type = f->type->meta.meta_0 ? f->type->meta.meta_0 : typeid(object);
-    num count = (1 + abs(from - to)) + 31 & ~31;
-    raw_t res = A_alloc(f->type, 1, true);
+    num count = (1 + abs(from - to)); // + 31 & ~31;
+    object res = A_alloc(f->type, 1, true);
+    A      res_f = A_header(res);
 
     /// get data type (default to object)
-    
     verify (data_type, "no data-type");
 
     /// allocate 
-    
     num adj   = call(a, vector_size, count);
     verify(adj >= count, "invalid vector adjustment");
     u8* src   = f->data;
-    u8* dst   = A_realloc(res, adj);
+    u8* dst   = A_alloc(data_type, adj, true);
     if (from <  to)
         memcpy(dst, &src[from * a->stride], count * a->stride);
     else
         for (int i = from; i > to; i--, dst++)
             memcpy(dst, &src[i * a->stride], count * a->stride);
-
+    res_f->data = dst;
+    A_initialize(res);
     return res;
-    */
-   return null;
 }
 
 sz vector_count(vector a) {

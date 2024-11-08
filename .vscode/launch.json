@@ -90,7 +90,7 @@
             "name": "silver",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../silver/silver-debug/app/silver",
+            "program": "${workspaceFolder}/../silver/silver-debug/app/silver88",
             "args": [
                 "WGPU.si",
                 "--install", "/home/kalen/src/silver-import"

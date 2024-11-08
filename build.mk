@@ -157,9 +157,9 @@ verify: $(TEST_TARGETS)
 
 # install targets and run reflect with integrity check
 install: all
-	install --directory $(SILVER_IMPORT)/lib
-	install --directory $(SILVER_IMPORT)/include
-	install --directory $(SILVER_IMPORT)/bin
+	@install --directory $(SILVER_IMPORT)/lib
+	@install --directory $(SILVER_IMPORT)/include
+	@install --directory $(SILVER_IMPORT)/bin
 	@if [ -n "$(LIB_TARGET)" ]; then \
 		if [ -f $(BUILD_DIR)/$(PROJECT)-includes ]; then \
 			install -m 644 $(LIB_TARGET)  $(SILVER_IMPORT)/lib/; \
@@ -170,7 +170,7 @@ install: all
 		install -m 644 $(APP_TARGETS) $(SILVER_IMPORT)/bin/; \
 	fi
 
-	@if [ -n $(SRCLIB_DIR)/$(PROJECT) ]; then \
+	@if [ -f "$(SRCLIB_DIR)/$(PROJECT)" ]; then \
 		install -m 644 $(SRCLIB_DIR)/$(PROJECT) $(SILVER_IMPORT)/include/; \
 	fi
 
@@ -180,13 +180,13 @@ install: all
 	fi
 
 	@cd $(BUILD_DIR) # && ./$(PROJECT)-reflect || true
-	if [ -f $(BUILD_DIR)/lib$(PROJECT).m ]; then \
+	@if [ -f $(BUILD_DIR)/lib$(PROJECT).m ]; then \
 		install -m 644 $(BUILD_DIR)/lib$(PROJECT).m $(SILVER_IMPORT)/lib/; \
 	fi
 
 # clean build artifacts
 clean:
-	rm -rf $(BUILD_DIR)/app $(BUILD_DIR)/lib $(BUILD_DIR)/test $(REFLECT_TARGET) $(BUILD_DIR)/*-flat $(BUILD_DIR)/*.tmp.c
+	rm -rf $(BUILD_DIR)/app $(BUILD_DIR)/lib $(BUILD_DIR)/test $(REFLECT_TARGET) $(BUILD_DIR)/*-flat $(BUILD_DIR)/*-includes $(BUILD_DIR)/*.tmp.c
 
 ifeq ($(VERBOSE),1)
 	$(info $(PROJECT) : $(IMPORT) -- $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --i $(SRC_ROOT)/import)

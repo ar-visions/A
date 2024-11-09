@@ -1312,6 +1312,7 @@ declare_class(fn)
 
 #define string_schema(X,Y) \
     i_prop    (X,Y,   public, cstr,    chars) \
+    i_prop    (X,Y,   public, num,     alloc) \
     i_prop    (X,Y,   public, num,     ref_length) \
     i_prop    (X,Y,   public, num,     len) \
     i_prop    (X,Y,   public, u64,     h) \
@@ -1322,8 +1323,8 @@ declare_class(fn)
     i_method  (X,Y,   public, string,  mid, num, num) \
     i_method  (X,Y,   public, none,    reserve, num) \
     i_method  (X,Y,   public, none,    write, handle, bool) \
-    i_method  (X,Y,   public, bool,    starts_with, cstr) \
     i_method  (X,Y,   public, bool,    ends_with, cstr) \
+    i_method  (X,Y,   public, bool,    starts_with, cstr) \
     i_method  (X,Y,   public, num,     cmp, cstr) \
     i_method  (X,Y,   public, bool,    eq,  cstr) \
     i_cast    (X,Y,   public, cstr) \
@@ -1335,13 +1336,11 @@ declare_class(fn)
     i_override(X,Y,   method, compare) \
     i_override(X,Y,   method, init) \
     i_override(X,Y,   cast,   bool) \
-    i_override(X,Y,   method, copy) \
-    i_override(X,Y,   method, realloc) \
-    i_override(X,Y,   method, vector_size)
+    i_override(X,Y,   method, copy)
 #ifndef string_intern
 #define string_intern
 #endif
-declare_vector(string)
+declare_class(string)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
 object A_formatter(AType rtype, FILE* f, object opt, cstr template, ...);

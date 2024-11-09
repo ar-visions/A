@@ -830,15 +830,6 @@ u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
     return hash;
 }
 
-void  string_destructor(string a)        { free(a->chars); }
-num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
-num   string_cmp(string a, cstr b)       { return strcmp(a->chars, b); }
-bool  string_eq(string a, cstr b)        { return strcmp(a->chars, b) == 0; }
-
-string string_copy(string a) {
-    return str(a->chars);
-}
-
 array  array_copy(array a) {
     array  b = new(array, alloc, len(a));
     concat(b, a);
@@ -850,6 +841,34 @@ list   list_copy(list a) {
     for (item i = a->first; i; i = i->next)
         push(b, i->value);
     return b;
+}
+
+u64 item_hash(item f) {
+    return hash(f->key ? f->key : f->value);
+}
+
+num clamp(num i, num mn, num mx) {
+    if (i < mn) return mn;
+    if (i > mx) return mx;
+    return i;
+}
+
+real clampf(real i, real mn, real mx) {
+    if (i < mn) return mn;
+    if (i > mx) return mx;
+    return i;
+}
+
+void vector_init(vector a);
+
+
+void  string_destructor(string a)        { free(a->chars); }
+num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
+num   string_cmp(string a, cstr b)       { return strcmp(a->chars, b); }
+bool  string_eq(string a, cstr b)        { return strcmp(a->chars, b) == 0; }
+
+string string_copy(string a) {
+    return str(a->chars);
 }
 
 i32   string_index_num(string a, num index) {
@@ -871,37 +890,29 @@ array string_split(string a, cstr sp) {
     return null;
 }
 
-void string_realloc(string a, sz alloc) {
-    vector_realloc(a, alloc);
-    verify(a->len <= a->alloc, "str len invalid");
-    a->chars = data(a);
-    a->chars[a->len] = 0;
-}
-
-sz string_vector_size(string a, sz alloc) {
-    return alloc + 1;
-}
-
-u64 string_hash(string a) {
-    if (a->h) return a->h;
-    a->h = fnv1a_hash(data(a), a->len, OFFSET_BASIS);
-    return a->h;
+void string_alloc_sz(string a, sz alloc) {
+    char* chars = calloc(1 + alloc, sizeof(char));
+    memcpy(chars, a->chars, sizeof(char) * a->len);
+    chars[a->len] = 0;
+    //free(a->chars);
+    a->chars = chars;
+    a->alloc = alloc;
 }
 
 string string_mid(string a, num start, num len) {
-    return slice(a, start, len);
+    return new(string, chars, &a->chars[start], ref_length, len);
 }
 
 none  string_reserve(string a, num extra) {
     if (a->alloc - a->len >= extra)
         return;
-    realloc(a, a->alloc + extra);
+    string_alloc_sz(a, a->alloc + extra);
 }
 
 none  string_append(string a, cstr b) {
     sz blen = strlen(b);
     if (blen + a->len >= a->alloc)
-        realloc(a, (a->alloc << 1) + blen);
+        string_alloc_sz(a, (a->alloc << 1) + blen);
     memcpy(&a->chars[a->len], b, blen);
     a->len += blen;
     a->chars[a->len] = 0;
@@ -937,52 +948,38 @@ path string_cast_path(string a) {
     return new(path, chars, a->chars);
 }
 
-u64 item_hash(item f) {
-    return hash(f->key ? f->key : f->value);
+
+
+u64 string_hash(string a) {
+    if (a->h) return a->h;
+    a->h = fnv1a_hash(a->chars, a->len, OFFSET_BASIS);
+    return a->h;
 }
 
 void string_init(string a) {
     cstr value = a->chars;
-    if (a->alloc) {
-        A header = A_header(a);
-        A data_header = A_header(header->data);
-        a->chars = (cstr)header->data;
-        a->len   = strlen(a->chars);
-    }
+    if (a->alloc)
+        a->chars = (char*)calloc(1, 1 + a->alloc);
     if (value) {
         sz len = a->ref_length ? a->ref_length : strlen(value);
         if (!a->alloc)
             a->alloc = len;
-        if (a->chars == value) {
-            realloc(a, len);
-            a->chars = (cstr)data(a);
-        }
+        if (a->chars == value)
+            a->chars = (char*)calloc(1, len + 1);
         memcpy(a->chars, value, len);
         a->chars[len] = 0;
         a->len = len;
     }
 }
 
-num clamp(num i, num mn, num mx) {
-    if (i < mn) return mn;
-    if (i > mx) return mx;
-    return i;
-}
-
-real clampf(real i, real mn, real mx) {
-    if (i < mn) return mn;
-    if (i > mx) return mx;
-    return i;
-}
-
-void vector_init(vector a);
 
 string string_with_cstr(string a, cstr value) {
-    vector_init(a);
-    a->chars = value;
-    string_init(a);
+    a->len   = value ? strlen(value) : 0;
+    a->chars = calloc(a->len + 1, 1);
+    memcpy(a->chars, value, a->len);
     return a;
 }
+
 
 bool string_starts_with(string a, cstr value) {
     sz ln = strlen(value);
@@ -1618,12 +1615,8 @@ array array_of_cstr(cstr first, ...) {
     array a = allocate(array);
     va_list args;
     va_start(args, first);
-    for (;;) {
-        cstr arg = va_arg(args, A);
-        if (!arg)
-            break;
+    for (cstr arg = first; arg; arg = va_arg(args, A))
         push(a, allocate(string, chars, arg));
-    }
     return a;
 }
 
@@ -1650,7 +1643,7 @@ num array_compare(array a, array b) {
 }
 
 A array_get(array a, num i) {
-    return a->elements[i];
+    return (i >= 0 && i < a->len) ? a->elements[i] : null;
 }
 
 num array_count(array a) {
@@ -2149,7 +2142,7 @@ define_class(path)
 define_class(file)
 
 
-define_vector(string, i8)
+define_class(string)
 
 define_class(item)
 //define_proto(collection) -- disabling for now during reduction to base + class + mod

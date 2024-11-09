@@ -38,6 +38,5 @@ int main(int n_args, char* v_args[]) {
     A header = A_header(s);
     print("string2: %i, refs: %i, data: %p", s->alloc, header->refs, header->data);
 
-    concat(s, "this is a test", 14); 
     return 0;
 }

@@ -231,6 +231,7 @@ typedef bool(*global_init_fn)();
         A_initialize(instance); \
         instance; \
     })
+
 #define valloc(T, N)                ((A)A_alloc(typeid(T), N, false))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
 #define isa(INSTANCE)               (INSTANCE ? (struct A_f*)((struct A*)INSTANCE - 1)->type : (struct A_f*)0)
@@ -455,7 +456,10 @@ typedef bool(*global_init_fn)();
 #define   i_method_intern_INIT(    X, R, N, ...)    
 #define   i_method_intern_PROTO(X, R, N, ...)
 #define   i_method_intern_METHOD(X, R, N, ...)      
-#define   i_method(X, Y, T, R, N, ...)              i_method_##T##_##Y(X, R, N, X, ##__VA_ARGS__)
+
+/// avoiding conflict with parsing i_method uses
+#define   i_method\
+(X, Y, T, R, N, ...) i_method_##T##_##Y(X, R, N, X, ##__VA_ARGS__)
 
 #define   i_operator_public_INST(X, R, N, ARG)
 #define   i_operator_public_INTERN(X, R, N, ARG)

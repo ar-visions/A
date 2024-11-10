@@ -77,20 +77,46 @@ LDFLAGS := $(LDFLAGS) -fsanitize=address
 LIB_TARGET   = $(if $(strip $(LIB_OBJS)),$(BUILD_DIR)/lib/lib$(PROJECT).so)
 APP_TARGETS	 = $(patsubst $(SRCAPP_DIR)/%.c, $(BUILD_DIR)/app/%, $(wildcard $(SRCAPP_DIR)/*.c))
 TARGET_FLAGS = -shared
-ALL_TARGETS  = import $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
+ALL_TARGETS  = import methods $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
 APP_FLAGS    = 
 
 ifneq ($(release),0)
 	ALL_TARGETS += verify
 endif
 
-.PHONY: all clean install import tests verify prepare_dirs
+.PHONY: all clean install import tests verify prepare_dirs methods
 .PRECIOUS: *.o
 
 all: prepare_dirs $(ALL_TARGETS)
 
+# not a huge restriction but we cannot have the same project name in lib and app form
+#PROJECT_HEADER = $(SRC_ROOT)/app/$(PROJECT)
+PROJECT_HEADER = $(if $(wildcard $(SRC_ROOT)/lib/$(PROJECT)),$(SRC_ROOT)/lib/$(PROJECT),$(if $(wildcard $(SRC_ROOT)/app/$(PROJECT)),$(SRC_ROOT)/app/$(PROJECT),))
+METHODS_HEADER = $(BUILD_DIR)/$(PROJECT)-methods
+upper 		   = $(shell echo $(1) | tr '[:lower:]' '[:upper:]')
+UPROJECT 	   = $(call upper,$(PROJECT))
+
+# how do we add to ALL_TARGETS if PROJECT_HEADER exists and METHODS_HEADER does not? (might be nice to allow the user to make one)
+# Generate method macros header
+$(METHODS_HEADER): $(PROJECT_HEADER)
+	$(info echo "generating project header")
+	@echo "/* Auto-generated method macros */" > $@
+	@echo "#ifndef _$(UPROJECT)_METHODS_H_" >> $@
+	@echo "#define _$(UPROJECT)_METHODS_H_" >> $@
+	@echo >> $@
+	@grep -o 'i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*[[:alnum:]_]*' $(PROJECT_HEADER) | \
+	sed 's/i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*\([[:alnum:]_]*\).*/\1/' | \
+	while read method; do \
+		echo "#define $$method(I,...) ftableI(I) -> $$method(I, ##__VA_ARGS__)" >> $@; \
+	done
+	@echo >> $@
+	@echo "#endif /* _$(UPROJECT)_METHODS_H_ */" >> $@
+	@echo "Generated $(METHODS_HEADER)"
+
+methods: $(METHODS_HEADER)
 
 prepare_dirs:
+	$(info echo "project header: $(PROJECT_HEADER), targets = $(ALL_TARGETS)")
 	mkdir -p $(BUILD_DIR)/app $(BUILD_DIR)/test $(BUILD_DIR)/lib
 	@if [ -d "$(SRC_ROOT)/res" ]; then \
 		cp -r $(SRC_ROOT)/res/* $(BUILD_DIR); \
@@ -174,6 +200,10 @@ install: all
 
 	@if [ -f "$(SRCLIB_DIR)/$(PROJECT)" ]; then \
 		install -m 644 $(SRCLIB_DIR)/$(PROJECT) $(SILVER_IMPORT)/include/; \
+	fi
+
+	@if [ -f "$(BUILD_DIR)/$(METHODS_HEADER)" ]; then \
+		install -m 644 $(BUILD_DIR)/$(METHODS_HEADER) $(SILVER_IMPORT)/include/; \
 	fi
 
 	@if [ -f $(BUILD_DIR)/$(PROJECT)-includes ]; then \

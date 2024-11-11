@@ -158,7 +158,6 @@ typedef bool(*global_init_fn)();
 #else
     #define TC(MEMBER, VALUE) VALUE
 #endif
-
 #define _ARG_COUNT_IMPL(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N
 #define _ARG_COUNT_I(...) _ARG_COUNT_IMPL(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 #define _ARG_COUNT(...)   _ARG_COUNT_I("A-type", ## __VA_ARGS__)
@@ -187,12 +186,20 @@ typedef bool(*global_init_fn)();
         _N_ARGS_18(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC(t,u);
 #define _N_ARGS_22(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) \
         _N_ARGS_20(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC(v,w);
-#define _N_ARGS(TYPE,...)    _N_ARGS_HELPER2(TYPE, _ARG_COUNT(__VA_ARGS__), ## __VA_ARGS__)
 #define _N_ARGS_HELPER2(TYPE, N, ...)  _COMBINE(_N_ARGS_, N)(TYPE, ## __VA_ARGS__)
+#define _N_ARGS(TYPE,...)    _N_ARGS_HELPER2(TYPE, _ARG_COUNT(__VA_ARGS__), ## __VA_ARGS__)
+
 #define new(TYPE, ...) \
     ({ \
         TYPE instance = (TYPE)A_alloc(typeid(TYPE), 1, true); \
         _N_ARGS(TYPE, ## __VA_ARGS__); \
+        A_initialize(instance); \
+        instance; \
+    })
+#define new2(TYPE, ...) \
+    ({ \
+        TYPE instance = (TYPE)A_alloc(typeid(TYPE), 1, true); \
+        TYPE##_N_ARGS(TYPE, ## __VA_ARGS__); \
         A_initialize(instance); \
         instance; \
     })

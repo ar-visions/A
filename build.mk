@@ -2,6 +2,7 @@ MAKEFILE_PATH := $(abspath $(word $(shell expr $(words $(MAKEFILE_LIST)) - 1),$(
 ifeq ($(MAKEFILE_PATH),)
     MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 endif
+
 SRC_ROOT  	  := $(patsubst %/,%,$(dir $(MAKEFILE_PATH)))
 BUILD_DIR 	  := $(CURDIR)
 
@@ -125,17 +126,41 @@ $(INIT_HEADER): $(PROJECT_HEADER)
 	@echo "#define _$(UPROJECT)_INIT_H_" >> $@
 	@# new wrappers; these allow you to use the type of the same name in C source, but not as tokens in macros
 	@echo >> $@
-	@grep -o 'declare_class[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-	sed 's/declare_class[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
+	@grep -o 'declare_\(class\|mod\)[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
+	sed 's/declare_\(class\|mod\)[[:space:]]*([[:space:]]*\([^,)]*\).*/\2/' | \
 	while read class_name; do \
-		echo "#define $$class_name(...)\t\tnew($$class_name, __VA_ARGS__)" >> $@; \
-	done
-	@echo >> $@
-	@echo >> $@
-	@grep -o 'declare_mod[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-	sed 's/declare_mod[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
-	while read class_name; do \
-		echo "#define $$class_name(...)\t\tnew($$class_name, __VA_ARGS__)" >> $@; \
+		echo "#ifndef NDEBUG" >> $@; \
+		echo "    //#define TC_$${class_name}(MEMBER, VALUE) A_validate_type(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)" >> $@; \
+		echo "    #define TC_$${class_name}(MEMBER, VALUE) VALUE" >> $@; \
+		echo "#else" >> $@; \
+		echo "    #define TC_$${class_name}(MEMBER, VALUE) VALUE" >> $@; \
+		echo "#endif" >> $@; \
+		echo "#define _ARG_COUNT_IMPL_$${class_name}(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N" >> $@; \
+		echo "#define _ARG_COUNT_I_$${class_name}(...) _ARG_COUNT_IMPL_$${class_name}(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)" >> $@; \
+		echo "#define _ARG_COUNT_$${class_name}(...)   _ARG_COUNT_I_$${class_name}(\"A-type\", ## __VA_ARGS__)" >> $@; \
+		echo "#define _COMBINE_$${class_name}_(A, B)   A##B" >> $@; \
+		echo "#define _COMBINE_$${class_name}(A, B)    _COMBINE_$${class_name}_(A, B)" >> $@; \
+		echo "#define _N_ARGS_0_$${class_name}( TYPE)" >> $@; \
+		echo "#define _N_ARGS_1_$${class_name}( TYPE, a) _Generic((a), TYPE##_schema(TYPE, GENERICS) const void *: (void)0)(instance, a)" >> $@; \
+		echo "#define _N_ARGS_2_$${class_name}( TYPE, a,b) instance->a = TC_$${class_name}(a,b);" >> $@; \
+		echo "#define _N_ARGS_4_$${class_name}( TYPE, a,b, c,d) _N_ARGS_2_$${class_name}(TYPE, a,b) instance->c = TC_$${class_name}(c,d);" >> $@; \
+		echo "#define _N_ARGS_6_$${class_name}( TYPE, a,b, c,d, e,f) _N_ARGS_4_$${class_name}(TYPE, a,b, c,d) instance->e = TC_$${class_name}(e,f);" >> $@; \
+		echo "#define _N_ARGS_8_$${class_name}( TYPE, a,b, c,d, e,f, g,h) _N_ARGS_6_$${class_name}(TYPE, a,b, c,d, e,f) instance->g = TC_$${class_name}(g,h);" >> $@; \
+		echo "#define _N_ARGS_10_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j) _N_ARGS_8_$${class_name}(TYPE, a,b, c,d, e,f, g,h) instance->i = TC_$${class_name}(i,j);" >> $@; \
+		echo "#define _N_ARGS_12_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) _N_ARGS_10_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j) instance->l = TC_$${class_name}(l,m);" >> $@; \
+		echo "#define _N_ARGS_14_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) _N_ARGS_12_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC_$${class_name}(n,o);" >> $@; \
+		echo "#define _N_ARGS_16_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) _N_ARGS_14_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) instance->p = TC_$${class_name}(p,q);" >> $@; \
+		echo "#define _N_ARGS_18_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) _N_ARGS_16_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) instance->r = TC_$${class_name}(r,s);" >> $@; \
+		echo "#define _N_ARGS_20_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) _N_ARGS_18_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC_$${class_name}(t,u);" >> $@; \
+		echo "#define _N_ARGS_22_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) _N_ARGS_20_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC_$${class_name}(v,w);" >> $@; \
+		echo "#define _N_ARGS_HELPER2_$${class_name}(TYPE, N, ...)  _COMBINE_$${class_name}(_N_ARGS_, N)(TYPE, ## __VA_ARGS__)" >> $@; \
+		echo "#define _N_ARGS_$${class_name}(TYPE,...)    _N_ARGS_HELPER2_$${class_name}(TYPE, _ARG_COUNT_$${class_name}(__VA_ARGS__), ## __VA_ARGS__)" >> $@; \
+		echo "#define $$class_name(...) ({ \\" >> $@; \
+		echo "    $${class_name} instance = ($${class_name})A_alloc(typeid($${class_name}), 1, true); \\" >> $@; \
+		echo "    _N_ARGS_$${class_name}($${class_name}, ## __VA_ARGS__); \\" >> $@; \
+		echo "    A_initialize(instance); \\" >> $@; \
+		echo "    instance; \\" >> $@; \
+		echo "})" >> $@; \
 	done
 	@echo >> $@
 	@echo "#endif /* _$(UPROJECT)_INIT_H_ */" >> $@

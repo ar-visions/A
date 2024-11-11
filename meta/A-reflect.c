@@ -4,7 +4,7 @@ bool isname(char n) { return (n >= 'a' && n <= 'z') || (n >= 'A' && n <= 'Z') ||
 
 bool validate(path mfile) {
     file f = new(file, src, mfile, read, true);
-    if(!cast(f, bool))
+    if(!cast(bool, f))
         return false;
 
     map   name_symbols   = new(map, hsize, 64);
@@ -88,7 +88,7 @@ bool validate(path mfile) {
 
 path reflect(string module) {
     file f = new(file, src, null, write, true);
-    if(!cast(f, bool))
+    if(!cast(bool, f))
         return f->src;
     
     map name_symbols = new(map, hsize, 64);

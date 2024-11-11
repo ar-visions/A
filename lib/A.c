@@ -1,17 +1,4 @@
-#define       A_intern  intern(A)
-#define    item_intern  intern(item)
-#define    path_intern  intern(path)
-#define    file_intern  intern(file)
-#define  vector_intern  intern(vector)
-#define   array_intern  intern(array)
-#define      AF_intern  intern(AF)
-#define hashmap_intern  intern(hashmap)
-#define    pair_intern  intern(pair)
-#define     map_intern  intern(map)
-#define      fn_intern  intern(fn)
-#define  string_intern  intern(string)
-
-#include <A>
+#include <import>
 #include <ffi.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -23,7 +10,6 @@ __thread   AF      af_top;
 static global_init_fn* call_after;
 static num             call_after_alloc;
 static num             call_after_count;
-
 static map             log_fields;
 
 void A_lazy_init(global_init_fn fn) {
@@ -235,7 +221,12 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     method_t* method = calloc(1, sizeof(method_t));
     method->ffi_cif  = calloc(1,        sizeof(ffi_cif));
     method->ffi_args = calloc(max_args, sizeof(ffi_type*));
-    method->atypes   = allocate(array);
+
+
+    //_Generic(("hi"), string_schema(string, GENERICS) const void *: (void)0)("hi")  
+
+
+    method->atypes   = new(array);
     method->rtype    = rtype;
     method->address  = address;
     assert(atypes->len <= max_args, "adjust arg maxima");
@@ -326,8 +317,8 @@ void A_start() {
     int remaining = call_after_count;
     while (remaining)
         for (int i = 0; i < call_after_count; i++) {
-            global_init_fn fn = call_after[i];
-            if (fn && fn()) {
+            global_init_fn fn2 = call_after[i];
+            if (fn2 && fn2()) {
                 call_after[i] = null;
                 remaining--;
             }
@@ -336,8 +327,8 @@ void A_start() {
     remaining = call_last_count;
     while (remaining)
         for (int i = 0; i < call_last_count; i++) {
-            global_init_fn fn = call_last[i];
-            if (fn && fn()) {
+            global_init_fn fn2 = call_last[i];
+            if (fn2 && fn2()) {
                 call_last[i] = null;
                 remaining--;
             }
@@ -593,7 +584,7 @@ void A_serialize(AType type, string res, A a) {
         }
         append(res, buf); // should allow for a -1 or len
     } else {
-        string s = cast(a, string);
+        string s = cast(string, a);
         if (s) {
             append(res, "\"");
             append(res, s->chars);
@@ -702,7 +693,7 @@ Exists A_exists(A o) {
     AType type = isa(o);
     path  f = null;
     if (type == typeid(string))
-        f = cast((string)o, path);
+        f = cast(path, (string)o);
     else if (type == typeid(path))
         f = o;
     assert(f, "type not supported");
@@ -752,7 +743,7 @@ object A_formatter(AType type, FILE* f, object opt, cstr template, ...) {
         /// format %o as object's string cast
         if (*scan == '%' && *(scan + 1) == 'o') {
             A      arg = va_arg(args, A);
-            string   a = arg ? cast(arg, string) : str("null");
+            string   a = arg ? cast(string, arg) : str("null");
             num    len = a->len;
             reserve(res, len);
             memcpy(&res->chars[res->len], a->chars, len);
@@ -800,7 +791,7 @@ object A_formatter(AType type, FILE* f, object opt, cstr template, ...) {
         object fvalue = get(log_fields, field); // make get be harmless to map; null is absolutely fine identity wise to understand that
         if (!fvalue) return null;
         verify(fvalue, "map integrity failure");
-        bool b = fvalue ? cast(fvalue, bool) : false;
+        bool b = fvalue ? cast(bool, fvalue) : false;
         if (!b) return null; /// need to guard for this in string opt callers
         string ff = instanceof(fvalue, string);
         
@@ -981,6 +972,11 @@ string string_with_cstr(string a, cstr value) {
 }
 
 
+string string_with_symbol(string a, symbol value) {
+    return string_with_cstr(a, (cstr)value);
+}
+
+
 bool string_starts_with(string a, cstr value) {
     sz ln = strlen(value);
     if (!ln || ln > a->len) return false;
@@ -1068,8 +1064,8 @@ string hashmap_cast_string(hashmap a) {
     for (int i = 0; i < a->alloc; i++) {
         list bucket = &a->data[i];
         for (item f = bucket->first; f; f = f->next) {
-            string key = cast(f->key, string);
-            string val = cast(f->value, string);
+            string key = cast(string, f->key);
+            string val = cast(string, f->value);
             if (once) append(res, " ");
             append(res, key->chars);
             append(res, ":");
@@ -1166,8 +1162,8 @@ string map_cast_string(map a) {
     bool   once = false;
     for (item i = a->first; i; i = i->next) {
         pair   kv    = i->value;
-        string key   = cast(kv->key,   string);
-        string value = cast(kv->value, string);
+        string key   = cast(string, kv->key);
+        string value = cast(string, kv->value);
         if (once) append(res, " ");
         append(res, key->chars);
         append(res, ":");
@@ -1412,7 +1408,7 @@ void vector_init(vector a) {
         A data_f = A_header(f->data);
         a->alloc = data_f->alloc;
     } else if (a->alloc) {
-        sz vsize = call(a, vector_size, a->alloc);
+        sz vsize = vector_size(a, a->alloc);
         f->data = A_alloc(a->data_type, vsize, false);
     }
     a->stride = (a->data_type->traits & A_TRAIT_PRIMITIVE) ? 
@@ -1474,7 +1470,7 @@ vector vector_slice(vector a, num from, num to) {
     verify (data_type, "no data-type");
 
     /// allocate 
-    num adj   = call(a, vector_size, count);
+    num adj   = vector_size(a, count);
     verify(adj >= count, "invalid vector adjustment");
     u8* src   = f->data;
     u8* dst   = A_alloc(data_type, adj, true);
@@ -1496,6 +1492,10 @@ sz vector_count(vector a) {
 define_class(vector);
 
 
+array array_with_sz(array a, sz alloc) {
+    a->alloc = alloc;
+    return a;
+}
 
 void array_push(array a, A b) {
     if (a->alloc == a->len) {
@@ -1701,7 +1701,7 @@ AF A_pool(sz start_size) {
 void AF_destructor(AF a) {
     int f = index_of(af_stack, a);
     assert(f >= 0, "invalid af-stack index");
-    call(af_stack, remove_weak, f);
+    remove_weak(af_stack, f);
     if (af_top == a)
         af_top = af_stack->len ? af_stack->elements[af_stack->len - 1] : null;
     for (int i = 1; i < a->pool->len; i++) {

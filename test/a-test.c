@@ -1,4 +1,4 @@
-#include <A>
+#include <import>
 
 /// @brief can reference the 'struct type' as inlay, and 'type' as ptr
 typedef struct user {

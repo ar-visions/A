@@ -153,41 +153,46 @@ typedef bool(*global_init_fn)();
 
 // runtime type-check api
 #ifndef NDEBUG
-    //intern needs to be effectively switched on to introspect for debug-only
-    //it would be useful to runtime verify args, though
     //#define TC(MEMBER, VALUE) A_validate_type(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)
     #define TC(MEMBER, VALUE) VALUE
 #else
     #define TC(MEMBER, VALUE) VALUE
 #endif
 
-#define _ARG_COUNT_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N
-#define _ARG_COUNT(...)        _ARG_COUNT_IMPL(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
-#define _COMBINE_(A, B)        A##B
-#define _COMBINE(A, B)         _COMBINE_(A, B)
-#define _N_ARGS_HELPER(N, ...) _COMBINE(EXPAND_ARGS_, N)(__VA_ARGS__)
-#define _N_ARGS_0()
-#define _N_ARGS_1()                  
-#define _N_ARGS_2(a,b)                                       instance->a = TC(a,b);
-#define _N_ARGS_4(a,b, c,d)                                  _N_ARGS_2 (a,b) instance->c = TC(c,d);
-#define _N_ARGS_6(a,b, c,d, e,f)                             _N_ARGS_4 (a,b, c, d) instance->e = TC(e,f);
-#define _N_ARGS_8(a,b, c,d, e,f, g,h)                        _N_ARGS_6 (a,b, c, d, e, f) instance->g = TC(g,h);
-#define _N_ARGS_10(a,b, c,d, e,f, g,h, i,j)                  _N_ARGS_8 (a,b, c,d, e,f, g,h) instance->i = TC(i,j);
-#define _N_ARGS_12(a,b, c,d, e,f, g,h, i,j, l,m)             _N_ARGS_10(a,b, c,d, e,f, g,h, i,j) instance->l = TC(l,m);
-#define _N_ARGS_14(a,b, c,d, e,f, g,h, i,j, l,m, n,o)        _N_ARGS_12(a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC(n,o);
-#define _N_ARGS_16(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q)   _N_ARGS_14(a,b, c,d, e,f, g,h, i,j, l,m, n,o) instance->p = TC(p,q);
-#define _N_ARGS_18(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) \
-    _N_ARGS_16(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) instance->r = TC(r,s);
-#define _N_ARGS_20(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) \
-    _N_ARGS_18(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC(t,u);
-#define _N_ARGS_22(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) \
-    _N_ARGS_20(a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC(v,w);
-#define _N_ARGS(instance,...)    _N_ARGS_HELPER2(_ARG_COUNT(__VA_ARGS__), __VA_ARGS__)
-#define _N_ARGS_HELPER2(N, ...)  _COMBINE(_N_ARGS_, N)(__VA_ARGS__)
-#define new(T, ...) \
+#define _ARG_COUNT_IMPL(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N
+#define _ARG_COUNT_I(...) _ARG_COUNT_IMPL(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+#define _ARG_COUNT(...)   _ARG_COUNT_I("A-type", ## __VA_ARGS__)
+#define _COMBINE_(A, B)   A##B
+#define _COMBINE(A, B)    _COMBINE_(A, B)
+#define _N_ARGS_0( TYPE)
+#define _N_ARGS_1( TYPE, a) _Generic((a), TYPE##_schema(TYPE, GENERICS) const void *: (void)0)(instance, a)
+#define _N_ARGS_2( TYPE, a,b) instance->a = TC(a,b);
+#define _N_ARGS_4( TYPE, a,b, c,d) \
+        _N_ARGS_2 (TYPE, a,b) instance->c = TC(c,d);
+#define _N_ARGS_6( TYPE, a,b, c,d, e,f) \
+        _N_ARGS_4 (TYPE, a,b, c,d) instance->e = TC(e,f);
+#define _N_ARGS_8( TYPE, a,b, c,d, e,f, g,h) \
+        _N_ARGS_6 (TYPE, a,b, c,d, e,f) instance->g = TC(g,h);
+#define _N_ARGS_10(TYPE, a,b, c,d, e,f, g,h, i,j) \
+        _N_ARGS_8 (TYPE, a,b, c,d, e,f, g,h) instance->i = TC(i,j);
+#define _N_ARGS_12(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) \
+        _N_ARGS_10(TYPE, a,b, c,d, e,f, g,h, i,j) instance->l = TC(l,m);
+#define _N_ARGS_14(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) \
+        _N_ARGS_12(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC(n,o);
+#define _N_ARGS_16(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) \
+        _N_ARGS_14(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) instance->p = TC(p,q);
+#define _N_ARGS_18(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) \
+        _N_ARGS_16(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) instance->r = TC(r,s);
+#define _N_ARGS_20(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) \
+        _N_ARGS_18(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC(t,u);
+#define _N_ARGS_22(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) \
+        _N_ARGS_20(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC(v,w);
+#define _N_ARGS(TYPE,...)    _N_ARGS_HELPER2(TYPE, _ARG_COUNT(__VA_ARGS__), ## __VA_ARGS__)
+#define _N_ARGS_HELPER2(TYPE, N, ...)  _COMBINE(_N_ARGS_, N)(TYPE, ## __VA_ARGS__)
+#define new(TYPE, ...) \
     ({ \
-        T instance = (T)A_alloc(typeid(T), 1, true); \
-        _N_ARGS(instance, __VA_ARGS__); \
+        TYPE instance = (TYPE)A_alloc(typeid(TYPE), 1, true); \
+        _N_ARGS(TYPE, ## __VA_ARGS__); \
         A_initialize(instance); \
         instance; \
     })
@@ -211,7 +216,7 @@ typedef bool(*global_init_fn)();
 #define construct(type, ...) \
     ({ \
         T instance = (T)A_alloc(type, 1, true); \
-        _N_ARGS(instance, __VA_ARGS__); \
+        _N_ARGS(instance, ## __VA_ARGS__); \
         A_initialize(instance); \
         instance; \
     })
@@ -219,15 +224,15 @@ typedef bool(*global_init_fn)();
 #define new0(T, ...) \
     ({ \
         T instance = (T)A_alloc(typeid(T), 1, true); \
-        _N_ARGS(instance, __VA_ARGS__); \
+        _N_ARGS(instance, ## __VA_ARGS__); \
         A_initialize(instance); \
         instance; \
     })
-//#define allocate(T)                 ((A)A_alloc(typeid(T), 1, false))
+
 #define allocate(T, ...) \
     ({ \
         T instance = (T)A_alloc(typeid(T), 1, false); \
-        _N_ARGS(instance, __VA_ARGS__); \
+        _N_ARGS(instance, ## __VA_ARGS__); \
         A_initialize(instance); \
         instance; \
     })
@@ -235,7 +240,6 @@ typedef bool(*global_init_fn)();
 #define valloc(T, N)                ((A)A_alloc(typeid(T), N, false))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
 #define isa(INSTANCE)               (INSTANCE ? (struct A_f*)((struct A*)INSTANCE - 1)->type : (struct A_f*)0)
-#define inherits(left, type)        (A_instanceof(left, typeid(type)) != null)
 /// see: javascript; returns null if its not an instance-of; faults if you give it a null
 #define instanceof(left, type)      A_instanceof(left, typeid(type))
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
@@ -243,6 +247,9 @@ typedef bool(*global_init_fn)();
 /// useful in two ways, less tokens and expansion inside call()
 /// obviously we only collect so many, but they become keywords of our common language
 /// it reserves their use for methods and not scope confusion with variables
+
+
+/*
 #define set(I,...)                  ftableI(I) -> set(I, ##__VA_ARGS__)
 #define get(I,...)                  ftableI(I) -> get(I, ##__VA_ARGS__)
 #define realloc(I,...)              ftableI(I) -> realloc(I, ##__VA_ARGS__)
@@ -282,13 +289,14 @@ typedef bool(*global_init_fn)();
 #define last(I,...)                 ftableI(I) -> last(I, ##__VA_ARGS__)
 #define exists(I,...)               ftableI(I) -> exists(I, ##__VA_ARGS__)
 #define len(I,...)                  ((I) ? (i64)ftableI(I) -> len(I, ##__VA_ARGS__) : (i64)0)
-#define cs(I)                       ((I) ? (cstr)(I)->chars : (cstr)null)
 #define fetch(I,...)                ftableI(I) -> fetch(I, ##__VA_ARGS__)
 #define lookup(I,...)               ftableI(I) -> lookup(I, ##__VA_ARGS__)
 #define remove(I,...)               ftableI(I) -> remove(I, ##__VA_ARGS__)
 #define remove_item(I,...)          ftableI(I) -> remove_item(I, ##__VA_ARGS__)
 #define index_of(I,...)             ftableI(I) -> index_of(I, ##__VA_ARGS__)
 #define item_of(I,...)              ftableI(I) -> item_of(I, ##__VA_ARGS__)
+
+
 #define build(I,...)                ftableI(I) -> build(I, ##__VA_ARGS__)
 #define write(I,...)                ftableI(I) -> write(I, ##__VA_ARGS__)
 #define parse(I,...)                ftableI(I) -> parse(I, ##__VA_ARGS__)
@@ -302,24 +310,26 @@ typedef bool(*global_init_fn)();
 #define is_empty(I,...)             ftableI(I) -> is_empty(I, ##__VA_ARGS__)
 #define is_dir(I,...)               ftableI(I) -> is_dir(I, ##__VA_ARGS__)
 #define make_dir(I,...)             ftableI(I) -> make_dir(I, ##__VA_ARGS__)
-#define cstring(I)                  cast(I, cstr)
+*/
+
+//#define cs(I)                       ((I) ? (cstr)(I)->chars : (cstr)null)
+
+#define M(I,N,...)                  ftableI(I) -> N(I, ##__VA_ARGS__)
+#define cstring(I)                  cast(cstr, I)
 #define stem(I,...)                 ftableI(I) -> stem(I, ##__VA_ARGS__)
 #define ext(I,...)                  ftableI(I) -> ext(I, ##__VA_ARGS__)
 #define element(I,...)              ftableI(I) -> element(I, ##__VA_ARGS__)
 #define resolve(I,...)              ftableI(I) -> resolve(I, ##__VA_ARGS__)
-#define call(I,N,...)               ftableI(I) -> N(I, ##__VA_ARGS__)
-#define call0(I,N,...)              ftableI(I) -> N(I, ##__VA_ARGS__)
 #define val(T,V)                    A_primitive(typeid(T), (&(T){V}))
-#define idx_1(I,T1,V1)              call0(I, index ##_## T1, V1)
-#define idx_2(I,T1,T2,V1,V2)        call0(I, index ##_## T1 ##_## T2, V1, V2)
-#define idx(I,V1)                   call0(I, index ##_## num, V1)
-#define cast(I,T)                   ftableI(I) -> cast_##T(I)
+#define idx_1(I,T1,V1)              M(I, index ##_## T1, V1)
+#define idx_2(I,T1,T2,V1,V2)        M(I, index ##_## T1 ##_## T2, V1, V2)
+#define idx(I,V1)                   M(I, index ##_## num, V1)
+#define cast(T,I)                   ftableI(I) -> cast_##T(I)
 #define meta_t(I,IDX)               isa(I) -> meta.meta_##IDX
 #define ctr(T,WITH,...)             A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
 #define ctr1(T,WITH,...)            A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
 #define alloc_ctr(T,WITH,...)       A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, false), ## __VA_ARGS__))
 #define str(CSTR)                   string_type.with_cstr(A_alloc(&string_type, 1, true), (cstr)(CSTR))
-#define operator(I,OP,...)          ftableI(I) -> operator_##OP(I, ##__VA_ARGS__)
 
 /// arg expansion for type emission (give address of its statically defined)
 #define emit_types(...)             EXPAND_ARGS(__VA_ARGS__)
@@ -359,6 +369,8 @@ typedef bool(*global_init_fn)();
 #define   i_ctr_public_INTERN(X, ARG)
 #define   i_ctr_public_ISIZE(X, ARG)
 #define   i_ctr_public_DECL(X, ARG)
+#define   i_ctr_public_GENERICS(X, ARG) ARG: X##_type.with_##ARG,
+
 #define   i_ctr_public_INIT(X, ARG) \
     X##_type.with_##ARG = & X##_with_##ARG; \
     X##_type.members[X##_type.member_count].name        = stringify(with_##ARG); \
@@ -382,6 +394,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_public_INTERN(X, R, N) 
 #define   i_prop_public_ISIZE(X, R, N)        
 #define   i_prop_public_DECL(X, R, N)
+#define   i_prop_public_GENERICS(X, R, N)
 #define   i_prop_public_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].name     = #N; \
     X##_type.members[X##_type.member_count].offset   = offsetof(struct X, N); \
@@ -395,6 +408,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_INTERN(X, R, N)
 #define   i_prop_required_ISIZE(X, R, N)        
 #define   i_prop_required_DECL(X, R, N)
+#define   i_prop_required_GENERICS(X, R, N)
 #define   i_prop_required_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].required = true; \
     i_prop_public_INIT(X, R, N)
@@ -405,6 +419,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_intern_INTERN(X, R, N)         R N;
 #define   i_prop_intern_ISIZE(X, R, N)          +sizeof(void*)
 #define   i_prop_intern_DECL(X, R, N)
+#define   i_prop_intern_GENERICS(X, R, N)
 #define   i_prop_intern_INIT(X, R, N)
 #define   i_prop_intern_PROTO(X, R, N)  
 #define   i_prop_intern_METHOD(X, R, N)  
@@ -414,6 +429,7 @@ typedef bool(*global_init_fn)();
 #define   s_method_public_INTERN(X, R, N, ...)
 #define   s_method_public_ISIZE(X, R, N)          
 #define   s_method_public_DECL(X, R, N, ...)       R X##_##N(__VA_ARGS__);
+#define   s_method_public_GENERICS(X, R, N, ...)
 #define   s_method_public_INIT(X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
@@ -429,6 +445,7 @@ typedef bool(*global_init_fn)();
 #define   s_method_intern_INTERN(X, R, N, ...)
 #define   s_method_intern_ISIZE(X, R, N, ...)
 #define   s_method_intern_DECL(X, R, N, ...)
+#define   s_method_intern_GENERICS(X, R, N, ...)
 #define   s_method_intern_INIT(X, R, N, ...)      
 #define   s_method_intern_PROTO(X, R, N, ...)
 #define   s_method_intern_METHOD(X, R, N, ...)    
@@ -438,6 +455,7 @@ typedef bool(*global_init_fn)();
 #define   i_method_public_INTERN(  X, R, N, ...)
 #define   i_method_public_ISIZE(  X, R, N, ...)
 #define   i_method_public_DECL(    X, R, N, ...)    R X##_##N(__VA_ARGS__);
+#define   i_method_public_GENERICS(X, R, N, ...)
 #define   i_method_public_INIT(    X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
@@ -453,6 +471,7 @@ typedef bool(*global_init_fn)();
 #define   i_method_intern_INTERN(  X, R, N, ...)
 #define   i_method_intern_ISIZE(  X, R, N, ...)
 #define   i_method_intern_DECL(    X, R, N, ...)
+#define   i_method_intern_GENERICS(X, R, N, ...)
 #define   i_method_intern_INIT(    X, R, N, ...)    
 #define   i_method_intern_PROTO(X, R, N, ...)
 #define   i_method_intern_METHOD(X, R, N, ...)      
@@ -465,6 +484,7 @@ typedef bool(*global_init_fn)();
 #define   i_operator_public_INTERN(X, R, N, ARG)
 #define   i_operator_public_ISIZE(X, R, N, ARG)
 #define   i_operator_public_DECL(X, R, N, ARG)
+#define   i_operator_public_GENERICS(X, R, N, ARG)
 #define   i_operator_public_INIT(X, R, N, ARG) \
     X##_type  . operator_##N = & X## _operator_ ## N; \
     X##_type.members[X##_type.member_count].name    = stringify(operator_##N); \
@@ -481,6 +501,7 @@ typedef bool(*global_init_fn)();
 #define   i_operator_intern_INTERN(X, R, N, ARG)
 #define   i_operator_intern_ISIZE(X, R, N, ARG)
 #define   i_operator_intern_DECL(X, R, N, ARG)
+#define   i_operator_intern_GENERICS(X, R, N, ARG)
 #define   i_operator_intern_INIT(X, R, N, ARG)      
 #define   i_operator_intern_PROTO(X, R, N, ARG)
 #define   i_operator_intern_METHOD(X, R, N, ARG)    
@@ -490,6 +511,7 @@ typedef bool(*global_init_fn)();
 #define   i_cast_public_INTERN(X, R)
 #define   i_cast_public_ISIZE(X, R)
 #define   i_cast_public_DECL(X, R)
+#define   i_cast_public_GENERICS(X, R)
 #define   i_cast_public_INIT(X, R) \
     X##_type.cast_##R = & X##_cast_##R; \
     X##_type.members[X##_type.member_count].name    = stringify(cast_##R); \
@@ -505,6 +527,7 @@ typedef bool(*global_init_fn)();
 #define   i_cast_intern_INTERN(X, R)
 #define   i_cast_intern_ISIZE(X, R)
 #define   i_cast_intern_DECL(X, R)
+#define   i_cast_intern_GENERICS(X, R)
 #define   i_cast_intern_INIT(X, R)          
 #define   i_cast_intern_PROTO(X, R)
 #define   i_cast_intern_METHOD(X, R)        
@@ -514,6 +537,7 @@ typedef bool(*global_init_fn)();
 #define   i_index_public_INTERN(X, R, ...)
 #define   i_index_public_ISIZE(X, R, ...)
 #define   i_index_public_DECL(X, R, ...)
+#define   i_index_public_GENERICS(X, R, ...)
 #define   i_index_public_INIT(X, R, ...) \
     X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__); \
     X##_type.members[X##_type.member_count].name        = stringify(emit_idx_symbol(index, __VA_ARGS__)); \
@@ -529,6 +553,7 @@ typedef bool(*global_init_fn)();
 #define i_index_intern_INTERN(X, R, ...)
 #define i_index_intern_ISIZE(X, R, ...)
 #define i_index_intern_DECL(X, R, ...)
+#define i_index_intern_GENERICS(X, R, ...)
 #define i_index_intern_INIT(X, R, ...)
 #define i_index_intern_PROTO(X, R, ...)
 #define i_index_intern_METHOD(X, R, ...)                R (*emit_idx_symbol(index, __VA_ARGS__))(X, ##__VA_ARGS__);
@@ -539,6 +564,7 @@ typedef bool(*global_init_fn)();
 #define i_vargs_public_ISIZE(X, R, N, ...)
 #define i_vargs_public_ISIZE(X, R, N, ...)
 #define i_vargs_public_DECL(X, R, N, ...)
+#define i_vargs_public_GENERICS(X, R, N, ...)
 #define i_vargs_public_INIT(X, R, N, ...)               i_method_public_INIT(X, R, N, __VA_ARGS__)  
 #define i_vargs_public_PROTO(X, R, N, ...)
 #define i_vargs_public_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
@@ -547,6 +573,7 @@ typedef bool(*global_init_fn)();
 #define i_vargs_intern_INTERN(X, R, N, ...)
 #define i_vargs_intern_ISIZE(X, R, N, ...)
 #define i_vargs_intern_DECL(X, R, N, ...)
+#define i_vargs_intern_GENERICS(X, R, N, ...)
 #define i_vargs_intern_INIT(X, R, N, ...)               i_method_intern_INIT(X, R, N, __VA_ARGS__)  
 #define i_vargs_intern_PROTO(X, R, N, ...)
 #define i_vargs_intern_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
@@ -556,6 +583,7 @@ typedef bool(*global_init_fn)();
 #define s_vargs_public_INTERN(X, R, N, ...)
 #define s_vargs_public_ISIZE(X, R, N, ...)
 #define s_vargs_public_DECL(X, R, N, ...)               R X##_##N(__VA_ARGS__, ...);
+#define s_vargs_public_GENERICS(X, R, N, ...)
 #define s_vargs_public_INIT(X, R, N, ...)               s_method_public_INIT(X, R, N, ##__VA_ARGS__)
 #define s_vargs_public_PROTO(X, R, N, ...)
 #define s_vargs_public_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
@@ -563,6 +591,8 @@ typedef bool(*global_init_fn)();
 #define s_vargs_intern_INST(X, R, N, ...)
 #define s_vargs_intern_INTERN(X, R, N, ...)
 #define s_vargs_intern_ISIZE(X, R, N, ...)
+#define s_vargs_intern_DECL(X, R, N, ...)
+#define s_vargs_intern_GENERICS(X, R, N, ...)
 #define s_vargs_intern_INIT(X, R, N, ...)               s_method_intern_INIT(X, R, N, ##__VA_ARGS__)
 #define s_vargs_intern_PROTO(X, R, N, ...)
 #define s_vargs_intern_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
@@ -572,6 +602,7 @@ typedef bool(*global_init_fn)();
 #define i_override_method_INTERN(X, N)
 #define i_override_method_ISIZE(X, N)
 #define i_override_method_DECL(X, N)
+#define i_override_method_GENERICS(X, N)
 #define i_override_method_INIT(X, N) \
     X##_type . N = & X## _ ## N;
 
@@ -582,6 +613,7 @@ typedef bool(*global_init_fn)();
 #define i_override_ctr_INTERN(X, N)
 #define i_override_ctr_ISIZE(X, N)
 #define i_override_ctr_DECL(X, R)
+#define i_override_ctr_GENERICS(X, N)
 #define i_override_ctr_INIT(X, R)                       X##_type . with_##R = & X##_with_##R;
 #define i_override_ctr_PROTO(X, R)
 #define i_override_ctr_METHOD(X, R)
@@ -590,6 +622,7 @@ typedef bool(*global_init_fn)();
 #define i_override_cast_INTERN(X, R)
 #define i_override_cast_ISIZE(X, R)
 #define i_override_cast_DECL(X, R)
+#define i_override_cast_GENERICS(X, N)
 #define i_override_cast_INIT(X, R)                      X##_type . cast_##R = & X##_cast_##R;
 #define i_override_cast_PROTO(X, R)
 #define i_override_cast_METHOD(X, R)
@@ -598,6 +631,7 @@ typedef bool(*global_init_fn)();
 #define i_override_idx_INTERN(X, R)
 #define i_override_idx_ISIZE(X, R)
 #define i_override_idx_DECL(X, R)
+#define i_override_idx_GENERICS(X, R)
 #define i_override_idx_INIT(X, R)                    X##_type . idx_##R = & X##_idx_##R;
 #define i_override_idx_PROTO(X, R)
 #define i_override_idx_METHOD(X, R)
@@ -750,7 +784,8 @@ void        A_lazy_init(global_init_fn fn);
     extern AA##_f   AA##_type; \
     _Pragma("pack(pop)")
 
-#define declare_class(AA) \
+#define declare_class\
+(AA) \
     typedef struct AA* AA; \
     _Pragma("pack(push, 1)") \
     typedef struct AA { \
@@ -766,7 +801,8 @@ void        A_lazy_init(global_init_fn fn);
     extern AA##_f   AA##_type; \
     _Pragma("pack(pop)")
 
-#define declare_mod(AA, BB, ...) \
+#define declare_mod\
+(AA, BB, ...) \
     declare_subclass_ex(AA, BB, dm_count(AA, BB, ## __VA_ARGS__), AA, BB, ## __VA_ARGS__)
 
 #define declare_subclass_ex(AA, BB, N, ...) \
@@ -1395,19 +1431,19 @@ extern FILE* logger;
 
 /// we can go through a map
 #define pairs(MM, EE) \
-    if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
+    if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
         for (pair EE = (pair)_i->value, e0 = EE; EE == e0; e0++) \
 
 #define evalues(MM, TT, EE) \
-    if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
+    if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
         for (TT EE = ((pair)_i->value)->value, e0 = EE; EE == e0; e0++) \
 
 #define ekeys(MM, TT, EE) \
-    if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
+    if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
         for (TT EE = ((pair)_i->value)->key, e0 = EE; EE == e0; e0++) \
 
 #define pairs_(MM, EE) \
-    if (MM && cast(MM, bool)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
+    if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
         for (pair EE = (pair)_i->value, e0 = EE; EE == e0; e0++) \
 
 

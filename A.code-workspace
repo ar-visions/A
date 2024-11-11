@@ -207,7 +207,15 @@
 			"stdio.h": "c",
 			"a-type": "cpp",
 			"dlfcn.h": "c",
-			"propagate_const": "c"
+			"propagate_const": "c",
+			"silver-methods": "c",
+			"a-methods": "c",
+			"a-init": "c",
+			"ether-init": "c",
+			"silver-intern": "c",
+			"ether-intern": "c",
+			"ether-methods": "c",
+			"silver-init": "c"
 		}
 	}
 }

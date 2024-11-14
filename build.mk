@@ -59,8 +59,8 @@ SILVER_IMPORT     ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import";
 CC 			       = clang-18 # $(SILVER_IMPORT)/bin/clang
 MAKEFLAGS         += --no-print-directory --silent
 LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
-APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(SRC_ROOT)/app -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
-TEST_INCLUDES      = -I$(BUILD_DIR)/test -I$(SRC_ROOT)/test -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
+APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(SRC_ROOT)/app -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
+TEST_INCLUDES      = -I$(BUILD_DIR)/test -I$(BUILD_DIR)/lib -I$(SRC_ROOT)/test -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
 LDFLAGS 	       = -L$(SILVER_IMPORT)/lib -Wl,-rpath,$(SILVER_IMPORT)/lib
 SRCAPP_DIR 	       = $(SRC_ROOT)/app
 SRCLIB_DIR 	       = $(SRC_ROOT)/lib
@@ -94,10 +94,16 @@ CFLAGS 		   	   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-Wno-incompatible-library-redeclaration
 CFLAGS  		  := $(CFLAGS) -fsanitize=address
 LDFLAGS 		  := $(LDFLAGS) -fsanitize=address
+SRC_TRANSLATION   := $(SRC_ROOT)/translation/A-translation.c
+BUILD_TRANSLATION := $(BUILD_DIR)/A-translation
+
 
 ifneq ($(release),0)
 	ALL_TARGETS += verify
 endif
+
+#clean_headers:
+#	@rm -f $(BUILD_DIR)/lib/* $(BUILD_DIR)/app/* $(BUILD_DIR)/test/*
 
 all: $(ALL_TARGETS)
 
@@ -113,7 +119,7 @@ $(METHODS_HEADER): $(PROJECT_HEADER)
 	@grep -o 'i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*[[:alnum:]_]*' $(PROJECT_HEADER) | \
 	sed 's/i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*\([[:alnum:]_]*\).*/\1/' | \
 	while read method; do \
-		echo "#undef $$method\n#define $$method(I,...) ftableI(I) -> $$method(I, ##__VA_ARGS__)" >> $@; \
+		echo "#undef $$method\n#define $$method(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->$$method(_i_, ## __VA_ARGS__); })" >> $@; \
 	done
 	@echo >> $@
 	@echo "#endif /* _$(UPROJECT)_METHODS_H_ */" >> $@
@@ -187,6 +193,24 @@ $(INTERN_HEADER):
 	@echo >> $@
 	@echo "#endif /* _$(UPROJECT)_INTERN_H_ */" >> $@
 
+ifeq ($(PROJECT),AAAAA) # disabled for now
+$(BUILD_TRANSLATION): $(SRC_TRANSLATION) # target to compile A-translation.c
+	$(CC) $(CFLAGS) -o $(BUILD_TRANSLATION) $(SRC_TRANSLATION)
+
+build_translation: $(BUILD_TRANSLATION)
+
+install_translation: build_translation # copy A-translation to SILVER_IMPORT/bin
+	echo "installing translation <-"
+	@install --directory $(SILVER_IMPORT)/bin
+	@install -m 755 $(BUILD_TRANSLATION) $(SILVER_IMPORT)/bin/
+
+all: install_translation
+else
+
+build_translation:
+
+endif
+
 define generate_import_header
 	@rm -f $(1)
 	@echo "/* generated import interface */" > $(1)
@@ -194,17 +218,21 @@ define generate_import_header
 	@echo "#define _$(UPROJECT)_IMPORT_$(2)_H_" >> $(1)
 	@echo >> $(1)
 	@$(foreach import, $(3), \
-		if [ -f "$(SILVER_IMPORT)/include/$(import)-methods" ]; then \
-		echo "#include <$(import)>" >> $(1) ; \
-		echo "#include <$(import)-methods>" >> $(1) ; \
+		if [ "$(PROJECT)" != "$(import)" ]; then \
+			if [ -f "$(SILVER_IMPORT)/include/$(import)-methods" ]; then \
+			echo "#include <$(import)>" >> $(1) ; \
+			echo "#include <$(import)-methods>" >> $(1) ; \
+			fi; \
 		fi;)
 	@echo "#include <$(PROJECT)-intern>" >> $(1)
 	@echo "#include <$(PROJECT)>" >> $(1)
 	@echo "#include <$(PROJECT)-methods>" >> $(1)
 	@echo "#include <A-reserve>" >> $(1)
 	@$(foreach import, $(3), \
-		if [ -f "$(SILVER_IMPORT)/include/$(import)-methods" ]; then \
-		echo "#include <$(import)-init>" >> $(1) ; \
+		if [ "$(PROJECT)" != "$(import)" ]; then \
+			if [ -f "$(SILVER_IMPORT)/include/$(import)-methods" ]; then \
+			echo "#include <$(import)-init>" >> $(1) ; \
+			fi; \
 		fi;)
 	@echo "#include <$(PROJECT)-init>" >> $(1)
 	@echo >> $(1)
@@ -222,10 +250,22 @@ $(IMPORT_TEST_HEADER):
 
 .PRECIOUS: *.o
 .SUFFIXES:
-.PHONY: all clean install import tests verify prepare_dirs methods clean $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
+.PHONY: all clean install import tests verify prepare_dirs process_c_files \
+	methods clean $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) \
+	$(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
 
 methods: $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
 
+define process_src
+	@for file in $(SRC_ROOT)/$(1)/*.c; do \
+		if [ -f "$$file" ]; then \
+			echo "A-translation '$$file' '$(BUILD_DIR)/$(1)/$$(basename $$file)'"; \
+			$(SILVER_IMPORT)/bin/A-translation "$$file" "$(BUILD_DIR)/$(1)/$$(basename $$file)"; \
+		fi \
+	done
+endef
+
+# build_translation
 prepare_dirs:
 	@mkdir -p $(BUILD_DIR)/app $(BUILD_DIR)/test $(BUILD_DIR)/lib
 	@if [ -d "$(SRC_ROOT)/res" ]; then \
@@ -234,6 +274,11 @@ prepare_dirs:
 	@if [ -d "$(SRC_ROOT)/lib" ]; then \
 		find $(SRC_ROOT)/lib -maxdepth 1 -type f ! -name '*.c' -exec cp -r {} $(BUILD_DIR)/lib \; ; \
 	fi
+
+process_c_files: prepare_dirs
+	$(call process_src,lib)
+	$(call process_src,app)
+	$(call process_src,test)
 
 import:
 	@bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --i $(SRC_ROOT)/import
@@ -251,13 +296,13 @@ $(BUILD_DIR)/$(PROJECT)-flat:
 	@rm $@.tmp.c
 
 # compiling
-$(BUILD_DIR)/lib/%.o: $(SRCLIB_DIR)/%.c
+$(BUILD_DIR)/lib/%.o: $(SRC_ROOT)/lib/%.c
 	$(CC) $(CFLAGS) $(LIB_INCLUDES) -c $< -o $@
 
-$(BUILD_DIR)/app/%.o: $(SRCAPP_DIR)/%.c $(LIB_TARGET)
+$(BUILD_DIR)/app/%.o: $(SRC_ROOT)/app/%.c $(LIB_TARGET)
 	$(CC) $(CFLAGS) $(APP_INCLUDES) -c $< -o $@
 
-$(BUILD_DIR)/test/%.o: $(TEST_DIR)/%.c $(LIB_TARGET)
+$(BUILD_DIR)/test/%.o: $(SRC_ROOT)/test/%.c $(LIB_TARGET)
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
 
 # linking

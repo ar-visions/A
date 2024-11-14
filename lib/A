@@ -193,14 +193,14 @@ typedef bool(*global_init_fn)();
     ({ \
         TYPE instance = (TYPE)A_alloc(typeid(TYPE), 1, true); \
         _N_ARGS(TYPE, ## __VA_ARGS__); \
-        A_initialize(instance); \
+        A_initialize((A)instance); \
         instance; \
     })
 #define new2(TYPE, ...) \
     ({ \
         TYPE instance = (TYPE)A_alloc(typeid(TYPE), 1, true); \
         TYPE##_N_ARGS(TYPE, ## __VA_ARGS__); \
-        A_initialize(instance); \
+        A_initialize((A)instance); \
         instance; \
     })
 
@@ -224,7 +224,7 @@ typedef bool(*global_init_fn)();
     ({ \
         T instance = (T)A_alloc(type, 1, true); \
         _N_ARGS(instance, ## __VA_ARGS__); \
-        A_initialize(instance); \
+        A_initialize((A)instance); \
         instance; \
     })
 
@@ -232,7 +232,7 @@ typedef bool(*global_init_fn)();
     ({ \
         T instance = (T)A_alloc(typeid(T), 1, true); \
         _N_ARGS(instance, ## __VA_ARGS__); \
-        A_initialize(instance); \
+        A_initialize((A)instance); \
         instance; \
     })
 
@@ -240,103 +240,34 @@ typedef bool(*global_init_fn)();
     ({ \
         T instance = (T)A_alloc(typeid(T), 1, false); \
         _N_ARGS(instance, ## __VA_ARGS__); \
-        A_initialize(instance); \
+        A_initialize((A)instance); \
         instance; \
     })
 
 #define valloc(T, N)                ((A)A_alloc(typeid(T), N, false))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
 #define isa(INSTANCE)               (INSTANCE ? (struct A_f*)((struct A*)INSTANCE - 1)->type : (struct A_f*)0)
-/// see: javascript; returns null if its not an instance-of; faults if you give it a null
+// see: javascript; returns null if its not an instance-of; faults if you give it a null
 #define instanceof(left, type)      A_instanceof(left, typeid(type))
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
-/// by defining these, we require their use; cant call() these methods
-/// useful in two ways, less tokens and expansion inside call()
-/// obviously we only collect so many, but they become keywords of our common language
-/// it reserves their use for methods and not scope confusion with variables
-
-
-/*
-#define set(I,...)                  ftableI(I) -> set(I, ##__VA_ARGS__)
-#define get(I,...)                  ftableI(I) -> get(I, ##__VA_ARGS__)
-#define realloc(I,...)              ftableI(I) -> realloc(I, ##__VA_ARGS__)
-#define alias(I,...)                ftableI(I) -> alias(I, ##__VA_ARGS__)
-#define ends_with(I,...)            ftableI(I) -> ends_with(I, ##__VA_ARGS__)
-#define starts_with(I,...)          ftableI(I) -> starts_with(I, ##__VA_ARGS__)
-#define set_value(I,...)            ftableI(I) -> set_value(I, ##__VA_ARGS__)
-#define run(I,...)                  ftableI(I) -> run(I, ##__VA_ARGS__)
-#define push(I,...)                 ftableI(I) -> push(I, ##__VA_ARGS__)
-#define push_weak(I,...)            ftableI(I) -> push_weak(I, ##__VA_ARGS__)
-#define slice(I,...)                ftableI(I) -> slice(I, ##__VA_ARGS__)
-#define load(I,...)                 ftableI(I) -> load(I, ##__VA_ARGS__)
-#define save(I,...)                 ftableI(I) -> save(I, ##__VA_ARGS__)
-#define include(I,...)              ftableI(I) -> include(I, ##__VA_ARGS__)
-#define compile(I,...)              ftableI(I) -> compile(I, ##__VA_ARGS__)
-#define clear(I,...)                ftableI(I) -> clear(I, ##__VA_ARGS__)
-#define pop(I,...)                  ftableI(I) -> pop(I, ##__VA_ARGS__)
-#define peek(I,...)                 ftableI(I) -> peek(I, ##__VA_ARGS__)
-#define read(I,...)                 ftableI(I) -> read(I, ##__VA_ARGS__)
-#define copy(I,...)                 ftableI(I) -> copy(I, ##__VA_ARGS__)
-#define move(I,...)                 ftableI(I) -> move(I, ##__VA_ARGS__)
-#define write(I,...)                ftableI(I) -> write(I, ##__VA_ARGS__)
-#define close(I,...)                ftableI(I) -> close(I, ##__VA_ARGS__)
-#define concat(I,...)               ftableI(I) -> concat(I, ##__VA_ARGS__)
-#define mid(I,...)                  ftableI(I) -> mid(I, ##__VA_ARGS__)
-#define process(I,...)              ftableI(I) -> process(I, ##__VA_ARGS__)
-#define operand(I,...)              ftableI(I) -> operand(I, ##__VA_ARGS__)
-#define convert(I,...)              ftableI(I) -> convert(I, ##__VA_ARGS__)
-#define append(I,...)               ftableI(I) -> append(I, ##__VA_ARGS__)
-#define eq(I,...)                   ftableI(I) -> eq(I, ##__VA_ARGS__)
-#define equals(I,...)               ftableI(I) -> equals(I, ##__VA_ARGS__)
-#define compare(I,...)              ftableI(I) -> compare(I, ##__VA_ARGS__)
-#define count(I,...)                ((I)?ftableI(I) -> count(I, ##__VA_ARGS__):0)
-#define contains(I,...)             ftableI(I) -> contains(I, ##__VA_ARGS__)
-#define cmp(I,...)                  ftableI(I) -> cmp(I, ##__VA_ARGS__)
-#define first(I,...)                ftableI(I) -> first(I, ##__VA_ARGS__)
-#define last(I,...)                 ftableI(I) -> last(I, ##__VA_ARGS__)
-#define exists(I,...)               ftableI(I) -> exists(I, ##__VA_ARGS__)
-#define len(I,...)                  ((I) ? (i64)ftableI(I) -> len(I, ##__VA_ARGS__) : (i64)0)
-#define fetch(I,...)                ftableI(I) -> fetch(I, ##__VA_ARGS__)
-#define lookup(I,...)               ftableI(I) -> lookup(I, ##__VA_ARGS__)
-#define remove(I,...)               ftableI(I) -> remove(I, ##__VA_ARGS__)
-#define remove_item(I,...)          ftableI(I) -> remove_item(I, ##__VA_ARGS__)
-#define index_of(I,...)             ftableI(I) -> index_of(I, ##__VA_ARGS__)
-#define item_of(I,...)              ftableI(I) -> item_of(I, ##__VA_ARGS__)
-
-
-#define build(I,...)                ftableI(I) -> build(I, ##__VA_ARGS__)
-#define write(I,...)                ftableI(I) -> write(I, ##__VA_ARGS__)
-#define parse(I,...)                ftableI(I) -> parse(I, ##__VA_ARGS__)
-#define reserve(I,...)              ftableI(I) -> reserve(I, ##__VA_ARGS__)
-#define hash(I,...)                 ftableI(I) -> hash(I, ##__VA_ARGS__)
-#define invoke(I,...)               ftableI(I) -> invoke(I, ##__VA_ARGS__)
-#define filename(I,...)             ftableI(I) -> filename(I, ##__VA_ARGS__)
-#define directory(I,...)            ftableI(I) -> directory(I, ##__VA_ARGS__)
-#define parent(I,...)               ftableI(I) -> parent(I, ##__VA_ARGS__)
-#define ls(I,...)                   ftableI(I) -> ls(I, ##__VA_ARGS__)
-#define is_empty(I,...)             ftableI(I) -> is_empty(I, ##__VA_ARGS__)
-#define is_dir(I,...)               ftableI(I) -> is_dir(I, ##__VA_ARGS__)
-#define make_dir(I,...)             ftableI(I) -> make_dir(I, ##__VA_ARGS__)
-*/
-
-//#define cs(I)                       ((I) ? (cstr)(I)->chars : (cstr)null)
-
-#define M(I,N,...)                  ftableI(I) -> N(I, ##__VA_ARGS__)
+#define fcall(I,M,...)              ({ __typeof__(I) _i_ = I; ftableI(_i_)->M(_i_, ## __VA_ARGS__); })
+#define mcall(I,M,...)              ({ __typeof__(I) _i_ = I; (_i_) ? ftableI(_i_)->M(_i_, ## __VA_ARGS__) : 0; })
+#define M(I,N,...)                  fcall(I,N, ## __VA_ARGS__)
 #define cstring(I)                  cast(cstr, I)
-#define stem(I,...)                 ftableI(I) -> stem(I, ##__VA_ARGS__)
-#define ext(I,...)                  ftableI(I) -> ext(I, ##__VA_ARGS__)
-#define element(I,...)              ftableI(I) -> element(I, ##__VA_ARGS__)
-#define resolve(I,...)              ftableI(I) -> resolve(I, ##__VA_ARGS__)
 #define val(T,V)                    A_primitive(typeid(T), (&(T){V}))
 #define idx_1(I,T1,V1)              M(I, index ##_## T1, V1)
 #define idx_2(I,T1,T2,V1,V2)        M(I, index ##_## T1 ##_## T2, V1, V2)
 #define idx(I,V1)                   M(I, index ##_## num, V1)
-#define cast(T,I)                   ftableI(I) -> cast_##T(I)
+#define cast(T,I)                   fcall(I, cast_##T)
 #define meta_t(I,IDX)               isa(I) -> meta.meta_##IDX
 #define ctr(T,WITH,...)             A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
 #define ctr1(T,WITH,...)            A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
 #define alloc_ctr(T,WITH,...)       A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, false), ## __VA_ARGS__))
-#define str(CSTR)                   string_type.with_cstr(A_alloc(&string_type, 1, true), (cstr)(CSTR))
+#define str(CSTR)                   string_type.with_cstr((string)A_alloc((AType)&string_type, 1, true), (cstr)(CSTR))
+#define addr_validateI(I)           ({ \
+    __typeof__(I) *addr = &I; \
+    I \
+})
 
 /// arg expansion for type emission (give address of its statically defined)
 #define emit_types(...)             EXPAND_ARGS(__VA_ARGS__)
@@ -1269,6 +1200,7 @@ declare_class(subprocedure)
     i_vargs          (X,Y, public, none,    push_symbols,   X, cstr) \
     i_vargs          (X,Y, public, none,    push_objects,   X, A) \
     i_index          (X,Y, public, A,       num) \
+    i_ctr            (X,Y, public, i32) \
     i_override       (X,Y, method, init) \
     i_override       (X,Y, cast,   bool)
 #ifndef array_intern

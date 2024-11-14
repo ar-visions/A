@@ -215,7 +215,8 @@
 			"silver-intern": "c",
 			"ether-intern": "c",
 			"ether-methods": "c",
-			"silver-init": "c"
+			"silver-init": "c",
+			"coroutine": "c"
 		}
 	}
 }

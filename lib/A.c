@@ -113,7 +113,7 @@ static void A_validator(A a) {
         type_member_t* m = &type->members[i];
         if (m->required) {
             u8* ptr = (u8*)a + m->offset;
-            A*  ref = ptr;
+            A*  ref = (A*)ptr;
             verify(*ref, "required arg [%s] not set for class %s", m->name, type->name);
         }
     }
@@ -139,7 +139,7 @@ string A_enum_string(AType type, i32 value) {
         type_member_t* mem = &type->members[m];
         if (mem->member_type & A_TYPE_ENUMV) {
             if (cur == value)
-                return str(mem->name);
+                return string(mem->name); 
             cur++;
         }
     }
@@ -154,8 +154,8 @@ void debug() {
 void A_init_recur(A a, AType current, raw last_init) {
     if (current == &A_type) return;
     void(*init)(A) = ((A_f*)current)->init;
-    A_init_recur(a, current->parent_type, init);
-    if (init) init(a);
+    A_init_recur(a, current->parent_type, (raw)init);
+    if (init) init(a); 
 }
 
 A A_initialize(A a) {
@@ -211,8 +211,8 @@ void array_push_weak(array a, A b) {
         array_expand(a);
     }
     AType t = isa(a);
-    if (is_meta(a))
-        assert(is_meta_compatible(a, b), "not meta compatible");
+    if (is_meta((A)a))
+        assert(is_meta_compatible((A)a, (A)b), "not meta compatible");
     a->elements[a->len++] = b;
 }
 
@@ -232,10 +232,10 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     assert(atypes->len <= max_args, "adjust arg maxima");
     ffi_type **ffi_args = (ffi_type**)method->ffi_args;
     for (num i = 0; i < atypes->len; i++) {
-        A_f* a_type   = atypes->elements[i];
+        A_f* a_type   = (A_f*)atypes->elements[i];
         bool is_prim  = a_type->traits & A_TRAIT_PRIMITIVE;
         ffi_args[i]   = is_prim ? a_type->arb : &ffi_type_pointer;
-        push_weak(method->atypes, a_type);
+        push_weak(method->atypes, (A)a_type);
     }
     ffi_status status = ffi_prep_cif(
         (ffi_cif*) method->ffi_cif, FFI_DEFAULT_ABI, atypes->len,
@@ -258,7 +258,7 @@ A A_method_call(method_t* a, array args) {
     void* arg_values[max_args];
     assert(args->len == a->atypes->len, "arg count mismatch");
     for (num i = 0; i < args->len; i++) {
-        A_f* arg_type = a->atypes->elements[i];
+        A_f* arg_type = (A_f*)a->atypes->elements[i];
         arg_values[i] = (arg_type->traits & (A_TRAIT_PRIMITIVE | A_TRAIT_ENUM)) ? 
             (void*)args->elements[i] : (void*)&args->elements[i];
     }
@@ -351,7 +351,7 @@ void A_start() {
                 assert(address, "no address");
                 array args = allocate(array, alloc, mem->args.count);
                 for (num i = 0; i < mem->args.count; i++)
-                    args->elements[i] = ((A_f**)&mem->args.meta_0)[i];
+                    args->elements[i] = (A)((A_f**)&mem->args.meta_0)[i];
                 args->len = mem->args.count;
                 mem->method = method_with_address(address, mem->type, args, type);
             }
@@ -1492,7 +1492,7 @@ sz vector_count(vector a) {
 define_class(vector);
 
 
-array array_with_sz(array a, sz alloc) {
+array array_with_i32(array a, i32 alloc) {
     a->alloc = alloc;
     return a;
 }

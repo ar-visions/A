@@ -414,9 +414,101 @@ typedef bool(*global_init_fn)();
 #define   i_method_intern_PROTO(X, R, N, ...)
 #define   i_method_intern_METHOD(X, R, N, ...)      
 
+
+typedef enum {
+    CPU_CAP_NONE      = 0,
+    CPU_CAP_SSE       = 1 << 0,  // Bit 0
+    CPU_CAP_SSE2      = 1 << 1,  // Bit 1
+    CPU_CAP_AVX       = 1 << 2,  // Bit 2
+    CPU_CAP_AVX2      = 1 << 3,  // Bit 3
+    CPU_CAP_AVX512    = 1 << 4,  // Bit 4
+    CPU_CAP_NEON32    = 1 << 5,  // Bit 5 (ARM 32-bit NEON)
+    CPU_CAP_NEON64    = 1 << 6,  // Bit 6 (ARM 64-bit NEON)
+} CPU_Caps;
+
+CPU_Caps detect_cpu_caps();
+
+#define method_member(X, R, N, ...) \
+    X##_type . N = & X## _ ## N ## _neon64; \
+    X##_type.members[X##_type.member_count].name    = #N; \
+    X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X, ##__VA_ARGS__) }; \
+    X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
+    X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, N); \
+    X##_type.members[X##_type.member_count].member_type = A_TYPE_IMETHOD; \
+    X##_type.member_count++; \
+
+#define   i_SIMD_neon64_INST(    X, R, N, ...)
+#define   i_SIMD_neon64_INTERN(  X, R, N, ...)
+#define   i_SIMD_neon64_ISIZE(  X, R, N, ...)
+#define   i_SIMD_neon64_DECL(    X, R, N, ...)
+#define   i_SIMD_neon64_GENERICS(X, R, N, ...)
+#define   i_SIMD_neon64_INIT(    X, R, N, ...) \
+    if (!X##_type . N && (detect_cpu_caps() & CPU_CAP_NEON64)) { \
+        X##_type . N = & X## _ ## N ## _neon64; \
+        method_member(X, R, N, ## __VA_ARGS__) \
+    }
+#define   i_SIMD_neon64_PROTO(X, R, N, ...)
+#define   i_SIMD_neon64_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
+
+#define   i_SIMD_neon32_INST(    X, R, N, ...)
+#define   i_SIMD_neon32_INTERN(  X, R, N, ...)
+#define   i_SIMD_neon32_ISIZE(  X, R, N, ...)
+#define   i_SIMD_neon32_DECL(    X, R, N, ...)
+#define   i_SIMD_neon32_GENERICS(X, R, N, ...)
+#define   i_SIMD_neon32_INIT(    X, R, N, ...) \
+    if (!X##_type . N && (detect_cpu_caps() & CPU_CAP_NEON32)) { \
+        X##_type . N = & X## _ ## N ## _neon32; \
+        method_member(X, R, N, ## __VA_ARGS__) \
+    }
+#define   i_SIMD_neon32_PROTO(X, R, N, ...)
+#define   i_SIMD_neon32_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
+
+#define   i_SIMD_avx512_INST(    X, R, N, ...)
+#define   i_SIMD_avx512_INTERN(  X, R, N, ...)
+#define   i_SIMD_avx512_ISIZE(  X, R, N, ...)
+#define   i_SIMD_avx512_DECL(    X, R, N, ...)
+#define   i_SIMD_avx512_GENERICS(X, R, N, ...)
+#define   i_SIMD_avx512_INIT(    X, R, N, ...) \
+    if (!X##_type . N && (detect_cpu_caps() & CPU_CAP_AVX512)) { \
+        X##_type . N = & X## _ ## N ## _avx512; \
+        method_member(X, R, N, ## __VA_ARGS__) \
+    }
+#define   i_SIMD_avx512_PROTO(X, R, N, ...)
+#define   i_SIMD_avx512_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
+
+#define   i_SIMD_avx2_INST(    X, R, N, ...)
+#define   i_SIMD_avx2_INTERN(  X, R, N, ...)
+#define   i_SIMD_avx2_ISIZE(  X, R, N, ...)
+#define   i_SIMD_avx2_DECL(    X, R, N, ...)
+#define   i_SIMD_avx2_GENERICS(X, R, N, ...)
+#define   i_SIMD_avx2_INIT(    X, R, N, ...) \
+    if (!X##_type . N && (detect_cpu_caps() & CPU_CAP_AVX2)) { \
+        X##_type . N = & X## _ ## N ## _avx2; \
+        method_member(X, R, N, ## __VA_ARGS__) \
+    }
+#define   i_SIMD_avx2_PROTO(X, R, N, ...)
+#define   i_SIMD_avx2_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
+
+#define   i_SIMD_avx_INST(    X, R, N, ...)
+#define   i_SIMD_avx_INTERN(  X, R, N, ...)
+#define   i_SIMD_avx_ISIZE(  X, R, N, ...)
+#define   i_SIMD_avx_DECL(    X, R, N, ...)
+#define   i_SIMD_avx_GENERICS(X, R, N, ...)
+#define   i_SIMD_avx_INIT(    X, R, N, ...) \
+    if (!X##_type . N && (detect_cpu_caps() & CPU_CAP_AVX)) { \
+        X##_type . N = & X## _ ## N ## _avx; \
+        method_member(X, R, N, ## __VA_ARGS__) \
+    }
+#define   i_SIMD_avx_PROTO(X, R, N, ...)
+#define   i_SIMD_avx_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
+
 /// avoiding conflict with parsing i_method uses
 #define   i_method\
-(X, Y, T, R, N, ...) i_method_##T##_##Y(X, R, N, X, ##__VA_ARGS__)
+(X, Y, T, R, N, ...) i_method_##T##_##Y(X, R, N, X, ## __VA_ARGS__)
+
+// SIMD is public, since we modify the function table
+#define   i_SIMD\
+(X, Y, R, ARCH, N ...) i_SIMD_##ARCH##_##Y(X, R, N, X, ## __VA_ARGS__)
 
 #define   i_operator_public_INST(X, R, N, ARG)
 #define   i_operator_public_INTERN(X, R, N, ARG)
@@ -1252,6 +1344,7 @@ declare_class(hashmap)
 declare_class(pair)
 
 extern int fault_level;
+
 #define level_schema(X,Y) \
     enum_value(X,Y, info) \
     enum_value(X,Y, warn) \

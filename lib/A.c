@@ -3,6 +3,9 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <endian.h>
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
+#include <cpuid.h>
+#endif
 
 __thread array     af_stack;
 __thread   AF      af_top;
@@ -11,6 +14,76 @@ static global_init_fn* call_after;
 static num             call_after_alloc;
 static num             call_after_count;
 static map             log_fields;
+
+static CPU_Caps        cpu_caps;
+
+#if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
+CPU_Caps detect_x86_caps() {
+    u32 eax, ebx, ecx, edx;
+    CPU_Caps cpu_caps = 0;
+    // Basic CPUID information
+    if (__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
+        // Check for SSE and SSE2
+        if (edx & (1 << 25)) {
+            cpu_caps |= CPU_CAP_SSE;   // SSE
+        }
+        if (edx & (1 << 26)) {
+            cpu_caps |= CPU_CAP_SSE2;  // SSE2
+        }
+        // Check for AVX
+        if (ecx & (1 << 28)) {
+            // Check for OS support for AVX using XGETBV
+            u32 xcr0;
+            __asm__ volatile ("xgetbv" : "=a"(eax), "=d"(edx) : "c"(0));
+            xcr0 = eax;
+            if ((xcr0 & 0x6) == 0x6) {
+                cpu_caps |= CPU_CAP_AVX;  // AVX
+            }
+        }
+    }
+
+    // Extended CPUID information
+    if (__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx)) {
+        // Check for AVX2
+        if (ebx & (1 << 5)) {
+            cpu_caps |= CPU_CAP_AVX2;  // AVX2
+        }
+        // Check for AVX-512
+        if (ebx & (1 << 16)) {
+            // Check for OS support for AVX-512 using XGETBV
+            unsigned int xcr0;
+            __asm__ volatile ("xgetbv" : "=a"(eax), "=d"(edx) : "c"(0));
+            xcr0 = eax;
+            if ((xcr0 & 0xE0) == 0xE0) {
+                cpu_caps |= CPU_CAP_AVX512;  // AVX-512
+            }
+        }
+    }
+    return cpu_caps;
+}
+#elif defined(__arm__) || defined(__aarch64__)
+CPU_Caps detect_arm_capabilities() {
+    CPU_Caps cpu_caps = 0;
+    #if defined(__ARM_NEON)
+        cpu_caps |= CPU_CAP_NEON32;  // NEON for ARM32
+    #endif
+
+    #if defined(__aarch64__)
+        cpu_caps |= CPU_CAP_NEON64;  // NEON is standard on ARM64
+    #endif
+    return cpu_caps;
+}
+#endif
+
+CPU_Caps detect_cpu_caps() {
+    #if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
+        return detect_x86_caps();
+    #elif defined(__arm__) || defined(__aarch64__)
+        return detect_arm_caps();
+    #else
+        return 0;
+    #endif
+}
 
 void A_lazy_init(global_init_fn fn) {
     if (call_after_count == call_after_alloc) {

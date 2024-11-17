@@ -57,11 +57,11 @@ release		      ?= 0
 APP			      ?= 0
 SILVER_IMPORT     ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)
 CC 			       = clang-18 # $(SILVER_IMPORT)/bin/clang
-MAKEFLAGS         += --no-print-directory --silent
+MAKEFLAGS         += --no-print-directory
 LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
-APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(SRC_ROOT)/app -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
+APP_INCLUDES       = -I$(SRC_ROOT)/app -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
 TEST_INCLUDES      = -I$(BUILD_DIR)/test -I$(BUILD_DIR)/lib -I$(SRC_ROOT)/test -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
-LDFLAGS 	       = -L$(SILVER_IMPORT)/lib -Wl,-rpath,$(SILVER_IMPORT)/lib
+LDFLAGS 	       = -L$(BUILD_DIR) -L$(SILVER_IMPORT)/lib -Wl,-rpath,$(SILVER_IMPORT)/lib -Wl,--no-as-needed
 SRCAPP_DIR 	       = $(SRC_ROOT)/app
 SRCLIB_DIR 	       = $(SRC_ROOT)/lib
 TEST_DIR           = $(SRC_ROOT)/test
@@ -72,10 +72,10 @@ LIB_OBJS 	       = $(LIB_SRCS:$(SRCLIB_DIR)/%.c=$(BUILD_DIR)/lib/%.o)
 APP_SRCS 	       = $(wildcard $(SRCAPP_DIR)/*.c)
 APP_OBJS 	       = $(APP_SRCS:$(SRCAPP_DIR)/%.c=$(BUILD_DIR)/app/%.o)
 #REFLECT_TARGET    = $(BUILD_DIR)/$(PROJECT)-reflect
-LIB_TARGET   	   = $(if $(strip $(LIB_OBJS)),$(BUILD_DIR)/lib/lib$(PROJECT).so)
-APP_TARGETS	 	   = $(patsubst $(SRCAPP_DIR)/%.c, $(BUILD_DIR)/app/%, $(wildcard $(SRCAPP_DIR)/*.c))
+LIB_TARGET   	   = $(if $(strip $(LIB_OBJS)),$(BUILD_DIR)/lib$(PROJECT).so)
+APP_TARGETS	 	   = $(patsubst $(SRCAPP_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(SRCAPP_DIR)/*.c))
 TARGET_FLAGS 	   = -shared
-ALL_TARGETS  	   = prepare_dirs import methods $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
+ALL_TARGETS  	   = prepare_dirs import2 methods $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
 APP_FLAGS    	   = 
 PROJECT_HEADER_R   = $(if $(wildcard $(SRC_ROOT)/lib/$(PROJECT)),lib/$(PROJECT),$(if $(wildcard $(SRC_ROOT)/app/$(PROJECT)),app/$(PROJECT),))
 PROJECT_HEADER     = $(SRC_ROOT)/$(PROJECT_HEADER_R)
@@ -91,9 +91,9 @@ CFLAGS 		   	   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS \
 	-Wno-write-strings -Wno-compare-distinct-pointer-types -Wno-deprecated-declarations \
 	-Wno-incompatible-pointer-types -Wfatal-errors -std=gnu11 -DMODULE="\"$(PROJECT)\"" \
-	-Wno-incompatible-library-redeclaration
-CFLAGS  		  := $(CFLAGS) -fsanitize=address
-LDFLAGS 		  := $(LDFLAGS) -fsanitize=address
+	-Wno-incompatible-library-redeclaration -fvisibility=default
+CFLAGS  		  := $(CFLAGS) # -fsanitize=address
+LDFLAGS 		  := $(LDFLAGS) # -fsanitize=address
 SRC_TRANSLATION   := $(SRC_ROOT)/translation/A-translation.c
 BUILD_TRANSLATION := $(BUILD_DIR)/A-translation
 
@@ -224,7 +224,9 @@ define generate_import_header
 			echo "#include <$(import)-methods>" >> $(1) ; \
 			fi; \
 		fi;)
-	@echo "#include <$(PROJECT)-intern>" >> $(1)
+	@if [ -f "$(SRC_ROOT)/$(4)/$(PROJECT).c" ]; then \
+		echo "#include <$(PROJECT)-intern>" >> $(1) ; \
+	fi
 	@echo "#include <$(PROJECT)>" >> $(1)
 	@echo "#include <$(PROJECT)-methods>" >> $(1)
 	@echo "#include <A-reserve>" >> $(1)
@@ -240,19 +242,17 @@ define generate_import_header
 endef
 
 $(IMPORT_LIB_HEADER):
-	$(call generate_import_header,$@,LIB,$(LIB_IMPORTS))
+	$(call generate_import_header,$@,LIB,$(LIB_IMPORTS),lib)
 
 $(IMPORT_APP_HEADER):
-	$(call generate_import_header,$@,APP,$(APPS_IMPORTS))
+	$(call generate_import_header,$@,APP,$(APPS_IMPORTS),app)
 
 $(IMPORT_TEST_HEADER):
-	$(call generate_import_header,$@,TEST,$(TEST_IMPORTS))
+	$(call generate_import_header,$@,TEST,$(TEST_IMPORTS),test)
 
 .PRECIOUS: *.o
 .SUFFIXES:
-.PHONY: all clean install import tests verify prepare_dirs process_c_files \
-	methods clean $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) \
-	$(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
+.PHONY: all clean install import2 tests verify prepare_dirs process_c_files methods clean $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
 
 methods: $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
 
@@ -280,8 +280,11 @@ process_c_files: prepare_dirs
 	$(call process_src,app)
 	$(call process_src,test)
 
-import:
+import2:
 	@bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --i $(SRC_ROOT)/import
+
+#$(LIB_TARGET): import2
+#$(APP_TARGETS): import2
 
 $(BUILD_DIR)/$(PROJECT)-includes:
 	@echo "#include <$(PROJECT)>" > $@.tmp.c
@@ -311,7 +314,7 @@ $(LIB_TARGET): $(LIB_OBJS)
 	$(CC) $(TARGET_FLAGS) $(LDFLAGS) -o $@ $^ $(LIB_LIBS)
 endif
 
-$(BUILD_DIR)/app/%: $(BUILD_DIR)/app/%.o $(LIB_TARGET)
+$(BUILD_DIR)/%: $(BUILD_DIR)/app/%.o $(LIB_TARGET)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIB_TARGET) $(APPS_LIBS)
 
 $(BUILD_DIR)/test/%: $(BUILD_DIR)/test/%.o $(LIB_TARGET)

@@ -30,7 +30,7 @@
             }
         },
         {
-            "name": "trinity-test",
+            "name": "trinity-hi",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/../trinity/silver-debug/app/hi",
@@ -90,10 +90,20 @@
             "name": "silver",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../silver/silver-debug/app/silver88",
+            "program": "${workspaceFolder}/../silver/silver-debug/silver",
             "args": [
                 "WGPU.si",
                 "--install", "/home/kalen/src/silver-import"
+            ],
+            "environment": [
+                {
+                    "name": "LSAN_OPTIONS",
+                    "value": "verbosity=1:log_threads=1:print_suppressions=1:report_objects=1"
+                },
+                {
+                    "name": "ASAN_OPTIONS",
+                    "value": "detect_leaks=1:verbosity=1"
+                }
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../silver/silver-debug",

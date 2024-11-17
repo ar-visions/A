@@ -29,12 +29,8 @@
 			"path": "../llvm"
 		},
 		{
-			"name": "llvm-main",
-			"path": "../llvm-main"
-		},
-		{
-			"name": "wgpu-native",
-			"path": "../wgpu-native"
+			"name": "hyperspace",
+			"path": "../hyperspace"
 		}
 	],
 	"settings": {
@@ -216,7 +212,15 @@
 			"ether-intern": "c",
 			"ether-methods": "c",
 			"silver-init": "c",
-			"coroutine": "c"
+			"coroutine": "c",
+			"trinity-init": "c",
+			"trinity": "cpp",
+			"barrier": "cpp",
+			"cuchar": "cpp",
+			"latch": "cpp",
+			"semaphore": "cpp",
+			"shared_mutex": "cpp",
+			"syncstream": "cpp"
 		}
 	}
 }

@@ -228,7 +228,7 @@ void A_init_recur(A a, AType current, raw last_init) {
     if (current == &A_type) return;
     void(*init)(A) = ((A_f*)current)->init;
     A_init_recur(a, current->parent_type, (raw)init);
-    if (init) init(a); 
+    if (init && init != last_init) init(a); 
 }
 
 A A_initialize(A a) {
@@ -1035,7 +1035,7 @@ void string_init(string a) {
         a->len = len;
     }
 }
-
+ 
 
 string string_with_cstr(string a, cstr value) {
     a->len   = value ? strlen(value) : 0;
@@ -1692,7 +1692,7 @@ array array_of_cstr(cstr first, ...) {
         push(a, allocate(string, chars, arg));
     return a;
 }
-
+ 
 void  array_weak_push(array a, A obj) {
     a->elements[a->len++] = obj;
 }
@@ -1700,7 +1700,7 @@ void  array_weak_push(array a, A obj) {
 A array_pop(array a) {
     assert(a->len > 0, "no items");
     if (!a->unmanaged) drop(a->elements[a->len - 1]);
-    return a->elements[a->len--];
+    return a->elements[--a->len];
 }
 
 num array_compare(array a, array b) {

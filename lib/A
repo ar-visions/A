@@ -148,6 +148,16 @@ typedef bool(*global_init_fn)();
 #define   enum_value(X,Y, N)                enum_value_##Y(X, N)
 
 
+#define   enum_value_v_DECL(E, N, VAL)             E##_##N = VAL,
+#define   enum_value_v_COUNT(E, N, VAL)            1,
+#define   enum_value_v_IMPL(E, N, VAL) \
+    E##_type.members[E## _type.member_count].name     = #N; \
+    E##_type.members[E## _type.member_count].offset   = E##_##N;\
+    E##_type.members[E## _type.member_count].type     = &i32_type; \
+    E##_type.members[E## _type.member_count].member_type = A_TYPE_ENUMV; \
+    E##_type.member_count++;
+#define   enum_value_v(X,Y, N,VAL)                enum_value_v_##Y(X, N,VAL)
+
 /// A_init method is simple: named args are set, then an init() is called from base to top
 /// we will need to support 16 args for 8 props
 

@@ -1,61 +1,66 @@
 // jean-claude van bot made this one
 #include <stdio.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
 
-#define MAX_LINE 4096
-#define DEBUG 0
+#define MAX_LINE    4096
+#define DEBUG       0
+
+/// sub insert at position
+/// the expression of it is filtered by f_subproc
+typedef struct subinsert {
+    struct subinsert* next;
+    char* buf;
+    int pos;
+} subinsert;
 
 typedef struct {
-    int brace_level;
-    bool in_macro;
-    bool in_string;
-    bool in_char;
-    bool in_single_comment;
-    bool in_multi_comment;
-    bool line_continuation;
-    char prev_char;
+    int     brace_level;
+    bool    in_macro;
+    bool    in_string;
+    bool    in_char;
+    bool    in_single_comment;
+    bool    in_multi_comment;
+    bool    line_continuation;
+    char    prev_char;
+    char*   in_subroutine;
+    subinsert *first_sub, *last_sub;
 } ParserState;
 
 void init_state(ParserState *state) {
-    state->brace_level = 0;
-    state->in_macro = false;
-    state->in_string = false;
-    state->in_char = false;
-    state->in_single_comment = false;
-    state->in_multi_comment = false;
-    state->line_continuation = false;
-    state->prev_char = '\0';
+    state->brace_level          = 0;
+    state->in_macro             = false;
+    state->in_string            = false;
+    state->in_char              = false;
+    state->in_single_comment    = false;
+    state->in_multi_comment     = false;
+    state->line_continuation    = false;
+    state->last_base            = 0;
+    state->in_subroutine        = 0;
+    state->first_sub            = 0;
+    state->last_sub             = 0;
+    state->prev_char            = '\0';
 }
 
-bool should_add_semicolon(const char *line, ParserState *state) {
-    int len = strlen(line);
-    char last_non_space = '\0';
-    
-    // find last non-whitespace character
-    for (int i = len - 1; i >= 0; i--)
-        if (!isspace(line[i])) {
-            last_non_space = line[i];
-            break;
-        }
-    
-    // dont add if line already ends with ; { or \ macro-continue
-    if (last_non_space == ';' || last_non_space == '{' || 
-        last_non_space == '\\') { // design: rem: last_non_space == '}'
-        return false;
+void f_subproc(const char *line, int *len, ParserState *state) {
+    /// if its a sub routine we can simply modify
+    /// the source of line, since we filter and manage state
+    if (state->in_macro)          return;
+    if (state->in_string)         return;
+    if (state->in_single_comment) return;
+    if (state->in_multi_comment)  return;
+
+    // quick and dirty filter
+    char *f = strstr(line, "^(");
+    if (f) {
+        char *fe = strstr(f, ") {");
+        char* args = calloc(1, strlen(f) + 1);
+        int64_t alen = fe - &f[2])
+        memcpy(args, f + 2, alen);
     }
-    
-    // dont add if we're in a special state
-    if (state->in_macro || state->in_single_comment || 
-        state->in_multi_comment || state->in_string || 
-        state->in_char || state->line_continuation) {
-        return false;
-    }
-    
-    // only add if we're inside function body
-    return state->brace_level >= 0;
 }
 
 void process_char(char c, char n, ParserState *state) {
@@ -88,8 +93,8 @@ void process_char(char c, char n, ParserState *state) {
     // track brace level when not in comments or strings
     if (!state->in_string && !state->in_char && 
         !state->in_single_comment && !state->in_multi_comment) {
-        //if (c == '{') state->brace_level++;
-        //if (c == '}') state->brace_level--;
+        if (c == '{') state->brace_level++;
+        if (c == '}') state->brace_level--;
     }
     
     // macros; #  define not allowed with this simple logic
@@ -122,19 +127,10 @@ void process_line(char *line, ParserState *state, FILE *out) {
         if (!state->line_continuation)
              state->in_macro = false;
     }
-    
-    // determine if we need to add a semicolon
-    needs_semicolon = should_add_semicolon(line, state) || 
-        (!state->in_macro  && !state->in_multi_comment && !state->in_single_comment &&
-         !state->in_string && (strcmp(line, "}\n") == 0 || strcmp(line, "}") == 0));
-    
-    // write the line, potentially with added semicolon
-    if (needs_semicolon) {
-        // remove trailing whitespace before adding semicolon
-        while (len > 0 && isspace(*(line + len - 1))) len--;
-        //strcpy(line + len, ";\n");
-    }
 
+    if (
+
+    check_subroutine(line, state);
     fputs(line, out);
 }
 
@@ -143,21 +139,17 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "usage: %s <input-a> <output-c>\n", argv[0]);
         return 1;
     }
-    
     FILE *in = fopen(argv[1], "r");
     if (!in) {
         perror("failed to open input a-file");
         return 1;
     }
-    
-    // Create output filename by appending "_semi.c"
     FILE *out = fopen(argv[2], "w");
     if (!out) {
         perror("failed to open output c-file");
         fclose(in);
         return 1;
     }
-    
     char line[MAX_LINE + 1];
     ParserState state;
     init_state(&state);
@@ -166,7 +158,6 @@ int main(int argc, char *argv[]) {
         process_line(line, &state, out);
         memset(line, 0, sizeof(line));
     }
-    
     fclose(in);
     fclose(out);
     printf("Processed file saved as: %s\n", argv[2]);

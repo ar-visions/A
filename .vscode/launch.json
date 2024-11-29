@@ -92,7 +92,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../silver/silver-debug/silver",
             "args": [
-                "WGPU.si",
+                "WGPU.cms",
                 "--install", "/home/kalen/src/silver-import"
             ],
             "environment": [

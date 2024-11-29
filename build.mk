@@ -92,8 +92,8 @@ CFLAGS 		   	   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-Wno-write-strings -Wno-compare-distinct-pointer-types -Wno-deprecated-declarations \
 	-Wno-incompatible-pointer-types -Wfatal-errors -std=gnu11 -DMODULE="\"$(PROJECT)\"" \
 	-Wno-incompatible-library-redeclaration -fvisibility=default
-CFLAGS  		  := $(CFLAGS) # -fsanitize=address
-LDFLAGS 		  := $(LDFLAGS) # -fsanitize=address
+CFLAGS  		  := $(CFLAGS) -fsanitize=address
+LDFLAGS 		  := $(LDFLAGS) -fsanitize=address
 SRC_TRANSLATION   := $(SRC_ROOT)/translation/A-translation.c
 BUILD_TRANSLATION := $(BUILD_DIR)/A-translation
 
@@ -193,7 +193,9 @@ $(INTERN_HEADER):
 	@echo >> $@
 	@echo "#endif /* _$(UPROJECT)_INTERN_H_ */" >> $@
 
+# A-type subprocedure syntax is a good thing it just cant happen now, and we should still attempt to say the file is c
 ifeq ($(PROJECT),AAAAA) # disabled for now
+
 $(BUILD_TRANSLATION): $(SRC_TRANSLATION) # target to compile A-translation.c
 	$(CC) $(CFLAGS) -o $(BUILD_TRANSLATION) $(SRC_TRANSLATION)
 

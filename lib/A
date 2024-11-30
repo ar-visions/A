@@ -7,6 +7,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <libgen.h>
 #include <unistd.h>
@@ -39,7 +40,7 @@ typedef struct A*           object;
 typedef struct A**          ARef;
 typedef struct A*           A;
 typedef struct type_member_t* Member;
-
+/*
 void*   calloc(size_t num, size_t size);
 void    free();
 void    exit(int);
@@ -54,6 +55,7 @@ int     setenv(symbol key, symbol value, int);
 cstr    getenv(symbol key);
 i32       rand();
 void     srand(u32 seed);
+*/
 
 typedef struct A_f* AType;
 

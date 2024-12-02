@@ -1527,7 +1527,7 @@ void vector_push(vector a, A any) {
     vector_concat(a, &any, 1);
 }
 
-num abs(num i) { 
+num abso(num i) { 
     return (i < 0) ? -i : i;
 }
 
@@ -1535,7 +1535,7 @@ vector vector_slice(vector a, num from, num to) {
     A      f   = A_header(a);
     /// allocate the data type (no i8 bytes)
     AType  data_type = f->type->meta.meta_0 ? f->type->meta.meta_0 : typeid(object);
-    num count = (1 + abs(from - to)); // + 31 & ~31;
+    num count = (1 + abso(from - to)); // + 31 & ~31;
     object res = A_alloc(f->type, 1, true);
     A      res_f = A_header(res);
 
@@ -1788,7 +1788,7 @@ void AF_destructor(AF a) {
 }
 
 AF AF_fetch(num index) {
-    if (af_stack && abs((int)index) < af_stack->len)
+    if (af_stack && abso((int)index) < af_stack->len)
         return index < 0 ? af_stack->elements[af_stack->len + index] :
                            af_stack->elements[index];
     else

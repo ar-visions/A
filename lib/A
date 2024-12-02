@@ -1179,8 +1179,9 @@ typedef struct string* string;
     enum_value(X,Y, _mod) \
     enum_value(X,Y, _right) \
     enum_value(X,Y, _left) \
-    enum_value(X,Y, _compare_equal) \
-    enum_value(X,Y, _compare_not) \
+    enum_value(X,Y, _compare) \
+    enum_value(X,Y, _equal) \
+    enum_value(X,Y, _not_equal) \
     enum_value(X,Y, _is) \
     enum_value(X,Y, _inherits) \
     enum_value(X,Y, _value_default) \

@@ -83,6 +83,31 @@
             }
         },
         {
+            "label": "build-net",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../net/silver-debug"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "osx": {
+                "command": "make -f ../Makefile install -j8"
+            },
+            "linux": {
+                "command": "make -f ../Makefile install -j8"
+            }
+        },
+        {
             "label": "build-A",
             "type": "shell",
 			"options": {

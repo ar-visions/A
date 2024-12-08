@@ -115,6 +115,33 @@
             }
         },
         {
+            "name": "net-hi",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../net/silver-debug/net-hi",
+            "args": [
+                "https://www.google.com"
+            ],
+            "environment": [
+                {
+                    "name": "LSAN_OPTIONS",
+                    "value": "verbosity=1:log_threads=1:print_suppressions=1:report_objects=1"
+                },
+                {
+                    "name": "ASAN_OPTIONS",
+                    "value": "detect_leaks=1:verbosity=1"
+                }
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../net/silver-debug",
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
             "name": "ether",
             "type": "cppdbg",
             "request": "launch",

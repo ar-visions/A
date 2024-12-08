@@ -925,6 +925,10 @@ real clampf(real i, real mn, real mx) {
 
 void vector_init(vector a);
 
+sz vector_len(vector a) {
+    return A_header(a)->count;
+}
+
 
 void  string_destructor(string a)        { free(a->chars); }
 num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
@@ -979,6 +983,7 @@ none  string_append(string a, cstr b) {
         string_alloc_sz(a, (a->alloc << 1) + blen);
     memcpy(&a->chars[a->len], b, blen);
     a->len += blen;
+    a->h = 0; /// mutable operations must clear the hash value
     a->chars[a->len] = 0;
 }
 
@@ -1035,7 +1040,44 @@ void string_init(string a) {
         a->len = len;
     }
 }
- 
+
+string string_with_i32(string a, uint32_t value) {
+    // Check if the value is within the BMP (U+0000 - U+FFFF)
+    if (value <= 0xFFFF) {
+        a->len = 1;
+        a->chars = calloc(8, 1);
+        a->chars[0] = (char)value;
+    } else {
+        // Encode the Unicode code point as UTF-8
+        a->len = 0;
+        char buf[4];
+        int len = 0;
+        if (value <= 0x7F) {
+            buf[len++] = (char)value;
+        } else if (value <= 0x7FF) {
+            buf[len++] = 0xC0 | ((value >> 6) & 0x1F);
+            buf[len++] = 0x80 | (value & 0x3F);
+        } else if (value <= 0xFFFF) {
+            buf[len++] = 0xE0 | ((value >> 12) & 0x0F);
+            buf[len++] = 0x80 | ((value >> 6) & 0x3F);
+            buf[len++] = 0x80 | (value & 0x3F);
+        } else if (value <= 0x10FFFF) {
+            buf[len++] = 0xF0 | ((value >> 18) & 0x07);
+            buf[len++] = 0x80 | ((value >> 12) & 0x3F);
+            buf[len++] = 0x80 | ((value >> 6) & 0x3F);
+            buf[len++] = 0x80 | (value & 0x3F);
+        } else {
+            // Invalid Unicode code point
+            a->len = 0;
+            a->chars = NULL;
+            return a;
+        }
+        a->len = len;
+        a->chars = calloc(len + 1, 1);
+        memcpy(a->chars, buf, len);
+    }
+    return a;
+}
 
 string string_with_cstr(string a, cstr value) {
     a->len   = value ? strlen(value) : 0;
@@ -1201,6 +1243,26 @@ none map_remove(map a, A key) {
 
 bool map_cast_bool(map a) {
     return a->count > 0;
+}
+
+void list_quicksort(list a, i32(*sfn)(A, A)) {
+    item f = a->first;
+    int  n = a->count;
+    for (int i = 0; i < n - 1; i++) {
+        int jc = 0;
+        for (item j = f; jc < n - i - 1; j = j->next, jc++) {
+            item j1 = j->next;
+            if (sfn(j->value, j1->value) > 0) {
+                A t = j->value;
+                j ->value = j1->value;
+                j1->value = t;
+            }
+        }
+    }
+}
+
+void list_sort(list a, ARef fn) {
+    list_quicksort(a, (i32(*)(A, A))fn);
 }
 
 A list_get(list a, object at_index);

@@ -1148,6 +1148,7 @@ declare_class(item)
     i_method(X,Y, public,    item,    push, A) \
     i_method(X,Y, public,    num,     index_of, A) \
     i_method(X,Y, public,    item,     item_of, A) \
+    i_method(X,Y, public,    none,    sort,   ARef) \
     i_method(X,Y, public,    none,    remove, num) \
     i_method(X,Y, public,    none,    remove_item, item) \
     i_method(X,Y, public,    A,       get,  A) \
@@ -1169,6 +1170,7 @@ declare_class(list)
 typedef struct string* string;
 
 #define OPType_schema(X,Y) \
+    enum_value(X,Y, _undefined) \
     enum_value(X,Y, _add) \
     enum_value(X,Y, _sub) \
     enum_value(X,Y, _mul) \
@@ -1260,6 +1262,7 @@ declare_class(path)
     i_method         (X,Y, public, vector,  slice, num, num) \
     i_method         (X,Y, public, sz,      vector_size, sz) \
     i_method         (X,Y, public, none,    realloc, sz) \
+    i_method         (X,Y, public, sz,      len) \
     i_override       (X,Y, method, init)
 #ifndef vector_intern
 #define vector_intern
@@ -1417,6 +1420,7 @@ declare_class(fn)
     i_cast    (X,Y,   public, sz) \
     i_cast    (X,Y,   public, path) \
     i_ctr     (X,Y,   public, cstr) \
+    i_ctr     (X,Y,   public, i32) \
     i_index   (X,Y,   public, i32, num) \
     i_override(X,Y,   method, hash) \
     i_override(X,Y,   method, compare) \
@@ -1492,6 +1496,19 @@ extern FILE* logger;
     if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
         for (pair EE = (pair)_i->value, e0 = EE; EE == e0; e0++) \
 
+#define min(A, B) ({ \
+    __typeof__(A) a = A; \
+    __typeof__(B) b = B; \
+    __typeof__(A) r = a < b ? a : b; \
+    r; \
+})
+
+#define max(A, B) ({ \
+    __typeof__(A) a = A; \
+    __typeof__(B) b = B; \
+    __typeof__(A) r = a > b ? a : b; \
+    r; \
+})
 
 /// possible to iterate safely through primitives
 #define primitives(arr, E, e) \

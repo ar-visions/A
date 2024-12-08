@@ -18,6 +18,9 @@ define IMPORT_script
 		found=0; \
 		while IFS= read -r line; do \
 			new_found=0; \
+			if echo "$$line" | grep -q "^#"; then \
+				continue; \
+			fi; \
 			if echo "$$line" | grep -q "^$(1):"; then \
 				found=1; \
 				new_found=1; \
@@ -48,6 +51,19 @@ define process_imports # ( module map )
 		$(if $(findstring .so,$(dep)), $(SILVER_IMPORT)/lib/$(dep),$(dep)))
 endef
 
+# alone, this does not work, however when we update the stamps of ALL of the source
+# rsync -a $(SRC_ROOT)/lib/* $(BUILD_DIR)/lib/;
+
+PREP_DIRS := $(shell \
+	mkdir -p $(BUILD_DIR)/app $(BUILD_DIR)/test $(BUILD_DIR)/lib && \
+	if [ -d "$(SRC_ROOT)/res" ]; then \
+		rsync --checksum -r $(SRC_ROOT)/res/* $(BUILD_DIR); \
+	fi && \
+	if [ -d "$(SRC_ROOT)/lib" ]; then \
+		rsync -a $(SRC_ROOT)/lib/* $(BUILD_DIR)/lib/; \
+	fi \
+)
+
 APPS_LIBS          = $(call process_libs,app)
 LIB_LIBS 	       = $(call process_libs,lib)
 TEST_LIBS          = $(call process_libs,test)
@@ -58,13 +74,13 @@ APP			      ?= 0
 SILVER_IMPORT     ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)
 CC 			       = clang-18 # $(SILVER_IMPORT)/bin/clang
 MAKEFLAGS         += --no-print-directory
-LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
-APP_INCLUDES       = -I$(SRC_ROOT)/app -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
-TEST_INCLUDES      = -I$(BUILD_DIR)/test -I$(BUILD_DIR)/lib -I$(SRC_ROOT)/test -I$(SRC_ROOT)/lib -I$(SILVER_IMPORT)/include
+LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(SILVER_IMPORT)/include
+APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(SILVER_IMPORT)/include
+TEST_INCLUDES      = -I$(BUILD_DIR)/test -I$(BUILD_DIR)/lib -I$(SILVER_IMPORT)/include
 LDFLAGS 	       = -L$(BUILD_DIR) -L$(SILVER_IMPORT)/lib -Wl,-rpath,$(SILVER_IMPORT)/lib -Wl,--no-as-needed
-SRCAPP_DIR 	       = $(SRC_ROOT)/app
-SRCLIB_DIR 	       = $(SRC_ROOT)/lib
-TEST_DIR           = $(SRC_ROOT)/test
+SRCAPP_DIR 	       = $(BUILD_DIR)/app
+SRCLIB_DIR 	       = $(BUILD_DIR)/lib
+TEST_DIR           = $(BUILD_DIR)/test
 TEST_SRCS 	       = $(wildcard $(TEST_DIR)/*.c)
 TEST_OBJS 	       = $(TEST_SRCS:$(TEST_DIR)/%.c=$(BUILD_DIR)/test/%.o)
 LIB_SRCS 	       = $(wildcard $(SRCLIB_DIR)/*.c)
@@ -75,10 +91,10 @@ APP_OBJS 	       = $(APP_SRCS:$(SRCAPP_DIR)/%.c=$(BUILD_DIR)/app/%.o)
 LIB_TARGET   	   = $(if $(strip $(LIB_OBJS)),$(BUILD_DIR)/lib$(PROJECT).so)
 APP_TARGETS	 	   = $(patsubst $(SRCAPP_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(SRCAPP_DIR)/*.c))
 TARGET_FLAGS 	   = -shared
-ALL_TARGETS  	   = prepare_dirs import2 methods $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
+ALL_TARGETS  	   = $(BUILD_DIR)/.rebuild methods $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
 APP_FLAGS    	   = 
-PROJECT_HEADER_R   = $(if $(wildcard $(SRC_ROOT)/lib/$(PROJECT)),lib/$(PROJECT),$(if $(wildcard $(SRC_ROOT)/app/$(PROJECT)),app/$(PROJECT),))
-PROJECT_HEADER     = $(SRC_ROOT)/$(PROJECT_HEADER_R)
+PROJECT_HEADER_R   = $(if $(wildcard $(BUILD_DIR)/lib/$(PROJECT)),lib/$(PROJECT),$(if $(wildcard $(BUILD_DIR)/app/$(PROJECT)),app/$(PROJECT),))
+PROJECT_HEADER     = $(BUILD_DIR)/$(PROJECT_HEADER_R)
 IMPORT_APP_HEADER  = $(BUILD_DIR)/app/import
 IMPORT_LIB_HEADER  = $(BUILD_DIR)/lib/import
 IMPORT_TEST_HEADER = $(BUILD_DIR)/test/import
@@ -110,88 +126,91 @@ all: $(ALL_TARGETS)
 # how do we add to ALL_TARGETS if PROJECT_HEADER exists and METHODS_HEADER does not? (might be nice to allow the user to make one)
 # Generate method macros header
 $(METHODS_HEADER): $(PROJECT_HEADER)
-	@rm -f $@  # delete the METHODS_HEADER before generating it
-	@echo "/* generated methods interface */" > $@
-	@echo "#ifndef _$(UPROJECT)_METHODS_H_" >> $@
-	@echo "#define _$(UPROJECT)_METHODS_H_" >> $@
-	@# python-like flat methods
-	@echo >> $@
-	@grep -o 'i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*[[:alnum:]_]*' $(PROJECT_HEADER) | \
-	sed 's/i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*\([[:alnum:]_]*\).*/\1/' | \
-	while read method; do \
-		echo "#undef $$method\n#define $$method(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->$$method(_i_, ## __VA_ARGS__); })" >> $@; \
-	done
-	@echo >> $@
-	@echo "#endif /* _$(UPROJECT)_METHODS_H_ */" >> $@
+	@if [ ! -f $@ ] || [ $(PROJECT_HEADER) -nt $@ ]; then \
+		rm -f $@; \
+		echo "/* generated methods interface */" > $@; \
+		echo "#ifndef _$(UPROJECT)_METHODS_H_" >> $@; \
+		echo "#define _$(UPROJECT)_METHODS_H_" >> $@; \
+		echo >> $@; \
+		grep -o 'i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*[[:alnum:]_]*' $(PROJECT_HEADER) | \
+		sed 's/i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*\([[:alnum:]_]*\).*/\1/' | \
+		while read method; do \
+			echo "#undef $$method\n#define $$method(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->$$method(_i_, ## __VA_ARGS__); })" >> $@; \
+		done; \
+		echo >> $@; \
+		echo "#endif /* _$(UPROJECT)_METHODS_H_ */" >> $@; \
+	fi
 
 # generate wrappers (macros named same as each class found in *_schema) around new() macro
 $(INIT_HEADER): $(PROJECT_HEADER)
-	@rm -f $@  # delete the INIT_HEADER before generating it
-	@echo "/* generated methods interface */" > $@
-	@echo "#ifndef _$(UPROJECT)_INIT_H_" >> $@
-	@echo "#define _$(UPROJECT)_INIT_H_" >> $@
-	@# new wrappers; these allow you to use the type of the same name in C source, but not as tokens in macros
-	@echo >> $@
-	@grep -o 'declare_\(class\|mod\)[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-	sed 's/declare_\(class\|mod\)[[:space:]]*([[:space:]]*\([^,)]*\).*/\2/' | \
-	while read class_name; do \
-		echo "#ifndef NDEBUG" >> $@; \
-		echo "    //#define TC_$${class_name}(MEMBER, VALUE) A_validate_type(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)" >> $@; \
-		echo "    #define TC_$${class_name}(MEMBER, VALUE) VALUE" >> $@; \
-		echo "#else" >> $@; \
-		echo "    #define TC_$${class_name}(MEMBER, VALUE) VALUE" >> $@; \
-		echo "#endif" >> $@; \
-		echo "#define _ARG_COUNT_IMPL_$${class_name}(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N" >> $@; \
-		echo "#define _ARG_COUNT_I_$${class_name}(...) _ARG_COUNT_IMPL_$${class_name}(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)" >> $@; \
-		echo "#define _ARG_COUNT_$${class_name}(...)   _ARG_COUNT_I_$${class_name}(\"A-type\", ## __VA_ARGS__)" >> $@; \
-		echo "#define _COMBINE_$${class_name}_(A, B)   A##B" >> $@; \
-		echo "#define _COMBINE_$${class_name}(A, B)    _COMBINE_$${class_name}_(A, B)" >> $@; \
-		echo "#define _N_ARGS_0_$${class_name}( TYPE)" >> $@; \
-		echo "#define _N_ARGS_1_$${class_name}( TYPE, a) _Generic((a), TYPE##_schema(TYPE, GENERICS) const void *: (void)0)(instance, a)" >> $@; \
-		echo "#define _N_ARGS_2_$${class_name}( TYPE, a,b) instance->a = TC_$${class_name}(a,b);" >> $@; \
-		echo "#define _N_ARGS_4_$${class_name}( TYPE, a,b, c,d) _N_ARGS_2_$${class_name}(TYPE, a,b) instance->c = TC_$${class_name}(c,d);" >> $@; \
-		echo "#define _N_ARGS_6_$${class_name}( TYPE, a,b, c,d, e,f) _N_ARGS_4_$${class_name}(TYPE, a,b, c,d) instance->e = TC_$${class_name}(e,f);" >> $@; \
-		echo "#define _N_ARGS_8_$${class_name}( TYPE, a,b, c,d, e,f, g,h) _N_ARGS_6_$${class_name}(TYPE, a,b, c,d, e,f) instance->g = TC_$${class_name}(g,h);" >> $@; \
-		echo "#define _N_ARGS_10_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j) _N_ARGS_8_$${class_name}(TYPE, a,b, c,d, e,f, g,h) instance->i = TC_$${class_name}(i,j);" >> $@; \
-		echo "#define _N_ARGS_12_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) _N_ARGS_10_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j) instance->l = TC_$${class_name}(l,m);" >> $@; \
-		echo "#define _N_ARGS_14_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) _N_ARGS_12_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC_$${class_name}(n,o);" >> $@; \
-		echo "#define _N_ARGS_16_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) _N_ARGS_14_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) instance->p = TC_$${class_name}(p,q);" >> $@; \
-		echo "#define _N_ARGS_18_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) _N_ARGS_16_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) instance->r = TC_$${class_name}(r,s);" >> $@; \
-		echo "#define _N_ARGS_20_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) _N_ARGS_18_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC_$${class_name}(t,u);" >> $@; \
-		echo "#define _N_ARGS_22_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) _N_ARGS_20_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC_$${class_name}(v,w);" >> $@; \
-		echo "#define _N_ARGS_HELPER2_$${class_name}(TYPE, N, ...)  _COMBINE_$${class_name}(_N_ARGS_, N)(TYPE, ## __VA_ARGS__)" >> $@; \
-		echo "#define _N_ARGS_$${class_name}(TYPE,...)    _N_ARGS_HELPER2_$${class_name}(TYPE, _ARG_COUNT_$${class_name}(__VA_ARGS__), ## __VA_ARGS__)" >> $@; \
-		echo "#define $$class_name(...) ({ \\" >> $@; \
-		echo "    $${class_name} instance = ($${class_name})A_alloc(typeid($${class_name}), 1, true); \\" >> $@; \
-		echo "    _N_ARGS_$${class_name}($${class_name}, ## __VA_ARGS__); \\" >> $@; \
-		echo "    A_initialize(instance); \\" >> $@; \
-		echo "    instance; \\" >> $@; \
-		echo "})" >> $@; \
-	done
-	@echo >> $@
-	@echo "#endif /* _$(UPROJECT)_INIT_H_ */" >> $@
+	@if [ ! -f $@ ] || [ $(PROJECT_HEADER) -nt $@ ]; then \
+		rm -f $@; \
+		echo "/* generated methods interface */" > $@; \
+		echo "#ifndef _$(UPROJECT)_INIT_H_" >> $@; \
+		echo "#define _$(UPROJECT)_INIT_H_" >> $@; \
+		echo >> $@; \
+		grep -o 'declare_\(class\|mod\)[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
+		sed 's/declare_\(class\|mod\)[[:space:]]*([[:space:]]*\([^,)]*\).*/\2/' | \
+		while read class_name; do \
+			echo "#ifndef NDEBUG" >> $@; \
+			echo "    //#define TC_$${class_name}(MEMBER, VALUE) A_validate_type(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)" >> $@; \
+			echo "    #define TC_$${class_name}(MEMBER, VALUE) VALUE" >> $@; \
+			echo "#else" >> $@; \
+			echo "    #define TC_$${class_name}(MEMBER, VALUE) VALUE" >> $@; \
+			echo "#endif" >> $@; \
+			echo "#define _ARG_COUNT_IMPL_$${class_name}(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N" >> $@; \
+			echo "#define _ARG_COUNT_I_$${class_name}(...) _ARG_COUNT_IMPL_$${class_name}(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)" >> $@; \
+			echo "#define _ARG_COUNT_$${class_name}(...)   _ARG_COUNT_I_$${class_name}(\"A-type\", ## __VA_ARGS__)" >> $@; \
+			echo "#define _COMBINE_$${class_name}_(A, B)   A##B" >> $@; \
+			echo "#define _COMBINE_$${class_name}(A, B)    _COMBINE_$${class_name}_(A, B)" >> $@; \
+			echo "#define _N_ARGS_0_$${class_name}( TYPE)" >> $@; \
+			echo "#define _N_ARGS_1_$${class_name}( TYPE, a) _Generic((a), TYPE##_schema(TYPE, GENERICS) const void *: (void)0)(instance, a)" >> $@; \
+			echo "#define _N_ARGS_2_$${class_name}( TYPE, a,b) instance->a = TC_$${class_name}(a,b);" >> $@; \
+			echo "#define _N_ARGS_4_$${class_name}( TYPE, a,b, c,d) _N_ARGS_2_$${class_name}(TYPE, a,b) instance->c = TC_$${class_name}(c,d);" >> $@; \
+			echo "#define _N_ARGS_6_$${class_name}( TYPE, a,b, c,d, e,f) _N_ARGS_4_$${class_name}(TYPE, a,b, c,d) instance->e = TC_$${class_name}(e,f);" >> $@; \
+			echo "#define _N_ARGS_8_$${class_name}( TYPE, a,b, c,d, e,f, g,h) _N_ARGS_6_$${class_name}(TYPE, a,b, c,d, e,f) instance->g = TC_$${class_name}(g,h);" >> $@; \
+			echo "#define _N_ARGS_10_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j) _N_ARGS_8_$${class_name}(TYPE, a,b, c,d, e,f, g,h) instance->i = TC_$${class_name}(i,j);" >> $@; \
+			echo "#define _N_ARGS_12_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) _N_ARGS_10_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j) instance->l = TC_$${class_name}(l,m);" >> $@; \
+			echo "#define _N_ARGS_14_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) _N_ARGS_12_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC_$${class_name}(n,o);" >> $@; \
+			echo "#define _N_ARGS_16_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) _N_ARGS_14_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) instance->p = TC_$${class_name}(p,q);" >> $@; \
+			echo "#define _N_ARGS_18_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) _N_ARGS_16_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) instance->r = TC_$${class_name}(r,s);" >> $@; \
+			echo "#define _N_ARGS_20_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) _N_ARGS_18_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC_$${class_name}(t,u);" >> $@; \
+			echo "#define _N_ARGS_22_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) _N_ARGS_20_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC_$${class_name}(v,w);" >> $@; \
+			echo "#define _N_ARGS_HELPER2_$${class_name}(TYPE, N, ...)  _COMBINE_$${class_name}(_N_ARGS_, N)(TYPE, ## __VA_ARGS__)" >> $@; \
+			echo "#define _N_ARGS_$${class_name}(TYPE,...)    _N_ARGS_HELPER2_$${class_name}(TYPE, _ARG_COUNT_$${class_name}(__VA_ARGS__), ## __VA_ARGS__)" >> $@; \
+			echo "#define $$class_name(...) ({ \\" >> $@; \
+			echo "    $${class_name} instance = ($${class_name})A_alloc(typeid($${class_name}), 1, true); \\" >> $@; \
+			echo "    _N_ARGS_$${class_name}($${class_name}, ## __VA_ARGS__); \\" >> $@; \
+			echo "    A_initialize(instance); \\" >> $@; \
+			echo "    instance; \\" >> $@; \
+			echo "})" >> $@; \
+		done; \
+		echo >> $@; \
+		echo "#endif /* _$(UPROJECT)_INIT_H_ */" >> $@; \
+	fi
 
 $(INTERN_HEADER):
-	@rm -f $@  # delete the INTERN_HEADER before generating it
-	@echo "/* generated methods interface */" > $@
-	@echo "#ifndef _$(UPROJECT)_INTERN_H_" >> $@
-	@echo "#define _$(UPROJECT)_INTERN_H_" >> $@
-	@# new wrappers; these allow you to use the type of the same name in C source, but not as tokens in macros
-	@echo >> $@
-	@grep -o 'declare_class[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-	sed 's/declare_class[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
-	while read class_name; do \
-		echo "#define $${class_name}_intern\t\tintern($$class_name)" >> $@; \
-	done
-	@echo >> $@
-	@echo >> $@
-	@grep -o 'declare_mod[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-	sed 's/declare_mod[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
-	while read class_name; do \
-		echo "#define $${class_name}_intern\t\tintern($$class_name)" >> $@; \
-	done
-	@echo >> $@
-	@echo "#endif /* _$(UPROJECT)_INTERN_H_ */" >> $@
+	@if [ ! -f $@ ] || [ $(PROJECT_HEADER) -nt $@ ]; then \
+		rm -f $@; \
+		echo "/* generated methods interface */" > $@; \
+		echo "#ifndef _$(UPROJECT)_INTERN_H_" >> $@; \
+		echo "#define _$(UPROJECT)_INTERN_H_" >> $@; \
+		echo >> $@; \
+		grep -o 'declare_class[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
+		sed 's/declare_class[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
+		while read class_name; do \
+			echo "#define $${class_name}_intern\t\tintern($$class_name)" >> $@; \
+		done; \
+		echo >> $@; \
+		echo >> $@; \
+		grep -o 'declare_mod[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
+		sed 's/declare_mod[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
+		while read class_name; do \
+			echo "#define $${class_name}_intern\t\tintern($$class_name)" >> $@; \
+		done; \
+		echo >> $@; \
+		echo "#endif /* _$(UPROJECT)_INTERN_H_ */" >> $@; \
+	fi
 
 # A-type subprocedure syntax is a good thing it just cant happen now, and we should still attempt to say the file is c
 ifeq ($(PROJECT),AAAAA) # disabled for now
@@ -214,33 +233,35 @@ build_translation:
 endif
 
 define generate_import_header
-	@rm -f $(1)
-	@echo "/* generated import interface */" > $(1)
-	@echo "#ifndef _$(UPROJECT)_IMPORT_$(2)_H_" >> $(1)
-	@echo "#define _$(UPROJECT)_IMPORT_$(2)_H_" >> $(1)
-	@echo >> $(1)
-	@$(foreach import, $(3), \
-		if [ "$(PROJECT)" != "$(import)" ]; then \
-			if [ -f "$(SILVER_IMPORT)/include/$(import)-methods" ]; then \
-			echo "#include <$(import)>" >> $(1) ; \
-			echo "#include <$(import)-methods>" >> $(1) ; \
-			fi; \
-		fi;)
-	@if [ -f "$(SRC_ROOT)/$(4)/$(PROJECT).c" ]; then \
-		echo "#include <$(PROJECT)-intern>" >> $(1) ; \
+	@if [ ! -f $(1) ] || [ "$(SRC_ROOT)/import" -nt $(1) ]; then \
+		rm -f $(1); \
+		echo "/* generated import interface */" > $(1); \
+		echo "#ifndef _$(UPROJECT)_IMPORT_$(2)_H_" >> $(1); \
+		echo "#define _$(UPROJECT)_IMPORT_$(2)_H_" >> $(1); \
+		echo >> $(1); \
+		$(foreach import, $(3), \
+			if [ "$(PROJECT)" != "$(import)" ]; then \
+				if [ -f "$(SILVER_IMPORT)/include/$(import)-methods" ]; then \
+				echo "#include <$(import)>" >> $(1) ; \
+				echo "#include <$(import)-methods>" >> $(1) ; \
+				fi; \
+			fi;) \
+		if [ -f "$(SRC_ROOT)/$(4)/$(PROJECT).c" ]; then \
+			echo "#include <$(PROJECT)-intern>" >> $(1) ; \
+		fi; \
+		echo "#include <$(PROJECT)>" >> $(1); \
+		echo "#include <$(PROJECT)-methods>" >> $(1); \
+		echo "#include <A-reserve>" >> $(1); \
+		$(foreach import, $(3), \
+			if [ "$(PROJECT)" != "$(import)" ]; then \
+				if [ -f "$(SILVER_IMPORT)/include/$(import)-methods" ]; then \
+				echo "#include <$(import)-init>" >> $(1) ; \
+				fi; \
+			fi;) \
+		echo "#include <$(PROJECT)-init>" >> $(1); \
+		echo >> $(1); \
+		echo "#endif" >> $(1); \
 	fi
-	@echo "#include <$(PROJECT)>" >> $(1)
-	@echo "#include <$(PROJECT)-methods>" >> $(1)
-	@echo "#include <A-reserve>" >> $(1)
-	@$(foreach import, $(3), \
-		if [ "$(PROJECT)" != "$(import)" ]; then \
-			if [ -f "$(SILVER_IMPORT)/include/$(import)-methods" ]; then \
-			echo "#include <$(import)-init>" >> $(1) ; \
-			fi; \
-		fi;)
-	@echo "#include <$(PROJECT)-init>" >> $(1)
-	@echo >> $(1)
-	@echo "#endif" >> $(1)
 endef
 
 $(IMPORT_LIB_HEADER):
@@ -254,7 +275,7 @@ $(IMPORT_TEST_HEADER):
 
 .PRECIOUS: *.o
 .SUFFIXES:
-.PHONY: all clean install import2 tests verify prepare_dirs process_c_files methods clean $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
+.PHONY: all clean install $(BUILD_DIR)/.rebuild tests verify process_c_files methods clean $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
 
 methods: $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
 
@@ -267,26 +288,16 @@ define process_src
 	done
 endef
 
-# build_translation
-prepare_dirs:
-	@mkdir -p $(BUILD_DIR)/app $(BUILD_DIR)/test $(BUILD_DIR)/lib
-	@if [ -d "$(SRC_ROOT)/res" ]; then \
-		cp -r $(SRC_ROOT)/res/* $(BUILD_DIR); \
-	fi
-	@if [ -d "$(SRC_ROOT)/lib" ]; then \
-		find $(SRC_ROOT)/lib -maxdepth 1 -type f ! -name '*.c' -exec cp -r {} $(BUILD_DIR)/lib \; ; \
-	fi
-
-process_c_files: prepare_dirs
+process_c_files:
 	$(call process_src,lib)
 	$(call process_src,app)
 	$(call process_src,test)
 
-import2:
-	@bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --i $(SRC_ROOT)/import
+$(LIB_TARGET): $(BUILD_DIR)/.rebuild
+$(APP_TARGET): $(BUILD_DIR)/.rebuild
 
-#$(LIB_TARGET): import2
-#$(APP_TARGETS): import2
+$(BUILD_DIR)/.rebuild:
+	bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --b $(BUILD_DIR) --i $(SRC_ROOT)/import
 
 $(BUILD_DIR)/$(PROJECT)-includes:
 	@echo "#include <$(PROJECT)>" > $@.tmp.c
@@ -301,13 +312,13 @@ $(BUILD_DIR)/$(PROJECT)-flat:
 	@rm $@.tmp.c
 
 # compiling
-$(BUILD_DIR)/lib/%.o: $(SRC_ROOT)/lib/%.c
+$(BUILD_DIR)/lib/%.o: $(BUILD_DIR)/lib/%.c $(BUILD_DIR)/lib/%
 	$(CC) $(CFLAGS) $(LIB_INCLUDES) -c $< -o $@
 
-$(BUILD_DIR)/app/%.o: $(SRC_ROOT)/app/%.c $(LIB_TARGET)
+$(BUILD_DIR)/app/%.o: $(BUILD_DIR)/app/%.c $(LIB_TARGET)
 	$(CC) $(CFLAGS) $(APP_INCLUDES) -c $< -o $@
 
-$(BUILD_DIR)/test/%.o: $(SRC_ROOT)/test/%.c $(LIB_TARGET)
+$(BUILD_DIR)/test/%.o: $(BUILD_DIR)/test/%.c $(LIB_TARGET)
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
 
 # linking
@@ -389,6 +400,6 @@ install: all
 	fi
 
 clean:
-	rm -rf $(BUILD_DIR)/app $(BUILD_DIR)/lib $(BUILD_DIR)/test $(METHODS_HEADER) \
+	rm -rf $(BUILD_DIR)/lib$(PROJECT).so $(BUILD_DIR)/$(PROJECT) $(BUILD_DIR)/app $(BUILD_DIR)/lib $(BUILD_DIR)/test $(METHODS_HEADER) \
 		   $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER) \
 		   $(REFLECT_TARGET) $(BUILD_DIR)/*-flat $(BUILD_DIR)/*-includes $(BUILD_DIR)/*.tmp.c

@@ -25,6 +25,10 @@
 			"path": "../trinity"
 		},
 		{
+			"name": "wolf",
+			"path": "../wolf"
+		},
+		{
 			"name": "llvm",
 			"path": "../llvm"
 		},
@@ -228,7 +232,19 @@
 			"latch": "cpp",
 			"semaphore": "cpp",
 			"shared_mutex": "cpp",
-			"syncstream": "cpp"
+			"syncstream": "cpp",
+			"a-intern": "c",
+			"__hash": "c",
+			"net-init": "cpp",
+			"net-methods": "cpp",
+			"net": "cpp",
+			"net-intern": "cpp",
+			"io_context": "c",
+			"inet.h": "c",
+			"a-flat": "c",
+			"mock_vector": "c",
+			"a-copy": "cpp",
+			"internet": "cpp"
 		}
 	}
 }

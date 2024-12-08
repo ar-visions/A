@@ -66,7 +66,7 @@ struct A_f;
 
 /// our A-type classes have many types of methods
 /// constructor, i[nstance]-method, s[tatic]-method, operator (these are enumerable!), and index.  we index by 1 argument only in C but we may allow for more in silver
-typedef enum A_TYPE {
+enum A_TYPE {
     A_TYPE_NONE      = 0,
     A_TYPE_CONSTRUCT = 1,
     A_TYPE_PROP      = 2,
@@ -80,7 +80,9 @@ typedef enum A_TYPE {
     A_TYPE_INDEX     = 512,
     A_TYPE_ENUMV     = 1024,
     A_TYPE_OVERRIDE  = 2048 /// being explicit with this is important, because we only infer by memory checks otherwise
-} AFlag;                    /// its not that its annoying to write its just more important for the override to be a real member with reference                   /// its not that its annoying to write its just more important for the override to be a real member with reference
+};                    /// its not that its annoying to write its just more important for the override to be a real member with reference                   /// its not that its annoying to write its just more important for the override to be a real member with reference
+
+typedef enum A_TYPE AFlag;
 
 enum A_TRAIT {
     A_TRAIT_PRIMITIVE = 1,

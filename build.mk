@@ -59,9 +59,30 @@ PREP_DIRS := $(shell \
 	if [ -d "$(SRC_ROOT)/res" ]; then \
 		rsync --checksum -r $(SRC_ROOT)/res/* $(BUILD_DIR); \
 	fi && \
-	if [ -d "$(SRC_ROOT)/lib" ]; then \
-		rsync -a $(SRC_ROOT)/lib/* $(BUILD_DIR)/lib/; \
-	fi \
+    if [ -d "$(SRC_ROOT)/lib" ]; then \
+        find $(SRC_ROOT)/lib -type f -exec sh -c ' \
+            src_file="{}"; \
+            dest_file="$(BUILD_DIR)/lib/$$(basename {})"; \
+            cp -p "$$src_file" "$$dest_file"; \
+            sed -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+        ' \; ; \
+    fi && \
+    if [ -d "$(SRC_ROOT)/app" ]; then \
+        find $(SRC_ROOT)/app -type f -exec sh -c ' \
+            src_file="{}"; \
+            dest_file="$(BUILD_DIR)/app/$$(basename {})"; \
+            cp -p "$$src_file" "$$dest_file"; \
+            sed -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+        ' \; ; \
+    fi && \
+    if [ -d "$(SRC_ROOT)/test" ]; then \
+        find $(SRC_ROOT)/test -type f -exec sh -c ' \
+            src_file="{}"; \
+            dest_file="$(BUILD_DIR)/test/$$(basename {})"; \
+            cp -p "$$src_file" "$$dest_file"; \
+            sed -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+        ' \; ; \
+    fi \
 )
 
 APPS_LIBS          = $(call process_libs,app)

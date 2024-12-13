@@ -149,6 +149,7 @@
                 fi
             else
                 echo "cloning repository $REPO_URL into $TARGET_DIR..."
+                echo git clone --recursive "$REPO_URL" "$TARGET_DIR"
                 git clone --recursive "$REPO_URL" "$TARGET_DIR"
                 
                 if [ $? -ne 0 ]; then

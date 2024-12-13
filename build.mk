@@ -129,8 +129,8 @@ CFLAGS 		   	   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-Wno-write-strings -Wno-compare-distinct-pointer-types -Wno-deprecated-declarations \
 	-Wno-incompatible-pointer-types -Wfatal-errors -std=gnu11 -DMODULE="\"$(PROJECT)\"" \
 	-Wno-incompatible-library-redeclaration -fvisibility=default
-CFLAGS  		  := $(CFLAGS) -fsanitize=address
-LDFLAGS 		  := $(LDFLAGS) -fsanitize=address
+CFLAGS  		  := $(CFLAGS) # -fsanitize=address
+LDFLAGS 		  := $(LDFLAGS) # -fsanitize=address
 SRC_TRANSLATION   := $(SRC_ROOT)/translation/A-translation.c
 BUILD_TRANSLATION := $(BUILD_DIR)/A-translation
 

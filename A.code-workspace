@@ -17,8 +17,8 @@
 			"path": "../ion"
 		},
 		{
-			"name": "WGPU",
-			"path": "../silver-import/checkout/WGPU"
+			"name": "dawn",
+			"path": "../dawn"
 		},
 		{
 			"name": "trinity",
@@ -35,6 +35,10 @@
 		{
 			"name": "hyperspace",
 			"path": "../hyperspace"
+		},
+		{
+			"name": "orbiter",
+			"path": "../orbiter"
 		},
 		{
 			"name": "net",

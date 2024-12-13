@@ -33,7 +33,7 @@
             "name": "trinity-hi",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../trinity/silver-debug/app/hi",
+            "program": "${workspaceFolder}/../trinity/silver-debug/hi",
             "args": [
                 "module.c"
             ],

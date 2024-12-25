@@ -1296,6 +1296,7 @@ declare_class(subprocedure)
     i_method         (X,Y, public, A,       first) \
     i_method         (X,Y, public, A,       last) \
     i_method         (X,Y, public, A,       pop) \
+    i_method         (X,Y, public, array,   reverse) \
     i_method         (X,Y, public, none,    remove,         num) \
     i_method         (X,Y, public, none,    remove_weak,    num) \
     i_method         (X,Y, public, none,    push,           A) \
@@ -1313,7 +1314,8 @@ declare_class(subprocedure)
     i_index          (X,Y, public, A,       num) \
     i_ctr            (X,Y, public, i32) \
     i_override       (X,Y, method, init) \
-    i_override       (X,Y, cast,   bool)
+    i_override       (X,Y, cast,   bool) \
+    i_override       (X,Y, cast,   string)
 #ifndef array_intern
 #define array_intern
 #endif

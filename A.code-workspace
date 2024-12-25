@@ -17,10 +17,6 @@
 			"path": "../ion"
 		},
 		{
-			"name": "dawn",
-			"path": "../dawn"
-		},
-		{
 			"name": "trinity",
 			"path": "../trinity"
 		},
@@ -249,7 +245,9 @@
 			"mock_vector": "c",
 			"a-copy": "cpp",
 			"internet": "cpp",
-			"executor": "c"
+			"executor": "c",
+			"buffer": "c",
+			"socket": "c"
 		}
 	}
 }

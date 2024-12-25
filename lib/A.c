@@ -274,6 +274,25 @@ void array_alloc_sz(array a, sz alloc) {
     a->alloc = alloc;
 }
 
+string array_cast_string(array a) {
+    string r = string(alloc, 64);
+    for (int i = 0; i < a->len; i++) {
+        object e = a->elements[i];
+        string s = cast(string, e);
+        if (r->len)
+            append(r, " ");
+        append(r, s ? s->chars : "null");
+    }
+    return r;
+}
+
+array array_reverse(array a) {
+    array r = array((int)len(a));
+    for (int i = len(a) - 1; i >= 0; i--)
+        push(r, a->elements[i]);
+    return r;
+}
+
 void array_expand(array a) {
     num alloc = 32 + (a->alloc << 1);
     array_alloc_sz(a, alloc);
@@ -287,6 +306,179 @@ void array_push_weak(array a, A b) {
     if (is_meta((A)a))
         assert(is_meta_compatible((A)a, (A)b), "not meta compatible");
     a->elements[a->len++] = b;
+}
+
+array  array_copy(array a) {
+    array  b = new(array, alloc, len(a));
+    concat(b, a);
+    return b;
+}
+
+array array_with_i32(array a, i32 alloc) {
+    a->alloc = alloc;
+    return a;
+}
+
+void array_push(array a, A b) {
+    if (a->alloc == a->len) {
+        array_expand(a);
+    }
+    AType t = isa(a);
+    if (is_meta(a))
+        assert(is_meta_compatible(a, b), "not meta compatible");
+    a->elements[a->len++] = A_hold(b);
+}
+
+void array_clear(array a) {
+    for (num i = 0; i < a->len; i++) {
+        A_drop(a->elements[i]);
+        a->elements[i] = null;
+    }
+    a->len = 0;
+}
+
+none array_concat(array a, array b) {
+    each(b, A, e) array_push(a, e);
+}
+
+A array_index_num(array a, num i) {
+    if (i < 0)
+        i += a->len;
+    if (i >= a->len)
+        return 0;
+    return a->elements[i];
+}
+
+void array_remove(array a, num b) {
+    for (num i = b; i < a->len; i++) {
+        A prev = a->elements[b];
+        a->elements[b] = a->elements[b + 1];
+        A_drop(prev);
+    }
+    a->elements[--a->len] = null;
+}
+
+void array_remove_weak(array a, num b) {
+    for (num i = b; i < a->len; i++) {
+        A prev = a->elements[b];
+        a->elements[b] = a->elements[b + 1];
+    }
+    a->elements[--a->len] = null;
+}
+
+void array_operator__assign_add(array a, A b) {
+    array_push(a, b);
+}
+
+void array_operator__assign_sub(array a, num b) {
+    array_remove(a, b);
+}
+
+A array_first(array a) {
+    assert(a->len, "no items");
+    return a->elements[a->len - 1];
+}
+
+A array_last(array a) {
+    assert(a->len, "no items");
+    return a->elements[a->len - 1];
+}
+
+void array_push_symbols(array a, ...) {
+    va_list args;
+    va_start(args, a);
+    char* value;
+    while ((value = va_arg(args, char*)) != null) {
+        string s = new(string, chars, value);
+        push(a, s);
+    }
+    va_end(args);
+}
+
+void array_push_objects(array a, A f, ...) {
+    va_list args;
+    va_start(args, f);
+    A value;
+    while ((value = va_arg(args, A)) != null)
+        push(a, value);
+    va_end(args);
+}
+
+array array_of(AType validate, ...) {
+    array a = new(array);
+    va_list args;
+    va_start(args, validate);
+    for (;;) {
+        A arg = va_arg(args, A);
+        if (!arg)
+            break;
+        assert(!validate || validate == isa(arg), "validation failure");
+        push(a, arg);
+    }
+    return a;
+}
+
+array array_of_cstr(cstr first, ...) {
+    array a = allocate(array);
+    va_list args;
+    va_start(args, first);
+    for (cstr arg = first; arg; arg = va_arg(args, A))
+        push(a, allocate(string, chars, arg));
+    return a;
+}
+ 
+void  array_weak_push(array a, A obj) {
+    a->elements[a->len++] = obj;
+}
+
+A array_pop(array a) {
+    assert(a->len > 0, "no items");
+    if (!a->unmanaged) drop(a->elements[a->len - 1]);
+    return a->elements[--a->len];
+}
+
+num array_compare(array a, array b) {
+    num diff = a->len - b->len;
+    if (diff != 0)
+        return diff;
+    for (num i = 0; i < a->len; i++) {
+        num cmp = compare(a->elements[i], b->elements[i]);
+        if (cmp != 0)
+            return cmp;
+    }
+    return 0;
+}
+
+A array_get(array a, num i) {
+    return (i >= 0 && i < a->len) ? a->elements[i] : null;
+}
+
+num array_count(array a) {
+    return a->len;
+}
+
+sz array_len(array a) {
+    return a->len;
+}
+
+/// index of element that compares to 0 diff with item
+num array_index_of(array a, A b) {
+    for (num i = 0; i < a->len; i++) {
+        if (compare(a -> elements[i], b) == 0)
+            return i;
+    }
+    return -1;
+}
+
+void br() {
+    usleep(0);
+}
+
+bool array_cast_bool(array a) { return a && a->len > 0; }
+
+none array_init(array a) {
+    if (a->alloc)
+        array_alloc_sz(a, a->alloc);
 }
 
 method_t* method_with_address(handle address, AType rtype, array atypes, AType method_owner) {
@@ -892,12 +1084,6 @@ u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
         hash *= FNV_PRIME; // multiply by FNV prime
     }
     return hash;
-}
-
-array  array_copy(array a) {
-    array  b = new(array, alloc, len(a));
-    concat(b, a);
-    return b;
 }
 
 list   list_copy(list a) {
@@ -1626,97 +1812,6 @@ sz vector_count(vector a) {
 
 define_class(vector);
 
-
-array array_with_i32(array a, i32 alloc) {
-    a->alloc = alloc;
-    return a;
-}
-
-void array_push(array a, A b) {
-    if (a->alloc == a->len) {
-        array_expand(a);
-    }
-    AType t = isa(a);
-    if (is_meta(a))
-        assert(is_meta_compatible(a, b), "not meta compatible");
-    a->elements[a->len++] = A_hold(b);
-}
-
-void array_clear(array a) {
-    for (num i = 0; i < a->len; i++) {
-        A_drop(a->elements[i]);
-        a->elements[i] = null;
-    }
-    a->len = 0;
-}
-
-none array_concat(array a, array b) {
-    each(b, A, e) array_push(a, e);
-}
-
-A array_index_num(array a, num i) {
-    if (i < 0)
-        i += a->len;
-    if (i >= a->len)
-        return 0;
-    return a->elements[i];
-}
-
-void array_remove(array a, num b) {
-    for (num i = b; i < a->len; i++) {
-        A prev = a->elements[b];
-        a->elements[b] = a->elements[b + 1];
-        A_drop(prev);
-    }
-    a->elements[--a->len] = null;
-}
-
-void array_remove_weak(array a, num b) {
-    for (num i = b; i < a->len; i++) {
-        A prev = a->elements[b];
-        a->elements[b] = a->elements[b + 1];
-    }
-    a->elements[--a->len] = null;
-}
-
-void array_operator__assign_add(array a, A b) {
-    array_push(a, b);
-}
-
-void array_operator__assign_sub(array a, num b) {
-    array_remove(a, b);
-}
-
-A array_first(array a) {
-    assert(a->len, "no items");
-    return a->elements[a->len - 1];
-}
-
-A array_last(array a) {
-    assert(a->len, "no items");
-    return a->elements[a->len - 1];
-}
-
-void array_push_symbols(array a, ...) {
-    va_list args;
-    va_start(args, a);
-    char* value;
-    while ((value = va_arg(args, char*)) != null) {
-        string s = new(string, chars, value);
-        push(a, s);
-    }
-    va_end(args);
-}
-
-void array_push_objects(array a, A f, ...) {
-    va_list args;
-    va_start(args, f);
-    A value;
-    while ((value = va_arg(args, A)) != null)
-        push(a, value);
-    va_end(args);
-}
-
 map map_of(cstr first_key, ...) {
     map a = new(map, hsize, 16);
     va_list args;
@@ -1732,82 +1827,8 @@ map map_of(cstr first_key, ...) {
     return a;
 }
 
-array array_of(AType validate, ...) {
-    array a = new(array);
-    va_list args;
-    va_start(args, validate);
-    for (;;) {
-        A arg = va_arg(args, A);
-        if (!arg)
-            break;
-        assert(!validate || validate == isa(arg), "validation failure");
-        push(a, arg);
-    }
-    return a;
-}
 
-array array_of_cstr(cstr first, ...) {
-    array a = allocate(array);
-    va_list args;
-    va_start(args, first);
-    for (cstr arg = first; arg; arg = va_arg(args, A))
-        push(a, allocate(string, chars, arg));
-    return a;
-}
- 
-void  array_weak_push(array a, A obj) {
-    a->elements[a->len++] = obj;
-}
 
-A array_pop(array a) {
-    assert(a->len > 0, "no items");
-    if (!a->unmanaged) drop(a->elements[a->len - 1]);
-    return a->elements[--a->len];
-}
-
-num array_compare(array a, array b) {
-    num diff = a->len - b->len;
-    if (diff != 0)
-        return diff;
-    for (num i = 0; i < a->len; i++) {
-        num cmp = compare(a->elements[i], b->elements[i]);
-        if (cmp != 0)
-            return cmp;
-    }
-    return 0;
-}
-
-A array_get(array a, num i) {
-    return (i >= 0 && i < a->len) ? a->elements[i] : null;
-}
-
-num array_count(array a) {
-    return a->len;
-}
-
-sz array_len(array a) {
-    return a->len;
-}
-
-/// index of element that compares to 0 diff with item
-num array_index_of(array a, A b) {
-    for (num i = 0; i < a->len; i++) {
-        if (compare(a -> elements[i], b) == 0)
-            return i;
-    }
-    return -1;
-}
-
-void br() {
-    usleep(0);
-}
-
-bool array_cast_bool(array a) { return a && a->len > 0; }
-
-none array_init(array a) {
-    if (a->alloc)
-        array_alloc_sz(a, a->alloc);
-}
 
 object subprocedure_invoke(subprocedure a, object arg) {
     object(*addr)(object, object, object) = a->addr;

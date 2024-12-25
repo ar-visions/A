@@ -149,8 +149,10 @@
                 fi
             else
                 echo "cloning repository $REPO_URL into $TARGET_DIR..."
-                echo git clone --recursive "$REPO_URL" "$TARGET_DIR"
-                git clone --recursive "$REPO_URL" "$TARGET_DIR"
+                echo git clone "$REPO_URL" "$TARGET_DIR"
+                git clone "$REPO_URL" "$TARGET_DIR"
+                #echo git clone --recursive "$REPO_URL" "$TARGET_DIR"
+                #git clone --recursive "$REPO_URL" "$TARGET_DIR"
                 
                 if [ $? -ne 0 ]; then
                     echo "clone failed for $TARGET_DIR"
@@ -161,10 +163,10 @@
                     exit 1
                 fi
                 cd "$TARGET_DIR"
-                if [ -f silver-init.sh ]; then
-                    echo 'running silver-init.sh'
-                    bash silver-init.sh
-                fi
+            fi
+            if [ -f silver-init.sh ]; then
+                echo 'running silver-init.sh'
+                bash silver-init.sh
             fi
             # check out the specific commit, branch, or tag if provided
             if [ -n "$COMMIT" ]; then

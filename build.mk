@@ -5,6 +5,13 @@ endif
 
 SRC_ROOT  	  := $(patsubst %/,%,$(dir $(MAKEFILE_PATH)))
 BUILD_DIR 	  := $(CURDIR)
+ifeq ($(shell uname), Darwin)
+    SED = gsed
+	NPROC = gnproc
+else
+    SED = sed
+	NPROC = nproc
+endif
 
 # its my wheel, i'll do it my way! /Oval
 ifeq ($(strip $(SRC_ROOT)),$(strip $(BUILD_DIR)))
@@ -24,7 +31,7 @@ define IMPORT_script
 			if echo "$$line" | grep -q "^$(1):"; then \
 				found=1; \
 				new_found=1; \
-				line=$$(echo "$$line" | sed -E 's/^$(1):[[:space:]]*(.*)/ \1/'); \
+				line=$$(echo "$$line" | $(SED) -E 's/^$(1):[[:space:]]*(.*)/ \1/'); \
 			elif echo "$$line" | grep -q "^[a-zA-Z][a-zA-Z0-9_]*:"; then \
 				found=0; \
 			fi; \
@@ -64,7 +71,7 @@ PREP_DIRS := $(shell \
             src_file="{}"; \
             dest_file="$(BUILD_DIR)/lib/$$(basename {})"; \
             cp -p "$$src_file" "$$dest_file"; \
-            sed -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+            $(SED) -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
         ' \; ; \
     fi && \
     if [ -d "$(SRC_ROOT)/app" ]; then \
@@ -72,7 +79,7 @@ PREP_DIRS := $(shell \
             src_file="{}"; \
             dest_file="$(BUILD_DIR)/app/$$(basename {})"; \
             cp -p "$$src_file" "$$dest_file"; \
-            sed -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+        	$(SED) -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
         ' \; ; \
     fi && \
     if [ -d "$(SRC_ROOT)/test" ]; then \
@@ -80,7 +87,7 @@ PREP_DIRS := $(shell \
             src_file="{}"; \
             dest_file="$(BUILD_DIR)/test/$$(basename {})"; \
             cp -p "$$src_file" "$$dest_file"; \
-            sed -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+            $(SED) -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
         ' \; ; \
     fi \
 )
@@ -93,12 +100,12 @@ LIB_IMPORTS        = $(call process_imports,lib)
 release		      ?= 0
 APP			      ?= 0
 SILVER_IMPORT     ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)
-CC 			       = clang-18 # $(SILVER_IMPORT)/bin/clang
+CC 			       = clang # $(SILVER_IMPORT)/bin/clang
 MAKEFLAGS         += --no-print-directory
 LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(SILVER_IMPORT)/include
 APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(SILVER_IMPORT)/include
 TEST_INCLUDES      = -I$(BUILD_DIR)/test -I$(BUILD_DIR)/lib -I$(SILVER_IMPORT)/include
-LDFLAGS 	       = -L$(BUILD_DIR) -L$(SILVER_IMPORT)/lib -Wl,-rpath,$(SILVER_IMPORT)/lib -Wl,--no-as-needed
+LDFLAGS 	       = -L$(BUILD_DIR) -L$(SILVER_IMPORT)/lib -Wl,-rpath,$(SILVER_IMPORT)/lib
 SRCAPP_DIR 	       = $(BUILD_DIR)/app
 SRCLIB_DIR 	       = $(BUILD_DIR)/lib
 TEST_DIR           = $(BUILD_DIR)/test
@@ -112,7 +119,7 @@ APP_OBJS 	       = $(APP_SRCS:$(SRCAPP_DIR)/%.c=$(BUILD_DIR)/app/%.o)
 LIB_TARGET   	   = $(if $(strip $(LIB_OBJS)),$(BUILD_DIR)/lib$(PROJECT).so)
 APP_TARGETS	 	   = $(patsubst $(SRCAPP_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(SRCAPP_DIR)/*.c))
 TARGET_FLAGS 	   = -shared
-ALL_TARGETS  	   = $(BUILD_DIR)/.rebuild methods $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
+ALL_TARGETS  	   = run-import methods $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
 APP_FLAGS    	   = 
 PROJECT_HEADER_R   = $(if $(wildcard $(BUILD_DIR)/lib/$(PROJECT)),lib/$(PROJECT),$(if $(wildcard $(BUILD_DIR)/app/$(PROJECT)),app/$(PROJECT),))
 PROJECT_HEADER     = $(BUILD_DIR)/$(PROJECT_HEADER_R)
@@ -154,7 +161,7 @@ $(METHODS_HEADER): $(PROJECT_HEADER)
 		echo "#define _$(UPROJECT)_METHODS_H_" >> $@; \
 		echo >> $@; \
 		grep -o 'i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*[[:alnum:]_]*' $(PROJECT_HEADER) | \
-		sed 's/i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*\([[:alnum:]_]*\).*/\1/' | \
+		$(SED) 's/i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*\([[:alnum:]_]*\).*/\1/' | \
 		while read method; do \
 			echo "#undef $$method\n#define $$method(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->$$method(_i_, ## __VA_ARGS__); })" >> $@; \
 		done; \
@@ -171,7 +178,7 @@ $(INIT_HEADER): $(PROJECT_HEADER)
 		echo "#define _$(UPROJECT)_INIT_H_" >> $@; \
 		echo >> $@; \
 		grep -o 'declare_\(class\|mod\)[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-		sed 's/declare_\(class\|mod\)[[:space:]]*([[:space:]]*\([^,)]*\).*/\2/' | \
+		$(SED) 's/declare_\(class\|mod\)[[:space:]]*([[:space:]]*\([^,)]*\).*/\2/' | \
 		while read class_name; do \
 			echo "#ifndef NDEBUG" >> $@; \
 			echo "    //#define TC_$${class_name}(MEMBER, VALUE) A_validate_type(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)" >> $@; \
@@ -218,14 +225,14 @@ $(INTERN_HEADER):
 		echo "#define _$(UPROJECT)_INTERN_H_" >> $@; \
 		echo >> $@; \
 		grep -o 'declare_class[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-		sed 's/declare_class[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
+		$(SED) 's/declare_class[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
 		while read class_name; do \
 			echo "#define $${class_name}_intern\t\tintern($$class_name)" >> $@; \
 		done; \
 		echo >> $@; \
 		echo >> $@; \
 		grep -o 'declare_mod[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-		sed 's/declare_mod[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
+		$(SED) 's/declare_mod[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
 		while read class_name; do \
 			echo "#define $${class_name}_intern\t\tintern($$class_name)" >> $@; \
 		done; \
@@ -296,7 +303,7 @@ $(IMPORT_TEST_HEADER):
 
 .PRECIOUS: *.o
 .SUFFIXES:
-.PHONY: all clean install $(BUILD_DIR)/.rebuild tests verify process_c_files methods clean $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
+.PHONY: all clean install run-import tests verify process_c_files methods clean $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
 
 methods: $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
 
@@ -314,11 +321,22 @@ process_c_files:
 	$(call process_src,app)
 	$(call process_src,test)
 
-$(LIB_TARGET): $(BUILD_DIR)/.rebuild
-$(APP_TARGET): $(BUILD_DIR)/.rebuild
+define RUN_IMPORT_SCRIPT
+	@bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --b $(BUILD_DIR) --i $(SRC_ROOT)/import
+endef
 
-$(BUILD_DIR)/.rebuild:
-	bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --b $(BUILD_DIR) --i $(SRC_ROOT)/import
+# Add this call to the import script before building
+$(LIB_TARGET): | run-import
+$(APP_TARGET): | run-import
+
+run-import:
+	$(RUN_IMPORT_SCRIPT)
+
+#$(LIB_TARGET): $(filter-out $(BUILD_DIR)/.rebuild, $(BUILD_DIR)/.rebuild)
+#$(APP_TARGET): $(filter-out $(BUILD_DIR)/.rebuild, $(BUILD_DIR)/.rebuild)
+
+#$(BUILD_DIR)/.rebuild:
+#	bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --b $(BUILD_DIR) --i $(SRC_ROOT)/import
 
 $(BUILD_DIR)/$(PROJECT)-includes:
 	@echo "#include <$(PROJECT)>" > $@.tmp.c
@@ -377,9 +395,11 @@ verify: $(TEST_TARGETS)
 
 # install targets and run reflect with integrity check
 install: all
-	@install --directory $(SILVER_IMPORT)/lib
-	@install --directory $(SILVER_IMPORT)/include
-	@install --directory $(SILVER_IMPORT)/bin
+
+	@mkdir -p $(SILVER_IMPORT)/lib
+	@mkdir -p $(SILVER_IMPORT)/include
+	@mkdir -p $(SILVER_IMPORT)/bin
+
 	@if [ -n "$(LIB_TARGET)" ]; then \
 		if [ -f $(BUILD_DIR)/$(PROJECT)-includes ]; then \
 			install -m 644 $(LIB_TARGET)  $(SILVER_IMPORT)/lib/; \

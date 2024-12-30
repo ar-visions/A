@@ -4,6 +4,15 @@
     BUILT_PROJECTS="${BUILT_PROJECTS:-}"
     CALLER_BUILD_DIR=""
 
+    # Set the NPROC_CMD variable based on the operating system
+    if [ "$(uname)" = "Darwin" ]; then
+        NPROC="sysctl -n hw.ncpu"
+        STAT="gstat"
+    else
+        NPROC="nproc"
+        STAT="stat"
+    fi
+
     # parse args
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -293,7 +302,7 @@
                 if [ "$repo_size" -gt 500 ]; then
                     j=8 # llvm takes up a lot of memory/swap when linking (70GB with debug on), as does many large projects
                 else
-                    j=$(($(nproc) / 2))
+                    j=$(($($NPROC) / 2))
                 fi
 
                 export MAKEFLAGS="-j$j --no-print-directory"
@@ -301,7 +310,7 @@
                 # build
                 print "building $TARGET_DIR with -j$j in $BUILD_FOLDER"
 
-                ts0=$(find . -type f -exec stat -c %Y {} + | sort -n | tail -1)
+                ts0=$(find . -type f -exec $STAT -c %Y {} + | sort -n | tail -1)
                 if [ -n "$cmake" ]; then
                     cmake --build . -- -j$j
                 elif [ -n "$rust" ]; then
@@ -312,7 +321,7 @@
                     #1/2/4/1/"a"
                     make $MFLAGS -j$j
                 fi
-                ts1=$(find . -type f -exec stat -c %Y {} + | sort -n | tail -1)
+                ts1=$(find . -type f -exec $STAT -c %Y {} + | sort -n | tail -1)
                 echo "project $PROJECT_NAME = $ts0 $ts1"
                 if [ $? -ne 0 ]; then
                     echo "build failure for $TARGET_DIR"

@@ -62,7 +62,7 @@ CPU_Caps detect_x86_caps() {
     return cpu_caps;
 }
 #elif defined(__arm__) || defined(__aarch64__)
-CPU_Caps detect_arm_capabilities() {
+CPU_Caps detect_arm_caps() {
     CPU_Caps cpu_caps = 0;
     #if defined(__ARM_NEON)
         cpu_caps |= CPU_CAP_NEON32;  // NEON for ARM32

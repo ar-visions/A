@@ -26,7 +26,7 @@ define IMPORT_script
 		printf "%s\n" "$$(cat $(SRC_ROOT)/import)" | { \
 		found=0; \
 		found_arch=1; \
-		arch_list="x86_64 aarch64"; \
+		arch_list="x86_64 arm64"; \
 		while IFS= read -r line; do \
 			new_found=0; \
 			if echo "$$line" | grep -q "^#"; then \

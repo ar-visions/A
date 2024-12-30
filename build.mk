@@ -3,6 +3,8 @@ ifeq ($(MAKEFILE_PATH),)
     MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 endif
 
+ARCH=$(uname -m)
+
 SRC_ROOT  	  := $(patsubst %/,%,$(dir $(MAKEFILE_PATH)))
 BUILD_DIR 	  := $(CURDIR)
 ifeq ($(shell uname), Darwin)
@@ -23,19 +25,32 @@ define IMPORT_script
 	$(shell \
 		printf "%s\n" "$$(cat $(SRC_ROOT)/import)" | { \
 		found=0; \
+		found_arch=1; \
+		arch_list="x86_64 aarch64"; \
 		while IFS= read -r line; do \
 			new_found=0; \
 			if echo "$$line" | grep -q "^#"; then \
 				continue; \
 			fi; \
+			for arch in $$arch_list; do \
+				if echo "$$line" | grep -q "[[:space:]]*$$arch:"; then \
+					if [ "$(2)" = "$$arch" ]; then \
+						found_arch=1; \
+					else \
+						found_arch=0; \
+					fi; \
+					continue 2; \
+				fi; \
+			done; \
 			if echo "$$line" | grep -q "^$(1):"; then \
 				found=1; \
 				new_found=1; \
+				found_arch=1; \
 				line=$$(echo "$$line" | $(SED) -E 's/^$(1):[[:space:]]*(.*)/ \1/'); \
 			elif echo "$$line" | grep -q "^[a-zA-Z][a-zA-Z0-9_]*:"; then \
 				found=0; \
 			fi; \
-			if [ $$found -eq 1 ]; then \
+			if [ $$found -eq 1 ] && [ $$found_arch -eq 1 ]; then \
 				if [ -n "$$line" ] && echo "$$line" | grep -q "^[[:space:]]"; then \
 					for lib in $$line; do \
 						echo "$$lib"; \
@@ -92,11 +107,11 @@ PREP_DIRS := $(shell \
     fi \
 )
 
-APPS_LIBS          = $(call process_libs,app)
-LIB_LIBS 	       = $(call process_libs,lib)
-TEST_LIBS          = $(call process_libs,test)
-APPS_IMPORTS       = $(call process_imports,app)
-LIB_IMPORTS        = $(call process_imports,lib)
+APPS_LIBS          = $(call process_libs,app,$(ARCH))
+LIB_LIBS 	       = $(call process_libs,lib,$(ARCH))
+TEST_LIBS          = $(call process_libs,test,$(ARCH))
+APPS_IMPORTS       = $(call process_imports,app,$(ARCH))
+LIB_IMPORTS        = $(call process_imports,lib,$(ARCH))
 release		      ?= 0
 APP			      ?= 0
 SILVER_IMPORT     ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)

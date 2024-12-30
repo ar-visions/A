@@ -3,8 +3,7 @@ ifeq ($(MAKEFILE_PATH),)
     MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 endif
 
-ARCH=$(uname -m)
-
+ARCH          := $(shell uname -m)
 SRC_ROOT  	  := $(patsubst %/,%,$(dir $(MAKEFILE_PATH)))
 BUILD_DIR 	  := $(CURDIR)
 ifeq ($(shell uname), Darwin)
@@ -34,7 +33,7 @@ define IMPORT_script
 			fi; \
 			for arch in $$arch_list; do \
 				if echo "$$line" | grep -q "[[:space:]]*$$arch:"; then \
-					if [ "$(2)" = "$$arch" ]; then \
+					if [ "$(ARCH)" = "$$arch" ]; then \
 						found_arch=1; \
 					else \
 						found_arch=0; \
@@ -107,11 +106,11 @@ PREP_DIRS := $(shell \
     fi \
 )
 
-APPS_LIBS          = $(call process_libs,app,$(ARCH))
-LIB_LIBS 	       = $(call process_libs,lib,$(ARCH))
-TEST_LIBS          = $(call process_libs,test,$(ARCH))
-APPS_IMPORTS       = $(call process_imports,app,$(ARCH))
-LIB_IMPORTS        = $(call process_imports,lib,$(ARCH))
+APPS_LIBS          = $(call process_libs,app)
+LIB_LIBS 	       = $(call process_libs,lib)
+TEST_LIBS          = $(call process_libs,test)
+APPS_IMPORTS       = $(call process_imports,app)
+LIB_IMPORTS        = $(call process_imports,lib)
 release		      ?= 0
 APP			      ?= 0
 SILVER_IMPORT     ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)

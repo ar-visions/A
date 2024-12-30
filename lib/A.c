@@ -2,7 +2,7 @@
 #include <ffi.h>
 #include <sys/stat.h>
 #include <dirent.h>
-#include <endian.h>
+#include <endian-cross.h>
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
 #include <cpuid.h>
 #endif

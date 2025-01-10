@@ -4,6 +4,13 @@ ifeq ($(MAKEFILE_PATH),)
 endif
 
 ARCH          := $(shell uname -m)
+ifeq ($(shell uname -s),Darwin)
+    OS := darwin
+else ifeq ($(shell uname -s),Linux)
+    OS := linux
+else
+    OS := windows
+endif
 SRC_ROOT  	  := $(patsubst %/,%,$(dir $(MAKEFILE_PATH)))
 BUILD_DIR 	  := $(CURDIR)
 ifeq ($(shell uname), Darwin)
@@ -25,7 +32,9 @@ define IMPORT_script
 		printf "%s\n" "$$(cat $(SRC_ROOT)/import)" | { \
 		found=0; \
 		found_arch=1; \
+		found_os=1; \
 		arch_list="x86_64 arm64"; \
+		os_list="darwin windows linux"; \
 		while IFS= read -r line; do \
 			new_found=0; \
 			if echo "$$line" | grep -q "^#"; then \
@@ -41,15 +50,26 @@ define IMPORT_script
 					continue 2; \
 				fi; \
 			done; \
+			for os in $$os_list; do \
+				if echo "$$line" | grep -q "[[:space:]]*$$os:"; then \
+					if [ "$(OS)" = "$$os" ]; then \
+						found_os=1; \
+					else \
+						found_os=0; \
+					fi; \
+					continue 2; \
+				fi; \
+			done; \
 			if echo "$$line" | grep -q "^$(1):"; then \
 				found=1; \
 				new_found=1; \
 				found_arch=1; \
+				found_os=1; \
 				line=$$(echo "$$line" | $(SED) -E 's/^$(1):[[:space:]]*(.*)/ \1/'); \
 			elif echo "$$line" | grep -q "^[a-zA-Z][a-zA-Z0-9_]*:"; then \
 				found=0; \
 			fi; \
-			if [ $$found -eq 1 ] && [ $$found_arch -eq 1 ]; then \
+			if [ $$found -eq 1 ] && [ $$found_arch -eq 1 ] && [ $$found_os -eq 1 ]; then \
 				if [ -n "$$line" ] && echo "$$line" | grep -q "^[[:space:]]"; then \
 					for lib in $$line; do \
 						echo "$$lib"; \

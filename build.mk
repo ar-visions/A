@@ -336,6 +336,7 @@ process_c_files:
 	$(call process_src,test)
 
 define RUN_IMPORT_SCRIPT
+	echo "running import script"
 	@bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --b $(BUILD_DIR) --i $(SRC_ROOT)/import
 endef
 

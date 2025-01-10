@@ -1413,6 +1413,7 @@ declare_class(fn)
     i_method  (X,Y,   public, array,   split, cstr) \
     i_method  (X,Y,   public, num,     index_of, cstr) \
     i_method  (X,Y,   public, none,    append, cstr) \
+    i_method  (X,Y,   public, none,    concat, string) \
     i_method  (X,Y,   public, string,  mid, num, num) \
     i_method  (X,Y,   public, none,    reserve, num) \
     i_method  (X,Y,   public, none,    write, handle, bool) \

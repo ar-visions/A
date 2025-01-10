@@ -1173,6 +1173,10 @@ none  string_append(string a, cstr b) {
     a->chars[a->len] = 0;
 }
 
+none  string_concat(string a, string b) {
+    string_append(a, b->chars);
+}
+
 sz string_len(string a) { return a->len; }
 
 num   string_index_of(string a, cstr cs) {

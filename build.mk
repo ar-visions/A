@@ -62,10 +62,33 @@ define IMPORT_script
 	})
 endef
 
-define process_libs # ( module map )
-	$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
-		$(if $(findstring .so,$(dep)), $(SILVER_IMPORT)/lib/$(dep),-l$(dep)))
+
+ifeq ($(shell uname),Darwin)
+FRAMEWORK_PATHS = /System/Library/Frameworks /Library/Frameworks
+define is_framework
+$(shell for p in $(FRAMEWORK_PATHS); do \
+    if [ -d "$$p/$(1).framework" ]; then \
+        echo "yes"; \
+        break; \
+    fi; \
+done)
 endef
+
+define process_libs
+$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
+$(if $(findstring .so,$(dep)), \
+    $(SILVER_IMPORT)/lib/$(dep), \
+    $(if $(call is_framework,$(dep)), \
+        -framework $(dep), \
+        -l$(dep)) \
+))
+endef
+else
+define process_libs
+$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
+$(if $(findstring .so,$(dep)), $(SILVER_IMPORT)/lib/$(dep),-l$(dep)))
+endef
+endif
 
 define process_imports # ( module map )
 	$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \

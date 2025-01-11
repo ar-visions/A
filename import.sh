@@ -121,8 +121,10 @@
             continue
         fi
 
-        REPO_URL=$(    echo "$project" | cut -d ' ' -f 2)
-        COMMIT=$(      echo "$project" | cut -d ' ' -f 3)
+        REPO_URL=$(   echo "$project" | cut -d ' ' -f 2)
+        COMMIT_RAW=$( echo "$project" | cut -d ' ' -f 3)
+        COMMIT=$(echo "$COMMIT_RAW" | sed -e 's/^!//')
+        IS_RECUR=$(echo "$COMMIT_RAW" | grep -q '^!' && echo true || echo false)
         BUILD_CONFIG=$(echo "$project" | cut -d ' ' -f 4-)
         TARGET_DIR="${PROJECT_NAME}"
         A_MAKE="0" # A-type projects use Make, but with a build-folder and no configuration; DEBUG=1 to enable debugging
@@ -158,10 +160,14 @@
                 fi
             else
                 echo "cloning repository $REPO_URL into $TARGET_DIR..."
-                echo git clone "$REPO_URL" "$TARGET_DIR"
-                git clone "$REPO_URL" "$TARGET_DIR"
+                #echo git clone "$REPO_URL" "$TARGET_DIR"
+                #git clone "$REPO_URL" "$TARGET_DIR"
                 #echo git clone --recursive "$REPO_URL" "$TARGET_DIR"
-                #git clone --recursive "$REPO_URL" "$TARGET_DIR"
+                if [ "$IS_RECUR" == "true" ]; then
+                    git clone --recursive "$REPO_URL" "$TARGET_DIR"
+                else
+                    git clone "$REPO_URL" "$TARGET_DIR"
+                fi
                 
                 if [ $? -ne 0 ]; then
                     echo "clone failed for $TARGET_DIR"

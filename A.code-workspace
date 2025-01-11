@@ -247,7 +247,9 @@
 			"internet": "cpp",
 			"executor": "c",
 			"buffer": "c",
-			"socket": "c"
+			"socket": "c",
+			"trinity-intern": "cpp",
+			"*.txt": "cpp"
 		}
 	}
 }

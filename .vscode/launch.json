@@ -30,10 +30,10 @@
             }
         },
         {
-            "name": "trinity-hi",
+            "name": "trinity-particles",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../trinity/silver-debug/hi",
+            "program": "${workspaceFolder}/../trinity/silver-debug/particles",
             "args": [
                 "module.c"
             ],

@@ -49,6 +49,25 @@
             }
         },
         {
+            "name": "trinity-hypercube",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../trinity/silver-debug/hypercube",
+            "args": [
+                "module.c"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../trinity/silver-debug",
+            "environment": [
+            ],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
             "name": "A-reflect",
             "type": "cppdbg",
             "request": "launch",

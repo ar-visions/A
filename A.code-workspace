@@ -21,12 +21,12 @@
 			"path": "../trinity"
 		},
 		{
-			"name": "wolf",
-			"path": "../wolf"
+			"name": "dawn",
+			"path": "../dawn"
 		},
 		{
-			"name": "llvm",
-			"path": "../llvm"
+			"name": "glfw",
+			"path": "../glfw"
 		},
 		{
 			"name": "hyperspace",
@@ -249,7 +249,9 @@
 			"buffer": "c",
 			"socket": "c",
 			"trinity-intern": "cpp",
-			"*.txt": "cpp"
+			"*.txt": "cpp",
+			"stat.h": "c",
+			"cpuid.h": "c"
 		}
 	}
 }

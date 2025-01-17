@@ -6,6 +6,7 @@
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
 #include <cpuid.h>
 #endif
+#include <math.h>
 
 __thread array     af_stack;
 __thread   AF      af_top;
@@ -194,14 +195,18 @@ static void A_validator(A a) {
 
 i32 A_enum_value(AType type, cstr cs) {
     int cur = 0;
+    int default_val = INT_MIN;
     for (num m = 0; m < type->member_count; m++) {
         type_member_t* mem = &type->members[m];
         if (mem->member_type & A_TYPE_ENUMV) {
-            if (strcmp(cs, mem->name) == 0)
+            if (!cs || strcmp(cs, mem->name) == 0)
                 return cur;
+            if (default_val == INT_MIN) default_val = cur;
             cur++;
         }
     }
+    if (default_val != INT_MIN)
+        return default_val;
     fault("enum not found");
     return -1;
 }
@@ -272,6 +277,11 @@ void array_alloc_sz(array a, sz alloc) {
     free(a->elements);
     a->elements = elements;
     a->alloc = alloc;
+}
+
+void array_fill(array a, object f) {
+    for (int i = 0; i < a->alloc; i++)
+        push(a, f);
 }
 
 string array_cast_string(array a) {
@@ -673,12 +683,30 @@ type_member_t* A_hold_members(A instance) {
 A A_set_property(A instance, symbol name, A value) {
     AType type = isa(instance);
     type_member_t* m = A_member(type, (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN), (cstr)name);
-    assert(m, "%s not found on object %s", name, type->name);
+    verify(m, "%s not found on object %s", name, type->name);
     A   *mdata = (A*)((cstr)instance + m->offset);
     A prev = *mdata;
-    *mdata = A_hold(value);
+    if ((m->type->traits & A_TRAIT_PRIMITIVE) || m->member_type == A_TYPE_INLAY) {
+        // copy primitive data (or inlaid objects such as ones we find in vector structs)
+        float v;
+        memcpy(&v, value, sizeof(float));
+        memcpy(mdata, value, m->type->size);
+    } else {
+        // assign as object, increase ref count
+        *mdata = A_hold(value); 
+    }
     A_drop(prev);
     return value;
+}
+
+
+A A_get_property(A instance, symbol name) {
+    AType type = isa(instance);
+    type_member_t* m = A_member(type, (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN), (cstr)name);
+    verify(m, "%s not found on object %s", name, type->name);
+    A *mdata = (A*)((cstr)instance + m->offset);
+    A  value = *mdata;
+    return (m->type->traits & A_TRAIT_PRIMITIVE) ? A_primitive(m->type, mdata) : value;
 }
 
 
@@ -801,6 +829,21 @@ void A_destructor(A a) {
 u64  A_hash      (A a) { return (u64)(size_t)a; }
 bool A_cast_bool (A a) { return A_header(a)->count > 0; }
 
+i64 read_integer(object data) {
+    AType data_type = isa(data);
+    i64 v = 0;
+         if (data_type == typeid(i8))   v = *(i8*)  data;
+    else if (data_type == typeid(i16))  v = *(i16*) data;
+    else if (data_type == typeid(i32))  v = *(i32*) data;
+    else if (data_type == typeid(i64))  v = *(i64*) data;
+    else if (data_type == typeid(u8))   v = *(u8*)  data;
+    else if (data_type == typeid(u16))  v = *(u16*) data;
+    else if (data_type == typeid(u32))  v = *(u32*) data;
+    else if (data_type == typeid(u64))  v = *(u64*) data;
+    else fault("unknown data");
+    return v;
+}
+
 A A_with_cereal(A a, cereal cs) {
     sz len = strlen(cs);
     A        f = A_header(a);
@@ -824,6 +867,107 @@ A A_with_cereal(A a, cereal cs) {
         exit(-1);
     }
     return a;
+}
+
+/// used by parse (from json) to construct objects from data
+object construct_with(AType type, object data) {
+    /// this will lookup ways to construct the type from the available data
+    AType data_type = isa(data);
+    object result = null;
+
+    if (!(type->traits & A_TRAIT_PRIMITIVE) && data_type == typeid(map)) {
+        map m = data;
+        result = A_alloc(type, 1, true);
+        pairs(m, i) {
+            verify(isa(i->key) == typeid(string), "expected string key when constructing object from map");
+            string s_key = instanceof(i->key, string);
+            A_set_property(result, s_key->chars, i->value);
+        }
+    }
+
+    /// check for identical constructor
+    for (int i = 0; i < type->member_count; i++) {
+        Member mem = &type->members[i];
+        if (!mem->ptr) continue;
+        void* addr = mem->ptr;
+        if (mem->member_type == A_TYPE_CONSTRUCT)
+            if (mem->type == data_type) {
+                result = A_alloc(type, 1, true);
+                ((void(*)(A, A))addr)(result, data);
+                break;
+            }
+    }
+
+    /// simple enum conversion, with a default handled in A_enum_value and type-based match here
+    if (!result)
+    if (type->traits & A_TRAIT_ENUM) {
+        i64 v = 0;
+        if (data_type->traits & A_TRAIT_INTEGRAL)
+            v = read_integer(data_type);
+        else if (data_type == typeid(symbol) || data_type == typeid(cstr))
+            v = A_enum_value (type, (cstr)data);
+        else if (data_type == typeid(string))
+            v = A_enum_value (type, (cstr)((string)data)->chars);
+        else
+            v = A_enum_value (type, null);
+        result = A_alloc(type, 1, true);
+        *((i32*)result) = (i32)v;
+    }
+
+    /// check if we may use generic object from string
+    if (!result)
+    if ((type->traits & A_TRAIT_PRIMITIVE) && (data_type == typeid(string) ||
+                                               data_type == typeid(cstr)   ||
+                                               data_type == typeid(symbol))) {
+        result = A_alloc(type, 1, true);
+        if (data_type == typeid(string))
+            A_with_cereal(result, (cereal)((string)data)->chars);
+        else
+            A_with_cereal(result, (cereal)data);
+    }
+
+    /// check for compatible constructor
+    if (!result)
+    for (int i = 0; i < type->member_count; i++) {
+        Member mem = &type->members[i];
+        if (!mem->ptr) continue;
+        void* addr = mem->ptr;
+        /// check for compatible constructors
+        if (mem->member_type == A_TYPE_CONSTRUCT) {
+            u64 combine = mem->type->traits & data_type->traits;
+            if (combine & A_TRAIT_INTEGRAL) {
+                i64 v = read_integer(data);
+                result = A_alloc(type, 1, true);
+                     if (mem->type == typeid(i8))   ((void(*)(A, i8))  addr)(result, (i8)  v);
+                else if (mem->type == typeid(i16))  ((void(*)(A, i16)) addr)(result, (i16) v);
+                else if (mem->type == typeid(i32))  ((void(*)(A, i32)) addr)(result, (i32) v);
+                else if (mem->type == typeid(i64))  ((void(*)(A, i64)) addr)(result, (i64) v);
+            } else if (combine & A_TRAIT_REALISTIC) {
+                result = A_alloc(type, 1, true);
+                if (mem->type == typeid(f64))
+                    ((void(*)(A, double))addr)(result, (double)*(float*)data);
+                else
+                    ((void(*)(A, float)) addr)(result, (float)*(double*)data);
+                break;
+            } else if ((mem->type == typeid(symbol) || mem->type == typeid(cstr)) && 
+                       (data_type == typeid(symbol) || mem->type == typeid(cstr))) {
+                result = A_alloc(type, 1, true);
+                ((void(*)(A, cstr))addr)(result, data);
+                break;
+            } else if ((mem->type == typeid(string)) && 
+                       (data_type == typeid(symbol) || mem->type == typeid(cstr))) {
+                result = A_alloc(type, 1, true);
+                ((void(*)(A, string))addr)(result, string((cstr)data));
+                break;
+            } else if ((mem->type == typeid(symbol) || mem->type == typeid(cstr)) && 
+                       (data_type == typeid(string))) {
+                result = A_alloc(type, 1, true);
+                ((void(*)(A, cstr))addr)(result, ((string)data)->chars);
+                break;
+            }
+        }
+    }
+    return result ? A_initialize(result) : null;
 }
 
 void A_serialize(AType type, string res, A a) {
@@ -852,7 +996,8 @@ void A_serialize(AType type, string res, A a) {
         string s = cast(string, a);
         if (s) {
             append(res, "\"");
-            append(res, s->chars);
+            /// encode the characters
+            concat(res, escape(s));
             append(res, "\"");
         } else
             append(res, "null");
@@ -861,8 +1006,7 @@ void A_serialize(AType type, string res, A a) {
 
 string A_cast_string(A a) {
     AType type = isa(a);
-    if (type == typeid(string))
-        return a;
+    if (instanceof(a, string)) return a;
     bool  once = false;
     string res = new(string, alloc, 1024);
     if (type->traits & A_TRAIT_PRIMITIVE)
@@ -1115,6 +1259,50 @@ sz vector_len(vector a) {
     return A_header(a)->count;
 }
 
+string string_escape(string input) {
+    struct {
+        char   ascii;
+        symbol escape;
+    } escape_map[] = {
+        {'\n', "\\n"},
+        {'\t', "\\t"},
+        {'\"', "\\\""},
+        {'\\', "\\\\"},
+        {'\r', "\\r"},
+    };
+    int escape_count = sizeof(escape_map) / sizeof(escape_map[0]);
+    int input_len    = strlen(input);
+    int extra_space  = 0;
+    for (int i = 0; i < input_len; i++)
+        for (int j = 0; j < escape_count; j++)
+            if (input->chars[i] == escape_map[j].ascii) {
+                extra_space += strlen(escape_map[j].escape) - 1;
+                break;
+            }
+
+    // allocate memory for escaped string with applied space
+    cstr escaped = calloc(input_len + extra_space + 1, 1);
+    if (!escaped) return NULL;
+
+    // fill escaped string
+    int pos = 0;
+    for (int i = 0; i < input_len; i++) {
+        bool found = false;
+        for (int j = 0; j < escape_count; j++) {
+            if (input->chars[i] == escape_map[j].ascii) {
+                const char *escape_seq = escape_map[j].escape;
+                int len = strlen(escape_seq);
+                strncpy(escaped + pos, escape_seq, len);
+                pos += len;
+                found = true;
+                break;
+            }
+        }
+        if (!found) escaped[pos++] = input->chars[i];
+    }
+    escaped[pos] = '\0';    /// null-terminate result
+    return string(escaped); /// with cstr constructor, it does not 'copy' but takes over life cycle
+}
 
 void  string_destructor(string a)        { free(a->chars); }
 num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
@@ -1168,6 +1356,16 @@ none  string_append(string a, cstr b) {
     if (blen + a->len >= a->alloc)
         string_alloc_sz(a, (a->alloc << 1) + blen);
     memcpy(&a->chars[a->len], b, blen);
+    a->len += blen;
+    a->h = 0; /// mutable operations must clear the hash value
+    a->chars[a->len] = 0;
+}
+
+none  string_push(string a, u32 b) {
+    sz blen = 1;
+    if (blen + a->len >= a->alloc)
+        string_alloc_sz(a, (a->alloc << 1) + blen);
+    memcpy(&a->chars[a->len], &b, 1);
     a->len += blen;
     a->h = 0; /// mutable operations must clear the hash value
     a->chars[a->len] = 0;
@@ -1297,20 +1495,20 @@ bool string_ends_with(string a, cstr value) {
 item list_push(list a, A e);
 
 item hashmap_fetch(hashmap a, A key) {
-    u64 h = hash(key);
+    u64 h = a->unmanaged ? (u64)((void*)key) : hash(key);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
         if (compare(f->key, key) == 0)
             return f;
     item n = list_push(bucket, null);
-    n->key = A_hold(key);
+    n->key = a->unmanaged ? key : A_hold(key);
     a->count++;
     return n;
 }
 
 item hashmap_lookup(hashmap a, A key) {
-    u64 h = hash(key);
+    u64 h = a->unmanaged ? (u64)((void*)key) : hash(key);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
@@ -1322,8 +1520,8 @@ item hashmap_lookup(hashmap a, A key) {
 none hashmap_set(hashmap a, A key, A value) {
     item i = fetch(a, key);
     A prev = i->value;
-    i->value = A_hold(value);
-    A_drop(prev);
+    i->value = a->unmanaged ? value : A_hold(value);
+    if (!a->unmanaged) A_drop(prev);
 }
 
 A hashmap_get(hashmap a, A key) {
@@ -1391,7 +1589,7 @@ item map_fetch(map a, A key) {
     if (prev != a->hmap->count) {
         pair mi = i->value = new(pair, key, key); // todo: make pair originate in hash; remove the key from item
         mi->ref = push(a, i);
-        mi->ref->key = A_hold(key);
+        mi->ref->key = a->unmanaged ? key : A_hold(key);
         mi->ref->value = mi; //
     }
     return i;
@@ -1402,12 +1600,12 @@ none map_set(map a, A key, A value) {
     pair mi = i->value;
     if (mi) {
         A before     = mi->value;
-        mi->value    = A_hold(value);
-        A_drop(before);
+        mi->value    = a->unmanaged ? value : A_hold(value);
+        if (!a->unmanaged) A_drop(before);
     } else {
         mi = i->value = new(pair, key, key, value, value); // todo: make pair originate in hash; remove the key from item
         mi->ref      = push(a, i);
-        mi->ref->key = A_hold(key);
+        mi->ref->key = a->unmanaged ? key : A_hold(key);
         mi->ref->value = mi;
     }
 }
@@ -1479,7 +1677,7 @@ map map_with_sz(map a, sz size) {
 
 void map_init(map a) {
     if (!a->hsize) a->hsize = 1024;
-    a->hmap  = new(hashmap, alloc, a->hsize);
+    a->hmap  = new(hashmap, alloc, a->hsize, unmanaged, a->unmanaged);
 }
 
 string map_cast_string(map a) {
@@ -2259,6 +2457,234 @@ array path_ls(path a, string pattern, bool recur) {
     closedir(dir);
     return list;
 }
+
+// -----------------------------------------------------------
+// vec generics (f, f64, and i8)
+// 
+// -----------------------------------------------------------
+
+
+
+
+vecf vecf_cross(vecf a, vecf b) {
+    vec3f result = vec3f(
+        a->y * b->z - a->z * b->y,
+        a->z * b->x - a->x * b->z,
+        a->x * b->y - a->y * b->x);
+    return result;
+}
+
+vecf vecf_normalize(vecf a) {
+    f32   len_sq = 0.0f;
+    AType type   = isa(a);
+    for (int i = 0; i < type->vmember_count; i++)
+        len_sq += (&a->x)[i] * (&a->x)[i];
+    f32   len    = sqrtf(len_sq);
+    
+    if (len > 0) {
+        vecf res = copy(a);
+        for (int i = 0; i < type->vmember_count; i++)
+            (&res->x)[i] /= len;
+        return res;
+    }
+    return a;
+}
+
+vecf vecf_mix(vecf a, vecf b, f32 f) {
+    vecf   res  = copy(a);
+    f32*   fres = &res->x;
+    AType  type = isa(a);
+    verify(type == isa(b) || typeid(a) == instanceof(a, vecf) || instanceof(b, vecf),
+        "vector mismatch"); // allow for generics
+    for (int i = 0; i < type->vmember_count; i++) {
+        f32 fa  = (&a->x)[i];
+        f32 fb  = (&b->x)[i];
+        fres[i] = fa * (1.0f - f) + fb * f;
+    }
+    return res;
+}
+
+float vecf_dot(vecf a, vecf b) {
+    float  r = 0.0f;
+    for (int i = 0; i < type->vmember_count; i++) r += (&a->x)[i] * (&b->x)[i];
+    return r;
+}
+
+float vecf_length(vecf a) {
+    float  r = 0.0f;
+    for (int i = 0; i < type->vmember_count; i++) r += (&a->x)[i] * (&a->x)[i];
+    return sqrtf(r);
+}
+
+vec2f   vecf_cast_vec2f  (vecf a) { return vec2f  (a->x, a->y, a->z); }
+vec3f   vecf_cast_vec3f  (vecf a) { return vec3f  (a->x, a->y, a->z); }
+vec4f   vecf_cast_vec4f  (vecf a) { return vec4f  (a->x, a->y, a->z); }
+vec2f64 vecf_cast_vec2f64(vecf a) { return vec2f64(a->x, a->y, a->z); }
+vec3f64 vecf_cast_vec3f64(vecf a) { return vec3f64(a->x, a->y, a->z); }
+vec4f64 vecf_cast_vec4f64(vecf a) { return vec4f64(a->x, a->y, a->z); }
+vec2i8  vecf_cast_vec2i8 (vecf a) { return vec2i8 (a->x, a->y, a->z); }
+vec3i8  vecf_cast_vec3i8 (vecf a) { return vec3i8 (a->x, a->y, a->z); }
+vec4i8  vecf_cast_vec4i8 (vecf a) { return vec4i8 (a->x, a->y, a->z); }
+
+bool    vecf_cast_bool   (vecf a) {
+    for (int i = 0; i < type->vmember_count; i++)
+        if ((&a->x)[i] != 0.0f) return true;
+    return false;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+vecf64 vecf64_cross(vecf64 a, vecf64 b) {
+    vec3f64 result = vec3f64(
+        a->y * b->z - a->z * b->y,
+        a->z * b->x - a->x * b->z,
+        a->x * b->y - a->y * b->x);
+    return result;
+}
+
+vecf64 vecf64_normalize(vecf64 a) {
+    f32   len_sq = 0.0f;
+    AType type   = isa(a);
+    for (int i = 0; i < type->vmember_count; i++)
+        len_sq += (&a->x)[i] * (&a->x)[i];
+    f32   len    = sqrtf(len_sq);
+    
+    if (len > 0) {
+        vecf64 res = copy(a);
+        for (int i = 0; i < type->vmember_count; i++)
+            (&res->x)[i] /= len;
+        return res;
+    }
+    return a;
+}
+
+vecf64 vecf64_mix(vecf64 a, vecf64 b, f32 f) {
+    vecf64   res  = copy(a);
+    f32*   fres = &res->x;
+    AType  type = isa(a);
+    verify(type == isa(b) || typeid(a) == instanceof(a, vecf64) || instanceof(b, vecf64),
+        "vector mismatch"); // allow for generics
+    for (int i = 0; i < type->vmember_count; i++) {
+        f32 fa  = (&a->x)[i];
+        f32 fb  = (&b->x)[i];
+        fres[i] = fa * (1.0f - f) + fb * f;
+    }
+    return res;
+}
+
+float vecf64_dot(vecf64 a, vecf64 b) {
+    float  r = 0.0f;
+    for (int i = 0; i < type->vmember_count; i++) r += (&a->x)[i] * (&b->x)[i];
+    return r;
+}
+
+float vecf64_length(vecf64 a) {
+    float  r = 0.0f;
+    for (int i = 0; i < type->vmember_count; i++) r += (&a->x)[i] * (&a->x)[i];
+    return sqrtf(r);
+}
+
+vec2f64 vecf64_cast_vec2f  (vecf64 a) { return vec2f64(a->x, a->y, a->z); }
+vec3f64 vecf64_cast_vec3f64(vecf64 a) { return vec3f64(a->x, a->y, a->z); }
+vec4f64 vecf64_cast_vec4f64(vecf64 a) { return vec4f64(a->x, a->y, a->z); }
+bool  vecf64_cast_bool (vecf64 a) {
+    for (int i = 0; i < type->vmember_count; i++)
+        if ((&a->x)[i] != 0.0f) return true;
+    return false;
+}
+
+
+
+
+veci8 veci8_cross(veci8 a, veci8 b) {
+    vec3i8 result = vec3i8(
+        a->y * b->z - a->z * b->y,
+        a->z * b->x - a->x * b->z,
+        a->x * b->y - a->y * b->x
+    );
+    return result;
+}
+
+veci8 veci8_normalize(veci8 a) {
+    i32 len_sq = 0;
+    AType type = isa(a);
+
+    for (int i = 0; i < type->vmember_count; i++)
+        len_sq += (&a->x)[i] * (&a->x)[i];
+
+    if (len_sq > 0) {
+        veci8 res = copy(a);
+        for (int i = 0; i < type->vmember_count; i++)
+            (&res->x)[i] = (&a->x)[i] * 255 / len_sq;
+        return res;
+    }
+    return a;
+}
+
+veci8 veci8_mix(veci8 a, veci8 b, f32 ff) {
+    i32 f = ff * 255;
+    veci8 res = copy(a);
+    i8* fres = &res->x;
+    AType type = isa(a);
+
+    verify(
+        type == isa(b) || typeid(a) == instanceof(a, veci8) || instanceof(b, veci8),
+        "vector mismatch"
+    );
+
+    for (int i = 0; i < type->vmember_count; i++) {
+        i8 fa = (&a->x)[i];
+        i8 fb = (&b->x)[i];
+        fres[i] = (fa * (255 - f) + fb * f) / 255;
+    }
+    return res;
+}
+
+i32 veci8_dot(veci8 a, veci8 b) {
+    i32 r = 0;
+    for (int i = 0; i < type->vmember_count; i++)
+        r += (&a->x)[i] * (&b->x)[i];
+    return r;
+}
+
+i32 veci8_length(veci8 a) {
+    i32 len_sq = 0;
+    for (int i = 0; i < type->vmember_count; i++)
+        len_sq += (&a->x)[i] * (&a->x)[i];
+    return len_sq;
+}
+
+vec2i8 veci8_cast_vec2i8(veci8 a) { return vec2i8(a->x, a->y); }
+vec3i8 veci8_cast_vec3i8(veci8 a) { return vec3i8(a->x, a->y, a->z); }
+vec4i8 veci8_cast_vec4i8(veci8 a) { return vec4i8(a->x, a->y, a->z, a->w); }
+
+bool veci8_cast_bool(veci8 a) {
+    for (int i = 0; i < type->vmember_count; i++) {
+        if ((&a->x)[i] != 0) return true;
+    }
+    return false;
+}
+
+define_vector(vec, 2, i8,  i8)
+define_vector(vec, 2, f32, f)
+define_vector(vec, 2, f64, f64)
+
+define_vector(vec, 3, i8,  i8)
+define_vector(vec, 3, f32, f)
+define_vector(vec, 3, f64, f64)
+
+define_vector(vec, 4, i8,  i8)
+define_vector(vec, 4, f32, f)
+define_vector(vec, 4, f64, f64)
 
 define_class(A)
 define_meta(object, A, A)

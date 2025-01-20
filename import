@@ -19,6 +19,6 @@ llvm https://github.com/ar-visions/llvm-project d37feb7
 libffi https://github.com/libffi/libffi 3d0ce1e
 
 lib:
-    ffi
+    ffi m
 app:
     A

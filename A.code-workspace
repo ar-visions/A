@@ -251,7 +251,9 @@
 			"trinity-intern": "cpp",
 			"*.txt": "cpp",
 			"stat.h": "c",
-			"cpuid.h": "c"
+			"cpuid.h": "c",
+			"gltf.h": "c",
+			"trinity-methods": "c"
 		}
 	}
 }

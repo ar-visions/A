@@ -317,6 +317,9 @@ build_translation:
 
 endif
 
+$(BUILD_DIR)/lib/%.o: $(BUILD_DIR)/lib/%.c
+	$(CC) $(CFLAGS) $(LIB_INCLUDES) -c $< -o $@
+
 define generate_import_header
 	@if [ ! -f $(1) ] || [ "$(SRC_ROOT)/import" -nt $(1) ]; then \
 		rm -f $(1); \

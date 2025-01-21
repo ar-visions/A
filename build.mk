@@ -220,7 +220,9 @@ $(METHODS_HEADER): $(PROJECT_HEADER)
 		grep -o 'i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*[[:alnum:]_]*' $(PROJECT_HEADER) | \
 		$(SED) 's/i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*\([[:alnum:]_]*\).*/\1/' | \
 		while read method; do \
-			echo "#undef $$method\n#define $$method(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->$$method(_i_, ## __VA_ARGS__); })" >> $@; \
+			if [ -n "$$method" ]; then \
+				echo "#undef $$method\n#define $$method(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->$$method(_i_, ## __VA_ARGS__); })" >> $@; \
+			fi; \
 		done; \
 		echo >> $@; \
 		echo "#endif /* _$(UPROJECT)_METHODS_H_ */" >> $@; \
@@ -234,9 +236,12 @@ $(INIT_HEADER): $(PROJECT_HEADER)
 		echo "#ifndef _$(UPROJECT)_INIT_H_" >> $@; \
 		echo "#define _$(UPROJECT)_INIT_H_" >> $@; \
 		echo >> $@; \
-		grep -o 'declare_\(class\|mod\)[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-		$(SED) 's/declare_\(class\|mod\)[[:space:]]*([[:space:]]*\([^,)]*\).*/\2/' | \
-		while read class_name; do \
+		grep -o 'declare_\(class\|mod\|meta\|vector\)[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
+		$(SED) -E 's/declare_(class|mod|meta|vector)[[:space:]]*\([[:space:]]*([^,)]*)[[:space:]]*(,[[:space:]]*([^,)[:space:]]*))?/\1 \2 \4/' | \
+		while read type class_name arg; do \
+			if [ -z "$${class_name}" ]; then \
+				continue; \
+			fi; \
 			echo "#ifndef NDEBUG" >> $@; \
 			echo "    //#define TC_$${class_name}(MEMBER, VALUE) A_validate_type(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)" >> $@; \
 			echo "    #define TC_$${class_name}(MEMBER, VALUE) VALUE" >> $@; \
@@ -248,22 +253,26 @@ $(INIT_HEADER): $(PROJECT_HEADER)
 			echo "#define _ARG_COUNT_$${class_name}(...)   _ARG_COUNT_I_$${class_name}(\"A-type\", ## __VA_ARGS__)" >> $@; \
 			echo "#define _COMBINE_$${class_name}_(A, B)   A##B" >> $@; \
 			echo "#define _COMBINE_$${class_name}(A, B)    _COMBINE_$${class_name}_(A, B)" >> $@; \
-			echo "#define _N_ARGS_0_$${class_name}( TYPE)" >> $@; \
-			echo "#define _N_ARGS_1_$${class_name}( TYPE, a) _Generic((a), TYPE##_schema(TYPE, GENERICS) const void *: (void)0)(instance, a)" >> $@; \
-			echo "#define _N_ARGS_2_$${class_name}( TYPE, a,b) instance->a = TC_$${class_name}(a,b);" >> $@; \
-			echo "#define _N_ARGS_4_$${class_name}( TYPE, a,b, c,d) _N_ARGS_2_$${class_name}(TYPE, a,b) instance->c = TC_$${class_name}(c,d);" >> $@; \
-			echo "#define _N_ARGS_6_$${class_name}( TYPE, a,b, c,d, e,f) _N_ARGS_4_$${class_name}(TYPE, a,b, c,d) instance->e = TC_$${class_name}(e,f);" >> $@; \
-			echo "#define _N_ARGS_8_$${class_name}( TYPE, a,b, c,d, e,f, g,h) _N_ARGS_6_$${class_name}(TYPE, a,b, c,d, e,f) instance->g = TC_$${class_name}(g,h);" >> $@; \
-			echo "#define _N_ARGS_10_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j) _N_ARGS_8_$${class_name}(TYPE, a,b, c,d, e,f, g,h) instance->i = TC_$${class_name}(i,j);" >> $@; \
-			echo "#define _N_ARGS_12_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) _N_ARGS_10_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j) instance->l = TC_$${class_name}(l,m);" >> $@; \
-			echo "#define _N_ARGS_14_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) _N_ARGS_12_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC_$${class_name}(n,o);" >> $@; \
-			echo "#define _N_ARGS_16_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) _N_ARGS_14_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) instance->p = TC_$${class_name}(p,q);" >> $@; \
-			echo "#define _N_ARGS_18_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) _N_ARGS_16_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) instance->r = TC_$${class_name}(r,s);" >> $@; \
-			echo "#define _N_ARGS_20_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) _N_ARGS_18_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC_$${class_name}(t,u);" >> $@; \
-			echo "#define _N_ARGS_22_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) _N_ARGS_20_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC_$${class_name}(v,w);" >> $@; \
-			echo "#define _N_ARGS_HELPER2_$${class_name}(TYPE, N, ...)  _COMBINE_$${class_name}(_N_ARGS_, N)(TYPE, ## __VA_ARGS__)" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_0( TYPE)" >> $@; \
+			if [ "$$type" = "meta" ] || [ "$$type" = "vector" ]; then \
+				echo "#define _N_ARGS_$${class_name}_1( TYPE, a)" >> $@; \
+			else \
+				echo "#define _N_ARGS_$${class_name}_1( TYPE, a) _Generic((a), TYPE##_schema(TYPE, GENERICS, object) const void *: (void)0)(instance, a)" >> $@; \
+			fi; \
+			echo "#define _N_ARGS_$${class_name}_2( TYPE, a,b) instance->a = TC_$${class_name}(a,b);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_4( TYPE, a,b, c,d) _N_ARGS_2_$${class_name}(TYPE, a,b) instance->c = TC_$${class_name}(c,d);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_6( TYPE, a,b, c,d, e,f) _N_ARGS_4_$${class_name}(TYPE, a,b, c,d) instance->e = TC_$${class_name}(e,f);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_8( TYPE, a,b, c,d, e,f, g,h) _N_ARGS_6_$${class_name}(TYPE, a,b, c,d, e,f) instance->g = TC_$${class_name}(g,h);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_10(TYPE, a,b, c,d, e,f, g,h, i,j) _N_ARGS_8_$${class_name}(TYPE, a,b, c,d, e,f, g,h) instance->i = TC_$${class_name}(i,j);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_12(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) _N_ARGS_10_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j) instance->l = TC_$${class_name}(l,m);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_14(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) _N_ARGS_12_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC_$${class_name}(n,o);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_16(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) _N_ARGS_14_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) instance->p = TC_$${class_name}(p,q);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_18(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) _N_ARGS_16_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) instance->r = TC_$${class_name}(r,s);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_20(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) _N_ARGS_18_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC_$${class_name}(t,u);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_22(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) _N_ARGS_20_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC_$${class_name}(v,w);" >> $@; \
+			echo "#define _N_ARGS_HELPER2_$${class_name}(TYPE, N, ...)  _COMBINE_$${class_name}(_N_ARGS_$${class_name}_, N)(TYPE, ## __VA_ARGS__)" >> $@; \
 			echo "#define _N_ARGS_$${class_name}(TYPE,...)    _N_ARGS_HELPER2_$${class_name}(TYPE, _ARG_COUNT_$${class_name}(__VA_ARGS__), ## __VA_ARGS__)" >> $@; \
-			echo "#define $$class_name(...) ({ \\" >> $@; \
+			echo "#define $${class_name}(...) ({ \\" >> $@; \
 			echo "    $${class_name} instance = ($${class_name})A_alloc(typeid($${class_name}), 1, true); \\" >> $@; \
 			echo "    _N_ARGS_$${class_name}($${class_name}, ## __VA_ARGS__); \\" >> $@; \
 			echo "    A_initialize(instance); \\" >> $@; \
@@ -290,6 +299,12 @@ $(INTERN_HEADER):
 		echo >> $@; \
 		grep -o 'declare_mod[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
 		$(SED) 's/declare_mod[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
+		while read class_name; do \
+			echo "#define $${class_name}_intern\t\tintern($$class_name)" >> $@; \
+		done; \
+		echo >> $@; \
+		grep -o 'declare_meta[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
+		$(SED) 's/declare_meta[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
 		while read class_name; do \
 			echo "#define $${class_name}_intern\t\tintern($$class_name)" >> $@; \
 		done; \

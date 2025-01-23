@@ -115,6 +115,8 @@
     for project in "${projects[@]}"; do
         PROJECT_NAME=$(echo "$project" | cut -d ' ' -f 1)
 
+        echo "project: $PROJECT_NAME"
+
         # check if project already built during this command stack
         if [[ ",$BUILT_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
             print "skipping $PROJECT_NAME - already built"
@@ -318,14 +320,14 @@
 
                 ts0=$(find . -type f -exec $STAT -c %Y {} + | sort -n | tail -1)
                 if [ -n "$cmake" ]; then
-                    cmake --build . -- -j$j
+                    cmake --build . -- -j$j || { echo "import.sh failed on compilation for $PROJECT_NAME"; exit 1; }
                 elif [ -n "$rust" ]; then
-                    cargo build --$build --manifest-path ../Cargo.toml --target-dir .
+                    cargo build --$build --manifest-path ../Cargo.toml --target-dir . || { echo "import.sh failed on compilation for $PROJECT_NAME"; exit 1; }
                 elif [ "$A_MAKE" = "1" ]; then
-                    make $MFLAGS -f ../Makefile
+                    make $MFLAGS -f ../Makefile || { echo "import.sh failed on compilation for $PROJECT_NAME"; exit 1; }
                 else
                     #1/2/4/1/"a"
-                    make $MFLAGS -j$j
+                    make $MFLAGS -j$j || { echo "import.sh failed on compilation for $PROJECT_NAME"; exit 1; }
                 fi
                 ts1=$(find . -type f -exec $STAT -c %Y {} + | sort -n | tail -1)
                 echo "project $PROJECT_NAME = $ts0 $ts1"
@@ -364,6 +366,7 @@
         fi
 
         BUILT_PROJECTS+=",${PROJECT_NAME}"
+        echo "project-built: $PROJECT_NAME"
         export BUILT_PROJECTS
 
         cd ../../

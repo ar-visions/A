@@ -127,24 +127,31 @@ PREP_DIRS := $(shell \
         find $(SRC_ROOT)/lib -type f -exec sh -c ' \
             src_file="{}"; \
             dest_file="$(BUILD_DIR)/lib/$$(basename {})"; \
-            cp -p "$$src_file" "$$dest_file"; \
-            $(SED) -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+			if [ ! -f "$$dest_file" ] || [ "$$src_file" -nt "$$dest_file" ]; then \
+				echo "copying $$src_file -> $$dest_file"; \
+				cp -p "$$src_file" "$$dest_file"; \
+				$(SED) -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+			fi \
         ' \; ; \
     fi && \
     if [ -d "$(SRC_ROOT)/app" ]; then \
         find $(SRC_ROOT)/app -type f -exec sh -c ' \
             src_file="{}"; \
             dest_file="$(BUILD_DIR)/app/$$(basename {})"; \
-            cp -p "$$src_file" "$$dest_file"; \
-        	$(SED) -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+			if [ ! -f "$$dest_file" ] || [ "$$src_file" -nt "$$dest_file" ]; then \
+				cp -p "$$src_file" "$$dest_file"; \
+				$(SED) -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+			fi \
         ' \; ; \
     fi && \
     if [ -d "$(SRC_ROOT)/test" ]; then \
         find $(SRC_ROOT)/test -type f -exec sh -c ' \
             src_file="{}"; \
             dest_file="$(BUILD_DIR)/test/$$(basename {})"; \
-            cp -p "$$src_file" "$$dest_file"; \
-            $(SED) -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+			if [ ! -f "$$dest_file" ] || [ "$$src_file" -nt "$$dest_file" ]; then \
+				cp -p "$$src_file" "$$dest_file"; \
+				$(SED) -i "1i\#line 1 \"$$src_file\"" "$$dest_file"; \
+			fi \
         ' \; ; \
     fi \
 )
@@ -157,7 +164,7 @@ LIB_IMPORTS        = $(call process_imports,lib)
 release		      ?= 0
 APP			      ?= 0
 SILVER_IMPORT     ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)
-CC 			       = clang # $(SILVER_IMPORT)/bin/clang
+CC 			       = gcc # $(SILVER_IMPORT)/bin/clang
 MAKEFLAGS         += --no-print-directory
 LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(SILVER_IMPORT)/include
 APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(SILVER_IMPORT)/include
@@ -193,8 +200,10 @@ CFLAGS 		   	   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-Wno-write-strings -Wno-compare-distinct-pointer-types -Wno-deprecated-declarations \
 	-Wno-incompatible-pointer-types -Wfatal-errors -std=gnu11 -DMODULE="\"$(PROJECT)\"" \
 	-Wno-incompatible-library-redeclaration -fvisibility=default
-CFLAGS  		  := $(CFLAGS) # -fsanitize=address
-LDFLAGS 		  := $(LDFLAGS) # -fsanitize=address
+#ifeq ($(ASAN),1)
+#    CFLAGS := $(CFLAGS) -fsanitize=address
+#    LDFLAGS := $(LDFLAGS) -fsanitize=address
+#endif
 SRC_TRANSLATION   := $(SRC_ROOT)/translation/A-translation.c
 BUILD_TRANSLATION := $(BUILD_DIR)/A-translation
 
@@ -260,16 +269,16 @@ $(INIT_HEADER): $(PROJECT_HEADER)
 				echo "#define _N_ARGS_$${class_name}_1( TYPE, a) _Generic((a), TYPE##_schema(TYPE, GENERICS, object) const void *: (void)0)(instance, a)" >> $@; \
 			fi; \
 			echo "#define _N_ARGS_$${class_name}_2( TYPE, a,b) instance->a = TC_$${class_name}(a,b);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_4( TYPE, a,b, c,d) _N_ARGS_2_$${class_name}(TYPE, a,b) instance->c = TC_$${class_name}(c,d);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_6( TYPE, a,b, c,d, e,f) _N_ARGS_4_$${class_name}(TYPE, a,b, c,d) instance->e = TC_$${class_name}(e,f);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_8( TYPE, a,b, c,d, e,f, g,h) _N_ARGS_6_$${class_name}(TYPE, a,b, c,d, e,f) instance->g = TC_$${class_name}(g,h);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_10(TYPE, a,b, c,d, e,f, g,h, i,j) _N_ARGS_8_$${class_name}(TYPE, a,b, c,d, e,f, g,h) instance->i = TC_$${class_name}(i,j);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_12(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) _N_ARGS_10_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j) instance->l = TC_$${class_name}(l,m);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_14(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) _N_ARGS_12_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC_$${class_name}(n,o);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_16(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) _N_ARGS_14_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) instance->p = TC_$${class_name}(p,q);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_18(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) _N_ARGS_16_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) instance->r = TC_$${class_name}(r,s);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_20(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) _N_ARGS_18_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC_$${class_name}(t,u);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_22(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) _N_ARGS_20_$${class_name}(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC_$${class_name}(v,w);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_4( TYPE, a,b, c,d) _N_ARGS_$${class_name}_2(TYPE, a,b) instance->c = TC_$${class_name}(c,d);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_6( TYPE, a,b, c,d, e,f) _N_ARGS_$${class_name}_4(TYPE, a,b, c,d) instance->e = TC_$${class_name}(e,f);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_8( TYPE, a,b, c,d, e,f, g,h) _N_ARGS_$${class_name}_6(TYPE, a,b, c,d, e,f) instance->g = TC_$${class_name}(g,h);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_10(TYPE, a,b, c,d, e,f, g,h, i,j) _N_ARGS_$${class_name}_8(TYPE, a,b, c,d, e,f, g,h) instance->i = TC_$${class_name}(i,j);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_12(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) _N_ARGS_$${class_name}_10(TYPE, a,b, c,d, e,f, g,h, i,j) instance->l = TC_$${class_name}(l,m);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_14(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) _N_ARGS_$${class_name}_12(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC_$${class_name}(n,o);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_16(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) _N_ARGS_$${class_name}_14(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) instance->p = TC_$${class_name}(p,q);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_18(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) _N_ARGS_$${class_name}_16(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) instance->r = TC_$${class_name}(r,s);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_20(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) _N_ARGS_$${class_name}_18(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC_$${class_name}(t,u);" >> $@; \
+			echo "#define _N_ARGS_$${class_name}_22(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) _N_ARGS_$${class_name}_20(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC_$${class_name}(v,w);" >> $@; \
 			echo "#define _N_ARGS_HELPER2_$${class_name}(TYPE, N, ...)  _COMBINE_$${class_name}(_N_ARGS_$${class_name}_, N)(TYPE, ## __VA_ARGS__)" >> $@; \
 			echo "#define _N_ARGS_$${class_name}(TYPE,...)    _N_ARGS_HELPER2_$${class_name}(TYPE, _ARG_COUNT_$${class_name}(__VA_ARGS__), ## __VA_ARGS__)" >> $@; \
 			echo "#define $${class_name}(...) ({ \\" >> $@; \
@@ -397,8 +406,8 @@ process_c_files:
 	$(call process_src,test)
 
 define RUN_IMPORT_SCRIPT
-	echo "running import script"
-	@bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --b $(BUILD_DIR) --i $(SRC_ROOT)/import
+	@echo "running import script"
+	@bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --b $(BUILD_DIR) --i $(SRC_ROOT)/import || { echo "Import script failed"; exit 1; }
 endef
 
 # Add this call to the import script before building

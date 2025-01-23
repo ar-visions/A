@@ -865,8 +865,8 @@ typedef struct method_t {
     typedef struct X *X; \
     _Pragma("pack(push, 1)") \
     typedef struct X##_f { \
-        A_f_members(object) \
-        A_schema(object, METHOD) \
+        A_f_members(A) \
+        A_schema(A, METHOD) \
         X##_schema(X, METHOD, __VA_ARGS__) \
     } X##_f, *X##_ft; \
     _Pragma("pack(pop)") \
@@ -876,8 +876,8 @@ typedef struct method_t {
 #define declare_primitive( X, Y, ... ) \
     _Pragma("pack(push, 1)") \
     typedef struct X##_f { \
-        A_f_members(object) \
-        A_schema(object, METHOD, __VA_ARGS__) \
+        A_f_members(A) \
+        A_schema(A, METHOD, __VA_ARGS__) \
         X##_schema(X, METHOD, __VA_ARGS__) \
     } X##_f, *X##_ft; \
     _Pragma("pack(pop)") \
@@ -892,7 +892,8 @@ typedef struct method_t {
     } E; \
     _Pragma("pack(push, 1)") \
     typedef struct E##_f { \
-        A_f_members(object) \
+        A_f_members(A) \
+        A_schema (A, METHOD) \
     } E##_f, *E##_ft; \
     _Pragma("pack(pop)") \
     enum { E##_ENUM_COUNT = ENUM_COUNT(E##_schema(E, COUNT)) }; \
@@ -942,8 +943,8 @@ void        A_lazy_init(global_init_fn fn);
     } *AA##t; \
     AA##_schema (AA##t, DECL, T, t) \
     typedef struct AA##t##_f { \
-        A_f_members(object) \
-        A_schema(object, METHOD) \
+        A_f_members(A) \
+        A_schema(A, METHOD) \
         AA##_schema(AA##t, METHOD, T, t) \
     } AA##t##_f, *AA##t##_ft; \
     extern AA##t##_f   AA##t##_type; \
@@ -959,8 +960,8 @@ void        A_lazy_init(global_init_fn fn);
     } *AA##Shape##t; \
     AA##Shape##_schema (AA, DECL, T, t) \
     typedef struct AA##Shape##t##_f { \
-        A_f_members(object) \
-        A_schema(object, METHOD) \
+        A_f_members(A) \
+        A_schema(A, METHOD) \
         AA##_schema(AA##Shape##t, METHOD, T, t) \
         AA##Shape##_schema(AA##Shape##t, METHOD, T, t) \
     } AA##Shape##t##_f, *AA##Shape##t##_ft; \
@@ -1092,11 +1093,13 @@ void* primitive_ffi_arb(AType);
     A       A0##_head; \
     A0##_f  A0##_type; \
     _Pragma("pack(pop)") \
-    static __attribute__((constructor)) bool global_##A0() { \
+    static __attribute__((constructor)) bool Aglobal_##A0() { \
         A0##_f* type_ref = &A0##_type; \
         A1##_f* base_ref = &A1##_type; \
+        if ((AType)type_ref == (AType)base_ref) \
+            printf("found same type as base, name = %s\n", type_ref->name); \
         if ((AType)type_ref != (AType)base_ref && (!base_ref->traits && !base_ref->size)) { \
-            A_lazy_init((global_init_fn)&global_##A0); \
+            A_lazy_init((global_init_fn)&Aglobal_##A0); \
             return false; \
         } else { \
             memset(type_ref, 0,        sizeof(A0##_f)); \
@@ -1136,7 +1139,6 @@ void* primitive_ffi_arb(AType);
             ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
             ALIAS_TYPE##_type.meta     = (meta_t) { emit_types(__VA_ARGS__) }; \
             ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
-            SRC_TYPE##_schema( SRC_TYPE, INIT, __VA_ARGS__ ) \
             A_push_type(&ALIAS_TYPE##_type);         \
             return true; \
         } \
@@ -1172,14 +1174,14 @@ void* primitive_ffi_arb(AType);
     define_arb(A0, A1, sizeof(struct A0), 0, 0, null, __VA_ARGS__)
 
 #define define_class(A0, ...) \
-    define_mod(A0, object, __VA_ARGS__)
+    define_mod(A0, A, __VA_ARGS__)
 
 /// primitives dont have construct/method support, but its abstract does
 #define define_primitive(X, Y, traits, ...) \
     define_arb(X, Y, sizeof(X), traits | A_TRAIT_PRIMITIVE, 0, null, __VA_ARGS__)
 
 #define define_abstract(X, ...) \
-    define_arb(X, object, 0, A_TRAIT_ABSTRACT, 0, null, __VA_ARGS__)
+    define_arb(X, A, 0, A_TRAIT_ABSTRACT, 0, null, __VA_ARGS__)
 
 #define define_vector(VT, Shape, T, t, ...) \
     _Pragma("pack(push, 1)") \
@@ -1201,9 +1203,10 @@ void* primitive_ffi_arb(AType);
             VT##Shape##t## _type.module   = MODULE;    \
             VT##Shape##t## _type.members  = members;   \
             VT##Shape##t## _type.member_count = 0; \
-            VT##Shape##t## _type.size     = sizeof(VT##Shape##t); \
+            VT##Shape##t## _type.size     = sizeof(struct VT##Shape##t); \
+            VT##Shape##t## _type.src      = typeid(VT##t); \
             VT##Shape##t## _type.vmember_shape = veci64_of(__VA_ARGS__, 0); \
-            VT##Shape##t## _type.vmember_count = veci64_total(VT##Shape##t## _type.vmember_shape); \
+            VT##Shape##t## _type.vmember_count = veci64_product(VT##Shape##t## _type.vmember_shape); \
             VT##Shape##t## _type.vmember_type  = typeid(T); \
             VT##Shape##t## _type.traits   = typeid(T)->traits & ~A_TRAIT_PRIMITIVE;     \
             VT##Shape##t##_type.arb       = primitive_ffi_arb(typeid(VT##Shape##t)); \
@@ -1244,38 +1247,6 @@ void* primitive_ffi_arb(AType);
         }                                    \
     }
 
-// lazy loading and copying of the table only requires knowledge of our parent class
-#define define_arb(A0, A1, TYPE_SZ, TRAIT, VMEMBER_COUNT, VMEMBER_TYPE, ...) \
-    _Pragma("pack(push, 1)") \
-    A       A0##_head; \
-    A0##_f  A0##_type; \
-    _Pragma("pack(pop)") \
-    static __attribute__((constructor)) bool global_##A0() { \
-        A0##_f* type_ref = &A0##_type; \
-        A1##_f* base_ref = &A1##_type; \
-        if ((AType)type_ref != (AType)base_ref && (!base_ref->traits && !base_ref->size)) { \
-            A_lazy_init((global_init_fn)&global_##A0); \
-            return false; \
-        } else { \
-            memset(type_ref, 0,        sizeof(A0##_f)); \
-            memcpy(type_ref, base_ref, sizeof(A1##_f)); \
-            static type_member_t members[16 + sizeof(A0##_type) / sizeof(void*)]; \
-            A0## _type.parent_type = &A1##_type; \
-            A0## _type.name     = #A0;       \
-            A0## _type.module   = MODULE;    \
-            A0## _type.members  = members;   \
-            A0## _type.member_count = 0; \
-            A0## _type.size     = TYPE_SZ;   \
-            A0## _type.vmember_count = VMEMBER_COUNT; \
-            A0## _type.vmember_type = VMEMBER_TYPE; \
-            A0## _type.traits   = TRAIT;     \
-            A0##_type.arb       = primitive_ffi_arb(typeid(A0)); \
-            A0##_schema( A0, INIT, __VA_ARGS__ ) \
-            A_push_type(&A0##_type);         \
-            return true;                     \
-        }                                    \
-    }
-
 typedef struct string* string;
 typedef struct veci64* veci64;
 
@@ -1284,12 +1255,12 @@ struct sz { i64 value; };
 /// constructors get a type forwarded from the construct macro
 #define A_schema(X,Y,...) \
     i_prop  (X,Y, public, AType,     type) \
-    i_prop  (X,Y, public, num,       refs) \
-    i_prop  (X,Y, public, num,       ar_index) \
+    i_prop  (X,Y, public, i64,       refs) \
+    i_prop  (X,Y, public, i64,       ar_index) \
     i_prop  (X,Y, public, object,    data) \
     i_prop  (X,Y, public, veci64,    shape) \
     i_prop  (X,Y, public, i64,       alloc) \
-    i_prop  (X,Y, public, num,       count) \
+    i_prop  (X,Y, public, i64,       count) \
     i_method(X,Y, public, none,      init) \
     i_method(X,Y, public, none,      destructor) \
     i_method(X,Y, public, i32,       compare,    X) \
@@ -1494,6 +1465,7 @@ typedef struct array* array;
     i_method    (X,Y, public, bool,   move, path) \
     s_method    (X,Y, public, path,   cwd, sz) \
     i_ctr       (X,Y, public, string) \
+    i_ctr       (X,Y, public, cstr) \
     i_cast      (X,Y, public, cstr) \
     i_cast      (X,Y, public, sz) \
     i_override  (X,Y, ctr,    cereal) \
@@ -1696,7 +1668,8 @@ declare_class(string)
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
 object A_formatter(AType rtype, FILE* f, object opt, cstr template, ...);
 
-i64 vlen(object a);
+i64 vlength(object a);
+i64 veci64_product(veci64);
 
 #define Exists_schema(X,Y,...) \
     enum_value(X,Y, no) \
@@ -1747,8 +1720,8 @@ extern FILE* logger;
         for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = *(E*)get(((array)container), __i)) \
 
 #define vec_values(container, E, e) \
-    if (len((container))) for (E e = get2((container), 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, __len = len((container)); __i < __len; __i++, e = get2((container), __i)) \
+    if (len((container))) for (E e = get((container), 0), e0 = 0; e0 == 0; e0++) \
+        for (num __i = 0, __len = len((container)); __i < __len; __i++, e = get((container), __i)) \
 
 /// we can go through a map
 #define pairs(MM, EE) \
@@ -1907,13 +1880,14 @@ declare_class(quatf)
     i_prop     (O, Y, public, T, z) \
     i_prop     (O, Y, public, T, w) \
     i_override (O, Y, cast,   bool) \
+    i_method   (O, Y, public, vec##t, typed_copy) \
     i_method   (O, Y, public, f64,  length) \
     i_method   (O, Y, public, f64,  dot,      O) \
     i_method   (O, Y, public, none, push,     T) \
     i_method   (O, Y, public, num,  index_of, T) \
     i_method   (O, Y, public, sz,   len) \
-    i_method   (O, Y, public, T,    get2,      num) \
-    i_method   (O, Y, public, T,    set2,      num, T) \
+    i_method   (O, Y, public, T,    get,      num) \
+    i_method   (O, Y, public, T,    set,      num, T) \
     i_method   (O, Y, public, O,    normalize) \
     i_method   (O, Y, public, O,    mix,      O, f64)
 
@@ -1922,7 +1896,6 @@ declare_vector_base(vec, f64, f64)
 declare_vector_base(vec, i8,  i8)
 declare_vector_base(vec, i64, i64)
 
-i64 veci64_total(veci64 a);
 veci64 veci64_of(i64 first, ...);
 
 object A_vec(AType type, i32 count, object vdata);
@@ -1985,20 +1958,17 @@ declare_meta(array_string,     array, string)
 /// you can be a typedef and a macro -- it makes APIs simpler
 typedef veci64 shape;
 shape new_shape(i64 size, ...);
-#define shape(x, ...) new_shape(x, __VA_ARGS__)
+object parse(cstr s, AType schema);
+mat4f  new_mat4f(f32* x0);
 
-#define vec2i8(x,y)      new_vec2i8 (x, y)
-#define vec3i8(x,y,z)    new_vec3fi8(x, y, z)
-#define vec4i8(x,y,z,w)  new_vec4i8 (x, y, z, w)
+veci8  new_veci8 (object);
+veci64 new_veci64(object);
+vecf   new_vecf  (object);
+vecf64 new_vecf64(object);
 
-
-mat4f new_mat4f(f32* x0);
-
-#define mat4f(x)      new_mat4f(x)
-
-vec2i8  new_vec2i8 (i8 x, i8 y);
-vec3i8  new_vec3i8 (i8 x, i8 y, i8 z);
-vec4i8  new_vec4i8 (i8 x, i8 y, i8 z, i8 w);
+vec2i8  new_vec2i8 (i8, i8);
+vec3i8  new_vec3i8 (i8, i8, i8);
+vec4i8  new_vec4i8 (i8, i8, i8, i8);
 vec2i64 new_vec2i64(i64 x, i64 y);
 vec3i64 new_vec3i64(i64 x, i64 y, i64 z);
 vec4i64 new_vec4i64(i64 x, i64 y, i64 z, i64 w);
@@ -2011,8 +1981,14 @@ vec4f   new_vec4f  (f32 x, f32 y, f32 z, f32 w);
 
 quatf   new_quatf  (f32 x, f32 y, f32 z, f32 w);
 
+
+#define veci8(ptr)  new_veci8(ptr)
+#define veci64(ptr) new_veci64(ptr)
+#define vecf64(ptr) new_vecf64(ptr)
+#define vecf(ptr)   new_vecf(ptr)
+
 #define vec2i8(x,y)      new_vec2i8 (x, y)
-#define vec3i8(x,y,z)    new_vec3fi8(x, y, z)
+#define vec3i8(x,y,z)    new_vec3i8(x, y, z)
 #define vec4i8(x,y,z,w)  new_vec4i8 (x, y, z, w)
 #define vec2i64(x,y)     new_vec2i64(x, y)
 #define vec3i64(x,y,z)   new_vec3i64(x, y, z)
@@ -2024,7 +2000,9 @@ quatf   new_quatf  (f32 x, f32 y, f32 z, f32 w);
 #define vec3f(x,y,z)     new_vec3f  (x, y, z)
 #define vec4f(x,y,z,w)   new_vec4f  (x, y, z, w)
 
-//#define quatf(x,y,z,w)   new_quatf  (x, y, z, w)
+#define shape(x, ...) new_shape(x, __VA_ARGS__)
+#define mat4f(x)      new_mat4f(x)
 
+//#define quatf(x,y,z,w)   new_quatf  (x, y, z, w)
 
 #endif

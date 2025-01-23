@@ -16,6 +16,9 @@ llvm https://github.com/ar-visions/llvm-project d37feb7
 	-DLLVM_LINK_LLVM_DYLIB=OFF
 	-DLLVM_TARGETS_TO_BUILD='host;X86;AArch64'
 
+str https://github.com/ar-visions/str 536c9d1d031cd5e1ce0b9c628be9ec30c0548a84
+	NO_ASAN
+
 libffi https://github.com/libffi/libffi 3d0ce1e
 
 lib:

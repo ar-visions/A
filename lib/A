@@ -38,6 +38,7 @@ typedef const char*         cereal;
 //typedef struct A_f*       AType;
 typedef struct object*      object;
 typedef struct A**          ARef;
+typedef float*              floats;
 typedef struct A*           A;
 typedef struct type_member_t* Member;
 /*
@@ -823,6 +824,9 @@ typedef struct method_t {
     void*           ffi_args; /// ffi-data types for args
 } method_t;
 
+// when scalar is set, this is known as a class that shapes this data
+// the complexity arises when we may want to perform shape on this high level class
+// at the moment, a simple rule is sufficient for our use-cases, when scalar is set, it takes the shape
 #define A_f_members(B) \
     struct B ## _f* parent_type; \
     char*           name; \
@@ -1097,7 +1101,7 @@ void* primitive_ffi_arb(AType);
         A0##_f* type_ref = &A0##_type; \
         A1##_f* base_ref = &A1##_type; \
         if ((AType)type_ref == (AType)base_ref) \
-            printf("found same type as base, name = %s\n", type_ref->name); \
+            type_ref->name = #A0; \
         if ((AType)type_ref != (AType)base_ref && (!base_ref->traits && !base_ref->size)) { \
             A_lazy_init((global_init_fn)&Aglobal_##A0); \
             return false; \
@@ -1105,18 +1109,18 @@ void* primitive_ffi_arb(AType);
             memset(type_ref, 0,        sizeof(A0##_f)); \
             memcpy(type_ref, base_ref, sizeof(A1##_f)); \
             static type_member_t members[16 + sizeof(A0##_type) / sizeof(void*)]; \
-            A0## _type.parent_type = &A1##_type; \
-            A0## _type.name     = #A0;       \
-            A0## _type.module   = MODULE;    \
-            A0## _type.members  = members;   \
-            A0## _type.member_count = 0; \
-            A0## _type.size     = TYPE_SZ;   \
-            A0## _type.vmember_count = VMEMBER_COUNT; \
-            A0## _type.vmember_type = VMEMBER_TYPE; \
-            A0## _type.traits   = TRAIT;     \
-            A0##_type.arb       = primitive_ffi_arb(typeid(A0)); \
+            type_ref->parent_type = &A1##_type; \
+            type_ref->name     = #A0;       \
+            type_ref->module   = MODULE;    \
+            type_ref->members  = members;   \
+            type_ref->member_count = 0; \
+            type_ref->size     = TYPE_SZ;   \
+            type_ref->vmember_count = VMEMBER_COUNT; \
+            type_ref->vmember_type = VMEMBER_TYPE; \
+            type_ref->traits   = TRAIT;     \
+            type_ref->arb       = primitive_ffi_arb(typeid(A0)); \
             A0##_schema( A0, INIT, __VA_ARGS__ ) \
-            A_push_type(&A0##_type);         \
+            A_push_type(type_ref);           \
             return true;                     \
         }                                    \
     }
@@ -1223,15 +1227,15 @@ void* primitive_ffi_arb(AType);
     _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##VT##t() { \
         VT##t##_f* type_ref = &VT##t##_type; \
-        VT##t##_f* base_ref = &VT##t##_type; \
+        VT##t##_f* base_ref = &A_type; \
         if ((AType)type_ref != (AType)base_ref && (!base_ref->traits && !base_ref->size)) { \
             A_lazy_init((global_init_fn)&global_##VT##t); \
             return false; \
         } else { \
             memset(type_ref, 0,        sizeof(VT##t##_f)); \
-            memcpy(type_ref, base_ref, sizeof(VT##t##_f)); \
+            memcpy(type_ref, base_ref, sizeof(A_type)); \
             static type_member_t members[16 + sizeof(VT##t##_type) / sizeof(void*)]; \
-            VT##t## _type.parent_type = &VT##t##_type; \
+            VT##t## _type.parent_type = &A_type; \
             VT##t## _type.name     = stringify(VT##t); \
             VT##t## _type.module   = MODULE;    \
             VT##t## _type.members  = members;   \
@@ -1255,6 +1259,7 @@ struct sz { i64 value; };
 /// constructors get a type forwarded from the construct macro
 #define A_schema(X,Y,...) \
     i_prop  (X,Y, public, AType,     type) \
+    i_prop  (X,Y, public, AType,     scalar) \
     i_prop  (X,Y, public, i64,       refs) \
     i_prop  (X,Y, public, i64,       ar_index) \
     i_prop  (X,Y, public, object,    data) \
@@ -1324,6 +1329,8 @@ declare_abstract(imported)
 #define Member_schema(X,Y,...)      raw_schema(X,Y,...)
 #define ARef_schema(X,Y,...)        ref_schema(X,Y,...)
 
+#define floats_schema(X,Y,...)      raw_schema(X,Y,...)
+
 /// meta gives us access to one token we can override with (F)
 declare_primitive( i8,          numeric)
 declare_primitive(i16,          numeric)
@@ -1350,6 +1357,8 @@ declare_primitive(handle,       raw)
 declare_primitive(AType,        raw)
 declare_primitive(ARef,         ref)
 declare_primitive(Member,       raw)
+
+declare_primitive(floats,       raw)
 
 /// doubly-linked item type, integrated key so we dont also need a 'field' type
 #define item_schema(X,Y,...) \
@@ -1760,7 +1769,8 @@ extern FILE* logger;
         for (num i = 0, __len = len(arr); i < __len; i++, e = *(E*)get(arr, i)) \
 
 object     A_alloc (AType type, num    count, bool af_pool);
-object     A_alloc2(AType type, veci64 shape, bool af_pool);
+object     A_alloc_extra(AType type, num extra, bool af_pool);
+object     A_alloc2(AType type, AType scalar, veci64 shape, bool af_pool);
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size
 #define A_struct(T) A_alloc(typeid(u8), sizeof(struct T), true)
@@ -1945,6 +1955,7 @@ declare_vector(vec, 4, i64, i64)
 declare_vector_base(mat, f32, f)
 
 #define mat4_schema(O, Y, T, t) \
+    i_ctr      (O, Y, public, floats) \
     i_ctr      (O, Y, public, quatf) \
     i_array    (O, Y, public, T, 16, m) \
 

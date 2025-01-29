@@ -56,7 +56,6 @@
     else
         projects=()  # Initialize an empty array
         found_deps=1
-        ws_count=0
         current_line=""
 
         while IFS= read -r raw_line || [ -n "$raw_line" ]; do
@@ -64,7 +63,7 @@
             if [ -z "$line" ]; then
                 continue
             fi
-            if [[ $line =~ ^[[:alnum:]][[:alnum:]_-]*: ]]; then
+            if [[ $line =~ ^[[:alnum:]][[:alnum:]]*: ]]; then
                 found_deps=0
             fi
             if [[ $found_deps -eq 1 ]]; then
@@ -127,7 +126,28 @@
         COMMIT_RAW=$( echo "$project" | cut -d ' ' -f 3)
         COMMIT=$(echo "$COMMIT_RAW" | sed -e 's/^!//')
         IS_RECUR=$(echo "$COMMIT_RAW" | grep -q '^!' && echo true || echo false)
-        BUILD_CONFIG=$(echo "$project" | cut -d ' ' -f 4-)
+        BUILD_CONFIG_RAW=$(echo "$project" | cut -d ' ' -f 4-)
+        BUILD_CONFIG=""
+
+        (
+        echo "Build configuration options: ($project)"
+        for item in $BUILD_CONFIG_RAW; do
+            # Check if the item contains a $ENV_VAR
+            res=$(eval "echo \"$item\"")
+            # if there is a env:var
+            if [[ $res =~ ^[[:alnum:]_]+[[:space:]]*[:] ]]; then
+                env_name="${res%%:*}"
+                env_value="${res#*:}"
+                export "$env_name=$env_value"
+                echo "set environment: ${env_name} to ${env_value}"
+                continue # this is not added to build config, this is an environment var we set (and stay in for this project iteration)
+            fi
+            # Append the resolved item to the processed_config
+            BUILD_CONFIG="$BUILD_CONFIG $res"
+        done
+
+        # Trim leading whitespace
+        BUILD_CONFIG=$(echo "$BUILD_CONFIG" | sed 's/^ *//')
         TARGET_DIR="${PROJECT_NAME}"
         A_MAKE="0" # A-type projects use Make, but with a build-folder and no configuration; DEBUG=1 to enable debugging
         IS_DEBUG=
@@ -225,9 +245,12 @@
                 if [[ ",$DEB," == *",$PROJECT_NAME,"* ]]; then
                     BUILD_TYPE="--enable-debug"
                 fi
-            else
+            elif [ -f "import" ]; then
                 A_MAKE="1"
                 BUILD_TYPE="-g"
+                echo "A-Make for $PROJECT_NAME"
+            else
+                echo "regular Makefile for $PROJECT_NAME"
             fi
         fi
 
@@ -292,8 +315,8 @@
                                     ../config $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
                                 fi
                             else
-                                echo "error: no configure.ac found for $PROJECT_NAME"
-                                exit 1
+                                echo "no configure.ac found for $PROJECT_NAME ... will simply call make"
+                                #exit 1
                             fi
                         fi
                     fi
@@ -317,20 +340,23 @@
 
                 # build
                 print "building $TARGET_DIR with -j$j in $BUILD_FOLDER"
-
+                COMPILE_ERROR="import.sh failed on compilation for $PROJECT_NAME"
+                
                 ts0=$(find . -type f -exec $STAT -c %Y {} + | sort -n | tail -1)
+                
                 if [ -n "$cmake" ]; then
-                    cmake --build . -- -j$j || { echo "import.sh failed on compilation for $PROJECT_NAME"; exit 1; }
+                    cmake --build . -- -j$j || { echo "$COMPILE_ERROR"; exit 1; }
                 elif [ -n "$rust" ]; then
-                    cargo build --$build --manifest-path ../Cargo.toml --target-dir . || { echo "import.sh failed on compilation for $PROJECT_NAME"; exit 1; }
+                    cargo build --$build --manifest-path ../Cargo.toml --target-dir . || { echo "$COMPILE_ERROR"; exit 1; }
                 elif [ "$A_MAKE" = "1" ]; then
-                    make $MFLAGS -f ../Makefile || { echo "import.sh failed on compilation for $PROJECT_NAME"; exit 1; }
+                    make $MFLAGS -f ../Makefile || { echo "$COMPILE_ERROR"; exit 1; }
                 else
-                    #1/2/4/1/"a"
-                    make $MFLAGS -j$j || { echo "import.sh failed on compilation for $PROJECT_NAME"; exit 1; }
+                    cd ..
+                    make $MFLAGS -j$j || { echo "$COMPILE_ERROR"; exit 1; }
+                    cd $BUILD_FOLDER
                 fi
                 ts1=$(find . -type f -exec $STAT -c %Y {} + | sort -n | tail -1)
-                echo "project $PROJECT_NAME = $ts0 $ts1"
+                echo "-> project $PROJECT_NAME = $ts0 $ts1"
                 if [ $? -ne 0 ]; then
                     echo "build failure for $TARGET_DIR"
                     exit 1
@@ -338,8 +364,8 @@
 
                 export MAKEFLAGS="-j1 --no-print-directory"
 
-                # install to silver-import
-                if [ "$ts0" != "$ts1" ]; then
+                # install to silver-import (if it does not build in build folder, let it build once, so we may write a single token file)
+                if [ "$ts0" != "$ts1" ] || { [ -z "$ts0" ] && [ -z "$ts1" ]; }; then
                     touch $CALLER_BUILD_DIR/.rebuild
                     echo "$PROJECT_NAME modified: (you should see a rebuild!)"
                     print "install ${TARGET_DIR}"
@@ -350,7 +376,9 @@
                     elif [ "$A_MAKE" = "1" ]; then
                         make $MFLAGS -f ../Makefile install
                     else
+                        cd ..
                         make $MFLAGS install
+                        cd $BUILD_FOLDER
                     fi
                     if [ $? -ne 0 ]; then
                         echo "install failure for $TARGET_DIR"
@@ -370,6 +398,7 @@
         export BUILT_PROJECTS
 
         cd ../../
+        )
 
     done
 )

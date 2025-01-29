@@ -164,7 +164,7 @@ LIB_IMPORTS        = $(call process_imports,lib)
 release		      ?= 0
 APP			      ?= 0
 SILVER_IMPORT     ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)
-CC 			       = gcc # $(SILVER_IMPORT)/bin/clang
+CC 			       = $(SILVER_IMPORT)/bin/clang
 MAKEFLAGS         += --no-print-directory
 LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(SILVER_IMPORT)/include
 APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(SILVER_IMPORT)/include
@@ -405,6 +405,9 @@ process_c_files:
 	$(call process_src,app)
 	$(call process_src,test)
 
+# Fix Makefile behavior with this; otherwise its On Error Resume Next -- style functionality.  not exactly what most people want
+.NOTPARALLEL:
+
 define RUN_IMPORT_SCRIPT
 	@echo "running import script"
 	@bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --b $(BUILD_DIR) --i $(SRC_ROOT)/import || { echo "Import script failed"; exit 1; }
@@ -453,9 +456,11 @@ endif
 
 $(BUILD_DIR)/%: $(BUILD_DIR)/app/%.o $(LIB_TARGET)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIB_TARGET) $(APPS_LIBS)
+	@echo "built app: $@"
 
 $(BUILD_DIR)/test/%: $(BUILD_DIR)/test/%.o $(LIB_TARGET)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LIB_TARGET) $(TEST_LIBS)
+	@echo "built test: $@"
 
 #ifneq ($(strip $(LIB_TARGET)),)
 #$(REFLECT_TARGET): $(SRC_ROOT)/../A/meta/A-reflect.c $(LIB_TARGET)

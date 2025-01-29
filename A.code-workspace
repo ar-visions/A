@@ -25,6 +25,10 @@
 			"path": "../dawn"
 		},
 		{
+			"name": "str",
+			"path": "../str"
+		},
+		{
 			"name": "glfw",
 			"path": "../glfw"
 		},
@@ -253,7 +257,8 @@
 			"stat.h": "c",
 			"cpuid.h": "c",
 			"gltf.h": "c",
-			"trinity-methods": "c"
+			"trinity-methods": "c",
+			"*.impl": "c"
 		}
 	}
 }

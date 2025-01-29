@@ -1,5 +1,7 @@
 #include <import>
 #include <ffi.h>
+#include <str.h>
+#undef bool
 #include <sys/stat.h>
 #include <dirent.h>
 #include <endian-cross.h>
@@ -265,12 +267,31 @@ object A_alloc(AType type, num count, bool af_pool) {
     return &a[1]; /// return fields (object)
 }
 
-object A_alloc2(AType type, veci64 shape, bool af_pool) {
+object A_alloc_extra(AType type, num extra, bool af_pool) {
+    sz map_sz = sizeof(map);
+    sz A_sz = sizeof(struct A);
+    object a      = calloc(1, A_sz + type->size + extra);
+    a->refs       = af_pool ? 0 : 1;
+    a->type       = type;
+    a->data       = null;
+    a->count      = 1;
+    a->alloc      = 1;
+    if (af_pool) {
+        a->ar_index = af_top->pool->len;
+        push(af_top->pool, &a[1]);
+    } else {
+        a->ar_index = 0; // Indicate that this object is not in the auto-free pool
+    }
+    return &a[1]; /// return fields (object)
+}
+
+object A_alloc2(AType type, AType scalar, veci64 shape, bool af_pool) {
     i64 map_sz    = sizeof(map);
     i64 A_sz      = sizeof(struct A);
     i64 count     = veci64_product(shape);
-    object a           = calloc(1, A_sz + type->size * count);
+    object a      = calloc(1, A_sz + (scalar ? scalar->size : type->size) * count);
     a->refs       = af_pool ? 0 : 1;
+    a->scalar     = scalar;
     a->type       = type;
     a->data       = null;
     a->shape      = A_hold(shape);
@@ -507,6 +528,7 @@ veci8  new_veci8(object data) {
     veci8 def = new(veci8);
     A def_a = A_header(def);
     def_a->data = hold(data); /// drop logic handles data reallocation cases
+    return def;
 }
 
 veci64 new_veci64(object data) {
@@ -518,6 +540,7 @@ veci64 new_veci64(object data) {
     veci64 def = new(veci64);
     A def_a = A_header(def);
     def_a->data = hold(data);
+    return def;
 }
 
 vecf64 new_vecf64(object data) {
@@ -529,6 +552,7 @@ vecf64 new_vecf64(object data) {
     vecf64 def = new(vecf64);
     A def_a = A_header(def);
     def_a->data = hold(data);
+    return def;
 }
 
 vecf   new_vecf(object data) {
@@ -540,6 +564,7 @@ vecf   new_vecf(object data) {
     vecf def = new(vecf);
     A def_a = A_header(def);
     def_a->data = hold(data);
+    return def;
 }
 
 i8    veci8_get (veci8  a, num i)          { i8*    m = A_data(a); return m[i]; }
@@ -1020,9 +1045,9 @@ static cstr ws(cstr p) {
 }
 
 // lets handle both quoted and non-quoted string serialization
-string prep_cereal(cereal* cs, i64* len) {
-    cstr scan = *cs;
-    cstr res;
+string prep_cereal(cereal cs) {
+    cstr   scan = (cstr)cs;
+    string res;
     if (*scan == '\"') {
         scan = scan + 1;
         cstr start = scan;
@@ -1032,12 +1057,12 @@ string prep_cereal(cereal* cs, i64* len) {
             else last_s = false;
         }
         assert(*scan == '\"', "missing end-quote");
-        *len = (i64)(scan - start) - 1;
-        res = calloc(1, *len + 1);
-        string s = string(alloc, *len + 1);
-        memcpy(s->chars, start, *len);
-        return 
-    }
+        i64 len = (i64)(scan - start) - 1;
+        res = string(alloc, len); // string performs + 1
+        memcpy(res->chars, start, len);
+    } else
+        res = string(scan);
+    return res;
 }
 
 A A_with_cereal(object a, cereal cs) {
@@ -1220,14 +1245,22 @@ string A_cast_string(A a) {
     if (type->traits & A_TRAIT_PRIMITIVE)
         A_serialize(type, res, a);
     else {
-        append(res, type->name);
+        //append(res, type->name);
         append(res, "[");
+        if (type->src == typeid(matf)) {
+            if (type == typeid(mat4f)) {
+                for (int r = 0; r < 4 * 4; r++) {
+                    if (r) append(res, ", ");
+                    A_serialize(typeid(f32), res, A_f32(((mat4f)a)->m[r]));
+                }
+            }
+        } else
         for (num i = 0; i < type->member_count; i++) {
             type_member_t* m = &type->members[i];
             // todo: intern members wont be registered
             if (m->member_type & (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN)) {
                 if (once)
-                    append(res, " ");
+                    append(res, ", ");
                 u8* ptr = (u8*)a + m->offset;
                 append(res, m->name);
                 append(res, ":");
@@ -1360,7 +1393,7 @@ object A_formatter(AType type, FILE* f, object opt, cstr template, ...) {
         /// format %o as object's string cast
         if (*scan == '%' && *(scan + 1) == 'o') {
             object      arg = va_arg(args, object);
-            string   a = arg ? cast(string, arg) : str("null");
+            string   a = arg ? cast(string, arg) : string("null");
             num    len = a->len;
             reserve(res, len);
             memcpy(&res->chars[res->len], a->chars, len);
@@ -1417,6 +1450,9 @@ object A_formatter(AType type, FILE* f, object opt, cstr template, ...) {
         /// if logging is set to a non-blank string, it breaks at your filter
         if (!ff || (ff->chars[0] && index_of(res, ff->chars) >= 0))
             raise(SIGTRAP);
+    }
+    if (f == stderr) {
+        fwrite("\033[1;33m", 7, 1, f);
     }
     if (f) {
         write(res, f, false);
@@ -1518,7 +1554,7 @@ num   string_cmp(string a, cstr b)       { return strcmp(a->chars, b); }
 bool  string_eq(string a, cstr b)        { return strcmp(a->chars, b) == 0; }
 
 string string_copy(string a) {
-    return str(a->chars);
+    return string(a->chars);
 }
 
 i32   string_index_num(string a, num index) {
@@ -2224,7 +2260,7 @@ map map_of(cstr first_key, ...) {
     cstr key = first_key;
     for (;;) {
         A arg = va_arg(args, A);
-        set(a, str(key), arg);
+        set(a, string(key), arg);
         key = va_arg(args, cstr);
         if (key == null)
             break;
@@ -2354,7 +2390,7 @@ object file_read(file f, AType type) {
         verify(nbytes < 1024, "overflow");
         verify(fread(bytes, 1, nbytes, f->file) == nbytes, "read failure");
         bytes[nbytes] = 0;
-        return str(bytes); 
+        return string(bytes); 
     }
     object o = A_alloc(type, 1, true);
     sz size = isa(o)->size;
@@ -3140,9 +3176,10 @@ shape new_shape(i64 size, ...) {
 
 
 object A_mat(AType type, i32 rows, i32 cols, object vdata) {
-    //AType type = typeid(veci64);
-    veci64  data_shape = veci64_of(rows, cols, 0);
-    veci64 res = A_alloc2(type, data_shape, true);
+    object res = A_alloc2(type, typeid(f32), veci64_of(rows, cols, 0), true);
+    // we must set the rows and columns on a field in object
+    A f = A_header(res);
+
     if (vdata)
         memcpy(res, vdata, rows * cols * type->size);
     return res;
@@ -3183,7 +3220,11 @@ none quatf_with_vec4f(quatf q, vec4f v) {
     q->w = cosf(half_theta);
 }
 
-matf mat4f_with_quatf(matf mat, quatf q) {
+void mat4f_with_floats(matf mat, floats f) {
+    memcpy(mat->m, f, sizeof(float) * 4 * 4);
+}
+
+void mat4f_with_quatf(matf mat, quatf q) {
     /// values are at mat->values[0...15] [ row-major ]
     f32 x = q->x, y = q->y, z = q->z, w = q->w;
     f32 xx = x * x;
@@ -3216,7 +3257,6 @@ matf mat4f_with_quatf(matf mat, quatf q) {
     mat->m[13] = 0.0f;                    // Row 4, Col 2
     mat->m[14] = 0.0f;                    // Row 4, Col 3
     mat->m[15] = 1.0f;                    // Row 4, Col 4
-    return mat;
 }
 
 i64 matf_rows(matf a) {
@@ -3243,7 +3283,9 @@ matf matf_mul(matf a, matf b) {
     }
 
     // Create the result matrix
-    matf result = A_mat(typeid(f32), rows_a, cols_b, null);
+    AType mtype = typeid(matf);
+    if (rows_a == 4 && cols_b == 4) mtype = typeid(mat4f);
+    matf result = A_mat(mtype, rows_a, cols_b, null);
 
     // Perform multiplication
     for (i64 i = 0; i < rows_a; ++i) {
@@ -3449,7 +3491,11 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
                 break;
         }
         if (has_dot || (schema->traits & A_TRAIT_REALISTIC)) {
-            if (schema == typeid(f32))
+            if (schema == typeid(i64)) {
+                double v = strtod(origin, &scan);
+                res = A_i64((i64)floor(v));
+            }
+            else if (schema == typeid(f32))
                 res = A_f32(strtof(origin, &scan));
             else
                 res = A_f64(strtod(origin, &scan));
@@ -3481,6 +3527,7 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             if (*scan != ':') return null;
             scan = ws(&scan[1]);
             object value = parse_object(scan, member->type, &scan);
+            AType type = isa(value);
             scan = ws(&scan[0]);
             if   (!value)
                 return null;
@@ -3526,7 +3573,7 @@ object parse_array(cstr s, AType schema, cstr* remainder) {
                 continue;
             }
         }
-    } else if (schema->src == typeid(veci64)) {
+    } else if (schema == typeid(veci64) || schema->src == typeid(veci64)) {
         /// handle generically
         res = new(veci64);
         for (;;) {
@@ -3544,6 +3591,26 @@ object parse_array(cstr s, AType schema, cstr* remainder) {
             }
         }
         res = typed_copy((veci64)res);
+    } else if (schema == typeid(mat4f)) {
+        f32 mat[16];
+        int n = 0;
+        for (;;) {
+            if (scan[0] == ']') {
+                scan = ws(&scan[1]);
+                break;
+            }
+            object a = parse_object(scan, typeid(i64), &scan);
+            AType a_type = isa(a);
+            if (a_type == typeid(i64)) mat[n++] =  (float)*(i64*)a;
+            if (a_type == typeid(f32)) mat[n++] = *(float*)a;
+            if (a_type == typeid(f64)) mat[n++] =  (float)*(double*)a;
+            scan = ws(scan);
+            if (scan[0] == ',') {
+                scan = ws(&scan[1]);
+                continue;
+            }
+        }
+        res = mat4f(mat);
     } else {
         fault("unhandled vector type: %s", schema ? schema->name : null);
     }
@@ -3614,7 +3681,8 @@ define_primitive(none,   nil, 0)
 define_primitive(AType,  raw, 0)
 define_primitive(handle, raw, 0)
 define_primitive(Member, raw, 0)
-define_primitive(ARef,   ref, 0);
+define_primitive(ARef,   ref, 0)
+define_primitive(floats, raw, 0)
 
 define_enum(OPType)
 define_enum(Exists)

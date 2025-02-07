@@ -11,16 +11,21 @@
             "cwd": "${workspaceFolder}/../silver/silver"
         },
         {
-            "name": "a-test",
+            "name": "A-generate",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../A/silver-debug/a-test-test",
+            "program": "${workspaceFolder}/../A/silver-debug/A-generate",
             "args": [
-                "module.c"
+                "-i", "/home/kalen/src/A/gen-test.c.ai",
+                "-o", "/home/kalen/src/A/gen-test.c"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../A/silver-debug",
             "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "/home/kalen/src/silver-import/lib"
+                }
             ],
             "MIMode": "gdb",
             "presentation": {
@@ -134,10 +139,10 @@
             }
         },
         {
-            "name": "net-hi",
+            "name": "quanta-hi",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../net/silver-debug/net-hi",
+            "program": "${workspaceFolder}/../quanta/silver-debug/quanta-hi",
             "args": [
                 "https://www.google.com"
             ],
@@ -152,7 +157,7 @@
                 }
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../net/silver-debug",
+            "cwd": "${workspaceFolder}/../quanta/silver-debug",
             "MIMode": "gdb",
             "presentation": {
                 "hidden": false,

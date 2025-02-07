@@ -11,6 +11,7 @@ else ifeq ($(shell uname -s),Linux)
 else
     OS := windows
 endif
+AI_DICTATION  := rune-gen
 SRC_ROOT  	  := $(patsubst %/,%,$(dir $(MAKEFILE_PATH)))
 BUILD_DIR 	  := $(CURDIR)
 ifeq ($(shell uname), Darwin)
@@ -164,7 +165,7 @@ LIB_IMPORTS        = $(call process_imports,lib)
 release		      ?= 0
 APP			      ?= 0
 SILVER_IMPORT     ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)
-CC 			       = $(SILVER_IMPORT)/bin/clang
+CC 			       = gcc # $(SILVER_IMPORT)/bin/clang
 MAKEFLAGS         += --no-print-directory
 LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(SILVER_IMPORT)/include
 APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(SILVER_IMPORT)/include
@@ -201,8 +202,8 @@ CFLAGS 		   	   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-Wno-incompatible-pointer-types -Wfatal-errors -std=gnu11 -DMODULE="\"$(PROJECT)\"" \
 	-Wno-incompatible-library-redeclaration -fvisibility=default
 #ifeq ($(ASAN),1)
-#    CFLAGS := $(CFLAGS) -fsanitize=address
-#    LDFLAGS := $(LDFLAGS) -fsanitize=address
+#CFLAGS := $(CFLAGS) -fsanitize=address
+#LDFLAGS := $(LDFLAGS) -fsanitize=address
 #endif
 SRC_TRANSLATION   := $(SRC_ROOT)/translation/A-translation.c
 BUILD_TRANSLATION := $(BUILD_DIR)/A-translation
@@ -396,6 +397,26 @@ define process_src
 		if [ -f "$$file" ]; then \
 			echo "A-translation '$$file' '$(BUILD_DIR)/$(1)/$$(basename $$file)'"; \
 			$(SILVER_IMPORT)/bin/A-translation "$$file" "$(BUILD_DIR)/$(1)/$$(basename $$file)"; \
+		fi \
+	done; \
+	for file in $(SRC_ROOT)/$(1)/*.ai; do \
+		if [ -f "$$file" ]; then \
+			base_name=$$(basename "$$file" .ai); \
+			if [[ $$base_name =~ ^.*\..*$$ ]]; then \
+				target_ext=$${base_name##*.}; \
+				target_base=$${base_name%.*}; \
+				target_file="$(BUILD_DIR)/$(1)/$$target_base.$$target_ext"; \
+				echo "Processing AI file '$$file' -> '$$target_file'"; \
+				export LD_LIBRARY_PATH=$$SILVER_IMPORT; \
+				$(BUILD_DIR)/A-generate -i "$$file" -o "$$target_file" || exit 1; \
+				unset LD_LIBRARY_PATH; \
+				if [ $$? -eq 0 ] && [ -f "$$target_file" ]; then \
+					echo "Successfully generated $$target_file"; \
+				else \
+					echo "Error: Failed to process $$file"; \
+					exit 1; \
+				fi \
+			fi \
 		fi \
 	done
 endef

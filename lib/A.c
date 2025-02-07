@@ -10,6 +10,8 @@
 #endif
 #include <math.h>
 
+/// block-chain will go here in quanta
+
 __thread array     af_stack;
 __thread   AF      af_top;
 
@@ -255,16 +257,16 @@ object A_alloc(AType type, num count, bool af_pool) {
     object a      = calloc(1, A_sz + type->size * count);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
-    a->data       = null;
+    a->data       = &a[1];
     a->count      = count;
     a->alloc      = count;
     if (af_pool) {
         a->ar_index = af_top->pool->len;
-        push(af_top->pool, &a[1]);
+        push(af_top->pool, a->data);
     } else {
         a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
-    return &a[1]; /// return fields (object)
+    return a->data; /// return fields (object)
 }
 
 object A_alloc_extra(AType type, num extra, bool af_pool) {
@@ -273,37 +275,57 @@ object A_alloc_extra(AType type, num extra, bool af_pool) {
     object a      = calloc(1, A_sz + type->size + extra);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
-    a->data       = null;
+    a->data       = &a[1];
     a->count      = 1;
     a->alloc      = 1;
     if (af_pool) {
         a->ar_index = af_top->pool->len;
-        push(af_top->pool, &a[1]);
+        push(af_top->pool, a->data);
     } else {
         a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
-    return &a[1]; /// return fields (object)
+    return a->data; /// return fields (object)
+}
+
+object A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool) {
+    verify(type,   "type not set");
+    verify(scalar, "scalar not set");
+    i64 A_sz      = sizeof(struct A);
+    object a      = calloc(1, A_sz + type->size);
+    a->refs       = af_pool ? 0 : 1;
+    a->scalar     = scalar;
+    a->type       = type;
+    a->data       = &a[1];
+    a->count      = count;
+    a->alloc      = alloc;
+    a->data       = calloc(alloc, scalar->size);
+    if (af_pool) {
+        a->ar_index = af_top->pool->len;
+        push(af_top->pool, a->data);
+    } else {
+        a->ar_index = 0;
+    }
+    return a->data;
 }
 
 object A_alloc2(AType type, AType scalar, veci64 shape, bool af_pool) {
-    i64 map_sz    = sizeof(map);
     i64 A_sz      = sizeof(struct A);
     i64 count     = veci64_product(shape);
     object a      = calloc(1, A_sz + (scalar ? scalar->size : type->size) * count);
     a->refs       = af_pool ? 0 : 1;
     a->scalar     = scalar;
     a->type       = type;
-    a->data       = null;
+    a->data       = &a[1];
     a->shape      = A_hold(shape);
     a->count      = count;
     a->alloc      = count;
     if (af_pool) {
         a->ar_index = af_top->pool->len;
-        push(af_top->pool, &a[1]);
+        push(af_top->pool, a->data);
     } else {
         a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
-    return &a[1]; /// return fields (object)
+    return a->data; /// return fields (object)
 }
 
 #define iarray(I,M,...) array_ ## M(I, M, __VA_ARGS__)
@@ -480,7 +502,7 @@ array array_of_cstr(cstr first, ...) {
 raw push_generic(object a) {
     A aa = A_header(a);
     verify (!aa->shape, "shape undefined");
-    return A_realloc(a, a->count + 1);
+    return A_realloc(a, aa->count + 1);
 }
 
 none vecf64_push(vecf64 a, f64 v) {
@@ -866,11 +888,16 @@ type_member_t* A_hold_members(object instance) {
     for (num i = 0; i < type->member_count; i++) {
         type_member_t* mem = &type->members[i];
         object   *mdata = (object*)((cstr)instance + mem->offset);
-        if (*mdata && mem->member_type & (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN))
+        if (mem->member_type & (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN))
             if (!(mem->type->traits & A_TRAIT_PRIMITIVE))
                 A_hold(*mdata);
     }
     return 0;
+}
+
+bool A_is_inlay(type_member_t* m) {
+    return m->type->traits & A_TRAIT_PRIMITIVE | m->type->traits & A_TRAIT_ENUM | 
+        m->member_type == A_TYPE_INLAY;
 }
 
 object A_set_property(object instance, symbol name, object value) {
@@ -878,10 +905,8 @@ object A_set_property(object instance, symbol name, object value) {
     type_member_t* m = A_member(type, (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN), (cstr)name);
     verify(m, "%s not found on object %s", name, type->name);
     object   *mdata = (object*)((cstr)instance + m->offset);
-    if ((m->type->traits & A_TRAIT_PRIMITIVE) || m->member_type == A_TYPE_INLAY) {
-        // copy primitive data (or inlaid objects such as ones we find in vector structs)
-        float v;
-        memcpy(&v, value, sizeof(float));
+    if (A_is_inlay(m)) {
+        // copy inlay data
         memcpy(mdata, value, m->type->size);
     } else {
         object prev = *mdata;
@@ -899,7 +924,7 @@ object A_get_property(object instance, symbol name) {
     verify(m, "%s not found on object %s", name, type->name);
     object *mdata = (object*)((cstr)instance + m->offset);
     object  value = *mdata;
-    return (m->type->traits & A_TRAIT_PRIMITIVE) ? A_primitive(m->type, mdata) : value;
+    return A_is_inlay(m) ? A_primitive(m->type, mdata) : value;
 }
 
 
@@ -1092,6 +1117,11 @@ A A_with_cereal(object a, cereal cs) {
 
 /// used by parse (from json) to construct objects from data
 object construct_with(AType type, object data) {
+    if (type == typeid(map)) {
+        verify(isa(data) == typeid(map), "expected map");
+        return hold(data);
+    }
+
     /// this will lookup ways to construct the type from the available data
     AType data_type = isa(data);
     object result = null;
@@ -1111,12 +1141,19 @@ object construct_with(AType type, object data) {
         Member mem = &type->members[i];
         if (!mem->ptr) continue;
         void* addr = mem->ptr;
-        if (mem->member_type == A_TYPE_CONSTRUCT)
+        if (mem->member_type == A_TYPE_CONSTRUCT) {
+            /// no meaningful way to do this generically, we prefer to call these first
+            if (mem->type == typeid(path) && data_type == typeid(string)) {
+                result = A_alloc(type, 1, true);
+                ((void(*)(object, path))addr)(result, path(((string)data)->chars));
+                break;
+            }
             if (mem->type == data_type) {
                 result = A_alloc(type, 1, true);
                 ((void(*)(object, object))addr)(result, data);
                 break;
             }
+        }
     }
 
     /// simple enum conversion, with a default handled in A_enum_value and type-based match here
@@ -1192,11 +1229,11 @@ object construct_with(AType type, object data) {
 }
 
 void A_serialize(AType type, string res, object a) {
-    //AType type = isa(a);
     if (type->traits & A_TRAIT_PRIMITIVE) {
         char buf[128];
         int len = 0;
-        if      (type == typeid(i64)) len = sprintf(buf, "%lld", *(i64*)a);
+        if      (type == typeid(bool)) len = sprintf(buf, "%s", *(bool*)a ? "true" : "false");
+        else if (type == typeid(i64)) len = sprintf(buf, "%lld", *(i64*)a);
         else if (type == typeid(num)) len = sprintf(buf, "%lld", *(i64*)a);
         else if (type == typeid(i32)) len = sprintf(buf, "%d",   *(i32*)a);
         else if (type == typeid(i16)) len = sprintf(buf, "%hd",  *(i16*)a);
@@ -1239,6 +1276,7 @@ void A_serialize(AType type, string res, object a) {
 
 string A_cast_string(A a) {
     AType type = isa(a);
+    A a_header = A_header(a);
     if (instanceof(a, string)) return a;
     bool  once = false;
     string res = new(string, alloc, 1024);
@@ -1254,17 +1292,58 @@ string A_cast_string(A a) {
                     A_serialize(typeid(f32), res, A_f32(((mat4f)a)->m[r]));
                 }
             }
-        } else
-        for (num i = 0; i < type->member_count; i++) {
+        } else if (type == typeid(veci64) || type->src == typeid(veci64)) {
+            for (int r = 0; r < a_header->count; r++) {
+                if (r) append(res, ", ");
+                A_serialize(typeid(i64), res, A_i64((&((veci64)a)->x)[r]));
+            }
+        } else if (type == typeid(vecf) || type->src == typeid(vecf)) {
+            for (int r = 0; r < a_header->count; r++) {
+                if (r) append(res, ", ");
+                A_serialize(typeid(f32), res, A_f32((&((vecf)a)->x)[r]));
+            }
+        } else if (type == typeid(vecf64) || type->src == typeid(vecf64)) {
+            for (int r = 0; r < a_header->count; r++) {
+                if (r) append(res, ", ");
+                A_serialize(typeid(f64), res, A_f64((&((vecf64)a)->x)[r]));
+            }
+        } else for (num i = 0; i < type->member_count; i++) {
             type_member_t* m = &type->members[i];
             // todo: intern members wont be registered
             if (m->member_type & (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN)) {
                 if (once)
                     append(res, ", ");
-                u8* ptr = (u8*)a + m->offset;
+                u8*    ptr = (u8*)a + m->offset;
+                object inst = null;
+                bool is_primitive = m->type->traits & A_TRAIT_PRIMITIVE;
+                if (is_primitive)
+                    inst = (object)ptr;
+                else
+                    inst = *(object*)ptr;
+                A inst_h = A_header(inst);
                 append(res, m->name);
                 append(res, ":");
-                A_serialize(m->type, res, ptr);
+                if (is_primitive)
+                    A_serialize(m->type, res, inst);
+                else {
+                    string s_value = inst ? A_cast_string(inst) : null; /// isa may be called on this, but not primitive data
+                    if (!s_value)
+                        append(res, "null");
+                    else {
+                        /// we should have a bit more information on what sort 
+                        /// of string casts will result here; sometimes it 
+                        /// returns a json object which is not a string, of course.
+                        /// however there is no knowledge of this in the return
+                        if (instanceof(inst, string)) {
+                            s_value = escape(s_value);
+                            append(res, "\"");
+                            concat(res, s_value);
+                            append(res, "\"");
+                        } else {
+                            concat(res, s_value);
+                        }
+                    }
+                }
                 once = true;
             }
         }
@@ -1380,14 +1459,15 @@ num parse_formatter(cstr start, cstr res, num sz) {
     return (num)(scan - start);
 }
 
-/// does not seem possible to proxy args around in C99, so we are wrapping this in a macro
+
 object A_formatter(AType type, FILE* f, object opt, cstr template, ...) {
     va_list args;
     va_start(args, template);
     string  res  = new(string, alloc, 1024);
     cstr    scan = template;
     bool write_ln = (i64)opt == true;
-    string  field = (!write_ln && opt) ? instanceof(opt, string) : null;
+    bool is_input = (f == stdin);
+    string  field = (!is_input && !write_ln && opt) ? instanceof(opt, string) : null;
     
     while (*scan) {
         /// format %o as object's string cast
@@ -1605,6 +1685,15 @@ none  string_append(string a, cstr b) {
     a->chars[a->len] = 0;
 }
 
+none  string_append_count(string a, cstr b, i32 blen) {
+    if (blen + a->len >= a->alloc)
+        string_alloc_sz(a, (a->alloc << 1) + blen);
+    memcpy(&a->chars[a->len], b, blen);
+    a->len += blen;
+    a->h = 0; /// mutable operations must clear the hash value
+    a->chars[a->len] = 0;
+}
+
 none  string_push(string a, u32 b) {
     sz blen = 1;
     if (blen + a->len >= a->alloc)
@@ -1655,6 +1744,16 @@ u64 string_hash(string a) {
     if (a->h) return a->h;
     a->h = fnv1a_hash(a->chars, a->len, OFFSET_BASIS);
     return a->h;
+}
+
+void message_init(message a) {
+    a->role = strdup(a->role);
+    a->content = strdup(a->content);
+}
+
+void message_destructor(message a) {
+    free(a->role);
+    free(a->content);
 }
 
 void string_init(string a) {
@@ -1980,9 +2079,19 @@ void A_drop(object a) {
         A_free(a);
 }
 
-object A_data(object instance) {
+object A_data(A instance) {
     A obj = A_header(instance);
     return obj->data;
+}
+
+i64 A_data_stride(A a) {
+    AType t = A_data_type(a);
+    return t->size - (t->traits & A_TRAIT_PRIMITIVE ? 0 : sizeof(void*));
+}
+
+AType A_data_type(A a) {
+    A f = A_header(a);
+    return f->scalar ? f->scalar : f->type;
 }
 
 object A_instanceof(object inst, AType type) {
@@ -2141,79 +2250,76 @@ bool is_meta_compatible(object a, object b) {
     return false;
 }
 
-object A_realloc(object a, sz count) {
+object A_realloc(object a, sz alloc) {
     A   i = A_header(a);
-    print("a refs = %i", i->refs);
-    if (count > i->alloc) {
-        sz  size  = (i->type->traits & A_TRAIT_PRIMITIVE) ? i->type->size : sizeof(A);
-        sz  alloc = (count << 1) + 32;
+    if (alloc > i->alloc) {
+        AType type = data_type(a);
+        sz  size  = data_stride(a);
         u8* data  = calloc(alloc, size);
         u8* prev  = i->data;
         memcpy(data, prev, i->count * size);
-        i->data = data;
-        print("prev = %p", prev);
-        //free(prev);
+        i->data  = data;
+        i->alloc = alloc;
+        if ((object)prev != a) free(prev);
     }
     return i->data;
 }
 
-/// just 1 meta is supported in allocation
-/// its certainly useful to have more and we may split data
-/// fields for parsing while enabling contiguous memory
-/// mixed allocation of objects and primitives will involve some tricky
-/// allocating
+object A_resize(object a, sz count) {
+    A_realloc(a, count);
+    A f = A_header(a);
+    f->count = count;
+    return f->data;
+}
+
 void vector_init(vector a) {
     A f = A_header(a);
-    a->data_type = f->type->meta.meta_0 ? f->type->meta.meta_0 : typeid(object);
-    if (f->data) {
-        verify(a->alloc == 0, "vector data provided already");
-        A data_f = A_header(f->data);
-        a->alloc = data_f->alloc;
-    } else if (a->alloc) {
-        sz vsize = vector_size(a, a->alloc);
-        f->data = A_alloc(a->data_type, vsize, false);
-    }
-    a->stride = (a->data_type->traits & A_TRAIT_PRIMITIVE) ? 
-        a->data_type->size : sizeof(A);
+    f->count = 0;
+    f->scalar = f->type->meta.meta_0 ? f->type->meta.meta_0 : a->type ? a->type : null;
+    verify(f->scalar, "scalar not set");
+    A_realloc(a, a->alloc);
+}
+
+none vector_with_path(vector a, path file_path) {
+    A f = A_header(a);
+    f->scalar = typeid(i8);
+    
+    verify(exists(file_path), "file %o does not exist", file_path);
+    FILE* ff = fopen(cstring(file_path), "rb");
+    fseek(ff, 0, SEEK_END);
+    sz flen = ftell(ff);
+    fseek(ff, 0, SEEK_SET);
+
+    A_realloc(a, flen);
+    f->count = flen;
+    size_t n = fread(f->data, 1, flen, ff);
+    verify(n == flen, "could not read file: %o", f);
+    fclose(ff);
 }
 
 void vector_realloc(vector a, sz size) {
-    A f = A_header(a);
-    object prev = f->data;
-    f->data = A_alloc(a->data_type, size, false);
-    if (prev) {
-        int amount = size >= a->alloc ? a->alloc : size;
-        memcpy(f->data, prev, amount * a->data_type->size);
-    }
-    a->alloc = size;
+    A_realloc(a, size);
 }
 
-sz vector_vector_size(vector a, sz alloc) {
-    return alloc; // we override this in string
+void vector_resize(vector a, sz size) {
+    A_resize(a, size);
 }
 
 void vector_concat(vector a, ARef any, num count) {
     if (count <= 0) return;
+    AType type = data_type(a);
     A f = A_header(a);
-    if (f->count == f->alloc) {
-        object data = A_alloc(a->data_type, (a->alloc << 1) + 32, false);
-        A_drop(f->data);
-    }
-    /// realloc on A objects is for their data, not the object memory
-    /// if we did that, they lose identity, or, they 
-    u8* ptr = A_realloc(a, f->count + count);
-    sz  size;
-    if (a->data_type->traits & A_TRAIT_PRIMITIVE)
-        size = a->data_type->size;
-    else
-        size = sizeof(A);
-
+    if (f->alloc < f->count + count)
+        realloc(a, (a->alloc << 1) + 32 + count);
+    
+    u8* ptr  = data(a);
+    i64 size = data_stride(a);
     memcpy(&ptr[f->count * size], any, size * count);
     f->count += count;
 }
 
 void vector_push(vector a, A any) {
-    vector_concat(a, &any, 1);
+    vector_concat(a, any, 1);
 }
 
 num abso(num i) { 
@@ -2223,24 +2329,19 @@ num abso(num i) {
 vector vector_slice(vector a, num from, num to) {
     A      f   = A_header(a);
     /// allocate the data type (no i8 bytes)
-    AType  data_type = f->type->meta.meta_0 ? f->type->meta.meta_0 : typeid(object);
     num count = (1 + abso(from - to)); // + 31 & ~31;
     object res = A_alloc(f->type, 1, true);
     A      res_f = A_header(res);
 
-    /// get data type (default to object)
-    verify (data_type, "no data-type");
-
     /// allocate 
-    num adj   = vector_size(a, count);
-    verify(adj >= count, "invalid vector adjustment");
     u8* src   = f->data;
-    u8* dst   = A_alloc(data_type, adj, true);
+    u8* dst   = A_valloc(f->type, f->scalar, count, count, true);
+    i64 stride = data_stride(a);
     if (from <  to)
-        memcpy(dst, &src[from * a->stride], count * a->stride);
+        memcpy(dst, &src[from * stride], count * stride);
     else
         for (int i = from; i > to; i--, dst++)
-            memcpy(dst, &src[i * a->stride], count * a->stride);
+            memcpy(dst, &src[i * stride], count * stride);
     res_f->data = dst;
     A_initialize(res);
     return res;
@@ -2340,7 +2441,7 @@ bool create_symlink(path target, path link) {
 void file_init(file f) {
     verify(!(f->read && f->write), "cannot open for both read and write");
     cstr src = f->src ? f->src->chars : null;
-    if (f->read || f->write) {
+    if (!f->id && (f->read || f->write)) {
         verify (src || f->write, "can only create temporary files for write");
 
         if (!src) {
@@ -2350,45 +2451,51 @@ void file_init(file f) {
             path   p      = null;
             do {
                 h   = (i64)rand() << 32 | (i64)rand();
-                r   = format("/tmp/f%p", (void*)h);
+                r   = formatter("/tmp/f%p", (void*)h);
                 src = r->chars;
                 p   = new(path, chars, r);
             } while (exists(p));
         }
-        f->file = fopen(src, f->read ? "rb" : "wb");
+        f->id = fopen(src, f->read ? "rb" : "wb");
         if (!f->src)
              f->src = new(path, chars, src);
     }
 }
 
 bool file_cast_bool(file f) {
-    return f->file != null;
+    return f->id != null;
 }
 
 bool file_write(file f, object o) {
     AType type = isa(o);
     if (type == typeid(string)) {
-        u16 nbytes = ((string)o)->len;
+        u16 nbytes    = ((string)o)->len;
         u16 le_nbytes = htole16(nbytes);
-        fwrite(&le_nbytes, 2, 1, f->file);
+        fwrite(&le_nbytes, 2, 1, f->id);
         f->size += (num)nbytes;
-        return fwrite(((string)o)->chars, 1, nbytes, f->file) == nbytes;
+        return fwrite(((string)o)->chars, 1, nbytes, f->id) == nbytes;
     }
     sz size = isa(o)->size;
     f->size += (num)size;
     verify(type->traits & A_TRAIT_PRIMITIVE, "not a primitive type");
-    return fwrite(o, size, 1, f->file) == 1;
+    return fwrite(o, size, 1, f->id) == 1;
 }
+
+
 
 object file_read(file f, AType type) {
     if (type == typeid(string)) {
-        u16 nbytes;
-        verify(fread(&nbytes, 2, 1, f->file) == 1, "failed to read byte count");
+        char bytes[65536];
+        u16  nbytes;
+        if (f->text_mode) {
+            verify(fgets(bytes, sizeof(bytes), f->id), "could not read text");
+            return string(bytes); 
+        }
+        verify(fread(&nbytes, 2, 1, f->id) == 1, "failed to read byte count");
         nbytes = le16toh(nbytes);
         f->location += nbytes;
-        char bytes[65536];
         verify(nbytes < 1024, "overflow");
-        verify(fread(bytes, 1, nbytes, f->file) == nbytes, "read failure");
+        verify(fread(bytes, 1, nbytes, f->id) == nbytes, "read fail");
         bytes[nbytes] = 0;
         return string(bytes); 
     }
@@ -2396,14 +2503,14 @@ object file_read(file f, AType type) {
     sz size = isa(o)->size;
     f->location += size;
     verify(type->traits & A_TRAIT_PRIMITIVE, "not a primitive type");
-    bool success = fread(o, size, 1, f->file) == 1;
+    bool success = fread(o, size, 1, f->id) == 1;
     return success ? o : null;
 }
 
 void file_close(file f) {
-    if (f->file) {
-        fclose(f->file);
-        f->file = null;
+    if (f->id) {
+        fclose(f->id);
+        f->id = null;
     }
 }
 
@@ -3479,7 +3586,16 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
     if (remainder)
        *remainder = null;
 
-    if (*scan == '[')
+    if (strncmp(scan, "true", 4) == 0 || strncmp(scan, "false", 5) == 0) {
+        verify(!schema || schema == typeid(bool), "type mismatch");
+        bool is_true = strncmp(scan, "true", 4) == 0;
+        if (is_true)
+            *remainder = scan + 4;
+        else
+            *remainder = scan + 5;
+        return A_bool(is_true); 
+    }
+    else if (*scan == '[')
         return parse_array (scan, schema, remainder);
     
     else if ((*scan >= '0' && *scan <= '9') || *scan == '-') {
@@ -3490,7 +3606,7 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             if (*scan != '.' && !(*scan >= '0' && *scan <= '9'))
                 break;
         }
-        if (has_dot || (schema->traits & A_TRAIT_REALISTIC)) {
+        if (has_dot || (!schema || schema->traits & A_TRAIT_REALISTIC)) {
             if (schema == typeid(i64)) {
                 double v = strtod(origin, &scan);
                 res = A_i64((i64)floor(v));
@@ -3504,9 +3620,11 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
     }
     else if (*scan == '"' || *scan == '\'') {
         origin = scan;
-        res = construct_with(schema, parse_json_string(origin, &scan));
+        res = construct_with(schema ? schema : typeid(string), parse_json_string(origin, &scan));
     }
     else if (*scan == '{') {
+        AType use_schema = schema ? schema : typeid(map);
+        bool is_map = use_schema == typeid(map);
         scan = ws(&scan[1]);
         map props = map(hsize, 16);
         for (;;) {
@@ -3518,15 +3636,15 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             if (*scan != '\"') return null;
             origin        = scan;
             string name   = parse_json_string(origin, &scan);
-            Member member = A_member(schema, A_TYPE_PROP, name->chars);
-            if (!member) {
-                print("property '%o' not found in type: %s", name, schema->name);
+            Member member = is_map ? null : A_member(use_schema, A_TYPE_PROP, name->chars);
+            if (!member && !is_map) {
+                print("property '%o' not found in type: %s", name, use_schema->name);
                 return null;
             }
             scan = ws(&scan[0]);
             if (*scan != ':') return null;
             scan = ws(&scan[1]);
-            object value = parse_object(scan, member->type, &scan);
+            object value = parse_object(scan, member ? member->type : null, &scan); /// issue with parsing a map type (attributes)
             AType type = isa(value);
             scan = ws(&scan[0]);
             if   (!value)
@@ -3540,14 +3658,31 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
                 return null;
         }
         if (remainder) *remainder = ws(scan);
-        pairs (props, i) {
-            print("key:%o value:%o (%s)", i->key, i->value, isa(i->value)->name);
-            int test = 0;
-            test += 2;
-        }
-        res = construct_with(schema, props);
+        res = construct_with(use_schema, props);
     }
     if (remainder) *remainder = scan;
+    return res;
+}
+
+array parse_array_objects(cstr* s, AType element_type) {
+    cstr scan = *s;
+    array res = array(alloc, 64);
+    for (;;) {
+        if (scan[0] == ']') {
+            scan = ws(&scan[1]);
+            break;
+        }
+
+        print("scan = %o", string(scan));
+        object a = parse_object(scan, element_type, &scan);
+        push(res, a);
+        scan = ws(scan);
+        if (scan[0] == ',') {
+            scan = ws(&scan[1]);
+            continue;
+        }
+    }
+    *s = scan;
     return res;
 }
 
@@ -3557,60 +3692,31 @@ object parse_array(cstr s, AType schema, cstr* remainder) {
     scan = ws(&scan[1]);
     object res = null;
     if (!schema || schema->src == typeid(array)) {
-        res = array();
         AType element_type = schema ? schema->meta.meta_0 : typeid(object);
-        for (;;) {
-            if (scan[0] == ']') {
-                scan = ws(&scan[1]);
-                break;
-            }
-            object obj = parse_object(scan, element_type, &scan);
-            if (!obj) break;
-            push((array)res, obj);
-            scan = ws(scan);
-            if (scan[0] == ',') {
-                scan = ws(&scan[1]);
-                continue;
-            }
-        }
+        res = parse_array_objects(&scan, element_type);
     } else if (schema == typeid(veci64) || schema->src == typeid(veci64)) {
-        /// handle generically
-        res = new(veci64);
-        for (;;) {
-            if (scan[0] == ']') {
-                scan = ws(&scan[1]);
-                break;
-            }
-            object a = parse_object(scan, typeid(i64), &scan);
-            AType a_type = isa(a);
-            if (a_type == typeid(i64)) push((vec4i64)res, *(i64*)a);
-            scan = ws(scan);
-            if (scan[0] == ',') {
-                scan = ws(&scan[1]);
-                continue;
-            }
-        }
-        res = typed_copy((veci64)res);
-    } else if (schema == typeid(mat4f)) {
-        f32 mat[16];
+        array arb = parse_array_objects(&scan, typeid(i64));
+        int vcount = len(arb);
+        res = A_alloc2(schema, typeid(i64), veci64_of(vcount, 0), true);
         int n = 0;
-        for (;;) {
-            if (scan[0] == ']') {
-                scan = ws(&scan[1]);
-                break;
-            }
-            object a = parse_object(scan, typeid(i64), &scan);
-            AType a_type = isa(a);
-            if (a_type == typeid(i64)) mat[n++] =  (float)*(i64*)a;
-            if (a_type == typeid(f32)) mat[n++] = *(float*)a;
-            if (a_type == typeid(f64)) mat[n++] =  (float)*(double*)a;
-            scan = ws(scan);
-            if (scan[0] == ',') {
-                scan = ws(&scan[1]);
-                continue;
-            }
+        each(arb, object, a) {
+            verify(isa(a) == typeid(i64), "expected i64");
+            ((i64*)res)[n] = *(i64*)a;
         }
-        res = mat4f(mat);
+    } else if (schema      == typeid(mat4f) || schema      == typeid(quatf) || 
+               schema->src == typeid(matf)  || schema->src == typeid(vecf)) {
+        array arb = parse_array_objects(&scan, typeid(f32));
+        int vcount = len(arb);
+        res = A_alloc2(schema, typeid(f32), veci64_of(vcount, 0), true);
+        int n = 0;
+        each(arb, object, a) {
+            AType a_type = isa(a);
+            if (a_type == typeid(i64))      ((f32*)res)[n++] =  (float)*(i64*)a;
+            else if (a_type == typeid(f32)) ((f32*)res)[n++] = *(float*)a;
+            else if (a_type == typeid(f64)) ((f32*)res)[n++] =  (float)*(double*)a;
+            else fault("unexpected type");
+        }
+        
     } else {
         fault("unhandled vector type: %s", schema ? schema->name : null);
     }
@@ -3624,6 +3730,8 @@ object parse(cstr s, AType schema) {
 }
 
 define_class(quatf)
+
+define_class(message)
 
 define_vector_base(mat, f32,  f)
 
@@ -3690,8 +3798,6 @@ define_enum(level)
 
 define_class(path)
 define_class(file)
-
-
 define_class(string)
 
 define_class(item)

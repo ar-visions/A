@@ -1271,6 +1271,9 @@ struct sz { i64 value; };
     i_method(X,Y, public, i32,       compare,    X) \
     i_method(X,Y, public, u64,       hash) \
     i_method(X,Y, public, object,    copy) \
+    i_method(X,Y, public, object,    data) \
+    i_method(X,Y, public, AType,     data_type) \
+    i_method(X,Y, public, i64,       data_stride) \
     i_ctr(   X,Y, public, cereal) \
     i_cast(  X,Y, public, string) \
     i_cast(  X,Y, public, bool)
@@ -1372,6 +1375,17 @@ declare_primitive(floats,       raw)
 #endif        
 declare_class(item)
 
+/// lets mimmick the structure in llama.cpp
+#define message_schema(X,Y,...) \
+    i_prop(X,Y, public,   cstr, role) \
+    i_prop(X,Y, public,   cstr, content) \
+    i_override(X,Y, method, init) \
+    i_override(X,Y, method, destructor)
+#ifndef message_intern
+#define message_intern isize(message)
+#endif
+declare_class(message)
+
 /// linked-list of elemental data
 #define list_schema(X,Y,...) \
     i_prop  (X,Y, public,    item,    first) \
@@ -1436,7 +1450,19 @@ declare_enum(OPType)
 
 typedef struct path* path;
 
-/// .m file is everything a module [body] needs without looking like what they ate onboard the Nebuchadnezzar
+#define buffer_schema(X,Y,...) \
+    i_ctr (X,Y, public,   path) \
+    i_ctr (X,Y, public,   i64) \
+    i_prop(X,Y, public,   cstr, data) \
+    i_prop(X,Y, public,   i64,  count) \
+    i_prop(X,Y, public,   i64,  alloc) \
+    i_method(X,Y, public, none, append, object, i32) \
+    i_override(X,Y, method, destructor)
+#ifndef buffer_intern
+#define buffer_intern isize(buffer)
+#endif
+declare_class(buffer)
+
 #define file_schema(X,Y,...) \
     i_method(X,Y, public,   bool,   write, object) \
     i_method(X,Y, public,   object, read,  AType) \
@@ -1446,7 +1472,8 @@ typedef struct path* path;
     i_prop(X,Y,   public,   bool,   write) \
     i_prop(X,Y,   public,   num,    size) \
     i_prop(X,Y,   public,   num,    location) \
-    i_prop(X,Y,   public,   handle, file) \
+    i_prop(X,Y,   public,   handle, id) \
+    i_prop(X,Y,   public,   bool,   text_mode) \
     i_override(X,Y, method, init) \
     i_override(X,Y, method, destructor) \
     i_override(X,Y, cast,   bool)
@@ -1488,16 +1515,16 @@ typedef struct array* array;
 declare_class(path)
 
 #define vector_schema(X,Y,...) \
-    i_prop           (X,Y, public, num,     alloc) \
-    i_prop           (X,Y, public, AType,   data_type) \
-    i_prop           (X,Y, public, sz,      stride) \
-    i_method         (X,Y, public, none,    concat, ARef, num) \
-    i_method         (X,Y, public, none,    push, A) \
-    i_method         (X,Y, public, vector,  slice, num, num) \
-    i_method         (X,Y, public, sz,      vector_size, sz) \
-    i_method         (X,Y, public, none,    realloc, sz) \
-    i_method         (X,Y, public, sz,      len) \
-    i_override       (X,Y, method, init)
+    i_prop      (X,Y, public, num,     alloc) \
+    i_prop      (X,Y, public, AType,   type) \
+    i_method    (X,Y, public, none,    concat, ARef, num) \
+    i_method    (X,Y, public, none,    push, A) \
+    i_method    (X,Y, public, vector,  slice, num, num) \
+    i_method    (X,Y, public, none,    realloc, sz) \
+    i_method    (X,Y, public, none,    resize, sz) \
+    i_method    (X,Y, public, sz,      len) \
+    i_ctr       (X,Y, public, path) \
+    i_override  (X,Y, method, init)
 #ifndef vector_intern
 #define vector_intern
 #endif
@@ -1649,6 +1676,7 @@ declare_class(fn)
     i_method  (X,Y,   public, string,  escape) \
     i_method  (X,Y,   public, num,     index_of, cstr) \
     i_method  (X,Y,   public, none,    append, cstr) \
+    i_method  (X,Y,   public, none,    append_count, cstr, i32) \
     i_method  (X,Y,   public, none,    push, u32) \
     i_method  (X,Y,   public, none,    concat, string) \
     i_method  (X,Y,   public, string,  mid, num, num) \
@@ -1689,11 +1717,12 @@ declare_enum(Exists)
 extern FILE* logger;
 
 #define         form(T, t, ...)   (T)A_formatter(typeid(T), null,   (object)false, t, ## __VA_ARGS__)
-#define       format(t, ...)      ((string)A_formatter(null,      null,   (object)false, t, ## __VA_ARGS__))
+#define    formatter(t, ...)      ((string)A_formatter(null,      null,   (object)false, t, ## __VA_ARGS__))
 #define         exec(t, ...)      system(((string)A_formatter(null, null, (object)false, t, ## __VA_ARGS__))->chars)
 #define          tap(L)           (A_tap(L))
 #define        untap(L)           (A_untap(L))
 #define        A_log(L, t, ...)   A_formatter(null,      stdout, str(L),  t, ## __VA_ARGS__)
+#define          put(t,    ...)   A_formatter(null,      stdout, (object)false, t, ## __VA_ARGS__)
 #define        print(t,    ...)   A_formatter(null,      stdout, (object)true,  t, ## __VA_ARGS__)
 #define        error(t, ...)      A_formatter(null,      stderr, (object)true,  t, ## __VA_ARGS__)
 #define        fault(t, ...) do { A_formatter(null,      stderr, (object)true,  t, ## __VA_ARGS__); exit(1); } while(0)
@@ -1771,6 +1800,8 @@ extern FILE* logger;
 object     A_alloc (AType type, num    count, bool af_pool);
 object     A_alloc_extra(AType type, num extra, bool af_pool);
 object     A_alloc2(AType type, AType scalar, veci64 shape, bool af_pool);
+object     A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool);
+
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size
 #define A_struct(T) A_alloc(typeid(u8), sizeof(struct T), true)
@@ -1781,6 +1812,7 @@ i32         A_enum_value(AType type, cstr cs);
 #define     eval(E,S) A_enum_value (typeid(E), S)
 
 bool        isname(char n);
+bool        A_is_inlay(type_member_t* m);
 object      A_new(AType);
 object      A_construct(AType, int, ...);
 void        A_serialize(AType type, string res, object a);
@@ -1840,18 +1872,19 @@ object      A_cstr(cstr);
 object      A_none();
 object      A_bool(bool);
 object      A_realloc(object, sz);
+object      A_resize(object, sz);
 void        A_push(object, object);
 void        A_start();
 map         A_args(int argc, symbol argv[], symbol default_arg, ...);
 A           A_header(object instance);
-object      A_data(object instance);
+//object      A_data(object instance);
 object      A_verify(object instance, AType type);
 void        A_module_init(bool(*fn)());
 void        debug();
 void        br();
 bool        A_reflect(symbol location);
 
-#define data(instance) A_header(instance)->data
+#define data(instance) A_data(instance)
 
 bool      is_meta(object a);
 bool      is_meta_compatible(object a, object b);

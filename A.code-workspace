@@ -41,8 +41,8 @@
 			"path": "../orbiter"
 		},
 		{
-			"name": "net",
-			"path": "../net"
+			"name": "quanta",
+			"path": "../quanta"
 		},
 		{
 			"name": "ai",
@@ -258,7 +258,10 @@
 			"cpuid.h": "c",
 			"gltf.h": "c",
 			"trinity-methods": "c",
-			"*.impl": "c"
+			"*.impl": "c",
+			"llama.h": "c",
+			"quanta": "cpp",
+			"quanta-init": "c"
 		}
 	}
 }

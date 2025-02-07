@@ -83,10 +83,10 @@
             }
         },
         {
-            "label": "build-net",
+            "label": "build-quanta",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../net/silver-debug"
+                "cwd": "${workspaceFolder}/../quanta/silver-debug"
             },
             "group": {
                 "kind": "build",

@@ -1449,7 +1449,7 @@ typedef struct string* string;
 declare_enum(OPType)
 
 typedef struct path* path;
-
+/*
 #define buffer_schema(X,Y,...) \
     i_ctr (X,Y, public,   path) \
     i_ctr (X,Y, public,   i64) \
@@ -1462,6 +1462,7 @@ typedef struct path* path;
 #define buffer_intern isize(buffer)
 #endif
 declare_class(buffer)
+*/
 
 #define file_schema(X,Y,...) \
     i_method(X,Y, public,   bool,   write, object) \

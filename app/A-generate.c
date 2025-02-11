@@ -15,7 +15,7 @@ static string generate(string prompt) {
     string     response        =  string(alloc, 1024);
     const bool is_first        =  llama_get_kv_cache_used_cells(ctx) == 0;
     const int  n_prompt_tokens = -llama_tokenize(vocab, cstring(prompt), len(prompt), NULL, 0, is_first, true);
-    buffer     prompt_tokens   =  vector(alloc, n_prompt_tokens, type, typeid(i32));
+    vector     prompt_tokens   =  vector(alloc, n_prompt_tokens, type, typeid(i32));
 
     if (llama_tokenize(vocab, cstring(prompt), len(prompt),
             data(prompt_tokens), n_prompt_tokens, is_first, true) < 0) {

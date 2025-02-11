@@ -2275,7 +2275,7 @@ object A_resize(object a, sz count) {
 void vector_init(vector a) {
     A f = A_header(a);
     f->count = 0;
-    f->scalar = f->type->meta.meta_0 ? f->type->meta.meta_0 : a->type ? a->type : null;
+    f->scalar = f->type->meta.meta_0 ? f->type->meta.meta_0 : a->type ? a->type : typeid(i8);
     verify(f->scalar, "scalar not set");
     A_realloc(a, a->alloc);
 }

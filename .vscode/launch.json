@@ -73,6 +73,22 @@
             }
         },
         {
+            "name": "orbiter",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../orbiter/silver-debug/agent",
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../orbiter/silver-debug",
+            "environment": [
+            ],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
             "name": "A-reflect",
             "type": "cppdbg",
             "request": "launch",

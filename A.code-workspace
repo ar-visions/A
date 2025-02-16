@@ -21,20 +21,16 @@
 			"path": "../trinity"
 		},
 		{
-			"name": "dawn",
-			"path": "../dawn"
-		},
-		{
-			"name": "str",
-			"path": "../str"
-		},
-		{
-			"name": "glfw",
-			"path": "../glfw"
-		},
-		{
 			"name": "hyperspace",
 			"path": "../hyperspace"
+		},
+		{
+			"name": "whisper.cpp",
+			"path": "../whisper.cpp"
+		},
+		{
+			"name": "llama.cpp",
+			"path": "../llama.cpp"
 		},
 		{
 			"name": "orbiter",
@@ -261,7 +257,10 @@
 			"*.impl": "c",
 			"llama.h": "c",
 			"quanta": "cpp",
-			"quanta-init": "c"
+			"quanta-init": "c",
+			"netfwd": "cpp",
+			"timer": "cpp",
+			"media": "cpp"
 		}
 	}
 }

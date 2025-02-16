@@ -58,6 +58,34 @@
             }
         },
         {
+            "label": "build-A-generate",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../A/silver-debug"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "windows": {
+                "command": "msbuild silver.sln /t:silver"
+            },
+            "osx": {
+                "command": "make -f ../Makefile -j8"
+            },
+            "linux": {
+                "command": "make -f ../Makefile -j8"
+            }
+        },
+        {
             "label": "build-ether",
             "type": "shell",
 			"options": {

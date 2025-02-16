@@ -76,9 +76,28 @@
             "name": "orbiter",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../orbiter/silver-debug/agent",
+            "program": "${workspaceFolder}/../orbiter/silver-debug/orbiter-agent",
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../orbiter/silver-debug",
+            "environment": [
+            ],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
+            "name": "orbiter-command",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../orbiter/silver-debug/command",
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../orbiter/silver-debug",
+            "args": [
+                "-c", "2"
+            ],
             "environment": [
             ],
             "MIMode": "gdb",

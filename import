@@ -1,6 +1,3 @@
-utlib https://github.com/irrwahn/utlib 19c8762
-	INST_PREFIX:$SILVER_IMPORT
-
 llvm https://github.com/ar-visions/llvm-project d37feb7
 	-S ../llvm
 	-G Ninja 
@@ -19,7 +16,7 @@ llvm https://github.com/ar-visions/llvm-project d37feb7
 	-DLLVM_LINK_LLVM_DYLIB=OFF
 	-DLLVM_TARGETS_TO_BUILD='host;X86;AArch64'
 
-llama https://github.com/ggerganov/llama.cpp 9f4cc8f
+llama.cpp https://github.com/ggerganov/llama.cpp 9f4cc8f
 	-DGGML_VULKAN=ON
 	-DLLAMA_CURL=ON
 

@@ -3,10 +3,12 @@ ifeq ($(MAKEFILE_PATH),)
     MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 endif
 
+UNAME 		   = $(shell uname)
 ARCH          := $(shell uname -m)
-ifeq ($(shell uname -s),Darwin)
+SYS           := $(shell uname -s)
+ifeq ($(SYS),Darwin)
     OS := darwin
-else ifeq ($(shell uname -s),Linux)
+else ifeq ($(SYS),Linux)
     OS := linux
 else
     OS := windows
@@ -14,7 +16,8 @@ endif
 AI_DICTATION  := rune-gen
 SRC_ROOT  	  := $(patsubst %/,%,$(dir $(MAKEFILE_PATH)))
 BUILD_DIR 	  := $(CURDIR)
-ifeq ($(shell uname), Darwin)
+
+ifeq ($(UNAME), Darwin)
     SED = gsed
 	NPROC = gnproc
 else
@@ -83,8 +86,7 @@ define IMPORT_script
 	})
 endef
 
-
-ifeq ($(shell uname),Darwin)
+ifeq ($(UNAME),Darwin)
 FRAMEWORK_PATHS = /System/Library/Frameworks /Library/Frameworks
 define is_framework
 $(shell for p in $(FRAMEWORK_PATHS); do \
@@ -94,30 +96,39 @@ $(shell for p in $(FRAMEWORK_PATHS); do \
     fi; \
 done)
 endef
-
-define process_libs
-$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
-$(if $(findstring .so,$(dep)), \
-    $(SILVER_IMPORT)/lib/$(dep), \
-    $(if $(call is_framework,$(dep)), \
-        -framework $(dep), \
-        -l$(dep)) \
-))
-endef
-else
-define process_libs
-$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
-$(if $(findstring .so,$(dep)), $(SILVER_IMPORT)/lib/$(dep),-l$(dep)))
-endef
 endif
 
-define process_imports # ( module map )
-	$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
-		$(if $(findstring .so,$(dep)), $(SILVER_IMPORT)/lib/$(dep),$(dep)))
+comma = ,
+define process_libs
+$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
+	$(if $(findstring -,$(dep)),, \
+		$(if $(findstring .so,$(dep)), \
+			$(SILVER_IMPORT)/lib/$(dep), \
+			$(if $(and $(findstring Darwin,$(UNAME)), $(call is_framework,$(dep))), \
+				-framework $(dep), \
+				$(if $(findstring @,$(dep)), \
+					-Wl$(comma)-Bstatic -l$(subst @,,$(dep)) -Wl$(comma)-Bdynamic -l$(subst @,,$(dep)), \
+					-l$(dep)\
+				)\
+			)\
+		)\
+	)\
+)
 endef
 
-# alone, this does not work, however when we update the stamps of ALL of the source
-# rsync -a $(SRC_ROOT)/lib/* $(BUILD_DIR)/lib/;
+define process_imports
+$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
+	$(if $(findstring -,$(dep)),, \
+		$(if $(findstring .so,$(dep)), $(SILVER_IMPORT)/lib/$(dep),$(dep))
+	)\
+)
+endef
+
+define process_cflags
+$(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
+	$(if $(findstring -,$(dep)),$(dep),)\
+)
+endef
 
 PREP_DIRS := $(shell \
 	mkdir -p $(BUILD_DIR)/app $(BUILD_DIR)/test $(BUILD_DIR)/lib && \
@@ -160,29 +171,39 @@ PREP_DIRS := $(shell \
 APPS_LIBS          = $(call process_libs,app)
 LIB_LIBS 	       = $(call process_libs,lib)
 TEST_LIBS          = $(call process_libs,test)
+
+LIB_CFLAGS         = $(call process_cflags,lib)
+
 APPS_IMPORTS       = $(call process_imports,app)
 LIB_IMPORTS        = $(call process_imports,lib)
 release		      ?= 0
 APP			      ?= 0
 SILVER_IMPORT     ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)
-CC 			       = gcc # $(SILVER_IMPORT)/bin/clang
+CC 			       = $(SILVER_IMPORT)/bin/clang
+CXX			       = $(SILVER_IMPORT)/bin/clang++
 MAKEFLAGS         += --no-print-directory
 LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(SILVER_IMPORT)/include
 APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(SILVER_IMPORT)/include
 TEST_INCLUDES      = -I$(BUILD_DIR)/test -I$(BUILD_DIR)/lib -I$(SILVER_IMPORT)/include
-LDFLAGS 	       = -L$(BUILD_DIR) -L$(SILVER_IMPORT)/lib -Wl,-rpath,$(SILVER_IMPORT)/lib
+# default behavior of -l cannot be set back once you do -Wl,-Bdynamic or -Wl,-Bstatic -- there is no -Wl,-Bdynamic-first
+# to create sanity lets establish -Wl,-Bdynamic first
+LDFLAGS 	       = -L$(BUILD_DIR) -L$(SILVER_IMPORT)/lib -Wl,-rpath,$(SILVER_IMPORT)/lib -Wl,-Bdynamic
 SRCAPP_DIR 	       = $(BUILD_DIR)/app
 SRCLIB_DIR 	       = $(BUILD_DIR)/lib
 TEST_DIR           = $(BUILD_DIR)/test
-TEST_SRCS 	       = $(wildcard $(TEST_DIR)/*.c)
-TEST_OBJS 	       = $(TEST_SRCS:$(TEST_DIR)/%.c=$(BUILD_DIR)/test/%.o)
-LIB_SRCS 	       = $(wildcard $(SRCLIB_DIR)/*.c)
-LIB_OBJS 	       = $(LIB_SRCS:$(SRCLIB_DIR)/%.c=$(BUILD_DIR)/lib/%.o)
-APP_SRCS 	       = $(wildcard $(SRCAPP_DIR)/*.c)
-APP_OBJS 	       = $(APP_SRCS:$(SRCAPP_DIR)/%.c=$(BUILD_DIR)/app/%.o)
+TEST_SRCS 	       = $(wildcard $(TEST_DIR)/*.c)    $(wildcard $(TEST_DIR)/*.cc)
+TEST_OBJS 		   = $(patsubst $(TEST_DIR)/%.c,    $(BUILD_DIR)/test/%.o, $(wildcard $(TEST_DIR)/*.c)) \
+           			 $(patsubst $(TEST_DIR)/%.cc,   $(BUILD_DIR)/test/%.o, $(wildcard $(TEST_DIR)/*.cc))
+LIB_SRCS 	       = $(wildcard $(SRCLIB_DIR)/*.c)  $(wildcard $(SRCLIB_DIR)/*.cc)
+LIB_OBJS 		   = $(patsubst $(SRCLIB_DIR)/%.c,  $(BUILD_DIR)/lib/%.o, $(wildcard $(SRCLIB_DIR)/*.c)) \
+           			 $(patsubst $(SRCLIB_DIR)/%.cc, $(BUILD_DIR)/lib/%.o, $(wildcard $(SRCLIB_DIR)/*.cc))
+APP_SRCS 	       = $(wildcard $(SRCAPP_DIR)/*.c)  $(wildcard $(SRCAPP_DIR)/*.cc)
+APP_OBJS 		   = $(patsubst $(SRCAPP_DIR)/%.c,  $(BUILD_DIR)/app/%.o, $(wildcard $(SRCAPP_DIR)/*.c)) \
+           			 $(patsubst $(SRCAPP_DIR)/%.cc, $(BUILD_DIR)/app/%.o, $(wildcard $(SRCAPP_DIR)/*.cc))
 #REFLECT_TARGET    = $(BUILD_DIR)/$(PROJECT)-reflect
 LIB_TARGET   	   = $(if $(strip $(LIB_OBJS)),$(BUILD_DIR)/lib$(PROJECT).so)
-APP_TARGETS	 	   = $(patsubst $(SRCAPP_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(SRCAPP_DIR)/*.c))
+APP_TARGETS	 	   = $(patsubst $(SRCAPP_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(SRCAPP_DIR)/*.c)) \
+				     $(patsubst $(SRCAPP_DIR)/%.cc, $(BUILD_DIR)/%, $(wildcard $(SRCAPP_DIR)/*.cc))
 TARGET_FLAGS 	   = -shared
 ALL_TARGETS  	   = run-import methods $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
 APP_FLAGS    	   = 
@@ -195,7 +216,9 @@ METHODS_HEADER 	   = $(BUILD_DIR)/$(PROJECT_HEADER_R)-methods
 INIT_HEADER        = $(BUILD_DIR)/$(PROJECT_HEADER_R)-init
 INTERN_HEADER      = $(BUILD_DIR)/$(PROJECT_HEADER_R)-intern
 upper 		       = $(shell echo $(1) | tr '[:lower:]' '[:upper:]')
+LINKER 			   = $(if $(filter %.cc %.cpp,$(LIB_SRCS)), $(CXX), $(CC))
 UPROJECT 	       = $(call upper,$(PROJECT))
+CXXFLAGS 		   = $(if $(filter 1,$(release)),,-g) -fPIC -DMODULE="\"$(PROJECT)\"" -std=c++17
 CFLAGS 		   	   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS \
 	-Wno-write-strings -Wno-compare-distinct-pointer-types -Wno-deprecated-declarations \
@@ -342,9 +365,6 @@ build_translation:
 
 endif
 
-$(BUILD_DIR)/lib/%.o: $(BUILD_DIR)/lib/%.c
-	$(CC) $(CFLAGS) $(LIB_INCLUDES) -c $< -o $@
-
 define generate_import_header
 	@if [ ! -f $(1) ] || [ "$(SRC_ROOT)/import" -nt $(1) ]; then \
 		rm -f $(1); \
@@ -460,27 +480,39 @@ $(BUILD_DIR)/$(PROJECT)-flat:
 	@rm $@.tmp.c
 
 # compiling
-$(BUILD_DIR)/lib/%.o: $(BUILD_DIR)/lib/%.c $(BUILD_DIR)/lib/%
-	$(CC) $(CFLAGS) $(LIB_INCLUDES) -c $< -o $@
+# ---------------------------------------------
+# lib
+$(BUILD_DIR)/lib/%.o: $(BUILD_DIR)/lib/%.c
+	$(CC) $(CFLAGS) $(LIB_INCLUDES) $(LIB_CFLAGS) -c $< -o $@
+$(BUILD_DIR)/lib/%.o: $(BUILD_DIR)/lib/%.cc
+	$(CXX) $(CXXFLAGS) $(LIB_INCLUDES) $(LIB_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/app/%.o: $(BUILD_DIR)/app/%.c $(LIB_TARGET)
+# app
+$(BUILD_DIR)/app/%.o: $(BUILD_DIR)/app/%.c
 	$(CC) $(CFLAGS) $(APP_INCLUDES) -c $< -o $@
+$(BUILD_DIR)/app/%.o: $(BUILD_DIR)/app/%.cc
+	$(CXX) $(CXXFLAGS) $(APP_INCLUDES) -c $< -o $@
 
-$(BUILD_DIR)/test/%.o: $(BUILD_DIR)/test/%.c $(LIB_TARGET)
+# test
+$(BUILD_DIR)/test/%.o: $(BUILD_DIR)/test/%.c
 	$(CC) $(CFLAGS) $(TEST_INCLUDES) -c $< -o $@
+$(BUILD_DIR)/test/%.o: $(BUILD_DIR)/test/%.cc
+	$(CXX) $(CXXFLAGS) $(TEST_INCLUDES) -c $< -o $@
 
 # linking
+# ---------------------------------------------
 ifneq ($(strip $(LIB_TARGET)),)
 $(LIB_TARGET): $(LIB_OBJS)
-	$(CC) $(TARGET_FLAGS) $(LDFLAGS) -o $@ $^ $(LIB_LIBS)
+	$(LINKER) $(TARGET_FLAGS) $(LDFLAGS) -o $@ $^ $(LIB_LIBS)
+	@echo "built lib: $@"
 endif
 
 $(BUILD_DIR)/%: $(BUILD_DIR)/app/%.o $(LIB_TARGET)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIB_TARGET) $(APPS_LIBS)
+	$(LINKER) $(LDFLAGS) -o $@ $^ $(LIB_TARGET) $(APPS_LIBS);
 	@echo "built app: $@"
 
 $(BUILD_DIR)/test/%: $(BUILD_DIR)/test/%.o $(LIB_TARGET)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LIB_TARGET) $(TEST_LIBS)
+	$(LINKER) $(LDFLAGS) -o $@ $^ $(LIB_TARGET) $(TEST_LIBS)
 	@echo "built test: $@"
 
 #ifneq ($(strip $(LIB_TARGET)),)

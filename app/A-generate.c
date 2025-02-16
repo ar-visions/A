@@ -1,6 +1,7 @@
 #include <A>
 #include <import>
 #include <llama.h>
+#include <poll.h>
 
 void llama_logger(enum ggml_log_level level, const char * text, void * user_data) {
     print("llama: %s", text);
@@ -94,14 +95,37 @@ int main(int n_args, cstr v_args) {
     i64    bsize     = llama_n_ctx(ctx);
     vector formatted = vector(alloc, bsize, type, typeid(i8));
     int    prev_len  = 0;
+    file   f_stdin   = file(id, stdin, text_mode, true);
+
+    struct pollfd fds = (struct pollfd) {
+        .fd = STDIN_FILENO,
+        .events = POLLIN
+    };
 
     while (true) {
         // get user input
         put("\033[32m> \033[0m");
-        file    f_stdin = file(id, stdin, text_mode, true);
         symbol  tmpl    = llama_model_chat_template(model, null);
-        string  line    = read(f_stdin, typeid(string));
-        message req     = message(role, "user", content, line->chars);
+        string  query   = null;
+        int     line_count = 1;
+        for (;;) {
+            string  line = read(f_stdin, typeid(string));
+            if (!line)  break;
+            if (!query) query = string("this is my query (with line numbers for reference):\n");
+            line = mid(line, 0, len(line) - 1);
+            string annot = form(string, "%o : line #%i\n", line, line_count);
+            printf("annot = %s", annot->chars);
+            concat(query, annot);
+            /// we need to check and see if there is more available on stdin, and then call read again!
+            /// we will concat(query, line) for each the user pastes in from console
+            if (poll(&fds, 1, 100) != 1)
+                break;
+            line_count++;
+        }
+        if (!query)
+            break;
+        print("now i am going to send to the bot...");
+        message req     = message(role, "user", content, query->chars);
         push(messages, req);
 
         int new_len = llama_chat_apply_template(tmpl, data(messages), len(messages), true, data(formatted), len(formatted));

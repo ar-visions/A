@@ -35,6 +35,8 @@
         esac
     done
 
+    BUILD_DIR=$CALLER_BUILD_DIR
+
     print() {
         if [ "${VERBOSE}" = "1" ]; then
             echo "$@"
@@ -123,6 +125,19 @@
         fi
 
         REPO_URL=$(   echo "$project" | cut -d ' ' -f 2)
+        IS_GCLIENT=
+
+        if [[ "$REPO_URL" == *"googlesource.com/"* ]]; then
+            # checkout depot_tools [todo: only do this if we use a gclient-based project
+            if [ ! -d "depot_tools" ]; then
+                git clone 'https://chromium.googlesource.com/chromium/tools/depot_tools.git'
+            fi
+            if [[ "$PATH" != *"/depot_tools"* ]]; then
+                export PATH="${PWD}/depot_tools:${PATH}"
+            fi
+            IS_GCLIENT=1
+        fi
+
         COMMIT_RAW=$( echo "$project" | cut -d ' ' -f 3)
         COMMIT=$(echo "$COMMIT_RAW" | sed -e 's/^!//')
         IS_RECUR=$(echo "$COMMIT_RAW" | grep -q '^!' && echo true || echo false)
@@ -133,7 +148,7 @@
         echo "Build configuration options: ($project)"
         for item in $BUILD_CONFIG_RAW; do
             # Check if the item contains a $ENV_VAR
-            res=$(eval "echo \"$item\"")
+            res=$(eval 'echo "$item"')
             # if there is a env:var
             if [[ $res =~ ^[[:alnum:]_]+[[:space:]]*[:] ]]; then
                 env_name="${res%%:*}"
@@ -142,15 +157,46 @@
                 echo "set environment: ${env_name} to ${env_value}"
                 continue # this is not added to build config, this is an environment var we set (and stay in for this project iteration)
             fi
-            # Append the resolved item to the processed_config
+
+            # Handle `>` commands
+            if [[ $res == ">"* ]]; then
+                # If we have a stored command, add it to the list
+                if [[ -n "$command_buffer" ]]; then
+                    COMMAND_LIST+=("$command_buffer")
+                fi
+
+                # start new command, strip >
+                command_buffer="${res#>}"
+                command_mode=1
+                continue
+            fi
+
+            # append command if we are inside one
+            if [[ $command_mode -eq 1 ]]; then
+                command_buffer+=" $res"
+                continue
+            fi
+
+            # append the resolved item to the processed_config
             BUILD_CONFIG="$BUILD_CONFIG $res"
         done
+
+        # Add the last command if one was being collected
+        if [[ -n "$command_buffer" ]]; then
+            COMMAND_LIST+=("$command_buffer")
+        fi
 
         # Trim leading whitespace
         BUILD_CONFIG=$(echo "$BUILD_CONFIG" | sed 's/^ *//')
         TARGET_DIR="${PROJECT_NAME}"
         A_MAKE="0" # A-type projects use Make, but with a build-folder and no configuration; DEBUG=1 to enable debugging
         IS_DEBUG=
+        rust=""
+        cmake=""
+        BUILD_TYPE=""
+        silver_build=""
+        IS_RESOURCE=
+        
         # set build folder based on release/debug
         if [[ ",$DEB," == *",$PROJECT_NAME,"* ]]; then
             BUILD_FOLDER="silver-debug"
@@ -185,7 +231,10 @@
                 #echo git clone "$REPO_URL" "$TARGET_DIR"
                 #git clone "$REPO_URL" "$TARGET_DIR"
                 #echo git clone --recursive "$REPO_URL" "$TARGET_DIR"
-                if [ "$IS_RECUR" == "true" ]; then
+                if [ -n "$IS_GCLIENT" ]; then
+                    echo "fetching $TARGET_DIR ... (PWD = $PWD)"
+                    fetch --force $TARGET_DIR
+                elif [ "$IS_RECUR" == "true" ]; then
                     git clone --recursive "$REPO_URL" "$TARGET_DIR"
                 else
                     git clone "$REPO_URL" "$TARGET_DIR"
@@ -194,10 +243,7 @@
                 if [ $? -ne 0 ]; then
                     echo "clone failed for $TARGET_DIR"
                     exit 1
-                fi
-                if [ $? -ne 0 ]; then
-                    echo "fetch failed for $TARGET_DIR"
-                    exit 1
+                    break
                 fi
                 cd "$TARGET_DIR"
             fi
@@ -205,6 +251,7 @@
                 echo 'running silver-init.sh'
                 bash silver-init.sh
             fi
+
             # check out the specific commit, branch, or tag if provided
             if [ -n "$COMMIT" ]; then
                 echo "checking out $COMMIT for $TARGET_DIR"
@@ -213,20 +260,28 @@
                     echo "checkout failed for $TARGET_DIR at $COMMIT"
                     exit 1
                 fi
+                if [ -n "$IS_GCLIENT" ]; then
+                    gclient sync -D
+                fi
             fi
         fi
+
         if [ -n "$IS_DEBUG" ]; then
             build="debug"
         else
             build="release"
         fi
-        rust=""
-        cmake=""
-        BUILD_TYPE=""
-        silver_build=""
+
+        for command in "${COMMAND_LIST[@]}"; do
+            echo "$PROJECT_NAME:command > $command\n"
+            eval "$command"
+        done
+
         # check if this is a cmake project, otherwise use autotools
         # or if there is "-S " in BUILD_CONFIG
-        if [ -f "silver-build.sh" ]; then
+        if [ -n "$IS_GCLIENT" ]; then
+            echo "[$PROJECT_NAME] gclient"
+        elif [ -f "silver-build.sh" ]; then
             silver_build="1"
             echo "[$PROJECT_NAME] silver-build"
         elif [ -f "CMakeLists.txt" ] || [[ "$BUILD_CONFIG" == *-S* ]]; then
@@ -249,9 +304,16 @@
                 A_MAKE="1"
                 BUILD_TYPE="-g"
                 echo "A-Make for $PROJECT_NAME"
-            else
+            elif [ -f "Makefile" ]; then
                 echo "regular Makefile for $PROJECT_NAME"
+            else
+                echo "resource project: $PROJECT_NAME"
+                IS_RESOURCE=1
             fi
+        fi
+        
+        if [ -n "$IS_RESOURCE" ]; then
+            exit 0
         fi
 
         mkdir -p $BUILD_FOLDER
@@ -264,7 +326,9 @@
         else
             if [ "$REBUILD" == "all" ] || [ "$REBUILD" == "$PROJECT_NAME" ]; then
                 echo "rebuilding ${TARGET_DIR}"
-                if [ -n "$cmake" ]; then
+                if [ -n "$IS_GCLIENT" ]; then
+                    ninja -C . -t clean
+                elif [ -n "$cmake" ]; then
                     cmake --build . --target clean
                 elif [ -n "$rust" ]; then
                     cargo clean
@@ -281,8 +345,17 @@
                 # we need more than this: it needs to also check if a dependency registered to this project changes
                 # to do that, we should run the import on the project without the make process
                 BUILD_CONFIG=$(echo "$BUILD_CONFIG" | sed "s|\$SILVER_IMPORT|$SILVER_IMPORT|g")
+                BUILD_CONFIG=$(echo "$BUILD_CONFIG" | sed ':a;N;$!ba;s/\n/ /g' | sed 's/[[:space:]]*$//')
 
-                if [ -n "$cmake" ]; then
+                if [ -n "$IS_GCLIENT" ]; then
+                    cd ..
+                    python3 tools/git-sync-deps # may need to be a command in import if this differs between gclient projects
+                    BUILD_CONFIG="'$BUILD_CONFIG"
+                    BUILD_CONFIG="$BUILD_CONFIG'"
+                    echo "bin/gn gen $BUILD_FOLDER --args=$BUILD_CONFIG"
+                    eval bin/gn gen $BUILD_FOLDER --args=$BUILD_CONFIG
+                    cd $BUILD_FOLDER
+                elif [ -n "$cmake" ]; then
                     if [ ! -f "CMakeCache.txt" ] || [ "$IMPORT" -nt "silver-token" ]; then
                         BUILD_CONFIG="${BUILD_CONFIG% }"
                         if [ -z "$BUILD_CONFIG" ]; then
@@ -344,7 +417,12 @@
                 
                 ts0=$(find . -type f -exec $STAT -c %Y {} + | sort -n | tail -1)
                 
-                if [ -n "$cmake" ]; then
+                if [ -n "$IS_GCLIENT" ]; then
+                    cd ..
+                    ninja -C $BUILD_FOLDER
+                    cd $BUILD_FOLDER
+                    echo "PWD = $PWD"
+                elif [ -n "$cmake" ]; then
                     cmake --build . -- -j$j || { echo "$COMPILE_ERROR"; exit 1; }
                 elif [ -n "$rust" ]; then
                     cargo build --$build --manifest-path ../Cargo.toml --target-dir . || { echo "$COMPILE_ERROR"; exit 1; }
@@ -369,7 +447,19 @@
                     touch $CALLER_BUILD_DIR/.rebuild
                     echo "$PROJECT_NAME modified: (you should see a rebuild!)"
                     print "install ${TARGET_DIR}"
-                    if [ -n "$cmake" ]; then
+                    if [ -n "$IS_GCLIENT" ]; then
+                        echo "installing gclient-based project $TARGET_DIR"
+                        cp *.so *.a *.dll *.dylib $SILVER_IMPORT/lib/ 2>/dev/null
+                        echo "2"
+                        #rm -rf $SILVER_IMPORT/include/$TARGET_DIR
+                        echo "3"
+                        mkdir -p $SILVER_IMPORT/include/$TARGET_DIR
+                        cd ..
+                        echo "4"
+                        rsync -a --include "*/" --include "*.h" --exclude="*" ../ $SILVER_IMPORT/include/$TARGET_DIR/
+                        echo "5"
+                        cd $BUILD_FOLDER
+                    elif [ -n "$cmake" ]; then
                         cmake --install .
                     elif [ -n "$rust" ]; then
                         cp -r ./$build/*.so $SILVER_IMPORT/lib/

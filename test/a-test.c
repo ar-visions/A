@@ -21,8 +21,8 @@ int main(int n_args, char* v_args[]) {
     A_free(pool);
     */
 
-    int sz1 = sizeof(struct string);
-    int sz2 = sizeof(struct vector);
+    int sz1 = sizeof(struct _string);
+    int sz2 = sizeof(struct _vector);
     AType str_type = typeid(string);
     string s1 = new(string, alloc, 64);
     print("a-test");

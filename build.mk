@@ -101,12 +101,12 @@ endif
 comma = ,
 define process_libs
 $(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
-	$(if $(findstring -,$(dep)),, \
+	$(if $(filter -%,$(strip $(dep))),, \
 		$(if $(findstring .so,$(dep)), \
-			$(SILVER_IMPORT)/lib/$(dep), \
-			$(if $(and $(findstring Darwin,$(UNAME)), $(call is_framework,$(dep))), \
-				-framework $(dep), \
-				$(if $(findstring @,$(dep)), \
+			$(SILVER_IMPORT)/lib/$(strip $(dep)), \
+			$(if $(and $(findstring Darwin,$(UNAME)), $(call is_framework,$(strip $(dep)))), \
+				-framework $(strip $(dep)), \
+				$(if $(filter @%,$(strip $(dep))), \
 					-Wl$(comma)-Bstatic -l$(subst @,,$(dep)) -Wl$(comma)-Bdynamic -l$(subst @,,$(dep)), \
 					-l$(dep)\
 				)\
@@ -118,15 +118,15 @@ endef
 
 define process_imports
 $(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
-	$(if $(findstring -,$(dep)),, \
-		$(if $(findstring .so,$(dep)), $(SILVER_IMPORT)/lib/$(dep),$(dep))
+	$(if $(filter -%,$(strip $(dep))),, \
+		$(if $(findstring .so,$(dep)), $(SILVER_IMPORT)/lib/$(strip $(dep)),$(strip $(dep)))
 	)\
 )
 endef
 
 define process_cflags
 $(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
-	$(if $(findstring -,$(dep)),$(dep),)\
+	$(if $(filter -%,$(strip $(dep))),$(strip $(dep)),)\
 )
 endef
 
@@ -171,9 +171,9 @@ PREP_DIRS := $(shell \
 APPS_LIBS          = $(call process_libs,app)
 LIB_LIBS 	       = $(call process_libs,lib)
 TEST_LIBS          = $(call process_libs,test)
-
 LIB_CFLAGS         = $(call process_cflags,lib)
-
+APPS_CFLAGS        = $(call process_cflags,app)
+TEST_CFLAGS        = $(call process_cflags,test)
 APPS_IMPORTS       = $(call process_imports,app)
 LIB_IMPORTS        = $(call process_imports,lib)
 release		      ?= 0
@@ -218,7 +218,7 @@ INTERN_HEADER      = $(BUILD_DIR)/$(PROJECT_HEADER_R)-intern
 upper 		       = $(shell echo $(1) | tr '[:lower:]' '[:upper:]')
 LINKER 			   = $(if $(filter %.cc %.cpp,$(LIB_SRCS)), $(CXX), $(CC))
 UPROJECT 	       = $(call upper,$(PROJECT))
-CXXFLAGS 		   = $(if $(filter 1,$(release)),,-g) -fPIC -DMODULE="\"$(PROJECT)\"" -std=c++17
+CXXFLAGS 		   = $(if $(filter 1,$(release)),,-g) -fPIC -DMODULE="\"$(PROJECT)\"" -std=c++17 -Wno-writable-strings
 CFLAGS 		   	   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS \
 	-Wno-write-strings -Wno-compare-distinct-pointer-types -Wno-deprecated-declarations \
@@ -308,7 +308,7 @@ $(INIT_HEADER): $(PROJECT_HEADER)
 			echo "#define $${class_name}(...) ({ \\" >> $@; \
 			echo "    $${class_name} instance = ($${class_name})A_alloc(typeid($${class_name}), 1, true); \\" >> $@; \
 			echo "    _N_ARGS_$${class_name}($${class_name}, ## __VA_ARGS__); \\" >> $@; \
-			echo "    A_initialize(instance); \\" >> $@; \
+			echo "    A_initialize((object)instance); \\" >> $@; \
 			echo "    instance; \\" >> $@; \
 			echo "})" >> $@; \
 		done; \

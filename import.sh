@@ -449,16 +449,12 @@
                     print "install ${TARGET_DIR}"
                     if [ -n "$IS_GCLIENT" ]; then
                         echo "installing gclient-based project $TARGET_DIR"
-                        cp *.so *.a *.dll *.dylib $SILVER_IMPORT/lib/ 2>/dev/null
-                        echo "2"
+                        cp *.so *.dll *.dylib $SILVER_IMPORT/lib/ 2>/dev/null
+                        # better to use manual -I includes because this indeed varies per GN project
+                        # this effectively was ok for skia but not others
                         #rm -rf $SILVER_IMPORT/include/$TARGET_DIR
-                        echo "3"
-                        mkdir -p $SILVER_IMPORT/include/$TARGET_DIR
-                        cd ..
-                        echo "4"
-                        rsync -a --include "*/" --include "*.h" --exclude="*" ../ $SILVER_IMPORT/include/$TARGET_DIR/
-                        echo "5"
-                        cd $BUILD_FOLDER
+                        #mkdir -p $SILVER_IMPORT/include/$TARGET_DIR
+                        #rsync -a --include "*/" --include "*.h" --exclude="*" ../ $SILVER_IMPORT/include/$TARGET_DIR/
                     elif [ -n "$cmake" ]; then
                         cmake --install .
                     elif [ -n "$rust" ]; then

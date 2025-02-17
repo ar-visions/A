@@ -26,7 +26,9 @@ typedef unsigned int        u32;
 typedef unsigned long long  u64;
 typedef long long           num;
 typedef long long           sz;      /// a signed 64 bit size lets us act like python, so this is a type for the purpose of indexing and all valid sizes
-typedef unsigned int        bool;
+#ifndef __cplusplus
+typedef u8                  bool;
+#endif
 typedef float               f32;
 typedef double              f64;
 typedef long double         f128;
@@ -36,11 +38,16 @@ typedef char*               cstr;
 typedef const char*         symbol;
 typedef const char*         cereal;
 //typedef struct A_f*       AType;
-typedef struct object*      object;
-typedef struct A**          ARef;
+typedef struct _object*     object;
+typedef struct _A**         ARef;
 typedef float*              floats;
-typedef struct A*           A;
+typedef struct _A*          A;
 typedef struct type_member_t* Member;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
 void*   calloc(size_t num, size_t size);
 void    free();
@@ -58,11 +65,11 @@ i32       rand();
 void     srand(u32 seed);
 */
 
-typedef struct A_f* AType;
+typedef struct _A_f* AType;
 
 struct type_member_t;
-struct array;
-struct A_f;
+struct _array;
+struct _A_f;
 
 
 /// our A-type classes have many types of methods
@@ -107,7 +114,7 @@ typedef struct meta_t {
                     meta_4, meta_5, meta_6, meta_7, meta_8, meta_9;
 } meta_t;
 
-typedef struct veci64* veci64;
+typedef struct _veci64* veci64;
 typedef veci64 shape;
 
 typedef struct ftable_t {
@@ -217,14 +224,14 @@ typedef bool(*global_init_fn)();
     ({ \
         TYPE instance = (TYPE)A_alloc(typeid(TYPE), 1, true); \
         _N_ARGS(TYPE, ## __VA_ARGS__); \
-        A_initialize((A)instance); \
+        A_initialize((object)instance); \
         instance; \
     })
 #define new2(TYPE, ...) \
     ({ \
         TYPE instance = (TYPE)A_alloc(typeid(TYPE), 1, true); \
         TYPE##_N_ARGS(TYPE, ## __VA_ARGS__); \
-        A_initialize((A)instance); \
+        A_initialize((object)instance); \
         instance; \
     })
 
@@ -270,7 +277,7 @@ typedef bool(*global_init_fn)();
 
 #define valloc(T, N)                ((A)A_alloc(typeid(T), N, false))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
-#define isa(INSTANCE)               (INSTANCE ? (struct A_f*)((struct A*)INSTANCE - 1)->type : (struct A_f*)0)
+#define isa(INSTANCE)               (INSTANCE ? (struct _A_f*)((struct _A*)INSTANCE - 1)->type : (struct _A_f*)0)
 // see: javascript; returns null if its not an instance-of; faults if you give it a null
 #define instanceof(left, type)      A_instanceof(left, typeid(type))
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
@@ -360,7 +367,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_public_GENERICS(X, R, N)
 #define   i_prop_public_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].name     = #N; \
-    X##_type.members[X##_type.member_count].offset   = offsetof(struct X, N); \
+    X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
     X##_type.members[X##_type.member_count].type     = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_PROP; \
     X##_type.member_count++;
@@ -397,7 +404,7 @@ typedef bool(*global_init_fn)();
 #define   i_vprop_public_GENERICS(X, R, N)
 #define   i_vprop_public_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].name     = #N; \
-    X##_type.members[X##_type.member_count].offset   = offsetof(struct X, N); \
+    X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
     X##_type.members[X##_type.member_count].type     = (AType)&ARef_type; \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_VPROP; \
     X##_type.member_count++;
@@ -435,7 +442,7 @@ typedef bool(*global_init_fn)();
 #define   i_array_public_GENERICS(X, R, S, N)
 #define   i_array_public_INIT(X, R, S, N) \
     X##_type.members[X##_type.member_count].name     = #N; \
-    X##_type.members[X##_type.member_count].offset   = offsetof(struct X, N); \
+    X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
     X##_type.members[X##_type.member_count].type     = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].count    = S; \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_PROP; \
@@ -461,14 +468,14 @@ typedef bool(*global_init_fn)();
 
 
 
-#define   i_inlay_public_INST(X, R, N)         struct R N;  
+#define   i_inlay_public_INST(X, R, N)         struct _##R N;  
 #define   i_inlay_public_INTERN(X, R, N) 
 #define   i_inlay_public_ISIZE(X, R, N)        
 #define   i_inlay_public_DECL(X, R, N)
 #define   i_inlay_public_GENERICS(X, R, N)
 #define   i_inlay_public_INIT(X, R, N) \
     X##_type.members[X##_type.member_count].name     = #N; \
-    X##_type.members[X##_type.member_count].offset   = offsetof(struct X, N); \
+    X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
     X##_type.members[X##_type.member_count].type     = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].member_type = A_TYPE_INLAY; \
     X##_type.member_count++;
@@ -487,7 +494,7 @@ typedef bool(*global_init_fn)();
 #define   i_inlay_required_METHOD(X, R, N)
 
 #define   i_inlay_intern_INST(X, R, N)          
-#define   i_inlay_intern_INTERN(X, R, N)         struct R N;
+#define   i_inlay_intern_INTERN(X, R, N)         struct _##R N;
 #define   i_inlay_intern_ISIZE(X, R, N)          +sizeof(R)
 #define   i_inlay_intern_DECL(X, R, N)
 #define   i_inlay_intern_GENERICS(X, R, N)
@@ -817,8 +824,8 @@ CPU_Caps detect_cpu_caps();
 #define META1(...) SECOND_HELPER(__VA_ARGS__, object, object)
 
 typedef struct method_t {
-    struct array*   atypes;
-    struct A_f*     rtype;
+    struct _array*  atypes;
+    struct _A_f*    rtype;
     void*           address;
     void*           ffi_cif;  /// ffi-calling info
     void*           ffi_args; /// ffi-data types for args
@@ -828,7 +835,7 @@ typedef struct method_t {
 // the complexity arises when we may want to perform shape on this high level class
 // at the moment, a simple rule is sufficient for our use-cases, when scalar is set, it takes the shape
 #define A_f_members(B) \
-    struct B ## _f* parent_type; \
+    struct _ ## B ## _f* parent_type; \
     char*           name; \
     char*           module; \
     int             size; \
@@ -848,16 +855,31 @@ typedef struct method_t {
 /// however we would need to emit it in both cases
 #define  isize(X) u8 __##X##_intern[0 X##_schema(X, ISIZE, object)];
 
+#ifdef __cplusplus
+#define declare_typedef(X) \
+    typedef struct _ ## X* X;
+#else
+#define declare_typedef(X) \
+    typedef struct _ ## X* X;
+#endif
+
+#ifdef __cplusplus
+#define declare_typedef_e(X)
+#else
+#define declare_typedef_e(X) \
+    typedef enum X X;
+#endif
+
 #define declare_base( X ) \
-    typedef struct X* X; \
+    declare_typedef(X) \
     _Pragma("pack(push, 1)") \
-    typedef struct X { \
+    typedef struct _ ## X { \
         X##_schema (X, INST) \
         X##_intern \
-        struct X##_f* f; \
+        struct _##X##_f* f; \
     } *X; \
     X##_schema (X, DECL) \
-    typedef struct X##_f { \
+    typedef struct _##X##_f { \
         A_f_members(A) \
         X##_schema (X, METHOD) \
     } X##_f; \
@@ -866,9 +888,9 @@ typedef struct method_t {
 
 
 #define declare_abstract( X, ... ) \
-    typedef struct X *X; \
+    declare_typedef(X) \
     _Pragma("pack(push, 1)") \
-    typedef struct X##_f { \
+    typedef struct _##X##_f { \
         A_f_members(A) \
         A_schema(A, METHOD) \
         X##_schema(X, METHOD, __VA_ARGS__) \
@@ -879,7 +901,7 @@ typedef struct method_t {
 
 #define declare_primitive( X, Y, ... ) \
     _Pragma("pack(push, 1)") \
-    typedef struct X##_f { \
+    typedef struct _##X##_f { \
         A_f_members(A) \
         A_schema(A, METHOD, __VA_ARGS__) \
         X##_schema(X, METHOD, __VA_ARGS__) \
@@ -891,11 +913,12 @@ typedef struct method_t {
 #define ENUM_COUNT(...)  (sizeof((int[]){__VA_ARGS__}) / sizeof(int))
 
 #define declare_enum( E ) \
-    typedef enum E { \
+    enum E { \
         E##_schema(E, DECL) \
-    } E; \
+    }; \
+    declare_typedef_e(E) \
     _Pragma("pack(push, 1)") \
-    typedef struct E##_f { \
+    typedef struct _##E##_f { \
         A_f_members(A) \
         A_schema (A, METHOD) \
     } E##_f, *E##_ft; \
@@ -909,7 +932,7 @@ void        A_lazy_init(global_init_fn fn);
 
 #define define_enum( E ) \
     _Pragma("pack(push, 1)") \
-    struct A  E ## _redirect; \
+    struct _A E ## _redirect; \
     E ## _f   E ## _type; \
     _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##E() { \
@@ -939,14 +962,14 @@ void        A_lazy_init(global_init_fn fn);
     }
 
 #define declare_vector_base(AA, T, t) \
-    typedef struct AA##t* AA##t; \
+    typedef struct _##AA##t* AA##t; \
     _Pragma("pack(push, 1)") \
-    typedef struct AA##t { \
+    typedef struct _##AA##t { \
         AA##_schema (AA##t, INST, T, t) \
-        struct AA##t##_f* f; \
+        struct _##AA##t##_f* f; \
     } *AA##t; \
     AA##_schema (AA##t, DECL, T, t) \
-    typedef struct AA##t##_f { \
+    typedef struct _##AA##t##_f { \
         A_f_members(A) \
         A_schema(A, METHOD) \
         AA##_schema(AA##t, METHOD, T, t) \
@@ -956,14 +979,14 @@ void        A_lazy_init(global_init_fn fn);
 
 #define declare_vector\
 (AA,Shape,T,t) \
-    typedef struct AA##Shape##t* AA##Shape##t; \
+    typedef struct _##AA##Shape##t* AA##Shape##t; \
     _Pragma("pack(push, 1)") \
-    typedef struct AA##Shape##t { \
+    typedef struct _##AA##Shape##t { \
         AA##Shape##_schema (AA##Shape##t, INST, T, t) \
-        struct AA##Shape##t##_f* f; \
+        struct _##AA##Shape##t##_f* f; \
     } *AA##Shape##t; \
     AA##Shape##_schema (AA, DECL, T, t) \
-    typedef struct AA##Shape##t##_f { \
+    typedef struct _##AA##Shape##t##_f { \
         A_f_members(A) \
         A_schema(A, METHOD) \
         AA##_schema(AA##Shape##t, METHOD, T, t) \
@@ -974,14 +997,14 @@ void        A_lazy_init(global_init_fn fn);
 
 #define declare_class\
 (AA, ...) \
-    typedef struct AA* AA; \
+    typedef struct _##AA* AA; \
     _Pragma("pack(push, 1)") \
-    typedef struct AA { \
+    typedef struct _##AA { \
         AA##_schema (AA, INST, __VA_ARGS__) AA##_intern \
-        struct AA##_f* f; \
+        struct _##AA##_f* f; \
     } *AA; \
     AA##_schema (AA, DECL, __VA_ARGS__) \
-    typedef struct AA##_f { \
+    typedef struct _##AA##_f { \
         A_f_members(AA) \
         A_schema(AA, METHOD, __VA_ARGS__) \
         AA##_schema (AA, METHOD, __VA_ARGS__) \
@@ -991,13 +1014,13 @@ void        A_lazy_init(global_init_fn fn);
 
 #define declare_meta\
 (AA, BASE, ...) \
-    typedef struct AA* AA; \
+    typedef struct _##AA* AA; \
     _Pragma("pack(push, 1)") \
-    typedef struct AA { \
+    typedef struct _##AA { \
         BASE##_schema (AA, INST, __VA_ARGS__) \
-        struct AA##_f* f; \
+        struct _##AA##_f* f; \
     } *AA; \
-    typedef struct AA##_f { \
+    typedef struct _##AA##_f { \
         A_f_members(BASE) \
         A_schema(AA, METHOD, __VA_ARGS__) \
         BASE##_schema (AA, METHOD, __VA_ARGS__) \
@@ -1007,13 +1030,13 @@ void        A_lazy_init(global_init_fn fn);
 
 #define declare_base_meta\
 (AA, BASE, ...) \
-    typedef struct AA* AA; \
+    typedef struct _##AA* AA; \
     _Pragma("pack(push, 1)") \
-    typedef struct AA { \
+    typedef struct _##AA { \
         BASE##_schema (AA, INST, __VA_ARGS__) \
-        struct AA##_f* f; \
+        struct _##AA##_f* f; \
     } *AA; \
-    typedef struct AA##_f { \
+    typedef struct _##AA##_f { \
         A_f_members(BASE) \
         BASE##_schema (AA, METHOD, __VA_ARGS__) \
     } AA##_f, *AA##_ft; \
@@ -1022,13 +1045,13 @@ void        A_lazy_init(global_init_fn fn);
 
 #define declare_struct\
 (AA,...) \
-    typedef struct AA* AA; \
+    typedef struct _##AA* AA; \
     _Pragma("pack(push, 1)") \
-    typedef struct AA { \
+    typedef struct _##AA { \
         AA##_schema (AA, INST, __VA_ARGS__) AA##_intern \
     } *AA; \
     AA##_schema (AA, DECL, __VA_ARGS__) \
-    typedef struct AA##_f { \
+    typedef struct _##AA##_f { \
         A_f_members(BB) \
         A_schema(AA, METHOD, __VA_ARGS__) \
         AA##_schema (AA, METHOD, __VA_ARGS__) \
@@ -1044,14 +1067,14 @@ void        A_lazy_init(global_init_fn fn);
     declare_subclass_ex(AA, BB, arg_count(AA, BB, ## __VA_ARGS__), AA, BB, ## __VA_ARGS__)
 
 #define declare_subclass_ex(AA, BB, N, ...) \
-    typedef struct AA* AA; \
+    typedef struct _##AA* AA; \
     _Pragma("pack(push, 1)") \
-    typedef struct AA { \
+    typedef struct _##AA { \
         _COMBINE(dm_f_, N)(__VA_ARGS__) \
-        struct AA##_f* f; \
+        struct _##AA##_f* f; \
     } *AA; \
     AA##_schema (AA, DECL) \
-    typedef struct AA##_f { \
+    typedef struct _##AA##_f { \
         A_f_members(BB) \
         A_schema(object, METHOD) \
         _COMBINE(dm_i_, N)(__VA_ARGS__) \
@@ -1175,7 +1198,7 @@ void* primitive_ffi_arb(AType);
     }
 
 #define define_mod(A0, A1, ...) \
-    define_arb(A0, A1, sizeof(struct A0), 0, 0, null, __VA_ARGS__)
+    define_arb(A0, A1, sizeof(struct _##A0), 0, 0, null, __VA_ARGS__)
 
 #define define_class(A0, ...) \
     define_mod(A0, A, __VA_ARGS__)
@@ -1207,7 +1230,7 @@ void* primitive_ffi_arb(AType);
             VT##Shape##t## _type.module   = MODULE;    \
             VT##Shape##t## _type.members  = members;   \
             VT##Shape##t## _type.member_count = 0; \
-            VT##Shape##t## _type.size     = sizeof(struct VT##Shape##t); \
+            VT##Shape##t## _type.size     = sizeof(struct _##VT##Shape##t); \
             VT##Shape##t## _type.src      = typeid(VT##t); \
             VT##Shape##t## _type.vmember_shape = veci64_of(__VA_ARGS__, 0); \
             VT##Shape##t## _type.vmember_count = veci64_product(VT##Shape##t## _type.vmember_shape); \
@@ -1251,12 +1274,11 @@ void* primitive_ffi_arb(AType);
         }                                    \
     }
 
-typedef struct string* string;
-typedef struct veci64* veci64;
+typedef struct _string* string;
+typedef struct _veci64* veci64;
 
-struct sz { i64 value; };
+struct _sz { i64 value; };
 
-/// constructors get a type forwarded from the construct macro
 #define A_schema(X,Y,...) \
     i_prop  (X,Y, public, AType,     type) \
     i_prop  (X,Y, public, AType,     scalar) \
@@ -1414,7 +1436,7 @@ declare_class(list)
 // ":", "+=", "-=", "*=", "/=", "|=",
 // "&=", "^=", ">>=", "<<=", "%=", null);
 
-typedef struct string* string;
+typedef struct _string* string;
 
 #define OPType_schema(X,Y,...) \
     enum_value(X,Y, _undefined) \
@@ -1448,7 +1470,7 @@ typedef struct string* string;
     enum_value(X,Y, _assign_left)
 declare_enum(OPType)
 
-typedef struct path* path;
+typedef struct _path* path;
 /*
 #define buffer_schema(X,Y,...) \
     i_ctr (X,Y, public,   path) \
@@ -1483,7 +1505,7 @@ declare_class(buffer)
 #endif
 declare_class(file)
 
-typedef struct array* array;
+typedef struct _array* array;
 #define path_schema(X,Y,...) \
     i_prop      (X,Y, public, cstr,   chars) \
     i_method    (X,Y, public, bool,   exists) \
@@ -1704,7 +1726,7 @@ declare_class(fn)
 declare_class(string)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
-object A_formatter(AType rtype, FILE* f, object opt, cstr template, ...);
+object A_formatter(AType rtype, FILE* f, object opt, cstr templ, ...);
 
 i64 vlength(object a);
 i64 veci64_product(veci64);
@@ -1718,26 +1740,26 @@ declare_enum(Exists)
 extern FILE* logger;
 
 #define         form(T, t, ...)   (T)A_formatter(typeid(T), null,   (object)false, t, ## __VA_ARGS__)
-#define    formatter(t, ...)      ((string)A_formatter(null,      null,   (object)false, t, ## __VA_ARGS__))
-#define         exec(t, ...)      system(((string)A_formatter(null, null, (object)false, t, ## __VA_ARGS__))->chars)
+#define    formatter(t, ...)      ((string)A_formatter((AType)null,      null,   (object)false, t, ## __VA_ARGS__))
+#define         exec(t, ...)      system(((string)A_formatter((AType)null, null, (object)false, t, ## __VA_ARGS__))->chars)
 #define          tap(L)           (A_tap(L))
 #define        untap(L)           (A_untap(L))
-#define        A_log(L, t, ...)   A_formatter(null,      stdout, str(L),  t, ## __VA_ARGS__)
-#define          put(t,    ...)   A_formatter(null,      stdout, (object)false, t, ## __VA_ARGS__)
-#define        print(t,    ...)   A_formatter(null,      stdout, (object)true,  t, ## __VA_ARGS__)
-#define        error(t, ...)      A_formatter(null,      stderr, (object)true,  t, ## __VA_ARGS__)
-#define        fault(t, ...) do { A_formatter(null,      stderr, (object)true,  t, ## __VA_ARGS__); exit(1); } while(0)
-#define  file_exists(t, ...)     (A_exists(A_formatter(null, null, (object)false, t, ## __VA_ARGS__)) == Exists_file)
-#define   dir_exists(t, ...)     (A_exists(A_formatter(null, null, (object)false, t, ## __VA_ARGS__)) == Exists_dir)
+#define        A_log(L, t, ...)   A_formatter((AType)null,      stdout, str(L),  t, ## __VA_ARGS__)
+#define          put(t,    ...)   A_formatter((AType)null,      stdout, (object)false, t, ## __VA_ARGS__)
+#define        print(t,    ...)   A_formatter((AType)null,      stdout, (object)true,  t, ## __VA_ARGS__)
+#define        error(t, ...)      A_formatter((AType)null,      stderr, (object)true,  t, ## __VA_ARGS__)
+#define        fault(t, ...) do { A_formatter((AType)null,      stderr, (object)true,  t, ## __VA_ARGS__); exit(1); } while(0)
+#define  file_exists(t, ...)     (A_exists(A_formatter((AType)null, null, (object)false, t, ## __VA_ARGS__)) == Exists_file)
+#define   dir_exists(t, ...)     (A_exists(A_formatter((AType)null, null, (object)false, t, ## __VA_ARGS__)) == Exists_dir)
 #ifndef NDEBUG
-#define       assert(a, t, ...) do { if (!(a)) { A_formatter(null, stderr, (object)true,  t, ## __VA_ARGS__); exit(1); } } while(0)
+#define       assert(a, t, ...) do { if (!(a)) { A_formatter((AType)null, stderr, (object)true,  t, ## __VA_ARGS__); exit(1); } } while(0)
 #else
 #define       assert(a, t, ...) do { } while(0)
 #endif
 #define       verify(a, t, ...) \
     do { \
         if (!(a)) { \
-            A_formatter(null, stderr, (object)true,  t, ## __VA_ARGS__); \
+            A_formatter((AType)null, stderr, (object)true,  t, ## __VA_ARGS__); \
             if (level_err >= fault_level) { \
                 raise(SIGSTOP); \
                 exit(1); \
@@ -1805,7 +1827,7 @@ object     A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool
 
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size
-#define A_struct(T) A_alloc(typeid(u8), sizeof(struct T), true)
+#define A_struct(T) A_alloc(typeid(u8), sizeof(struct _##T), true)
 
 string      A_enum_string(AType type, i32 value);
 i32         A_enum_value(AType type, cstr cs);
@@ -1904,7 +1926,7 @@ void  array_weak_push(array, object);
 // we still define type + shape together, so vec + 3 is vec3, if its mat, 4x4 then mat4x4f.. its simple shape in type
 // it has its own unique type identity.
 
-typedef struct vec4f* vec4f;
+typedef struct _vec4f* vec4f;
 
 #define quatf_schema(O, Y, ...) \
     i_ctr(O,Y, public, vec4f) \
@@ -2049,5 +2071,9 @@ quatf   new_quatf  (f32 x, f32 y, f32 z, f32 w);
 #define mat4f(x)      new_mat4f(x)
 
 //#define quatf(x,y,z,w)   new_quatf  (x, y, z, w)
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

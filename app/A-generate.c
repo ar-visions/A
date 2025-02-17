@@ -56,7 +56,7 @@ static string generate(string prompt) {
     return response;
 };
 
-int main(int n_args, cstr v_args) {
+int main(int n_args, cstr* v_args) {
     A_start();
   //string a          = string("Audrey");
     symbol model_file = "bartowski_Meta-Llama-3-8B-Instruct-GGUF_Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"; /// form this from two parts
@@ -135,7 +135,7 @@ int main(int n_args, cstr v_args) {
         }
         verify (new_len >= 0, "failed to apply the chat template");
         i8*    f_data = data(formatted);
-        string prompt = string(chars, &f_data[prev_len], ref_length, new_len - prev_len);
+        string prompt = string(chars, (cstr)&f_data[prev_len], ref_length, new_len - prev_len);
 
         // generate a response
         printf("\033[33m");

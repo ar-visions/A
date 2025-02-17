@@ -116,7 +116,7 @@ cstr copy_cstr(cstr input) {
 }
 
 A A_header(object instance) {
-    return (((struct A*)instance) - 1);
+    return (((struct _A*)instance) - 1);
 }
 
 void A_module_init(bool(*fn)()) {
@@ -253,7 +253,7 @@ object A_initialize(object a) {
 
 object A_alloc(AType type, num count, bool af_pool) {
     sz map_sz = sizeof(map);
-    sz A_sz = sizeof(struct A);
+    sz A_sz = sizeof(struct _A);
     object a      = calloc(1, A_sz + type->size * count);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
@@ -271,7 +271,7 @@ object A_alloc(AType type, num count, bool af_pool) {
 
 object A_alloc_extra(AType type, num extra, bool af_pool) {
     sz map_sz = sizeof(map);
-    sz A_sz = sizeof(struct A);
+    sz A_sz = sizeof(struct _A);
     object a      = calloc(1, A_sz + type->size + extra);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
@@ -290,7 +290,7 @@ object A_alloc_extra(AType type, num extra, bool af_pool) {
 object A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool) {
     verify(type,   "type not set");
     verify(scalar, "scalar not set");
-    i64 A_sz      = sizeof(struct A);
+    i64 A_sz      = sizeof(struct _A);
     object a      = calloc(1, A_sz + type->size);
     a->refs       = af_pool ? 0 : 1;
     a->scalar     = scalar;
@@ -309,7 +309,7 @@ object A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool) {
 }
 
 object A_alloc2(AType type, AType scalar, veci64 shape, bool af_pool) {
-    i64 A_sz      = sizeof(struct A);
+    i64 A_sz      = sizeof(struct _A);
     i64 count     = veci64_product(shape);
     object a      = calloc(1, A_sz + (scalar ? scalar->size : type->size) * count);
     a->refs       = af_pool ? 0 : 1;
@@ -333,8 +333,8 @@ object A_alloc2(AType type, AType scalar, veci64 shape, bool af_pool) {
 
 /// array -------------------------
 void array_alloc_sz(array a, sz alloc) {
-    object* elements = (object*)calloc(alloc, sizeof(struct A*));
-    memcpy(elements, a->elements, sizeof(struct A*) * a->len);
+    object* elements = (object*)calloc(alloc, sizeof(struct _A*));
+    memcpy(elements, a->elements, sizeof(struct _A*) * a->len);
     
     free(a->elements);
     a->elements = elements;
@@ -1900,7 +1900,7 @@ object hashmap_index_object(hashmap a, object key) {
 hashmap hashmap_init(hashmap a) {
     if (!a->alloc)
          a->alloc = 16;
-    a->data  = (list)calloc(a->alloc, sizeof(struct list)); /// we can zero-init a vectorized set of objects with A-type
+    a->data  = (list)calloc(a->alloc, sizeof(struct _list)); /// we can zero-init a vectorized set of objects with A-type
     return a;
 }
 

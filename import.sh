@@ -272,11 +272,6 @@
             build="release"
         fi
 
-        for command in "${COMMAND_LIST[@]}"; do
-            echo "$PROJECT_NAME:command > $command\n"
-            eval "$command"
-        done
-
         # check if this is a cmake project, otherwise use autotools
         # or if there is "-S " in BUILD_CONFIG
         if [ -n "$IS_GCLIENT" ]; then
@@ -340,6 +335,12 @@
                 rm -rf silver-token
             fi
 
+            # we must do this every time for A-type projects
+            if [ -d "../res" ] && [ -f "../import" ]; then
+                echo "$PROJECT_NAME: copying resource files $BUILD_DIR"
+                rsync -av --checksum --update ../res/* "$BUILD_DIR"
+            fi
+            
             # proceed if there is a newer file than silver-token, or no silver-token
             if [ ! -f "silver-token" ] || find .. -type f -newer "silver-token" | grep -q . ; then
                 # we need more than this: it needs to also check if a dependency registered to this project changes
@@ -470,6 +471,7 @@
                         echo "install failure for $TARGET_DIR"
                         exit 1
                     fi
+
                     if [ -f ../silver-post.sh ]; then
                         echo "running silver-post.sh $BUILD_FOLDER"
                         (cd .. && bash silver-post.sh $BUILD_FOLDER)
@@ -479,12 +481,15 @@
             echo "im-a-token" >> silver-token  # only create this if all steps succeed
         fi
 
+        for command in "${COMMAND_LIST[@]}"; do
+            echo "$PROJECT_NAME:command > $command\n"
+            eval "$command"
+        done
+
         BUILT_PROJECTS+=",${PROJECT_NAME}"
         echo "project-built: $PROJECT_NAME"
         export BUILT_PROJECTS
-
-        cd ../../
-        )
+        ) || exit 1
 
     done
-)
+) || exit 1

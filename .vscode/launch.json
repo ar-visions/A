@@ -76,7 +76,7 @@
             "name": "orbiter",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../orbiter/silver-debug/orbiter-agent",
+            "program": "${workspaceFolder}/../orbiter/silver-debug/orbiter",
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../orbiter/silver-debug",
             "environment": [

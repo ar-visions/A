@@ -365,13 +365,19 @@ build_translation:
 
 endif
 
+# this code is less ugly than maintaining headers.
+# here is where we may include generated headers, too.
+# A-type projects provide extra defs in -methods and -init
+# Collect all .c and .cc files
+# Get only files with NO extension (user modules)
+LIB_MODULES := $(foreach f,$(wildcard $(SRC_ROOT)/lib/*),$(if $(suffix $f),,$(notdir $f)))
+
 define generate_import_header
 	@if [ ! -f $(1) ] || [ "$(SRC_ROOT)/import" -nt $(1) ]; then \
 		rm -f $(1); \
 		echo "/* generated import interface */" > $(1); \
 		echo "#ifndef _$(UPROJECT)_IMPORT_$(2)_H_" >> $(1); \
 		echo "#define _$(UPROJECT)_IMPORT_$(2)_H_" >> $(1); \
-		echo >> $(1); \
 		$(foreach import, $(3), \
 			if [ "$(PROJECT)" != "$(import)" ]; then \
 				if [ -f "$(SILVER_IMPORT)/include/$(import)-methods" ]; then \
@@ -379,10 +385,11 @@ define generate_import_header
 				echo "#include <$(import)-methods>" >> $(1) ; \
 				fi; \
 			fi;) \
-		if [ -f "$(SRC_ROOT)/$(4)/$(PROJECT).c" ]; then \
-			echo "#include <$(PROJECT)-intern>" >> $(1) ; \
-		fi; \
+		echo "#include <$(PROJECT)-intern>" >> $(1) ; \
 		echo "#include <$(PROJECT)>" >> $(1); \
+		$(foreach name, $(LIB_MODULES), \
+			echo "#include <$(basename $(notdir $(name)))>" >> $(1) ; \
+		) \
 		echo "#include <$(PROJECT)-methods>" >> $(1); \
 		echo "#include <A-reserve>" >> $(1); \
 		$(foreach import, $(3), \
@@ -550,7 +557,7 @@ install: all
 	fi
 
 	@if [ -n "$(APP_TARGETS)" ]; then \
-		install -m 644 $(APP_TARGETS) $(SILVER_IMPORT)/bin/; \
+		install -m 755 $(APP_TARGETS) $(SILVER_IMPORT)/bin/; \
 	fi
 
 	@if [ -f "$(SRCLIB_DIR)/$(PROJECT)" ]; then \

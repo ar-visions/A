@@ -260,7 +260,12 @@
 			"quanta-init": "c",
 			"netfwd": "cpp",
 			"timer": "cpp",
-			"media": "cpp"
+			"media": "cpp",
+			"quanta-methods": "cpp",
+			"exr": "cpp",
+			"png.h": "c",
+			"canvas": "cpp",
+			"a-reserve": "c"
 		}
 	}
 }

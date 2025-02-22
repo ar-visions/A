@@ -1,4 +1,5 @@
 #include <import>
+#include <A-reserve>
 #include <ffi.h>
 #include <str.h>
 #undef bool
@@ -202,7 +203,7 @@ i32 A_enum_value(AType type, cstr cs) {
     int default_val = INT_MIN;
     for (num m = 0; m < type->member_count; m++) {
         type_member_t* mem = &type->members[m];
-        if (mem->member_type & A_TYPE_ENUMV) {
+        if (mem->member_type & A_MEMBER_ENUMV) {
             if (!cs || strcmp(cs, mem->name) == 0)
                 return cur;
             if (default_val == INT_MIN) default_val = cur;
@@ -219,7 +220,7 @@ string A_enum_string(AType type, i32 value) {
     int cur = 0;
     for (num m = 0; m < type->member_count; m++) {
         type_member_t* mem = &type->members[m];
-        if (mem->member_type & A_TYPE_ENUMV) {
+        if (mem->member_type & A_MEMBER_ENUMV) {
             if (cur == value)
                 return string(mem->name); 
             cur++;
@@ -476,16 +477,18 @@ void array_push_objects(array a, A f, ...) {
     va_end(args);
 }
 
-array array_of(AType validate, ...) {
+array array_of(object first, ...) {
     array a = new(array);
     va_list args;
-    va_start(args, validate);
-    for (;;) {
-        A arg = va_arg(args, A);
-        if (!arg)
-            break;
-        assert(!validate || validate == isa(arg), "validation failure");
-        push(a, arg);
+    va_start(args, first);
+    if (first) {
+        push(a, first);
+        for (;;) {
+            A arg = va_arg(args, object);
+            if (!arg)
+                break;
+            push(a, arg);
+        }
     }
     return a;
 }
@@ -674,7 +677,9 @@ num array_compare(array a, array b) {
 }
 
 object array_get(array a, num i) {
-    return (i >= 0 && i < a->len) ? a->elements[i] : null;
+    if (i < 0 || i > a->len)
+        fault("out of bounds: %i, len = %i", i, a->len);
+    return a->elements[i];
 }
 
 num array_count(array a) {
@@ -763,7 +768,7 @@ object A_method_call(method_t* a, array args) {
 
 /// this calls type methods
 object A_method(AType type, cstr method_name, array args) {
-    type_member_t* mem = A_member(type, A_TYPE_IMETHOD | A_TYPE_SMETHOD, method_name);
+    type_member_t* mem = A_member(type, A_MEMBER_IMETHOD | A_MEMBER_SMETHOD, method_name);
     assert(mem->method, "method not set");
     method_t* m = mem->method;
     object res = A_method_call(m, args);
@@ -778,7 +783,7 @@ object A_convert(AType type, object input) {
 
 object A_method_vargs(object instance, cstr method_name, int n_args, ...) {
     AType type = isa(instance);
-    type_member_t* mem = A_member(type, A_TYPE_IMETHOD | A_TYPE_SMETHOD, method_name);
+    type_member_t* mem = A_member(type, A_MEMBER_IMETHOD | A_MEMBER_SMETHOD, method_name);
     assert(mem->method, "method not set");
     method_t* m = mem->method;
     va_list  vargs;
@@ -835,7 +840,7 @@ void A_start() {
         /// for each member of type
         for (num m = 0; m < type->member_count; m++) {
             type_member_t* mem = &type->members[m];
-            if (mem->member_type & (A_TYPE_IMETHOD | A_TYPE_SMETHOD)) {
+            if (mem->member_type & (A_MEMBER_IMETHOD | A_MEMBER_SMETHOD)) {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
                 assert(address, "no address");
@@ -874,7 +879,7 @@ none A_untap(symbol f) {
     set(log_fields, fname, A_bool(false));
 }
 
-type_member_t* A_member(AType type, enum A_TYPE member_type, char* name) {
+type_member_t* A_member(AType type, enum A_MEMBER member_type, char* name) {
     for (num i = 0; i < type->member_count; i++) {
         type_member_t* mem = &type->members[i];
         if (mem->member_type & member_type && strcmp(mem->name, name) == 0)
@@ -888,7 +893,7 @@ type_member_t* A_hold_members(object instance) {
     for (num i = 0; i < type->member_count; i++) {
         type_member_t* mem = &type->members[i];
         object   *mdata = (object*)((cstr)instance + mem->offset);
-        if (mem->member_type & (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN))
+        if (mem->member_type & (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN))
             if (!(mem->type->traits & A_TRAIT_PRIMITIVE))
                 A_hold(*mdata);
     }
@@ -897,12 +902,12 @@ type_member_t* A_hold_members(object instance) {
 
 bool A_is_inlay(type_member_t* m) {
     return m->type->traits & A_TRAIT_PRIMITIVE | m->type->traits & A_TRAIT_ENUM | 
-        m->member_type == A_TYPE_INLAY;
+        m->member_type == A_MEMBER_INLAY;
 }
 
 object A_set_property(object instance, symbol name, object value) {
     AType type = isa(instance);
-    type_member_t* m = A_member(type, (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN), (cstr)name);
+    type_member_t* m = A_member(type, (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN), (cstr)name);
     verify(m, "%s not found on object %s", name, type->name);
     object   *mdata = (object*)((cstr)instance + m->offset);
     if (A_is_inlay(m)) {
@@ -920,7 +925,7 @@ object A_set_property(object instance, symbol name, object value) {
 
 object A_get_property(object instance, symbol name) {
     AType type = isa(instance);
-    type_member_t* m = A_member(type, (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN), (cstr)name);
+    type_member_t* m = A_member(type, (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN), (cstr)name);
     verify(m, "%s not found on object %s", name, type->name);
     object *mdata = (object*)((cstr)instance + m->offset);
     object  value = *mdata;
@@ -1032,7 +1037,7 @@ void A_destructor(A a) {
     AType type = f->type;
     for (num i = 0; i < type->member_count; i++) {
         type_member_t* m = &type->members[i];
-        if ((m->member_type == A_TYPE_PROP || m->member_type == A_TYPE_PRIV) && !(m->type->traits & A_TRAIT_PRIMITIVE)) {
+        if ((m->member_type == A_MEMBER_PROP || m->member_type == A_MEMBER_PRIV) && !(m->type->traits & A_TRAIT_PRIMITIVE)) {
             u8* ptr = (u8*)a + m->offset;
             A*  ref = ptr;
             A_drop(*ref);
@@ -1141,7 +1146,7 @@ object construct_with(AType type, object data) {
         Member mem = &type->members[i];
         if (!mem->ptr) continue;
         void* addr = mem->ptr;
-        if (mem->member_type == A_TYPE_CONSTRUCT) {
+        if (mem->member_type == A_MEMBER_CONSTRUCT) {
             /// no meaningful way to do this generically, we prefer to call these first
             if (mem->type == typeid(path) && data_type == typeid(string)) {
                 result = A_alloc(type, 1, true);
@@ -1191,7 +1196,7 @@ object construct_with(AType type, object data) {
         if (!mem->ptr) continue;
         void* addr = mem->ptr;
         /// check for compatible constructors
-        if (mem->member_type == A_TYPE_CONSTRUCT) {
+        if (mem->member_type == A_MEMBER_CONSTRUCT) {
             u64 combine = mem->type->traits & data_type->traits;
             if (combine & A_TRAIT_INTEGRAL) {
                 i64 v = read_integer(data);
@@ -1257,6 +1262,15 @@ void A_serialize(AType type, string res, object a) {
         else if (type == typeid(vec4f64))  len = sprintf(buf, "%.4f %.4f %.4f %.4f", ((f64*)a)[0], ((f64*)a)[1], ((f64*)a)[2], ((f32*)a)[3]);
         else if (type == typeid(mat4f)) {
             len = 0;
+            fault("implement m4x4");
+        }
+        else if (type == typeid(mat3f)) {
+            len = 0;
+            fault("implement m3x3");
+        }
+        else if (type == typeid(mat2f)) {
+            len = 0;
+            fault("implement m2x2");
         }
         else {
             fault("implement primitive cast to str: %s", type->name);
@@ -1291,6 +1305,18 @@ string A_cast_string(A a) {
                     if (r) append(res, ", ");
                     A_serialize(typeid(f32), res, A_f32(((mat4f)a)->m[r]));
                 }
+            } else if (type == typeid(mat3f)) {
+                for (int r = 0; r < 3 * 3; r++) {
+                    if (r) append(res, ", ");
+                    A_serialize(typeid(f32), res, A_f32(((mat3f)a)->m[r]));
+                }
+            } else if (type == typeid(mat2f)) {
+                for (int r = 0; r < 2 * 2; r++) {
+                    if (r) append(res, ", ");
+                    A_serialize(typeid(f32), res, A_f32(((mat2f)a)->m[r]));
+                }
+            } else {
+                fault("implement generic");
             }
         } else if (type == typeid(veci64) || type->src == typeid(veci64)) {
             for (int r = 0; r < a_header->count; r++) {
@@ -1310,7 +1336,7 @@ string A_cast_string(A a) {
         } else for (num i = 0; i < type->member_count; i++) {
             type_member_t* m = &type->members[i];
             // todo: intern members wont be registered
-            if (m->member_type & (A_TYPE_PROP | A_TYPE_PRIV | A_TYPE_INTERN)) {
+            if (m->member_type & (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN)) {
                 if (once)
                     append(res, ", ");
                 u8*    ptr = (u8*)a + m->offset;
@@ -1926,6 +1952,15 @@ void map_concat(map a, map b) {
     pairs(b, e) set(a, e->key, e->value);
 }
 
+bool map_rm(map a, object key) {
+    item i = lookup(a->hmap, key);
+    if (i) {
+        list_remove_item(a, i);
+        return true;
+    }
+    return false;
+}
+
 item map_fetch(map a, object key) {
     num prev = a->hmap->count;
     item i = fetch(a->hmap, key);
@@ -2058,6 +2093,8 @@ object A_hold(object a) {
     return a;
 }
 
+//#undef destructor
+
 void A_free(object a) {
     A       aa = A_header(a);
     A_f*  type = aa->type;
@@ -2168,7 +2205,6 @@ void list_remove(list a, num index) {
 }
 
 void list_remove_item(list a, item ai) {
-    item res = null;
     num i = 0;
     if (ai) {
         if (ai == a->first) a->first = ai->next;
@@ -2176,8 +2212,6 @@ void list_remove_item(list a, item ai) {
         if (ai->prev)       ai->prev->next = ai->next;
         if (ai->next)       ai->next->prev = ai->prev;
         a->count--;
-        res->prev = null;
-        res->next = null;
     }
 }
 
@@ -2187,7 +2221,7 @@ num list_compare(list a, list b) {
         return diff;
     A_f* ai_t = a->first ? isa(a->first->value) : null;
     if (ai_t) {
-        type_member_t* m = A_member(ai_t, (A_TYPE_IMETHOD), "compare");
+        type_member_t* m = A_member(ai_t, (A_MEMBER_IMETHOD), "compare");
         for (item ai = a->first, bi = b->first; ai; ai = ai->next, bi = bi->next) {
             num   v  = ((num(*)(object,A))((method_t*)m->method)->address)(ai, bi);
             if (v != 0) return v;
@@ -2466,6 +2500,13 @@ bool file_cast_bool(file f) {
     return f->id != null;
 }
 
+string file_gets(file f) {
+    char buf[2048];
+    if (fgets(buf, 2048, f->id) > 0)
+        return string(buf);
+    return null;
+}
+
 bool file_write(file f, object o) {
     AType type = isa(o);
     if (type == typeid(string)) {
@@ -2524,6 +2565,16 @@ none path_init(path a) {
     a->chars = calloc(len + 1, 1);
     if (arg)
         memcpy(a->chars, arg, len + 1);
+}
+
+path path_temp(symbol tmpl) {
+    path p = null;
+    do {
+        i64    h = (i64)rand() << 32 | (i64)rand();
+        string r = formatter("/tmp/%p.%s", (void*)h, tmpl);
+        p        = path(chars, r->chars);
+    } while (exists(p));
+    return p;
 }
 
 path path_with_string(path a, string s) {
@@ -2765,7 +2816,7 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeid(f32))       return &ffi_type_float;
     if (ptype == typeid(f64))       return &ffi_type_double;
     if (ptype == typeid(f128))      return &ffi_type_longdouble;
-    if (ptype == typeid(AFlag))     return &ffi_type_sint32;
+    if (ptype == typeid(AMember))   return &ffi_type_sint32;
     if (ptype == typeid(bool))      return &ffi_type_uint32;
     if (ptype == typeid(num))       return &ffi_type_sint64;
     if (ptype == typeid(sz))        return &ffi_type_sint64;
@@ -2825,6 +2876,31 @@ mat4f new_mat4f(f32* x0) {
         r->m[4 * 1 + 1] = 1.0f;
         r->m[4 * 2 + 2] = 1.0f;
         r->m[4 * 3 + 3] = 1.0f;
+    }
+    return r;
+}
+
+mat3f new_mat3f(f32* x0) {
+    mat3f r = A_alloc(typeid(mat3f), 1, true);
+    AType  type = typeid(mat3f);
+    if (x0)
+        memcpy(r->m, x0, sizeof(f32) * type->vmember_count);
+    else {
+        r->m[3 * 0 + 0] = 1.0f;
+        r->m[3 * 1 + 1] = 1.0f;
+        r->m[3 * 2 + 2] = 1.0f;
+    }
+    return r;
+}
+
+mat2f new_mat2f(f32* x0) {
+    mat2f r = A_alloc(typeid(mat2f), 1, true);
+    AType  type = typeid(mat2f);
+    if (x0)
+        memcpy(r->m, x0, sizeof(f32) * type->vmember_count);
+    else {
+        r->m[2 * 0 + 0] = 1.0f;
+        r->m[2 * 1 + 1] = 1.0f;
     }
     return r;
 }
@@ -3327,6 +3403,14 @@ none quatf_with_vec4f(quatf q, vec4f v) {
     q->w = cosf(half_theta);
 }
 
+void mat2f_with_floats(matf mat, floats f) {
+    memcpy(mat->m, f, sizeof(float) * 2 * 2);
+}
+
+void mat3f_with_floats(matf mat, floats f) {
+    memcpy(mat->m, f, sizeof(float) * 3 * 3);
+}
+
 void mat4f_with_floats(matf mat, floats f) {
     memcpy(mat->m, f, sizeof(float) * 4 * 4);
 }
@@ -3505,7 +3589,7 @@ string json(object a) {
         for (num m = 0; m < type->member_count; m++) {
             if (one) push(res, ',');
             type_member_t* mem = &type->members[m];
-            if (!(mem->member_type & (A_TYPE_PROP | A_TYPE_INLAY))) continue;
+            if (!(mem->member_type & (A_MEMBER_PROP | A_MEMBER_INLAY))) continue;
             string name = string(mem->name);
             concat(res, json(name));
             push  (res, ':');
@@ -3606,7 +3690,7 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             if (*scan != '.' && !(*scan >= '0' && *scan <= '9'))
                 break;
         }
-        if (has_dot || (!schema || schema->traits & A_TRAIT_REALISTIC)) {
+        if (has_dot || (schema && schema->traits & A_TRAIT_REALISTIC)) {
             if (schema == typeid(i64)) {
                 double v = strtod(origin, &scan);
                 res = A_i64((i64)floor(v));
@@ -3625,6 +3709,17 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
     else if (*scan == '{') {
         AType use_schema = schema ? schema : typeid(map);
         bool is_map = use_schema == typeid(map);
+        map required = null;
+        if (!is_map) {
+            /// required fields
+            required = map();
+            for (int i = 0; i < use_schema->member_count; i++) {
+                type_member_t* mem = use_schema->members;
+                if (mem->required) {
+                    set(required, string(mem->name), A_bool(true)); // field-name
+                }
+            }
+        }
         scan = ws(&scan[1]);
         map props = map(hsize, 16);
         for (;;) {
@@ -3636,7 +3731,7 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             if (*scan != '\"') return null;
             origin        = scan;
             string name   = parse_json_string(origin, &scan);
-            Member member = is_map ? null : A_member(use_schema, A_TYPE_PROP, name->chars);
+            Member member = is_map ? null : A_member(use_schema, A_MEMBER_PROP, name->chars);
             if (!member && !is_map) {
                 print("property '%o' not found in type: %s", name, use_schema->name);
                 return null;
@@ -3644,6 +3739,9 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             scan = ws(&scan[0]);
             if (*scan != ':') return null;
             scan = ws(&scan[1]);
+            if (required && contains(required, name)) {
+                rm(required, name);
+            }
             object value = parse_object(scan, member ? member->type : null, &scan); /// issue with parsing a map type (attributes)
             AType type = isa(value);
             scan = ws(&scan[0]);
@@ -3656,6 +3754,14 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
                 continue;
             } else if (*scan != '}')
                 return null;
+        }
+        /// check for remaining required
+        if (required && len(required)) {
+            string r = string();
+            pairs(required, i) {
+                r = form(string, "%o%s%o", r, len(r) ? " " : "", i->key);
+            }
+            fault("required fields not set: %o", r); // in public case, no required fields
         }
         if (remainder) *remainder = ws(scan);
         res = construct_with(use_schema, props);
@@ -3672,8 +3778,6 @@ array parse_array_objects(cstr* s, AType element_type) {
             scan = ws(&scan[1]);
             break;
         }
-
-        print("scan = %o", string(scan));
         object a = parse_object(scan, element_type, &scan);
         push(res, a);
         scan = ws(scan);
@@ -3741,6 +3845,8 @@ define_vector_base(vec, f32, f)
 define_vector_base(vec, f64, f64)
 
 define_vector(mat, 4, f32, f,   4, 4)
+define_vector(mat, 3, f32, f,   3, 3)
+define_vector(mat, 2, f32, f,   2, 2)
 
 define_vector(vec, 2, i8,  i8,  2)
 define_vector(vec, 2, i64, i64, 2)
@@ -3781,7 +3887,7 @@ define_primitive(sz,     numeric, A_TRAIT_INTEGRAL | A_TRAIT_SIGNED)
 define_primitive(f32,    numeric, A_TRAIT_REALISTIC)
 define_primitive(f64,    numeric, A_TRAIT_REALISTIC)
 define_primitive(f128,   numeric, A_TRAIT_REALISTIC)
-define_primitive(AFlag,  numeric, A_TRAIT_INTEGRAL | A_TRAIT_UNSIGNED)
+define_primitive(AMember, numeric, A_TRAIT_INTEGRAL | A_TRAIT_UNSIGNED)
 define_primitive(cstr,   string_like, 0)
 define_primitive(symbol, string_like, 0)
 define_primitive(cereal, string_like, 0)
@@ -3815,4 +3921,6 @@ define_class(AF)
 define_meta(ATypes,           array, AType)
 define_meta(array_map,        array, map)
 define_meta(array_mat4f,      array, mat4f)
+define_meta(array_mat3f,      array, mat3f)
+define_meta(array_mat2f,      array, mat2f)
 define_meta(array_string,     array, string)

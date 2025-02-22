@@ -12,6 +12,7 @@
 #include <libgen.h>
 #include <unistd.h>
 #include <signal.h>
+
 /// end-trim
 
 /// A-type runtime
@@ -71,28 +72,30 @@ struct type_member_t;
 struct _array;
 struct _A_f;
 
+#define a(...) array_of(__VA_ARGS__)
+
 
 /// our A-type classes have many types of methods
 /// constructor, i[nstance]-method, s[tatic]-method, operator (these are enumerable!), and index.  we index by 1 argument only in C but we may allow for more in silver
-enum A_TYPE {
-    A_TYPE_NONE      = 0,
-    A_TYPE_CONSTRUCT = 1,
-    A_TYPE_PROP      = 2,
-    A_TYPE_INLAY     = 4,
-    A_TYPE_PRIV      = 8,
-    A_TYPE_INTERN    = 16,
-    A_TYPE_READ_ONLY = 32,
-    A_TYPE_IMETHOD   = 64,
-    A_TYPE_SMETHOD   = 128,
-    A_TYPE_OPERATOR  = 256,
-    A_TYPE_CAST      = 512,
-    A_TYPE_INDEX     = 1024,
-    A_TYPE_ENUMV     = 2048,
-    A_TYPE_OVERRIDE  = 4096,
-    A_TYPE_VPROP     = 8192
+enum A_MEMBER {
+    A_MEMBER_NONE      = 0,
+    A_MEMBER_CONSTRUCT = 1,
+    A_MEMBER_PROP      = 2,
+    A_MEMBER_INLAY     = 4,
+    A_MEMBER_PRIV      = 8,
+    A_MEMBER_INTERN    = 16,
+    A_MEMBER_READ_ONLY = 32,
+    A_MEMBER_IMETHOD   = 64,
+    A_MEMBER_SMETHOD   = 128,
+    A_MEMBER_OPERATOR  = 256,
+    A_MEMBER_CAST      = 512,
+    A_MEMBER_INDEX     = 1024,
+    A_MEMBER_ENUMV     = 2048,
+    A_MEMBER_OVERRIDE  = 4096,
+    A_MEMBER_VPROP     = 8192
 };
 
-typedef enum A_TYPE AFlag;
+typedef enum A_MEMBER AMember;
 
 enum A_TRAIT {
     A_TRAIT_PRIMITIVE = 1,
@@ -154,7 +157,11 @@ typedef bool(*global_init_fn)();
 #define true                (bool)1
 #define false               (bool)0
 #define stringify(x)        #x
+#ifdef __cpp
+#define null                nullptr
+#else
 #define null                ((void*)0)
+#endif
 #define FNV_PRIME           0x100000001b3
 #define OFFSET_BASIS        0xcbf29ce484222325
 
@@ -164,10 +171,9 @@ typedef bool(*global_init_fn)();
     E##_type.members[E## _type.member_count].name     = #N; \
     E##_type.members[E## _type.member_count].offset   = E##_##N;\
     E##_type.members[E## _type.member_count].type     = &i32_type; \
-    E##_type.members[E## _type.member_count].member_type = A_TYPE_ENUMV; \
+    E##_type.members[E## _type.member_count].member_type = A_MEMBER_ENUMV; \
     E##_type.member_count++;
 #define   enum_value(X,Y, N)                enum_value_##Y(X, N)
-
 
 #define   enum_value_v_DECL(E, N, VAL)             E##_##N = VAL,
 #define   enum_value_v_COUNT(E, N, VAL)            1,
@@ -175,20 +181,49 @@ typedef bool(*global_init_fn)();
     E##_type.members[E## _type.member_count].name     = #N; \
     E##_type.members[E## _type.member_count].offset   = E##_##N;\
     E##_type.members[E## _type.member_count].type     = &i32_type; \
-    E##_type.members[E## _type.member_count].member_type = A_TYPE_ENUMV; \
+    E##_type.members[E## _type.member_count].member_type = A_MEMBER_ENUMV; \
     E##_type.member_count++;
-#define   enum_value_v(X,Y, N,VAL)                enum_value_v_##Y(X, N,VAL)
 
-/// A_init method is simple: named args are set, then an init() is called from base to top
-/// we will need to support 16 args for 8 props
+#define   enum_value_vargs_DECL(E, N, VAL,...)             E##_##N = VAL,
+#define   enum_value_vargs_COUNT(E, N, VAL,...)            1,
+#define   enum_value_vargs_IMPL(E, N, VAL,...) \
+    E##_type.members[E## _type.member_count].name     = #N; \
+    E##_type.members[E## _type.member_count].offset   = E##_##N;\
+    E##_type.members[E## _type.member_count].type     = &i32_type; \
+    E##_type.members[E## _type.member_count].member_type = A_MEMBER_ENUMV; \
+    E##_type.members[E## _type.member_count].args     = (meta_t) { emit_types(__VA_ARGS__) }; \
+    E##_type.member_count++;
+
+//#define   enum_value_v(X,Y, N,VAL)                enum_value_v_##Y(X, N,VAL)
+
+#define ARG_COUNT_HELPER(_1, _2, N, ...) N
+#define ARG_COUNT_NO_ZERO(...) \
+    ARG_COUNT_HELPER(__VA_ARGS__, 2, 1, 0)
+
+#define CONCAT_HELPER(x, y) x##y
+#define CONCAT(x, y) CONCAT_HELPER(x, y)
+
+#define   enum_value_v_1(X,Y, N,VAL)             enum_value_v_##Y(X, N,VAL)
+#define   enum_value_v_2(X,Y, N,VAL,T1)          enum_value_vargs_##Y(X, N,VAL,T1)
+#define   enum_value_v_3(X,Y, N,VAL,T1,T2)       enum_value_vargs_##Y(X, N,VAL,T1,T2)
+#define   enum_value_v_4(X,Y, N,VAL,T1,T2,T3)    enum_value_vargs_##Y(X, N,VAL,T1,T2,T3)
+#define   enum_value_v_5(X,Y, N,VAL,T1,T2,T3,T4) enum_value_vargs_##Y(X, N,VAL,T1,T2,T3,T4)
+#define   enum_value_v(X,Y, N,VAL, ...) \
+    CONCAT(enum_value_v_, ARG_COUNT_NO_ZERO(__VA_ARGS__))(X,Y, N,VAL __VA_OPT__(,) __VA_ARGS__)
+
 
 // runtime type-check api
 #ifndef NDEBUG
-    //#define TC(MEMBER, VALUE) A_validate_type(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)
     #define TC(MEMBER, VALUE) VALUE
 #else
     #define TC(MEMBER, VALUE) VALUE
 #endif
+
+#define NULL_TOKEN
+#define ARG_COUNT_NZ_IMPL(NULL_TOKEN, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N
+
+#define ARG_COUNT_NZ(...) _ARG_COUNT_IMPL(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
+
 #define _ARG_COUNT_IMPL(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N
 #define _ARG_COUNT_I(...) _ARG_COUNT_IMPL(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 #define _ARG_COUNT(...)   _ARG_COUNT_I("A-type", ## __VA_ARGS__)
@@ -306,17 +341,17 @@ typedef bool(*global_init_fn)();
 #define combine_tokens(A, B)        combine_tokens_(A, B)
 #define EXPAND_ARGS(...)            EXPAND_ARGS_HELPER(COUNT_ARGS(__VA_ARGS__), __VA_ARGS__)
 #define EXPAND_ARGS_HELPER(N, ...)  combine_tokens(EXPAND_ARGS_, N)(__VA_ARGS__)
-#define EXPAND_ARGS_0()                         0
-#define EXPAND_ARGS_1(a)                        1, &a##_type
-#define EXPAND_ARGS_2(a, b)                     2, &a##_type, &b##_type
-#define EXPAND_ARGS_3(a, b, c)                  3, &a##_type, &b##_type, &c##_type
-#define EXPAND_ARGS_4(a, b, c, d)               4, &a##_type, &b##_type, &c##_type, &d##_type
-#define EXPAND_ARGS_5(a, b, c, d, e)            5, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type
-#define EXPAND_ARGS_6(a, b, c, d, e, f)         6, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type
-#define EXPAND_ARGS_7(a, b, c, d, e, f, g)      7, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type
-#define EXPAND_ARGS_8(a, b, c, d, e, f, g, h)          8,  &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type, &h##_type
-#define EXPAND_ARGS_9(a, b, c, d, e, f, g, h, ii)       9,  &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type, &h##_type, &ii##_type
-#define EXPAND_ARGS_10(a, b, c, d, e, f, g, h, ii, j)   10, &a##_type, &b##_type, &c##_type, &d##_type, &e##_type, &f##_type, &g##_type, &h##_type, &ii##_type, &j##_type
+#define EXPAND_ARGS_0()                                0
+#define EXPAND_ARGS_1(a)                               1, (AType)&a##_type
+#define EXPAND_ARGS_2(a, b)                            2, (AType)&a##_type, (AType)&b##_type
+#define EXPAND_ARGS_3(a, b, c)                         3, (AType)&a##_type, (AType)&b##_type, (AType)&c##_type
+#define EXPAND_ARGS_4(a, b, c, d)                      4, (AType)&a##_type, (AType)&b##_type, (AType)&c##_type, (AType)&d##_type
+#define EXPAND_ARGS_5(a, b, c, d, e)                   5, (AType)&a##_type, (AType)&b##_type, (AType)&c##_type, (AType)&d##_type, (AType)&e##_type
+#define EXPAND_ARGS_6(a, b, c, d, e, f)                6, (AType)&a##_type, (AType)&b##_type, (AType)&c##_type, (AType)&d##_type, (AType)&e##_type, (AType)&f##_type
+#define EXPAND_ARGS_7(a, b, c, d, e, f, g)             7, (AType)&a##_type, (AType)&b##_type, (AType)&c##_type, (AType)&d##_type, (AType)&e##_type, (AType)&f##_type, (AType)&g##_type
+#define EXPAND_ARGS_8(a, b, c, d, e, f, g, h)          8, (AType)&a##_type, (AType)&b##_type, (AType)&c##_type, (AType)&d##_type, (AType)&e##_type, (AType)&f##_type, (AType)&g##_type, (AType)&h##_type
+#define EXPAND_ARGS_9(a, b, c, d, e, f, g, h, ii)      9, (AType)&a##_type, (AType)&b##_type, (AType)&c##_type, (AType)&d##_type, (AType)&e##_type, (AType)&f##_type, (AType)&g##_type, (AType)&h##_type, (AType)&ii##_type
+#define EXPAND_ARGS_10(a, b, c, d, e, f, g, h, ii, j) 10, (AType)&a##_type, (AType)&b##_type, (AType)&c##_type, (AType)&d##_type, (AType)&e##_type, (AType)&f##_type, (AType)&g##_type, (AType)&h##_type, (AType)&ii##_type, (AType)&j##_type
 #define COUNT_ARGS_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, N, ...) N
 #define COUNT_ARGS(...)             COUNT_ARGS_IMPL(__VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
 
@@ -347,7 +382,7 @@ typedef bool(*global_init_fn)();
     X##_type.members[X##_type.member_count].type        = &ARG##_type; \
     X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, with_##ARG); \
     X##_type.members[X##_type.member_count].ptr         = (void*)& X##_with_##ARG; \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_CONSTRUCT; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_CONSTRUCT; \
     X##_type.member_count++;  
 #define   i_ctr_public_PROTO(X, ARG)
 #define   i_ctr_public_METHOD(X, ARG)      X (*with_##ARG)(X, ARG);
@@ -369,7 +404,7 @@ typedef bool(*global_init_fn)();
     X##_type.members[X##_type.member_count].name     = #N; \
     X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
     X##_type.members[X##_type.member_count].type     = (AType)&R##_type; \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_PROP; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_PROP; \
     X##_type.member_count++;
 #define   i_prop_public_PROTO(X, R, N)  
 #define   i_prop_public_METHOD(X, R, N)
@@ -392,9 +427,68 @@ typedef bool(*global_init_fn)();
 #define   i_prop_intern_GENERICS(X, R, N)
 #define   i_prop_intern_INIT(X, R, N)
 #define   i_prop_intern_PROTO(X, R, N)  
-#define   i_prop_intern_METHOD(X, R, N)  
-#define   i_prop(X, Y, T, R, N) i_prop_##T##_##Y(X, R, N)
+#define   i_prop_intern_METHOD(X, R, N)
 
+
+
+
+
+
+
+#define   i_prop_public_INST_field(X, R, N, M2)         R N;  
+#define   i_prop_public_INTERN_field(X, R, N, M2) 
+#define   i_prop_public_ISIZE_field(X, R, N, M2)        
+#define   i_prop_public_DECL_field(X, R, N, M2)
+#define   i_prop_public_GENERICS_field(X, R, N, M2)
+#define   i_prop_public_INIT_field(X, R, N, M2) \
+    X##_type.members[X##_type.member_count].name     = #M2; \
+    X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
+    X##_type.members[X##_type.member_count].type     = (AType)&R##_type; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_PROP; \
+    X##_type.member_count++;
+#define   i_prop_public_PROTO_field(X, R, N, M2)  
+#define   i_prop_public_METHOD_field(X, R, N, M2)
+
+#define   i_prop_required_INST_field(X, R, N, M2)         i_prop_public_INST_field(X, R, N, M2)
+#define   i_prop_required_INTERN_field(X, R, N, M2)
+#define   i_prop_required_ISIZE_field(X, R, N, M2)        
+#define   i_prop_required_DECL_field(X, R, N, M2)
+#define   i_prop_required_GENERICS_field(X, R, N, M2)
+#define   i_prop_required_INIT_field(X, R, N, M2) \
+    X##_type.members[X##_type.member_count].required = true; \
+    i_prop_public_INIT_field(X, R, N, M2)
+#define   i_prop_required_PROTO_field(X, R, N, M2)  
+#define   i_prop_required_METHOD_field(X, R, N, M2)
+
+#define   i_prop_intern_INST_field(X, R, N, M2)          
+#define   i_prop_intern_INTERN_field(X, R, N, M2)         R N;
+#define   i_prop_intern_ISIZE_field(X, R, N, M2)          +sizeof(void*)
+#define   i_prop_intern_DECL_field(X, R, N, M2)
+#define   i_prop_intern_GENERICS_field(X, R, N, M2)
+#define   i_prop_intern_INIT_field(X, R, N, M2)          fault("field is not exposed when intern");
+#define   i_prop_intern_PROTO_field(X, R, N, M2)  
+#define   i_prop_intern_METHOD_field(X, R, N, M2)  
+
+
+
+
+
+
+#define i_prop_1(X, Y, T, R, N, ...) \
+    i_prop_##T##_##Y(X, R, N)
+
+#define i_prop_2(X, Y, T, R, N, MODE2, M2) \
+    i_prop_##T##_##Y##_##MODE2(X, R, N, M2)
+
+#define ARG_COUNT_HELPER(_1, _2, N, ...) N
+#define ARG_COUNT_NO_ZERO(...) \
+    ARG_COUNT_HELPER(__VA_ARGS__, 2, 1, 0)
+
+#define CONCAT_HELPER(x, y) x##y
+#define CONCAT(x, y) CONCAT_HELPER(x, y)
+
+#define i_prop(X, Y, T, R, N, ...) \
+    CONCAT(i_prop_, ARG_COUNT_NO_ZERO(__VA_ARGS__))(X, Y, T, R, N __VA_OPT__(,) __VA_ARGS__)
 
 
 #define   i_vprop_public_INST(X, R, N)         R* N;  
@@ -406,7 +500,7 @@ typedef bool(*global_init_fn)();
     X##_type.members[X##_type.member_count].name     = #N; \
     X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
     X##_type.members[X##_type.member_count].type     = (AType)&ARef_type; \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_VPROP; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_VPROP; \
     X##_type.member_count++;
 #define   i_vprop_public_PROTO(X, R, N)  
 #define   i_vprop_public_METHOD(X, R, N)
@@ -445,7 +539,7 @@ typedef bool(*global_init_fn)();
     X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
     X##_type.members[X##_type.member_count].type     = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].count    = S; \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_PROP; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_PROP; \
     X##_type.member_count++;
 #define   i_array_public_PROTO(X, R, S, N)  
 #define   i_array_public_METHOD(X, R, S, N)
@@ -477,7 +571,7 @@ typedef bool(*global_init_fn)();
     X##_type.members[X##_type.member_count].name     = #N; \
     X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
     X##_type.members[X##_type.member_count].type     = (AType)&R##_type; \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_INLAY; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_INLAY; \
     X##_type.member_count++;
 #define   i_inlay_public_PROTO(X, R, N)  
 #define   i_inlay_public_METHOD(X, R, N)
@@ -519,7 +613,7 @@ typedef bool(*global_init_fn)();
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, N); \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_SMETHOD; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_SMETHOD; \
     X##_type.member_count++;   
 #define   s_method_public_PROTO(X, R, N, ...)
 #define   s_method_public_METHOD(X, R, N, ...)    R (*N)(__VA_ARGS__);
@@ -545,7 +639,7 @@ typedef bool(*global_init_fn)();
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X, ##__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, N); \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_IMETHOD; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_IMETHOD; \
     X##_type.member_count++;
 #define   i_method_public_PROTO(X, R, N, ...)
 #define   i_method_public_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
@@ -579,7 +673,7 @@ CPU_Caps detect_cpu_caps();
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X, ##__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, N); \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_IMETHOD; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_IMETHOD; \
     X##_type.member_count++; \
 
 #define   i_SIMD_neon64_INST(    X, R, N, ...)
@@ -666,7 +760,7 @@ CPU_Caps detect_cpu_caps();
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X, ARG) }; \
     X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, operator_##N); \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_OPERATOR; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_OPERATOR; \
     X##_type.members[X##_type.member_count].operator_type = OPType_ ## N; \
     X##_type.member_count++; 
 #define   i_operator_public_PROTO(X, R, N, ARG)
@@ -693,7 +787,7 @@ CPU_Caps detect_cpu_caps();
     X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X) }; \
     X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, cast_##R); \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_CAST; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_CAST; \
     X##_type.member_count++;  
 #define   i_cast_public_PROTO(X, R)
 #define   i_cast_public_METHOD(X, R)        R (*cast_##R)(X);
@@ -719,7 +813,7 @@ CPU_Caps detect_cpu_caps();
     X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(X, __VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type        = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, emit_idx_symbol(index, __VA_ARGS__)); \
-    X##_type.members[X##_type.member_count].member_type = A_TYPE_INDEX; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_INDEX; \
     X##_type.member_count++;  
 #define i_index_public_PROTO(X, R, ...)
 #define i_index_public_METHOD(X, R, ...)                R (*emit_idx_symbol(index,__VA_ARGS__))(X, ##__VA_ARGS__);
@@ -779,7 +873,7 @@ CPU_Caps detect_cpu_caps();
 #define i_override_method_DECL(X, N)
 #define i_override_method_GENERICS(X, N)
 #define i_override_method_INIT(X, N) \
-    X##_type . N = & X## _ ## N;
+    X##_type . N = (__typeof__(X##_type . N))& X## _ ## N;
 
 #define i_override_method_PROTO(X, N)
 #define i_override_method_METHOD(X, N)
@@ -811,7 +905,70 @@ CPU_Caps detect_cpu_caps();
 #define i_override_idx_PROTO(X, R)
 #define i_override_idx_METHOD(X, R)
 
-#define i_override(X, Y, OT, N)                        i_override_##OT##_##Y(X, N)
+#define i_override_1(X, Y, OT, N, ...) \
+    i_override_##OT##_##Y(X, N)
+
+#define i_override_2(X, Y, OT, N, N2) \
+    i_override_##OT##_##Y(X, N) \
+    i_override_##OT##_##Y(X, N2)
+
+#define i_override_3(X, Y, OT, N, N2, N3) \
+    i_override_##OT##_##Y(X, N)  \
+    i_override_##OT##_##Y(X, N2) \
+    i_override_##OT##_##Y(X, N3)
+
+#define i_override_4(X, Y, OT, N, N2, N3) \
+    i_override_##OT##_##Y(X, N)  \
+    i_override_##OT##_##Y(X, N2) \
+    i_override_##OT##_##Y(X, N3) \
+    i_override_##OT##_##Y(X, N4)
+
+#define i_override_5(X, Y, OT, N, N2, N3) \
+    i_override_##OT##_##Y(X, N)  \
+    i_override_##OT##_##Y(X, N2) \
+    i_override_##OT##_##Y(X, N3) \
+    i_override_##OT##_##Y(X, N4) \
+    i_override_##OT##_##Y(X, N5)
+
+#define i_override_6(X, Y, OT, N, N2, N3) \
+    i_override_##OT##_##Y(X, N)  \
+    i_override_##OT##_##Y(X, N2) \
+    i_override_##OT##_##Y(X, N3) \
+    i_override_##OT##_##Y(X, N4) \
+    i_override_##OT##_##Y(X, N5) \
+    i_override_##OT##_##Y(X, N6)
+
+#define i_override_7(X, Y, OT, N, N2, N3) \
+    i_override_##OT##_##Y(X, N)  \
+    i_override_##OT##_##Y(X, N2) \
+    i_override_##OT##_##Y(X, N3) \
+    i_override_##OT##_##Y(X, N4) \
+    i_override_##OT##_##Y(X, N5) \
+    i_override_##OT##_##Y(X, N6) \
+    i_override_##OT##_##Y(X, N7)
+
+#define i_override_8(X, Y, OT, N, N2, N3) \
+    i_override_##OT##_##Y(X, N)  \
+    i_override_##OT##_##Y(X, N2) \
+    i_override_##OT##_##Y(X, N3) \
+    i_override_##OT##_##Y(X, N4) \
+    i_override_##OT##_##Y(X, N5) \
+    i_override_##OT##_##Y(X, N6) \
+    i_override_##OT##_##Y(X, N7) \
+    i_override_##OT##_##Y(X, N8)
+
+#define ARG_COUNT_HELPER(_1, _2, N, ...) N
+#define ARG_COUNT_NO_ZERO(...) \
+    ARG_COUNT_HELPER(__VA_ARGS__, 2, 1, 0)
+
+#define CONCAT_HELPER(x, y) x##y
+#define CONCAT(x, y) CONCAT_HELPER(x, y)
+
+#define i_override(X, Y, OT, N, ...) \
+    CONCAT(i_override_, ARG_COUNT_NO_ZERO(__VA_ARGS__))(X, Y, OT, N __VA_OPT__(,) __VA_ARGS__)
+
+
+//#define i_override(X, Y, OT, N) i_override_##OT##_##Y(X, N)
 
 /// useful for fetching from va_args if they are used; this is how we enable the meta-types on the classes
 /// they get a global constructor and type structure, with function table identical except for the call signature
@@ -947,7 +1104,7 @@ void        A_lazy_init(global_init_fn fn);
             memcpy(type_ref, base_ref, sizeof(A_f)); \
             static type_member_t members[16 + E##_ENUM_COUNT + sizeof(E##_type) / sizeof(void*)]; \
             memset(&E##_type, 0, sizeof(E##_type)); \
-            E##_type.parent_type = & A_type;        \
+            E##_type.parent_type = (__typeof__(E##_type.parent_type))& A_type; \
             E##_type.name     = #E;                 \
             E##_type.module   = MODULE;             \
             E##_type.size     = sizeof(enum E);     \
@@ -956,7 +1113,7 @@ void        A_lazy_init(global_init_fn fn);
             E##_type.traits   = A_TRAIT_ENUM;       \
             E##_type.arb      = primitive_ffi_arb(typeid(i32)); \
             E##_schema( E, IMPL ); \
-            A_push_type(&E##_type); \
+            A_push_type((AType)&E##_type); \
             return true; \
         } \
     }
@@ -983,7 +1140,6 @@ void        A_lazy_init(global_init_fn fn);
     _Pragma("pack(push, 1)") \
     typedef struct _##AA##Shape##t { \
         AA##Shape##_schema (AA##Shape##t, INST, T, t) \
-        struct _##AA##Shape##t##_f* f; \
     } *AA##Shape##t; \
     AA##Shape##_schema (AA, DECL, T, t) \
     typedef struct _##AA##Shape##t##_f { \
@@ -1008,6 +1164,20 @@ void        A_lazy_init(global_init_fn fn);
         A_f_members(AA) \
         A_schema(AA, METHOD, __VA_ARGS__) \
         AA##_schema (AA, METHOD, __VA_ARGS__) \
+    } AA##_f, *AA##_ft; \
+    extern AA##_f   AA##_type; \
+    _Pragma("pack(pop)")
+
+#define declare_sentry\
+(AA) \
+    typedef struct _##AA* AA; \
+    _Pragma("pack(push, 1)") \
+    typedef struct _##AA { \
+        struct _##AA##_f* f; \
+    } *AA; \
+    typedef struct _##AA##_f { \
+        A_f_members(AA) \
+        A_schema(AA, METHOD) \
     } AA##_f, *AA##_ft; \
     extern AA##_f   AA##_type; \
     _Pragma("pack(pop)")
@@ -1112,6 +1282,37 @@ void        A_lazy_init(global_init_fn fn);
 
 void* primitive_ffi_arb(AType);
 
+#define define_sentry(A0, VMEMBER_COUNT, ...) \
+    _Pragma("pack(push, 1)") \
+    A       A0##_head; \
+    A0##_f  A0##_type; \
+    _Pragma("pack(pop)") \
+    static __attribute__((constructor)) bool Aglobal_##A0() { \
+        A0##_f* type_ref = &A0##_type; \
+        A_f* base_ref = &A_type; \
+        if ((AType)type_ref == (AType)base_ref) \
+            type_ref->name = #A0; \
+        if ((AType)type_ref != (AType)base_ref && (!base_ref->traits && !base_ref->size)) { \
+            A_lazy_init((global_init_fn)&Aglobal_##A0); \
+            return false; \
+        } else { \
+            memset(type_ref, 0,        sizeof(A0##_f)); \
+            memcpy(type_ref, base_ref, sizeof(A_f)); \
+            static type_member_t members[16 + sizeof(A0##_type) / sizeof(void*)]; \
+            type_ref->parent_type = (__typeof__(type_ref->parent_type))&A_type; \
+            type_ref->name     = #A0;       \
+            type_ref->module   = MODULE;    \
+            type_ref->members  = members;   \
+            type_ref->member_count = 0; \
+            type_ref->size     = 0;   \
+            type_ref->vmember_count = VMEMBER_COUNT; \
+            type_ref->arb       = primitive_ffi_arb(typeid(A0)); \
+            A_push_type((AType)type_ref);    \
+            return true;                     \
+        }                                    \
+    }
+
+
 /// alias lets use tag types with an array of types, enabling 
 /// design-time and runtime template-like functionality, with 
 /// permutation of the class-type and instance-type
@@ -1132,18 +1333,18 @@ void* primitive_ffi_arb(AType);
             memset(type_ref, 0,        sizeof(A0##_f)); \
             memcpy(type_ref, base_ref, sizeof(A1##_f)); \
             static type_member_t members[16 + sizeof(A0##_type) / sizeof(void*)]; \
-            type_ref->parent_type = &A1##_type; \
+            type_ref->parent_type = (__typeof__(type_ref->parent_type))&A1##_type; \
             type_ref->name     = #A0;       \
             type_ref->module   = MODULE;    \
             type_ref->members  = members;   \
             type_ref->member_count = 0; \
             type_ref->size     = TYPE_SZ;   \
             type_ref->vmember_count = VMEMBER_COUNT; \
-            type_ref->vmember_type = VMEMBER_TYPE; \
+            type_ref->vmember_type = (AType)VMEMBER_TYPE; \
             type_ref->traits   = TRAIT;     \
             type_ref->arb       = primitive_ffi_arb(typeid(A0)); \
             A0##_schema( A0, INIT, __VA_ARGS__ ) \
-            A_push_type(type_ref);           \
+            A_push_type((AType)type_ref);    \
             return true;                     \
         }                                    \
     }
@@ -1161,12 +1362,13 @@ void* primitive_ffi_arb(AType);
         } else { \
             memset(type_ref, 0, sizeof(ALIAS_TYPE##_f)); \
             memcpy(&ALIAS_TYPE##_type, &SRC_TYPE##_type, sizeof(SRC_TYPE##_f)); \
+            verify(sizeof(ALIAS_TYPE##_type) >= sizeof(SRC_TYPE##_type), "strange?"); \
             ALIAS_TYPE## _type.module  = MODULE; \
             ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
             ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
             ALIAS_TYPE##_type.meta     = (meta_t) { emit_types(__VA_ARGS__) }; \
             ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
-            A_push_type(&ALIAS_TYPE##_type);         \
+            A_push_type((AType)&ALIAS_TYPE##_type);     \
             return true; \
         } \
     }
@@ -1192,7 +1394,7 @@ void* primitive_ffi_arb(AType);
             ALIAS_TYPE##_type.name     = #ALIAS_TYPE; \
             ALIAS_TYPE##_type.src      = &SRC_TYPE##_type; \
             ALIAS_TYPE##_type.traits   = A_TRAIT_ALIAS; \
-            A_push_type(&ALIAS_TYPE##_type);         \
+            A_push_type((AType)&ALIAS_TYPE##_type);         \
             return true; \
         } \
     }
@@ -1238,7 +1440,7 @@ void* primitive_ffi_arb(AType);
             VT##Shape##t## _type.traits   = typeid(T)->traits & ~A_TRAIT_PRIMITIVE;     \
             VT##Shape##t##_type.arb       = primitive_ffi_arb(typeid(VT##Shape##t)); \
             VT##Shape##_schema( VT##Shape##t, INIT, T, f) \
-            A_push_type(&VT##Shape##t##_type);         \
+            A_push_type((AType)&VT##Shape##t##_type);         \
             return true;                     \
         }                                    \
     }
@@ -1269,7 +1471,7 @@ void* primitive_ffi_arb(AType);
             VT##t## _type.traits   = typeid(T)->traits & ~A_TRAIT_PRIMITIVE; \
             VT##t##_type.arb       = primitive_ffi_arb(typeid(VT##t)); \
             VT##_schema( VT##t, INIT, T, f) \
-            A_push_type(&VT##t##_type); \
+            A_push_type((AType)&VT##t##_type); \
             return true; \
         }                                    \
     }
@@ -1306,7 +1508,9 @@ declare_base(A)
 
 declare_base_meta(object, A, A)
 
-#define typeid(X) ((AType)&X##_type)
+#define typeid(X)   ((AType)&X##_type)
+
+#define scalarof(X) head(X)->scalar
 
 #define numeric_schema(X,Y,...)
 declare_abstract(numeric)
@@ -1340,7 +1544,7 @@ declare_abstract(imported)
 #define f32_schema(X,Y,...)         numeric_schema(X,Y,...)
 #define f64_schema(X,Y,...)         numeric_schema(X,Y,...)
 #define f128_schema(X,Y,...)        numeric_schema(X,Y,...)
-#define AFlag_schema(X,Y,...)       numeric_schema(X,Y,...)
+#define AMember_schema(X,Y,...)     numeric_schema(X,Y,...)
 #define bool_schema(X,Y,...)        numeric_schema(X,Y,...)
 #define num_schema(X,Y,...)         numeric_schema(X,Y,...)
 #define sz_schema(X,Y,...)          numeric_schema(X,Y,...)
@@ -1368,7 +1572,7 @@ declare_primitive(u64,          numeric)
 declare_primitive(f32,          numeric)
 declare_primitive(f64,          numeric)
 declare_primitive(f128,         numeric)
-declare_primitive(AFlag,        numeric)
+declare_primitive(AMember,      numeric)
 declare_primitive(cstr,         string_like)
 declare_primitive(symbol,       string_like)
 declare_primitive(cereal,       string_like)
@@ -1489,6 +1693,7 @@ declare_class(buffer)
 #define file_schema(X,Y,...) \
     i_method(X,Y, public,   bool,   write, object) \
     i_method(X,Y, public,   object, read,  AType) \
+    i_method(X,Y, public,   string, gets) \
     i_method(X,Y, public,   none,   close) \
     i_prop(X,Y,   public,   path,   src) \
     i_prop(X,Y,   public,   bool,   read) \
@@ -1523,6 +1728,7 @@ typedef struct _array* array;
     i_method    (X,Y, public, array,  ls, string, bool) \
     i_method    (X,Y, public, bool,   move, path) \
     s_method    (X,Y, public, path,   cwd, sz) \
+    s_method    (X,Y, public, path,   temp, symbol) \
     i_ctr       (X,Y, public, string) \
     i_ctr       (X,Y, public, cstr) \
     i_cast      (X,Y, public, cstr) \
@@ -1536,6 +1742,8 @@ typedef struct _array* array;
 #define path_intern
 #endif
 declare_class(path)
+
+path path_temp(symbol tmpl);
 
 #define vector_schema(X,Y,...) \
     i_prop      (X,Y, public, num,     alloc) \
@@ -1573,7 +1781,7 @@ declare_class(subprocedure)
     i_prop           (X,Y, public, bool, unmanaged) \
     i_prop           (X,Y, public, i32,  alloc) \
     i_prop           (X,Y, public, i32,  len) \
-    s_vargs          (X,Y, public, array,   of,             AType) \
+    s_vargs          (X,Y, public, array,   of,             object) \
     s_vargs          (X,Y, public, array,   of_cstr,        cstr) \
     i_method         (X,Y, public, O, first) \
     i_method         (X,Y, public, O,       last) \
@@ -1663,6 +1871,7 @@ declare_enum(level)
     i_prop      (X,Y, public,  bool,       unmanaged) \
     i_method    (X,Y, public,  none,       set,        object, object) \
     i_method    (X,Y, public,  item,       fetch,      object) \
+    i_method    (X,Y, public,  bool,       rm,         object) \
     i_method    (X,Y, public,  bool,       contains,   object) \
     i_method    (X,Y, public,  none,       concat,     map) \
     i_method    (X,Y, public,  sz,         len) \
@@ -1869,7 +2078,7 @@ map         A_arguments(int argc, symbol argv[], map default_values, object defa
 AF          A_pool(sz size);
 void        A_free(object a);
 A_f**       A_types(num* length);
-type_member_t* A_member(AType type, enum A_TYPE member_type, char* name);
+type_member_t* A_member(AType type, enum A_MEMBER member_type, char* name);
 object      A_method_call(method_t* a, array args);
 object      A_method(AType type, char* method_name, array args);
 object      A_method_vargs(object instance, cstr method_name, int n_args, ...);
@@ -1900,6 +2109,8 @@ void        A_push(object, object);
 void        A_start();
 map         A_args(int argc, symbol argv[], symbol default_arg, ...);
 A           A_header(object instance);
+#define head(o) A_header((object)o)
+
 //object      A_data(object instance);
 object      A_verify(object instance, AType type);
 void        A_module_init(bool(*fn)());
@@ -1917,7 +2128,7 @@ bool create_symlink(path target, path link);
 /// todo: auto-release, no use of drop in most places
 /// push_weak is probably a reasonable idea for array
 map   map_of(cstr first_key, ...); /// cstr, A, ...
-//array array_of(AType validate, ...);
+//array array_of(object first, ...);
 //array array_of_cstr(cstr first, ...);
 void  array_weak_push(array, object);
 
@@ -2015,10 +2226,22 @@ declare_vector_base(mat, f32, f)
     i_ctr      (O, Y, public, quatf) \
     i_array    (O, Y, public, T, 16, m) \
 
+#define mat3_schema(O, Y, T, t) \
+    i_ctr      (O, Y, public, floats) \
+    i_array    (O, Y, public, T, 9, m) \
+
+#define mat2_schema(O, Y, T, t) \
+    i_ctr      (O, Y, public, floats) \
+    i_array    (O, Y, public, T, 4, m) \
+
 declare_vector(mat, 4, f32, f)
+declare_vector(mat, 3, f32, f)
+declare_vector(mat, 2, f32, f)
 
 declare_meta(array_map,        array, map)
 declare_meta(array_mat4f,      array, mat4f)
+declare_meta(array_mat3f,      array, mat3f)
+declare_meta(array_mat2f,      array, mat2f)
 declare_meta(array_string,     array, string)
 
 
@@ -2027,6 +2250,8 @@ typedef veci64 shape;
 shape new_shape(i64 size, ...);
 object parse(cstr s, AType schema);
 mat4f  new_mat4f(f32* x0);
+mat3f  new_mat3f(f32* x0);
+mat2f  new_mat2f(f32* x0);
 
 veci8  new_veci8 (object);
 veci64 new_veci64(object);
@@ -2069,6 +2294,8 @@ quatf   new_quatf  (f32 x, f32 y, f32 z, f32 w);
 
 #define shape(x, ...) new_shape(x, __VA_ARGS__)
 #define mat4f(x)      new_mat4f(x)
+#define mat3f(x)      new_mat3f(x)
+#define mat2f(x)      new_mat2f(x)
 
 //#define quatf(x,y,z,w)   new_quatf  (x, y, z, w)
 

@@ -13,9 +13,11 @@ else ifeq ($(SYS),Linux)
 else
     OS := windows
 endif
-AI_DICTATION  := rune-gen
-SRC_ROOT  	  := $(patsubst %/,%,$(dir $(MAKEFILE_PATH)))
-BUILD_DIR 	  := $(CURDIR)
+AI_DICTATION  	   := rune-gen
+SRC_ROOT  	  	   := $(patsubst %/,%,$(dir $(MAKEFILE_PATH)))
+BUILD_DIR 	  	   := $(CURDIR)
+MAKEFILE_PATH_ROOT := $(abspath $(lastword $(MAKEFILE_LIST)))
+ATYPE_ROOT 		   := $(patsubst %/,%,$(dir $(MAKEFILE_PATH_ROOT)))
 
 ifeq ($(UNAME), Darwin)
     SED = gsed
@@ -103,7 +105,7 @@ define process_libs
 $(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
 	$(if $(filter -%,$(strip $(dep))),, \
 		$(if $(findstring .so,$(dep)), \
-			$(SILVER_IMPORT)/lib/$(strip $(dep)), \
+			$(IMPORT)/lib/$(strip $(dep)), \
 			$(if $(and $(findstring Darwin,$(UNAME)), $(call is_framework,$(strip $(dep)))), \
 				-framework $(strip $(dep)), \
 				$(if $(filter @%,$(strip $(dep))), \
@@ -119,7 +121,7 @@ endef
 define process_imports
 $(foreach dep,$(filter-out ,$(shell bash -c 'echo "$(call IMPORT_script,$(1))"')), \
 	$(if $(filter -%,$(strip $(dep))),, \
-		$(if $(findstring .so,$(dep)), $(SILVER_IMPORT)/lib/$(strip $(dep)),$(strip $(dep)))
+		$(if $(findstring .so,$(dep)), $(IMPORT)/lib/$(strip $(dep)),$(strip $(dep)))
 	)\
 )
 endef
@@ -178,16 +180,15 @@ APPS_IMPORTS       = $(call process_imports,app)
 LIB_IMPORTS        = $(call process_imports,lib)
 release		      ?= 0
 APP			      ?= 0
-SILVER_IMPORT     ?= $(shell if [ -n "$$SRC" ]; then echo "$$SRC/silver-import"; else echo "$(BUILD_DIR)/silver-import"; fi)
-CC 			       = $(SILVER_IMPORT)/bin/clang
-CXX			       = $(SILVER_IMPORT)/bin/clang++
+CC 			       = $(IMPORT)/bin/clang
+CXX			       = $(IMPORT)/bin/clang++
 MAKEFLAGS         += --no-print-directory
-LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(SILVER_IMPORT)/include
-APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(SILVER_IMPORT)/include
-TEST_INCLUDES      = -I$(BUILD_DIR)/test -I$(BUILD_DIR)/lib -I$(SILVER_IMPORT)/include
+LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(IMPORT)/include
+APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(IMPORT)/include
+TEST_INCLUDES      = -I$(BUILD_DIR)/test -I$(BUILD_DIR)/lib -I$(IMPORT)/include
 # default behavior of -l cannot be set back once you do -Wl,-Bdynamic or -Wl,-Bstatic -- there is no -Wl,-Bdynamic-first
 # to create sanity lets establish -Wl,-Bdynamic first
-LDFLAGS 	       = -L$(BUILD_DIR) -L$(SILVER_IMPORT)/lib -Wl,-rpath,$(SILVER_IMPORT)/lib -Wl,-Bdynamic
+LDFLAGS 	       = -L$(BUILD_DIR) -L$(IMPORT)/lib -Wl,-rpath,$(IMPORT)/lib -Wl,-Bdynamic
 SRCAPP_DIR 	       = $(BUILD_DIR)/app
 SRCLIB_DIR 	       = $(BUILD_DIR)/lib
 TEST_DIR           = $(BUILD_DIR)/test
@@ -203,7 +204,7 @@ APP_OBJS 		   = $(patsubst $(SRCAPP_DIR)/%.c,  $(BUILD_DIR)/app/%.o, $(wildcard 
 #REFLECT_TARGET    = $(BUILD_DIR)/$(PROJECT)-reflect
 LIB_TARGET   	   = $(if $(strip $(LIB_OBJS)),$(BUILD_DIR)/lib$(PROJECT).so)
 APP_TARGETS	 	   = $(patsubst $(SRCAPP_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(SRCAPP_DIR)/*.c)) \
-				     $(patsubst $(SRCAPP_DIR)/%.cc, $(BUILD_DIR)/%, $(wildcard $(SRCAPP_DIR)/*.cc))
+					 $(patsubst $(SRCAPP_DIR)/%.cc, $(BUILD_DIR)/%, $(wildcard $(SRCAPP_DIR)/*.cc))
 TARGET_FLAGS 	   = -shared
 ALL_TARGETS  	   = run-import methods $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
 APP_FLAGS    	   = 
@@ -353,10 +354,10 @@ $(BUILD_TRANSLATION): $(SRC_TRANSLATION) # target to compile A-translation.c
 
 build_translation: $(BUILD_TRANSLATION)
 
-install_translation: build_translation # copy A-translation to SILVER_IMPORT/bin
+install_translation: build_translation # copy A-translation to IMPORT/bin
 	echo "installing translation <-"
-	@install --directory $(SILVER_IMPORT)/bin
-	@install -m 755 $(BUILD_TRANSLATION) $(SILVER_IMPORT)/bin/
+	@install --directory $(IMPORT)/bin
+	@install -m 755 $(BUILD_TRANSLATION) $(IMPORT)/bin/
 
 all: install_translation
 else
@@ -380,7 +381,7 @@ define generate_import_header
 		echo "#define _$(UPROJECT)_IMPORT_$(2)_H_" >> $(1); \
 		$(foreach import, $(3), \
 			if [ "$(PROJECT)" != "$(import)" ]; then \
-				if [ -f "$(SILVER_IMPORT)/include/$(import)-methods" ]; then \
+				if [ -f "$(IMPORT)/include/$(import)-methods" ]; then \
 				echo "#include <$(import)>" >> $(1) ; \
 				echo "#include <$(import)-methods>" >> $(1) ; \
 				fi; \
@@ -394,8 +395,8 @@ define generate_import_header
 		echo "#include <A-reserve>" >> $(1); \
 		$(foreach import, $(3), \
 			if [ "$(PROJECT)" != "$(import)" ]; then \
-				if [ -f "$(SILVER_IMPORT)/include/$(import)-methods" ]; then \
-				echo "#include <$(import)-init>" >> $(1) ; \
+				if [ -f "$(IMPORT)/include/$(import)-methods" ]; then \
+					echo "#include <$(import)-init>" >> $(1) ; \
 				fi; \
 			fi;) \
 		echo "#include <$(PROJECT)-init>" >> $(1); \
@@ -423,7 +424,7 @@ define process_src
 	@for file in $(SRC_ROOT)/$(1)/*.c; do \
 		if [ -f "$$file" ]; then \
 			echo "A-translation '$$file' '$(BUILD_DIR)/$(1)/$$(basename $$file)'"; \
-			$(SILVER_IMPORT)/bin/A-translation "$$file" "$(BUILD_DIR)/$(1)/$$(basename $$file)"; \
+			$(IMPORT)/bin/A-translation "$$file" "$(BUILD_DIR)/$(1)/$$(basename $$file)"; \
 		fi \
 	done; \
 	for file in $(SRC_ROOT)/$(1)/*.ai; do \
@@ -434,7 +435,7 @@ define process_src
 				target_base=$${base_name%.*}; \
 				target_file="$(BUILD_DIR)/$(1)/$$target_base.$$target_ext"; \
 				echo "Processing AI file '$$file' -> '$$target_file'"; \
-				export LD_LIBRARY_PATH=$$SILVER_IMPORT; \
+				export LD_LIBRARY_PATH=$$IMPORT; \
 				$(BUILD_DIR)/A-generate -i "$$file" -o "$$target_file" || exit 1; \
 				unset LD_LIBRARY_PATH; \
 				if [ $$? -eq 0 ] && [ -f "$$target_file" ]; then \
@@ -458,7 +459,7 @@ process_c_files:
 
 define RUN_IMPORT_SCRIPT
 	@echo "running import script"
-	@bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --b $(BUILD_DIR) --i $(SRC_ROOT)/import || { echo "Import script failed"; exit 1; }
+	@bash $(ATYPE_ROOT)/import.sh --b $(BUILD_DIR) --i $(SRC_ROOT)/import || { echo "import script failed"; exit 1; }
 endef
 
 # Add this call to the import script before building
@@ -472,7 +473,7 @@ run-import:
 #$(APP_TARGET): $(filter-out $(BUILD_DIR)/.rebuild, $(BUILD_DIR)/.rebuild)
 
 #$(BUILD_DIR)/.rebuild:
-#	bash $(SRC_ROOT)/../A/import.sh $(SILVER_IMPORT) --b $(BUILD_DIR) --i $(SRC_ROOT)/import
+#	bash $(SRC_ROOT)/../A/import.sh $(IMPORT) --b $(BUILD_DIR) --i $(SRC_ROOT)/import
 
 $(BUILD_DIR)/$(PROJECT)-includes:
 	@echo "#include <$(PROJECT)>" > $@.tmp.c
@@ -546,48 +547,48 @@ verify: $(TEST_TARGETS)
 # install targets and run reflect with integrity check
 install: all
 
-	@mkdir -p $(SILVER_IMPORT)/lib
-	@mkdir -p $(SILVER_IMPORT)/include
-	@mkdir -p $(SILVER_IMPORT)/bin
+	@mkdir -p $(IMPORT)/lib
+	@mkdir -p $(IMPORT)/include
+	@mkdir -p $(IMPORT)/bin
 
-	@if [ -n "$(LIB_TARGET)" ]; then \
+	@if [ -n "$(strip $(LIB_TARGET))" ]; then \
 		if [ -f $(BUILD_DIR)/$(PROJECT)-includes ]; then \
-			install -m 644 $(LIB_TARGET)  $(SILVER_IMPORT)/lib/; \
+			install -m 644 $(LIB_TARGET)  $(IMPORT)/lib/; \
 		fi \
 	fi
 
-	@if [ -n "$(APP_TARGETS)" ]; then \
-		install -m 755 $(APP_TARGETS) $(SILVER_IMPORT)/bin/; \
+	@if [ -n "$(strip $(APP_TARGETS))" ]; then \
+		install -m 755 $(APP_TARGETS) $(IMPORT)/bin/; \
 	fi
 
 	@if [ -f "$(SRCLIB_DIR)/$(PROJECT)" ]; then \
-		install -m 644 $(SRCLIB_DIR)/$(PROJECT) $(SILVER_IMPORT)/include/; \
+		install -m 644 $(SRCLIB_DIR)/$(PROJECT) $(IMPORT)/include/; \
 	fi
 
 	@if [ -f "$(METHODS_HEADER)" ]; then \
-		install -m 644 $(METHODS_HEADER) $(SILVER_IMPORT)/include/; \
+		install -m 644 $(METHODS_HEADER) $(IMPORT)/include/; \
 	fi
 
 	@if [ -f "$(INIT_HEADER)" ]; then \
-		install -m 644 $(INIT_HEADER) $(SILVER_IMPORT)/include/; \
+		install -m 644 $(INIT_HEADER) $(IMPORT)/include/; \
 	fi
 
 	@if [ -f "$(INTERN_HEADER)" ]; then \
-		install -m 644 $(INTERN_HEADER) $(SILVER_IMPORT)/include/; \
+		install -m 644 $(INTERN_HEADER) $(IMPORT)/include/; \
 	fi
 
 	@if [ -f $(SRCLIB_DIR)/A-reserve ]; then \
-		install -m 644 $(SRCLIB_DIR)/A-reserve $(SILVER_IMPORT)/include/; \
+		install -m 644 $(SRCLIB_DIR)/A-reserve $(IMPORT)/include/; \
 	fi
 
 	@if [ -f $(BUILD_DIR)/$(PROJECT)-includes ]; then \
-		install -m 644 $(BUILD_DIR)/$(PROJECT)-includes $(SILVER_IMPORT)/include/; \
-		install -m 644 $(BUILD_DIR)/$(PROJECT)-flat $(SILVER_IMPORT)/include/; \
+		install -m 644 $(BUILD_DIR)/$(PROJECT)-includes $(IMPORT)/include/; \
+		install -m 644 $(BUILD_DIR)/$(PROJECT)-flat $(IMPORT)/include/; \
 	fi
 
 	@cd $(BUILD_DIR) # && ./$(PROJECT)-reflect || true
 	@if [ -f $(BUILD_DIR)/lib$(PROJECT).m ]; then \
-		install -m 644 $(BUILD_DIR)/lib$(PROJECT).m $(SILVER_IMPORT)/lib/; \
+		install -m 644 $(BUILD_DIR)/lib$(PROJECT).m $(IMPORT)/lib/; \
 	fi
 
 clean:

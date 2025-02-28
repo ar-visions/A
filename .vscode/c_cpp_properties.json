@@ -3,11 +3,11 @@
         {
             "name": "silver environment",
             "includePath": [
-                "/home/kalen/src/A/src",
-                "/home/kalen/src/silver/src",
-                "/home/kalen/src/ether/src",
-                "/home/kalen/src/trinity/src",
-                "/home/kalen/src/silver-import/include"
+                "/home/kalen/src/A/lib",
+                "/home/kalen/src/silver/lib",
+                "/home/kalen/src/ether/lib",
+                "/home/kalen/src/trinity/lib",
+                "/home/kalen/src/import/include"
             ],
             "defines": [
                 "_DEBUG",
@@ -18,7 +18,7 @@
             "cStandard":        "c11",
             "cppStandard":      "c++17",
             "intelliSenseMode": "gcc-x64",
-            "compileCommands":  "/home/kalen/src/silver/silver-build/compile_commands.json"
+            "compileCommands":  "/home/kalen/src/silver/build/compile_commands.json"
         }
     ],
     "version": 4

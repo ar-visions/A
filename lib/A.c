@@ -1,7 +1,6 @@
 #include <import>
 #include <A-reserve>
 #include <ffi.h>
-#include <str.h>
 #undef bool
 #include <sys/stat.h>
 #include <dirent.h>
@@ -517,6 +516,57 @@ none vecf_push(vecf a, f32 v) {
     f32* ptr = push_generic(a);
     *ptr = v;
 }
+
+
+
+f64 vecf64_last(vecf64 a) {
+    f64* ptr = A_data(a);
+    A f = A_header(a);
+    return ptr[f->count];
+}
+
+f64 vecf64_first(vecf64 a) {
+    f64* ptr = A_data(a);
+    return ptr[0];
+}
+
+
+i8 veci8_last(veci8 a) {
+    i8* ptr = A_data(a);
+    A f = A_header(a);
+    return ptr[f->count];
+}
+
+i8 veci8_first(veci8 a) {
+    i8* ptr = A_data(a);
+    return ptr[0];
+}
+
+
+f32 vecf_last(vecf a) {
+    f32* ptr = A_data(a);
+    A f = A_header(a);
+    return ptr[f->count];
+}
+
+f32 vecf_first(vecf a) {
+    f32* ptr = A_data(a);
+    return ptr[0];
+}
+
+
+i64 veci64_last(veci64 a) {
+    i64* ptr = A_data(a);
+    A f = A_header(a);
+    return ptr[f->count];
+}
+
+i64 veci64_first(veci64 a) {
+    i64* ptr = A_data(a);
+    return ptr[0];
+}
+
+
 
 none veci64_push(veci64 a, i64 v) {
     i64* ptr = push_generic(a);
@@ -3225,6 +3275,16 @@ f64 veci8_length(veci8 a) {
     return sqrt((f32)len_sq);
 }
 
+i64 shape_total(veci64 a) {
+    A header = A_header(a);
+    i64* data = vdata(a);
+    if (header->count == 0) return 0;
+    i64 total = 1;
+    for (int i = 0; i < header->count; i++)
+        total *= data[i];
+    return total;
+}
+
 vec2i8 veci8_cast_vec2i8(veci8 a) { return vec2i8(a->x, a->y); }
 vec3i8 veci8_cast_vec3i8(veci8 a) { return vec3i8(a->x, a->y, a->z); }
 vec4i8 veci8_cast_vec4i8(veci8 a) { return vec4i8(a->x, a->y, a->z, a->w); }
@@ -3764,7 +3824,7 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             fault("required fields not set: %o", r); // in public case, no required fields
         }
         if (remainder) *remainder = ws(scan);
-        res = construct_with(use_schema, props);
+        res = construct_with(use_schema, props); // makes a bit more sense to implement required here
     }
     if (remainder) *remainder = scan;
     return res;

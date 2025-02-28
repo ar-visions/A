@@ -23,6 +23,6 @@ llama.cpp https://github.com/ggerganov/llama.cpp 9f4cc8f
 libffi https://github.com/libffi/libffi 3d0ce1e
 
 lib:
-    ffi m str
+    ffi m
 app:
     llama

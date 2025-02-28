@@ -11,21 +11,68 @@
             "cwd": "${workspaceFolder}/../silver/silver"
         },
         {
+            "name": "Python: hyperspace:train",
+            "type": "debugpy",
+            "args": ["-b", "4", "-m", "track", "-s", "target,mostly-center", "-i", "64", "-q", "4", "-r", "1", "-e", "1", "--learning-rate", "0.0001"],
+            "request": "launch",
+            "program": "${workspaceFolder}/../hyperspace/app/vision-train.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../hyperspace/app"
+        },
+        {
             "name": "A-generate",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../A/silver-debug/A-generate",
+            "program": "${workspaceFolder}/../A/debug/A-generate",
             "args": [
                 "-i", "/home/kalen/src/A/gen-test.c.ai",
                 "-o", "/home/kalen/src/A/gen-test.c"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../A/silver-debug",
+            "cwd": "${workspaceFolder}/../A/debug",
             "environment": [
                 {
                     "name": "LD_LIBRARY_PATH",
-                    "value": "/home/kalen/src/silver-import/lib"
+                    "value": "/home/kalen/src/import/lib"
                 }
+            ],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
+            "name": "hyperspace",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../hyperspace/debug/hyperspace-test",
+            "args": [
+                "module.c"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../hyperspace/debug",
+            "environment": [
+            ],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
+            "name": "ai",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../ai/debug/ai-test",
+            "args": [
+                "module.c"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../ai/debug",
+            "environment": [
             ],
             "MIMode": "gdb",
             "presentation": {
@@ -38,12 +85,12 @@
             "name": "trinity-particles",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../trinity/silver-debug/particles",
+            "program": "${workspaceFolder}/../trinity/debug/particles",
             "args": [
                 "module.c"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../trinity/silver-debug",
+            "cwd": "${workspaceFolder}/../trinity/debug",
             "environment": [
             ],
             "MIMode": "gdb",
@@ -57,12 +104,12 @@
             "name": "trinity-hypercube",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../trinity/silver-debug/hypercube",
+            "program": "${workspaceFolder}/../trinity/debug/hypercube",
             "args": [
                 "module.c"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../trinity/silver-debug",
+            "cwd": "${workspaceFolder}/../trinity/debug",
             "environment": [
             ],
             "MIMode": "gdb",
@@ -76,9 +123,9 @@
             "name": "orbiter",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../orbiter/silver-debug/orbiter",
+            "program": "${workspaceFolder}/../orbiter/debug/orbiter",
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../orbiter/silver-debug",
+            "cwd": "${workspaceFolder}/../orbiter/debug",
             "environment": [
             ],
             "MIMode": "gdb",
@@ -92,9 +139,9 @@
             "name": "orbiter-command",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../orbiter/silver-debug/command",
+            "program": "${workspaceFolder}/../orbiter/debug/command",
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../orbiter/silver-debug",
+            "cwd": "${workspaceFolder}/../orbiter/debug",
             "args": [
                 "-c", "2"
             ],
@@ -111,12 +158,12 @@
             "name": "A-reflect",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../A/silver-debug/A-reflect",
+            "program": "${workspaceFolder}/../A/debug/A-reflect",
             "args": [
                 
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../A/silver-debug",
+            "cwd": "${workspaceFolder}/../A/debug",
             "environment": [
             ],
             "MIMode": "gdb",
@@ -130,12 +177,12 @@
             "name": "ether-reflect",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../ether/silver-debug/ether-reflect",
+            "program": "${workspaceFolder}/../ether/debug/ether-reflect",
             "args": [
                 
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../ether/silver-debug",
+            "cwd": "${workspaceFolder}/../ether/debug",
             "environment": [
             ],
             "MIMode": "gdb",
@@ -149,7 +196,7 @@
             "name": "silver",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../silver/silver-debug/silver",
+            "program": "${workspaceFolder}/../silver/debug/silver",
             "args": [
                 "silver88.cms",
                 "--install", "/home/kalen/src/silver-import"
@@ -165,7 +212,7 @@
                 }
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../silver/silver-debug",
+            "cwd": "${workspaceFolder}/../silver/debug",
             "MIMode": "gdb",
             "presentation": {
                 "hidden": false,
@@ -177,7 +224,7 @@
             "name": "quanta-hi",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../quanta/silver-debug/quanta-hi",
+            "program": "${workspaceFolder}/../quanta/debug/quanta-hi",
             "args": [
                 "https://www.google.com"
             ],
@@ -192,7 +239,7 @@
                 }
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../quanta/silver-debug",
+            "cwd": "${workspaceFolder}/../quanta/debug",
             "MIMode": "gdb",
             "presentation": {
                 "hidden": false,
@@ -204,13 +251,13 @@
             "name": "ether",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../ether/silver-debug/ether",
+            "program": "${workspaceFolder}/../ether/debug/ether",
             "args": [
                 "--module",  "WGPU.si",
                 "--install", "/home/kalen/src/silver-import"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../silver/silver-debug",
+            "cwd": "${workspaceFolder}/../silver/debug",
             "environment": [
             ],
             "MIMode": "gdb",

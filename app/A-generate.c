@@ -18,12 +18,12 @@ static string generate(string prompt) {
     vector     prompt_tokens   =  vector(alloc, n_prompt_tokens, type, typeid(i32));
 
     if (llama_tokenize(vocab, cstring(prompt), len(prompt),
-            data(prompt_tokens), n_prompt_tokens, is_first, true) < 0) {
+            vdata(prompt_tokens), n_prompt_tokens, is_first, true) < 0) {
         fault("failed to tokenize the prompt");
     }
 
     // prepare a batch for the prompt
-    llama_batch batch = llama_batch_get_one(data(prompt_tokens), n_prompt_tokens);
+    llama_batch batch = llama_batch_get_one(vdata(prompt_tokens), n_prompt_tokens);
     llama_token new_token_id;
     for (;;) {
         int n_ctx      = llama_n_ctx(ctx);
@@ -127,13 +127,13 @@ int main(int n_args, cstr* v_args) {
         message req     = message(role, "user", content, query->chars);
         push(messages, req);
 
-        int new_len = llama_chat_apply_template(tmpl, data(messages), len(messages), true, data(formatted), len(formatted));
+        int new_len = llama_chat_apply_template(tmpl, vdata(messages), len(messages), true, vdata(formatted), len(formatted));
         if (new_len > (int)len(formatted)) {
             resize(formatted, new_len); // this may not copy what we need
-            new_len = llama_chat_apply_template(tmpl, data(messages), len(messages), true, data(formatted), len(formatted));
+            new_len = llama_chat_apply_template(tmpl, vdata(messages), len(messages), true, vdata(formatted), len(formatted));
         }
         verify (new_len >= 0, "failed to apply the chat template");
-        i8*    f_data = data(formatted);
+        i8*    f_data = vdata(formatted);
         string prompt = string(chars, (cstr)&f_data[prev_len], ref_length, new_len - prev_len);
 
         // generate a response
@@ -144,7 +144,7 @@ int main(int n_args, cstr* v_args) {
 
         // add response
         push(messages, res);
-        prev_len = llama_chat_apply_template(tmpl, data(messages), len(messages), false, null, 0);
+        prev_len = llama_chat_apply_template(tmpl, vdata(messages), len(messages), false, null, 0);
         verify(prev_len >= 0, "failed to apply the chat template");
     }
     llama_sampler_free(smpl);

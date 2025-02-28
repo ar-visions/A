@@ -33,7 +33,7 @@
             "label": "build-silver",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../silver/silver-debug"
+                "cwd": "${workspaceFolder}/../silver/debug"
             },
             "group": {
                 "kind": "build",
@@ -61,7 +61,7 @@
             "label": "build-A-generate",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../A/silver-debug"
+                "cwd": "${workspaceFolder}/../A/debug"
             },
             "group": {
                 "kind": "build",
@@ -89,7 +89,7 @@
             "label": "build-ether",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../ether/silver-debug"
+                "cwd": "${workspaceFolder}/../ether/debug"
             },
             "group": {
                 "kind": "build",
@@ -114,7 +114,7 @@
             "label": "build-orbiter",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../orbiter/silver-debug"
+                "cwd": "${workspaceFolder}/../orbiter/debug"
             },
             "group": {
                 "kind": "build",
@@ -139,7 +139,7 @@
             "label": "build-quanta",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../quanta/silver-debug"
+                "cwd": "${workspaceFolder}/../quanta/debug"
             },
             "group": {
                 "kind": "build",
@@ -164,7 +164,7 @@
             "label": "build-A",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../A/silver-debug"
+                "cwd": "${workspaceFolder}/../A/debug"
             },
             "group": {
                 "kind": "build",
@@ -189,7 +189,57 @@
             "label": "build-trinity",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../trinity/silver-debug"
+                "cwd": "${workspaceFolder}/../trinity/debug"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "osx": {
+                "command": "make -f ../Makefile install -j8"
+            },
+            "linux": {
+                "command": "make -f ../Makefile install -j8"
+            }
+        },
+        {
+            "label": "build-hyperspace",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../hyperspace/debug"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "osx": {
+                "command": "make -f ../Makefile install -j8"
+            },
+            "linux": {
+                "command": "make -f ../Makefile install -j8"
+            }
+        },
+        {
+            "label": "build-ai",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../ai/debug"
             },
             "group": {
                 "kind": "build",

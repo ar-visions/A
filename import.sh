@@ -25,15 +25,24 @@
                 shift 2
                 ;;
             --i)
-                IMPORT="$2"
+                PROJECT_IMPORT="$2"
                 shift 2
                 ;;
             *)
-                BUILD_ROOT="$1"
                 shift
                 ;;
         esac
     done
+
+    if [ -z "$PROJECT_IMPORT" ]; then
+        echo '--i required argument (import file)'
+        exit
+    fi
+
+    if [ -z "$CALLER_BUILD_DIR" ]; then
+        echo '--b required argument (project build dir)'
+        exit
+    fi
 
     BUILD_DIR=$CALLER_BUILD_DIR
 
@@ -43,57 +52,44 @@
         fi
     }
 
-    if [ -z "$CALLER_BUILD_DIR" ]; then
-        echo '--b required argument (project build dir)'
-        exit
-    fi
-
     if [ ! -f "$CALLER_BUILD_DIR/.rebuild" ]; then
         touch $CALLER_BUILD_DIR/.rebuild
     fi
 
-    if [ -z "$IMPORT" ]; then
-        echo '--i required argument (import file)'
-        exit
-    else
-        projects=()  # Initialize an empty array
-        found_deps=1
-        current_line=""
+    projects=()  # Initialize an empty array
+    found_deps=1
+    current_line=""
 
-        while IFS= read -r raw_line || [ -n "$raw_line" ]; do
-            line=$(echo "$raw_line" | tr '\t' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-            if [ -z "$line" ]; then
-                continue
-            fi
-            if [[ $line =~ ^[[:alnum:]][[:alnum:]]*: ]]; then
-                found_deps=0
-            fi
-            if [[ $found_deps -eq 1 ]]; then
-                ws=$(echo "$raw_line" | tr '\t' ' ' | sed -E 's/^( *).*/\1/' | wc -c)
-                if [ $ws -le 1 ]; then
-                    if [ ! -z "$current_line" ]; then
-                        projects+=("$current_line")
-                        print "import: $current_line"
-                    fi
-                    current_line="$line"
-                elif [ $ws -ge 2 ]; then
-                    current_line="$current_line $line"
-                fi
-                
-            fi
-        done < $IMPORT
-
-        # Add the last current_line if it exists
-        if [ ! -z "$current_line" ]; then
-            projects+=("$current_line")
-            #echo "import: $current_line"
+    while IFS= read -r raw_line || [ -n "$raw_line" ]; do
+        line=$(echo "$raw_line" | tr '\t' ' ' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+        if [ -z "$line" ]; then
+            continue
         fi
+        if [[ $line =~ ^[[:alnum:]][[:alnum:]]*: ]]; then
+            found_deps=0
+        fi
+        if [[ $found_deps -eq 1 ]]; then
+            ws=$(echo "$raw_line" | tr '\t' ' ' | sed -E 's/^( *).*/\1/' | wc -c)
+            if [ $ws -le 1 ]; then
+                if [ ! -z "$current_line" ]; then
+                    projects+=("$current_line")
+                    print "import: $current_line"
+                fi
+                current_line="$line"
+            elif [ $ws -ge 2 ]; then
+                current_line="$current_line $line"
+            fi
+            
+        fi
+    done < $PROJECT_IMPORT
+
+    # Add the last current_line if it exists
+    if [ ! -z "$current_line" ]; then
+        projects+=("$current_line")
+        #echo "import: $current_line"
     fi
 
     SRC_DIR="${SRC_DIR:-$SRC}"
-    BUILD_ROOT="${BUILD_ROOT:-silver-import}"
-
-    export SILVER_IMPORT="$BUILD_ROOT"
 
     if [ "${VERBOSE}" = "1" ]; then
         MFLAGS=""
@@ -107,10 +103,16 @@
 
     SCRIPT_DIR=$(dirname "$(realpath "$0")")
     cd      $SCRIPT_DIR || exit 1
-    mkdir -p "$BUILD_ROOT" || exit 1
-    cd       "$BUILD_ROOT"
+    mkdir -p "$IMPORT" || exit 1
+    cd       "$IMPORT"
     mkdir -p checkout
     cd       checkout
+
+    echo "processing projects ${projects[@]}"
+    for project1 in "${projects[@]}"; do
+        PROJECT_NAME1=$(echo "$project" | cut -d ' ' -f 1)
+        echo "$PROJECT_NAME1"
+    done
 
     # iterate through projects, cloning and building
     for project in "${projects[@]}"; do
@@ -145,7 +147,6 @@
         BUILD_CONFIG=""
 
         (
-        echo "Build configuration options: ($project)"
         for item in $BUILD_CONFIG_RAW; do
             # Check if the item contains a $ENV_VAR
             res=$(eval 'echo "$item"')
@@ -199,10 +200,10 @@
         
         # set build folder based on release/debug
         if [[ ",$DEB," == *",$PROJECT_NAME,"* ]]; then
-            BUILD_FOLDER="silver-debug"
+            BUILD_FOLDER="debug"
             IS_DEBUG=1
         else
-            BUILD_FOLDER="silver-build"
+            BUILD_FOLDER="build"
         fi
         
         # Check if --src directory and project exist, then symlink
@@ -278,7 +279,7 @@
             echo "[$PROJECT_NAME] gclient"
         elif [ -f "silver-build.sh" ]; then
             silver_build="1"
-            echo "[$PROJECT_NAME] silver-build"
+            echo "[$PROJECT_NAME] build"
         elif [ -f "CMakeLists.txt" ] || [[ "$BUILD_CONFIG" == *-S* ]]; then
             cmake="1"
             if [[ ",$DEB," == *",$PROJECT_NAME,"* ]]; then
@@ -308,6 +309,12 @@
         fi
         
         if [ -n "$IS_RESOURCE" ]; then
+            COMMANDS=""
+            for command in "${COMMAND_LIST[@]}"; do
+                echo "$PROJECT_NAME:command > $command\n"
+                COMMANDS="${COMMANDS}${command}; "
+            done
+            bash -c "${COMMANDS}"
             exit 0
         fi
 
@@ -345,7 +352,7 @@
             if [ ! -f "silver-token" ] || find .. -type f -newer "silver-token" | grep -q . ; then
                 # we need more than this: it needs to also check if a dependency registered to this project changes
                 # to do that, we should run the import on the project without the make process
-                BUILD_CONFIG=$(echo "$BUILD_CONFIG" | sed "s|\$SILVER_IMPORT|$SILVER_IMPORT|g")
+                BUILD_CONFIG=$(echo "$BUILD_CONFIG" | sed "s|\$IMPORT|$IMPORT|g")
                 BUILD_CONFIG=$(echo "$BUILD_CONFIG" | sed ':a;N;$!ba;s/\n/ /g' | sed 's/[[:space:]]*$//')
 
                 if [ -n "$IS_GCLIENT" ]; then
@@ -362,7 +369,7 @@
                         if [ -z "$BUILD_CONFIG" ]; then
                             BUILD_CONFIG="-S .."
                         fi
-                        cmake -B . -S .. $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$BUILD_ROOT" 
+                        cmake -B . -S .. $BUILD_TYPE $BUILD_CONFIG -DCMAKE_INSTALL_PREFIX="$IMPORT" 
                     fi
                 elif [ -n "$rust" ]; then
                     rust="$rust"
@@ -380,13 +387,14 @@
                                 echo "configure script not available after running autoreconf -i"
                                 exit 1
                             fi
-                            echo ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
-                            ../configure $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
+                            echo "pwd = $(pwd)"
+                            echo \033[34m../configure $BUILD_TYPE --prefix=$IMPORT $BUILD_CONFIG\033[0m
+                            ../configure $BUILD_TYPE --prefix=$IMPORT $BUILD_CONFIG
                         else
                             if [ -f "../config" ]; then
                                 if [ ! -f "Makefile" ]; then
-                                    echo ../config $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
-                                    ../config $BUILD_TYPE --prefix=$BUILD_ROOT $BUILD_CONFIG
+                                    echo ../config $BUILD_TYPE --prefix=$IMPORT $BUILD_CONFIG
+                                    ../config $BUILD_TYPE --prefix=$IMPORT $BUILD_CONFIG
                                 fi
                             else
                                 echo "no configure.ac found for $PROJECT_NAME ... will simply call make"
@@ -450,16 +458,16 @@
                     print "install ${TARGET_DIR}"
                     if [ -n "$IS_GCLIENT" ]; then
                         echo "installing gclient-based project $TARGET_DIR"
-                        cp *.so *.dll *.dylib $SILVER_IMPORT/lib/ 2>/dev/null
+                        cp *.so *.dll *.dylib $IMPORT/lib/ 2>/dev/null
                         # better to use manual -I includes because this indeed varies per GN project
                         # this effectively was ok for skia but not others
-                        #rm -rf $SILVER_IMPORT/include/$TARGET_DIR
-                        #mkdir -p $SILVER_IMPORT/include/$TARGET_DIR
-                        #rsync -a --include "*/" --include "*.h" --exclude="*" ../ $SILVER_IMPORT/include/$TARGET_DIR/
+                        #rm -rf $IMPORT/include/$TARGET_DIR
+                        #mkdir -p $IMPORT/include/$TARGET_DIR
+                        #rsync -a --include "*/" --include "*.h" --exclude="*" ../ $IMPORT/include/$TARGET_DIR/
                     elif [ -n "$cmake" ]; then
                         cmake --install .
                     elif [ -n "$rust" ]; then
-                        cp -r ./$build/*.so $SILVER_IMPORT/lib/
+                        cp -r ./$build/*.so $IMPORT/lib/
                     elif [ "$A_MAKE" = "1" ]; then
                         make $MFLAGS -f ../Makefile install
                     else
@@ -481,10 +489,12 @@
             echo "im-a-token" >> silver-token  # only create this if all steps succeed
         fi
 
+        COMMANDS=""
         for command in "${COMMAND_LIST[@]}"; do
             echo "$PROJECT_NAME:command > $command\n"
-            eval "$command"
+            COMMANDS="${COMMANDS}${command}; "
         done
+        bash -c "${COMMANDS}"
 
         BUILT_PROJECTS+=",${PROJECT_NAME}"
         echo "project-built: $PROJECT_NAME"

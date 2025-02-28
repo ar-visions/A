@@ -11,11 +11,10 @@ A-type is a C-based object system designed for clear maintainable code that is r
 int main(int argc, char **argv) {
     A_start();
     cstr        src = getenv("SRC");
-    cstr     import = getenv("SILVER_IMPORT");
+    cstr     import = getenv("IMPORT");
     map        args = A_args(argc, argv,
         "module",  str(""),
-        "install", import ? form(path, "%s", import) : 
-                            form(path, "%s/silver-import", src ? src : "."), null);
+        "install", form(path, "%s", import));
     string mkey     = str("module");
     string name     = get(args, str("module"));
     path   n        = new(path, chars, name->chars);

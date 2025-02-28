@@ -5,3 +5,4 @@ silver-build
 silver-debug
 target
 Cargo.lock
+debug

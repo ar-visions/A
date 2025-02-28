@@ -265,7 +265,12 @@
 			"exr": "cpp",
 			"png.h": "c",
 			"canvas": "cpp",
-			"a-reserve": "c"
+			"a-reserve": "c",
+			"endian-cross.h": "c",
+			"ai": "cpp",
+			"ai-methods": "cpp",
+			"ai-init": "cpp",
+			"ai-intern": "cpp"
 		}
 	}
 }

@@ -118,7 +118,7 @@ typedef struct meta_t {
 } meta_t;
 
 typedef struct _veci64* veci64;
-typedef veci64 shape;
+typedef struct _shape* shape;
 
 typedef struct ftable_t {
     struct ftable_t* parent_type;
@@ -329,7 +329,7 @@ typedef bool(*global_init_fn)();
 #define ctr(T,WITH,...)             A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
 #define ctr1(T,WITH,...)            A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
 #define alloc_ctr(T,WITH,...)       A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, false), ## __VA_ARGS__))
-#define str(CSTR)                   string_type.with_cstr((string)A_alloc((AType)&string_type, 1, true), (cstr)(CSTR))
+#define str(CSTR)                   string_type.with_symbol((string)A_alloc((AType)&string_type, 1, true), (symbol)(CSTR))
 #define addr_validateI(I)           ({ \
     __typeof__(I) *addr = &I; \
     I \
@@ -1188,12 +1188,14 @@ void        A_lazy_init(global_init_fn fn);
     _Pragma("pack(push, 1)") \
     typedef struct _##AA { \
         BASE##_schema (AA, INST, __VA_ARGS__) \
+        AA##_schema (AA, INST, __VA_ARGS__) \
         struct _##AA##_f* f; \
     } *AA; \
     typedef struct _##AA##_f { \
         A_f_members(BASE) \
         A_schema(AA, METHOD, __VA_ARGS__) \
         BASE##_schema (AA, METHOD, __VA_ARGS__) \
+        AA##_schema (AA, METHOD, __VA_ARGS__) \
     } AA##_f, *AA##_ft; \
     extern AA##_f   AA##_type; \
     _Pragma("pack(pop)")
@@ -1434,8 +1436,8 @@ void* primitive_ffi_arb(AType);
             VT##Shape##t## _type.member_count = 0; \
             VT##Shape##t## _type.size     = sizeof(struct _##VT##Shape##t); \
             VT##Shape##t## _type.src      = typeid(VT##t); \
-            VT##Shape##t## _type.vmember_shape = veci64_of(__VA_ARGS__, 0); \
-            VT##Shape##t## _type.vmember_count = veci64_product(VT##Shape##t## _type.vmember_shape); \
+            VT##Shape##t## _type.vmember_shape = new_shape(__VA_ARGS__, 0); \
+            VT##Shape##t## _type.vmember_count = shape_total(VT##Shape##t## _type.vmember_shape); \
             VT##Shape##t## _type.vmember_type  = typeid(T); \
             VT##Shape##t## _type.traits   = typeid(T)->traits & ~A_TRAIT_PRIMITIVE;     \
             VT##Shape##t##_type.arb       = primitive_ffi_arb(typeid(VT##Shape##t)); \
@@ -1487,7 +1489,7 @@ struct _sz { i64 value; };
     i_prop  (X,Y, public, i64,       refs) \
     i_prop  (X,Y, public, i64,       ar_index) \
     i_prop  (X,Y, public, object,    data) \
-    i_prop  (X,Y, public, veci64,    shape) \
+    i_prop  (X,Y, public, shape,     shape) \
     i_prop  (X,Y, public, i64,       alloc) \
     i_prop  (X,Y, public, i64,       count) \
     i_method(X,Y, public, none,      init) \
@@ -1711,8 +1713,21 @@ declare_class(buffer)
 declare_class(file)
 
 typedef struct _array* array;
+
+#define shape_schema(X,Y,...) \
+    i_method(X,Y, public, i64, total) \
+    i_override(X,Y, method, compare) \
+    i_ctr(X,Y, public, array) \
+    i_prop(X,Y, public, i64, count) \
+    i_array(X,Y, public, i64, 16, data)
+#ifndef shape_intern
+#define shape_intern
+#endif
+declare_class(shape)
+
+
 #define path_schema(X,Y,...) \
-    i_prop      (X,Y, public, cstr,   chars) \
+    i_prop      (X,Y, public, symbol, chars) \
     i_method    (X,Y, public, bool,   exists) \
     i_method    (X,Y, public, bool,   make_dir) \
     i_method    (X,Y, public, bool,   is_empty) \
@@ -1730,7 +1745,7 @@ typedef struct _array* array;
     s_method    (X,Y, public, path,   cwd, sz) \
     s_method    (X,Y, public, path,   temp, symbol) \
     i_ctr       (X,Y, public, string) \
-    i_ctr       (X,Y, public, cstr) \
+    i_ctr       (X,Y, public, symbol) \
     i_cast      (X,Y, public, cstr) \
     i_cast      (X,Y, public, sz) \
     i_override  (X,Y, ctr,    cereal) \
@@ -1812,6 +1827,7 @@ declare_class(subprocedure)
 #endif
 declare_class(array, object)
 
+#define ATypes_schema(X,Y,...)
 declare_meta(ATypes, array, AType)
 
 #define AF_schema(X,Y,...) \
@@ -1898,29 +1914,30 @@ declare_mod(map, list)
 declare_class(fn)
 
 #define string_schema(X,Y,...) \
-    i_prop    (X,Y,   public, cstr,    chars) \
+    i_prop    (X,Y,   public, symbol,  chars) \
     i_prop    (X,Y,   public, num,     alloc) \
     i_prop    (X,Y,   public, num,     ref_length) \
     i_prop    (X,Y,   public, num,     len) \
     i_prop    (X,Y,   public, u64,     h) \
     i_method  (X,Y,   public, sz,      len) \
-    i_method  (X,Y,   public, array,   split, cstr) \
+    i_method  (X,Y,   public, array,   split, symbol) \
     i_method  (X,Y,   public, string,  escape) \
-    i_method  (X,Y,   public, num,     index_of, cstr) \
-    i_method  (X,Y,   public, none,    append, cstr) \
-    i_method  (X,Y,   public, none,    append_count, cstr, i32) \
+    i_method  (X,Y,   public, num,     index_of, symbol) \
+    i_method  (X,Y,   public, none,    append, symbol) \
+    i_method  (X,Y,   public, none,    append_count, symbol, i32) \
     i_method  (X,Y,   public, none,    push, u32) \
     i_method  (X,Y,   public, none,    concat, string) \
     i_method  (X,Y,   public, string,  mid, num, num) \
     i_method  (X,Y,   public, none,    reserve, num) \
     i_method  (X,Y,   public, none,    write, handle, bool) \
-    i_method  (X,Y,   public, bool,    ends_with, cstr) \
-    i_method  (X,Y,   public, bool,    starts_with, cstr) \
-    i_method  (X,Y,   public, num,     cmp, cstr) \
-    i_method  (X,Y,   public, bool,    eq,  cstr) \
+    i_method  (X,Y,   public, bool,    ends_with, symbol) \
+    i_method  (X,Y,   public, bool,    starts_with, symbol) \
+    i_method  (X,Y,   public, num,     cmp, symbol) \
+    i_method  (X,Y,   public, bool,    eq,  symbol) \
     i_cast    (X,Y,   public, cstr) \
     i_cast    (X,Y,   public, sz) \
     i_cast    (X,Y,   public, path) \
+    i_ctr     (X,Y,   public, symbol) \
     i_ctr     (X,Y,   public, cstr) \
     i_ctr     (X,Y,   public, i32) \
     i_index   (X,Y,   public, i32, num) \
@@ -1935,7 +1952,7 @@ declare_class(fn)
 declare_class(string)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
-object A_formatter(AType rtype, FILE* f, object opt, cstr templ, ...);
+object A_formatter(AType rtype, FILE* f, object opt, symbol templ, ...);
 
 i64 vlength(object a);
 i64 veci64_product(veci64);
@@ -1948,18 +1965,18 @@ declare_enum(Exists)
 
 extern FILE* logger;
 
-#define         form(T, t, ...)   (T)A_formatter(typeid(T), null,   (object)false, t, ## __VA_ARGS__)
-#define    formatter(t, ...)      ((string)A_formatter((AType)null,      null,   (object)false, t, ## __VA_ARGS__))
-#define         exec(t, ...)      system(((string)A_formatter((AType)null, null, (object)false, t, ## __VA_ARGS__))->chars)
+#define         form(T, t, ...)   (T)A_formatter(typeid(T), null,   (object)false, (symbol)t, ## __VA_ARGS__)
+#define    formatter(t, ...)      ((string)A_formatter((AType)null,      null,   (object)false, (symbol)t, ## __VA_ARGS__))
+#define         exec(t, ...)      system(((string)A_formatter((AType)null, null, (object)false, (symbol)t, ## __VA_ARGS__))->chars)
 #define          tap(L)           (A_tap(L))
 #define        untap(L)           (A_untap(L))
 #define        A_log(L, t, ...)   A_formatter((AType)null,      stdout, str(L),  t, ## __VA_ARGS__)
-#define          put(t,    ...)   A_formatter((AType)null,      stdout, (object)false, t, ## __VA_ARGS__)
-#define        print(t,    ...)   A_formatter((AType)null,      stdout, (object)true,  t, ## __VA_ARGS__)
-#define        error(t, ...)      A_formatter((AType)null,      stderr, (object)true,  t, ## __VA_ARGS__)
-#define        fault(t, ...) do { A_formatter((AType)null,      stderr, (object)true,  t, ## __VA_ARGS__); exit(1); } while(0)
-#define  file_exists(t, ...)     (A_exists(A_formatter((AType)null, null, (object)false, t, ## __VA_ARGS__)) == Exists_file)
-#define   dir_exists(t, ...)     (A_exists(A_formatter((AType)null, null, (object)false, t, ## __VA_ARGS__)) == Exists_dir)
+#define          put(t,    ...)   A_formatter((AType)null,      stdout, (object)false, (symbol)t, ## __VA_ARGS__)
+#define        print(t,    ...)   A_formatter((AType)null,      stdout, (object)true,  (symbol)t, ## __VA_ARGS__)
+#define        error(t, ...)      A_formatter((AType)null,      stderr, (object)true,  (symbol)t, ## __VA_ARGS__)
+#define        fault(t, ...) do { A_formatter((AType)null,      stderr, (object)true,  (symbol)t, ## __VA_ARGS__); exit(1); } while(0)
+#define  file_exists(t, ...)     (A_exists(A_formatter((AType)null, null, (object)false, (symbol)t, ## __VA_ARGS__)) == Exists_file)
+#define   dir_exists(t, ...)     (A_exists(A_formatter((AType)null, null, (object)false, (symbol)t, ## __VA_ARGS__)) == Exists_dir)
 #ifndef NDEBUG
 #define       assert(a, t, ...) do { if (!(a)) { A_formatter((AType)null, stderr, (object)true,  t, ## __VA_ARGS__); exit(1); } } while(0)
 #else
@@ -1968,7 +1985,7 @@ extern FILE* logger;
 #define       verify(a, t, ...) \
     do { \
         if (!(a)) { \
-            A_formatter((AType)null, stderr, (object)true,  t, ## __VA_ARGS__); \
+            A_formatter((AType)null, stderr, (object)true,  (symbol)t, ## __VA_ARGS__); \
             if (level_err >= fault_level) { \
                 raise(SIGSTOP); \
                 exit(1); \
@@ -2031,7 +2048,7 @@ extern FILE* logger;
 
 object     A_alloc (AType type, num    count, bool af_pool);
 object     A_alloc_extra(AType type, num extra, bool af_pool);
-object     A_alloc2(AType type, AType scalar, veci64 shape, bool af_pool);
+object     A_alloc2(AType type, AType scalar, shape shape, bool af_pool);
 object     A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool);
 
 /// we are not registering struct types because we have no idea of membership
@@ -2065,6 +2082,7 @@ Exists      A_exists(object a);
 num         clamp(num i, num mn, num mx);
 real        clampf(real, real, real);
 object      construct_with(AType type, object data);
+bool        constructs_with(AType type, AType data_type);
 i64         read_integer(object data);
 #define     drop(a) A_drop(a)
 #define     hold(a) A_hold(a)
@@ -2073,12 +2091,12 @@ i64         read_integer(object data);
 /// should be adapted to work with schemas 
 /// what a weird thing it would be to have map access to properties
 /// everything should be A-based, and forget about the argument hacks?
-AType       A_find_type(cstr name);
+AType       A_find_type(symbol name);
 map         A_arguments(int argc, symbol argv[], map default_values, object default_key);
 AF          A_pool(sz size);
 void        A_free(object a);
 A_f**       A_types(num* length);
-type_member_t* A_member(AType type, enum A_MEMBER member_type, char* name);
+type_member_t* A_member(AType type, enum A_MEMBER member_type, symbol name, bool poly);
 object      A_method_call(method_t* a, array args);
 object      A_method(AType type, char* method_name, array args);
 object      A_method_vargs(object instance, cstr method_name, int n_args, ...);
@@ -2118,6 +2136,10 @@ void        debug();
 void        br();
 bool        A_reflect(symbol location);
 
+none vector_with_path(vector a, path file_path);
+typedef struct _veci8* veci8;
+veci8 veci8_load(path uri);
+
 #define vdata(instance) A_data(instance)
 
 bool      is_meta(object a);
@@ -2127,7 +2149,7 @@ bool create_symlink(path target, path link);
 
 /// todo: auto-release, no use of drop in most places
 /// push_weak is probably a reasonable idea for array
-map   map_of(cstr first_key, ...); /// cstr, A, ...
+map   map_of(symbol first_key, ...); /// cstr, A, ...
 //array array_of(object first, ...);
 //array array_of_cstr(cstr first, ...);
 void  array_weak_push(array, object);
@@ -2176,8 +2198,6 @@ declare_vector_base(vec, i8,  i8)
 declare_vector_base(vec, i64, i64)
 
 veci64 veci64_of(i64 first, ...);
-
-i64 shape_total(veci64 a);
 
 object A_vec(AType type, i32 count, object vdata);
 
@@ -2242,6 +2262,11 @@ declare_vector(mat, 4, f32, f)
 declare_vector(mat, 3, f32, f)
 declare_vector(mat, 2, f32, f)
 
+#define array_map_schema(X,Y,...)
+#define array_mat4f_schema(X,Y,...)
+#define array_mat3f_schema(X,Y,...)
+#define array_mat2f_schema(X,Y,...)
+#define array_string_schema(X,Y,...)
 declare_meta(array_map,        array, map)
 declare_meta(array_mat4f,      array, mat4f)
 declare_meta(array_mat3f,      array, mat3f)
@@ -2250,8 +2275,10 @@ declare_meta(array_string,     array, string)
 
 
 /// you can be a typedef and a macro -- it makes APIs simpler
-typedef veci64 shape;
-shape new_shape(i64 size, ...);
+shape new_shape(i64 count, ...);
+shape shape_from(i64 count, i64* dims);
+shape shape_read(FILE* f);
+
 object parse(cstr s, AType schema);
 mat4f  new_mat4f(f32* x0);
 mat3f  new_mat3f(f32* x0);
@@ -2296,7 +2323,6 @@ quatf   new_quatf  (f32 x, f32 y, f32 z, f32 w);
 #define vec3f(x,y,z)     new_vec3f  (x, y, z)
 #define vec4f(x,y,z,w)   new_vec4f  (x, y, z, w)
 
-#define shape(x, ...) veci64_of(x, __VA_ARGS__)
 #define mat4f(x)      new_mat4f(x)
 #define mat3f(x)      new_mat3f(x)
 #define mat2f(x)      new_mat2f(x)

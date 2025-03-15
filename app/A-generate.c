@@ -124,7 +124,7 @@ int main(int n_args, cstr* v_args) {
         if (!query)
             break;
         print("now i am going to send to the bot...");
-        message req     = message(role, "user", content, query->chars);
+        message req     = message(role, "user", content, (cstr)query->chars);
         push(messages, req);
 
         int new_len = llama_chat_apply_template(tmpl, vdata(messages), len(messages), true, vdata(formatted), len(formatted));
@@ -140,7 +140,7 @@ int main(int n_args, cstr* v_args) {
         printf("\033[33m");
         string response = generate(prompt);
         printf("\n\033[0m");
-        message res = message(role, "assistant", content, response->chars);
+        message res = message(role, "assistant", content, (cstr)response->chars);
 
         // add response
         push(messages, res);

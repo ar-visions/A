@@ -170,7 +170,7 @@ A_f** A_types(num* length) {
     return types;
 }
 
-AType A_find_type(cstr name) {
+AType A_find_type(symbol name) {
     for (int i = 0; i < types_len; i++) {
         AType type = types[i];
         if (strcmp(type->name, name) == 0)
@@ -221,7 +221,7 @@ string A_enum_string(AType type, i32 value) {
         type_member_t* mem = &type->members[m];
         if (mem->member_type & A_MEMBER_ENUMV) {
             if (cur == value)
-                return string(mem->name); 
+                return string((symbol)mem->name); 
             cur++;
         }
     }
@@ -298,25 +298,26 @@ object A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool) {
     a->data       = &a[1];
     a->count      = count;
     a->alloc      = alloc;
-    a->data       = calloc(alloc, scalar->size);
+    a->data       = calloc(alloc, scalar->size); /// incorrect!
     if (af_pool) {
         a->ar_index = af_top->pool->len;
-        push(af_top->pool, a->data);
+        push(af_top->pool, &a[1]);
     } else {
         a->ar_index = 0;
     }
     return a->data;
 }
 
-object A_alloc2(AType type, AType scalar, veci64 shape, bool af_pool) {
+object A_alloc2(AType type, AType scalar, shape s, bool af_pool) {
     i64 A_sz      = sizeof(struct _A);
-    i64 count     = veci64_product(shape);
+    shape_ft* t2 = &shape_type;
+    i64 count     = total(s);
     object a      = calloc(1, A_sz + (scalar ? scalar->size : type->size) * count);
     a->refs       = af_pool ? 0 : 1;
     a->scalar     = scalar;
     a->type       = type;
     a->data       = &a[1];
-    a->shape      = A_hold(shape);
+    a->shape      = A_hold(s);
     a->count      = count;
     a->alloc      = count;
     if (af_pool) {
@@ -818,7 +819,7 @@ object A_method_call(method_t* a, array args) {
 
 /// this calls type methods
 object A_method(AType type, cstr method_name, array args) {
-    type_member_t* mem = A_member(type, A_MEMBER_IMETHOD | A_MEMBER_SMETHOD, method_name);
+    type_member_t* mem = A_member(type, A_MEMBER_IMETHOD | A_MEMBER_SMETHOD, method_name, false);
     assert(mem->method, "method not set");
     method_t* m = mem->method;
     object res = A_method_call(m, args);
@@ -833,7 +834,7 @@ object A_convert(AType type, object input) {
 
 object A_method_vargs(object instance, cstr method_name, int n_args, ...) {
     AType type = isa(instance);
-    type_member_t* mem = A_member(type, A_MEMBER_IMETHOD | A_MEMBER_SMETHOD, method_name);
+    type_member_t* mem = A_member(type, A_MEMBER_IMETHOD | A_MEMBER_SMETHOD, method_name, false);
     assert(mem->method, "method not set");
     method_t* m = mem->method;
     va_list  vargs;
@@ -929,12 +930,14 @@ none A_untap(symbol f) {
     set(log_fields, fname, A_bool(false));
 }
 
-type_member_t* A_member(AType type, enum A_MEMBER member_type, char* name) {
+type_member_t* A_member(AType type, enum A_MEMBER member_type, symbol name, bool poly) {
     for (num i = 0; i < type->member_count; i++) {
         type_member_t* mem = &type->members[i];
         if (mem->member_type & member_type && strcmp(mem->name, name) == 0)
             return mem;
     }
+    if (poly && type->parent_type && type->parent_type != typeid(A))
+        return A_member(type->parent_type, member_type, name, true);
     return 0;
 }
 
@@ -957,7 +960,7 @@ bool A_is_inlay(type_member_t* m) {
 
 object A_set_property(object instance, symbol name, object value) {
     AType type = isa(instance);
-    type_member_t* m = A_member(type, (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN), (cstr)name);
+    type_member_t* m = A_member(type, (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN), (cstr)name, true);
     verify(m, "%s not found on object %s", name, type->name);
     object   *mdata = (object*)((cstr)instance + m->offset);
     if (A_is_inlay(m)) {
@@ -975,7 +978,7 @@ object A_set_property(object instance, symbol name, object value) {
 
 object A_get_property(object instance, symbol name) {
     AType type = isa(instance);
-    type_member_t* m = A_member(type, (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN), (cstr)name);
+    type_member_t* m = A_member(type, (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN), (cstr)name, true);
     verify(m, "%s not found on object %s", name, type->name);
     object *mdata = (object*)((cstr)instance + m->offset);
     object  value = *mdata;
@@ -1139,9 +1142,9 @@ string prep_cereal(cereal cs) {
         assert(*scan == '\"', "missing end-quote");
         i64 len = (i64)(scan - start) - 1;
         res = string(alloc, len); // string performs + 1
-        memcpy(res->chars, start, len);
+        memcpy((cstr)res->chars, start, len);
     } else
-        res = string(scan);
+        res = string((symbol)scan);
     return res;
 }
 
@@ -1160,7 +1163,7 @@ A A_with_cereal(object a, cereal cs) {
         sz     a_ln = len > -1 ? len : strlen(cs);
         res->chars  = calloc(a_ln + 1, 1);
         res->len    = a_ln;
-        memcpy(res->chars, cs, a_ln);
+        memcpy((cstr)res->chars, cs, a_ln);
         return res;
     }
     else {
@@ -1168,6 +1171,17 @@ A A_with_cereal(object a, cereal cs) {
         exit(-1);
     }
     return a;
+}
+
+bool constructs_with(AType type, AType with_type) {
+    for (int i = 0; i < type->member_count; i++) {
+        Member mem = &type->members[i];
+        if (mem->member_type == A_MEMBER_CONSTRUCT) {
+            if (mem->type == with_type)
+                return true;
+        }
+    }
+    return false;
 }
 
 /// used by parse (from json) to construct objects from data
@@ -1270,12 +1284,12 @@ object construct_with(AType type, object data) {
             } else if ((mem->type == typeid(string)) && 
                        (data_type == typeid(symbol) || data_type == typeid(cstr))) {
                 result = A_alloc(type, 1, true);
-                ((void(*)(object, string))addr)(result, string((cstr)data));
+                ((void(*)(object, string))addr)(result, string((symbol)data));
                 break;
             } else if ((mem->type == typeid(symbol) || mem->type == typeid(cstr)) && 
                        (data_type == typeid(string))) {
                 result = A_alloc(type, 1, true);
-                ((void(*)(object, cstr))addr)(result, ((string)data)->chars);
+                ((void(*)(object, cstr))addr)(result, (cstr)((string)data)->chars);
                 break;
             }
         }
@@ -1536,11 +1550,11 @@ num parse_formatter(cstr start, cstr res, num sz) {
 }
 
 
-object A_formatter(AType type, FILE* f, object opt, cstr template, ...) {
+object A_formatter(AType type, FILE* f, object opt, symbol template, ...) {
     va_list args;
     va_start(args, template);
     string  res  = new(string, alloc, 1024);
-    cstr    scan = template;
+    cstr    scan = (cstr)template;
     bool write_ln = (i64)opt == true;
     bool is_input = (f == stdin);
     string  field = (!is_input && !write_ln && opt) ? instanceof(opt, string) : null;
@@ -1549,10 +1563,10 @@ object A_formatter(AType type, FILE* f, object opt, cstr template, ...) {
         /// format %o as object's string cast
         if (*scan == '%' && *(scan + 1) == 'o') {
             object      arg = va_arg(args, object);
-            string   a = arg ? cast(string, arg) : string("null");
+            string   a = arg ? cast(string, arg) : string((symbol)"null");
             num    len = a->len;
             reserve(res, len);
-            memcpy(&res->chars[res->len], a->chars, len);
+            memcpy((cstr)&res->chars[res->len], a->chars, len);
             res->len += len;
             scan     += 2; // Skip over %o
         } else {
@@ -1560,7 +1574,7 @@ object A_formatter(AType type, FILE* f, object opt, cstr template, ...) {
             const char* next_percent = strchr(scan, '%');
             num segment_len = next_percent ? (num)(next_percent - scan) : (num)strlen(scan);
             reserve(res, segment_len);
-            memcpy(&res->chars[res->len], scan, segment_len);
+            memcpy((cstr)&res->chars[res->len], scan, segment_len);
             res->len += segment_len;
             scan     += segment_len;
             if (*scan == '%') {
@@ -1571,7 +1585,7 @@ object A_formatter(AType type, FILE* f, object opt, cstr template, ...) {
                 for (;;) {
                     num f_len = 0;
                     num avail = res->alloc - res->len;
-                    cstr  end = &res->chars[res->len];
+                    cstr  end = (cstr)&res->chars[res->len];
                     if (strchr("fFgG", formatter[symbol_len - 1]))
                         f_len = snprintf(end, avail, formatter, va_arg(args, double));
                     else if (strchr("diouxX", formatter[symbol_len - 1]))
@@ -1701,16 +1715,16 @@ string string_escape(string input) {
         if (!found) escaped[pos++] = input->chars[i];
     }
     escaped[pos] = '\0';    /// null-terminate result
-    return string(escaped); /// with cstr constructor, it does not 'copy' but takes over life cycle
+    return string((symbol)escaped); /// with cstr constructor, it does not 'copy' but takes over life cycle
 }
 
-void  string_destructor(string a)        { free(a->chars); }
-num   string_compare(string a, string b) { return strcmp(a->chars, b->chars); }
-num   string_cmp(string a, cstr b)       { return strcmp(a->chars, b); }
-bool  string_eq(string a, cstr b)        { return strcmp(a->chars, b) == 0; }
+void  string_destructor(string a)          { free((cstr)a->chars); }
+num   string_compare(string a, string b)   { return strcmp(a->chars, b->chars); }
+num   string_cmp(string a, symbol b)       { return strcmp(a->chars, b); }
+bool  string_eq(string a, symbol b)        { return strcmp(a->chars, b) == 0; }
 
 string string_copy(string a) {
-    return string(a->chars);
+    return string((symbol)a->chars);
 }
 
 i32   string_index_num(string a, num index) {
@@ -1721,8 +1735,8 @@ i32   string_index_num(string a, num index) {
     return (i32)a->chars[index];
 }
 
-array string_split(string a, cstr sp) {
-    cstr next = a->chars;
+array string_split(string a, symbol sp) {
+    cstr next = (cstr)a->chars;
     sz   slen = strlen(sp);
     while (next) {
         cstr   n = strstr(&next[1], sp);
@@ -1751,33 +1765,33 @@ none  string_reserve(string a, num extra) {
     string_alloc_sz(a, a->alloc + extra);
 }
 
-none  string_append(string a, cstr b) {
+none  string_append(string a, symbol b) {
     sz blen = strlen(b);
     if (blen + a->len >= a->alloc)
         string_alloc_sz(a, (a->alloc << 1) + blen);
-    memcpy(&a->chars[a->len], b, blen);
+    memcpy((cstr)&a->chars[a->len], b, blen);
     a->len += blen;
     a->h = 0; /// mutable operations must clear the hash value
-    a->chars[a->len] = 0;
+    ((cstr)a->chars)[a->len] = 0;
 }
 
-none  string_append_count(string a, cstr b, i32 blen) {
+none  string_append_count(string a, symbol b, i32 blen) {
     if (blen + a->len >= a->alloc)
         string_alloc_sz(a, (a->alloc << 1) + blen);
-    memcpy(&a->chars[a->len], b, blen);
+    memcpy((cstr)&a->chars[a->len], b, blen);
     a->len += blen;
     a->h = 0; /// mutable operations must clear the hash value
-    a->chars[a->len] = 0;
+    ((cstr)a->chars)[a->len] = 0;
 }
 
 none  string_push(string a, u32 b) {
     sz blen = 1;
     if (blen + a->len >= a->alloc)
         string_alloc_sz(a, (a->alloc << 1) + blen);
-    memcpy(&a->chars[a->len], &b, 1);
+    memcpy((cstr)&a->chars[a->len], &b, 1);
     a->len += blen;
     a->h = 0; /// mutable operations must clear the hash value
-    a->chars[a->len] = 0;
+    ((cstr)a->chars)[a->len] = 0;
 }
 
 none  string_concat(string a, string b) {
@@ -1786,7 +1800,7 @@ none  string_concat(string a, string b) {
 
 sz string_len(string a) { return a->len; }
 
-num   string_index_of(string a, cstr cs) {
+num   string_index_of(string a, symbol cs) {
     char* f = strstr(a->chars, cs);
     return f ? (num)(f - a->chars) : (num)-1;
 }
@@ -1800,7 +1814,7 @@ sz string_cast_sz(string a) {
 }
 
 cstr string_cast_cstr(string a) {
-    return a->chars;
+    return (cstr)a->chars;
 }
 
 none string_write(string a, handle f, bool new_line) {
@@ -1833,7 +1847,7 @@ void message_destructor(message a) {
 }
 
 void string_init(string a) {
-    cstr value = a->chars;
+    cstr value = (cstr)a->chars;
     if (a->alloc)
         a->chars = (char*)calloc(1, 1 + a->alloc);
     if (value) {
@@ -1842,8 +1856,8 @@ void string_init(string a) {
             a->alloc = len;
         if (a->chars == value)
             a->chars = (char*)calloc(1, len + 1);
-        memcpy(a->chars, value, len);
-        a->chars[len] = 0;
+        memcpy((cstr)a->chars, value, len);
+        ((cstr)a->chars)[len] = 0;
         a->len = len;
     }
 }
@@ -1853,7 +1867,7 @@ string string_with_i32(string a, uint32_t value) {
     if (value <= 0xFFFF) {
         a->len = 1;
         a->chars = calloc(8, 1);
-        a->chars[0] = (char)value;
+        ((cstr)a->chars)[0] = (char)value;
     } else {
         // Encode the Unicode code point as UTF-8
         a->len = 0;
@@ -1881,7 +1895,7 @@ string string_with_i32(string a, uint32_t value) {
         }
         a->len = len;
         a->chars = calloc(len + 1, 1);
-        memcpy(a->chars, buf, len);
+        memcpy((cstr)a->chars, buf, len);
     }
     return a;
 }
@@ -1889,7 +1903,7 @@ string string_with_i32(string a, uint32_t value) {
 string string_with_cstr(string a, cstr value) {
     a->len   = value ? strlen(value) : 0;
     a->chars = calloc(a->len + 1, 1);
-    memcpy(a->chars, value, a->len);
+    memcpy((cstr)a->chars, value, a->len);
     return a;
 }
 
@@ -1899,13 +1913,13 @@ string string_with_symbol(string a, symbol value) {
 }
 
 
-bool string_starts_with(string a, cstr value) {
+bool string_starts_with(string a, symbol value) {
     sz ln = strlen(value);
     if (!ln || ln > a->len) return false;
     return strncmp(&a->chars[0], value, ln) == 0;
 }
 
-bool string_ends_with(string a, cstr value) {
+bool string_ends_with(string a, symbol value) {
     sz ln = strlen(value);
     if (!ln || ln > a->len) return false;
     return strcmp(&a->chars[a->len - ln], value) == 0;
@@ -2271,7 +2285,7 @@ num list_compare(list a, list b) {
         return diff;
     A_f* ai_t = a->first ? isa(a->first->value) : null;
     if (ai_t) {
-        type_member_t* m = A_member(ai_t, (A_MEMBER_IMETHOD), "compare");
+        type_member_t* m = A_member(ai_t, (A_MEMBER_IMETHOD), "compare", true);
         for (item ai = a->first, bi = b->first; ai; ai = ai->next, bi = bi->next) {
             num   v  = ((num(*)(object,A))((method_t*)m->method)->address)(ai, bi);
             if (v != 0) return v;
@@ -2438,11 +2452,11 @@ sz vector_count(vector a) {
 
 define_class(vector);
 
-map map_of(cstr first_key, ...) {
+map map_of(symbol first_key, ...) {
     map a = new(map, hsize, 16);
     va_list args;
     va_start(args, first_key);
-    cstr key = first_key;
+    symbol key = first_key;
     for (;;) {
         A arg = va_arg(args, A);
         set(a, string(key), arg);
@@ -2524,7 +2538,7 @@ bool create_symlink(path target, path link) {
 
 void file_init(file f) {
     verify(!(f->read && f->write), "cannot open for both read and write");
-    cstr src = f->src ? f->src->chars : null;
+    cstr src = (cstr)(f->src ? f->src->chars : null);
     if (!f->id && (f->read || f->write)) {
         verify (src || f->write, "can only create temporary files for write");
 
@@ -2536,7 +2550,7 @@ void file_init(file f) {
             do {
                 h   = (i64)rand() << 32 | (i64)rand();
                 r   = formatter("/tmp/f%p", (void*)h);
-                src = r->chars;
+                src = (cstr)r->chars;
                 p   = new(path, chars, r);
             } while (exists(p));
         }
@@ -2610,11 +2624,11 @@ void file_destructor(file f) {
 }
 
 none path_init(path a) {
-    cstr arg = a->chars;
+    cstr arg = (cstr)a->chars;
     num  len = arg ? strlen(arg) : 0;
     a->chars = calloc(len + 1, 1);
     if (arg)
-        memcpy(a->chars, arg, len + 1);
+        memcpy((cstr)a->chars, arg, len + 1);
 }
 
 path path_temp(symbol tmpl) {
@@ -2628,7 +2642,7 @@ path path_temp(symbol tmpl) {
 }
 
 path path_with_string(path a, string s) {
-    a->chars = copy_cstr(s->chars);
+    a->chars = copy_cstr((cstr)s->chars);
     return a;
 }
 
@@ -2641,7 +2655,7 @@ sz path_cast_sz(path a) {
 }
 
 cstr path_cast_cstr(path a) {
-    return a->chars;
+    return (cstr)a->chars;
 }
 
 string path_cast_string(path a) {
@@ -2653,7 +2667,12 @@ path path_with_cereal(path a, cereal cs) {
     return a;
 }
 
-path path_with_cstr(path a, cereal cs) {
+path path_with_cstr(path a, cstr cs) {
+    a->chars = copy_cstr((cstr)cs);
+    return a;
+}
+
+path path_with_symbol(path a, symbol cs) {
     a->chars = copy_cstr((cstr)cs);
     return a;
 }
@@ -2663,7 +2682,7 @@ bool path_move(path a, path b) {
 }
 
 bool path_make_dir(path a) {
-    cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
+    cstr cs  = (cstr)a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
     for (num i = 1; i < len; i++) {
         if (cs[i] == '/' || i == len - 1) {
@@ -2710,7 +2729,7 @@ string path_ext(path a) {
 }
 
 string path_stem(path a) {
-    cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
+    cstr cs  = (cstr)a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
     string res = new(string, alloc, 256);
     sz     dot = 0;
@@ -2721,7 +2740,7 @@ string path_stem(path a) {
             int offset = cs[i] == '/';
             cstr start = &cs[i + offset];
             int n_bytes = (dot > 0 ? dot : len) - (i + offset);
-            memcpy(res->chars, start, n_bytes);
+            memcpy((cstr)res->chars, start, n_bytes);
             res->len = n_bytes;
             break;
         }
@@ -2730,14 +2749,14 @@ string path_stem(path a) {
 }
 
 string path_filename(path a) {
-    cstr cs  = a->chars; /// this can be a bunch of folders we need to make in a row
+    cstr cs  = (cstr)a->chars; /// this can be a bunch of folders we need to make in a row
     sz   len = strlen(cs);
     string res = new(string, alloc, 256);
     for (num i = len - 1; i >= 0; i--) {
         if (cs[i] == '/' || i == 0) {
             cstr start = &cs[i + (cs[i] == '/')];
             int n_bytes = len - i;
-            memcpy(res->chars, start, n_bytes);
+            memcpy((cstr)res->chars, start, n_bytes);
             res->len = n_bytes;
             break;
         }
@@ -2795,16 +2814,16 @@ path path_change_ext(path a, cstr ext) {
     path res = new(path);
     res->chars = calloc(32 + len + e_len, 1);
     if (ext_pos >= 0) {
-        memcpy( res->chars, a->chars, ext_pos + 1);
+        memcpy( (cstr)res->chars, a->chars, ext_pos + 1);
         if (e_len)
-            memcpy(&res->chars[ext_pos + 1], ext, e_len);
+            memcpy((cstr)&res->chars[ext_pos + 1], ext, e_len);
         else
-            res->chars[ext_pos] = 0;
+            ((cstr)res->chars)[ext_pos] = 0;
     } else {
-        memcpy( res->chars, a->chars, len);
+        memcpy( (cstr)res->chars, a->chars, len);
         if (e_len) {
-            memcpy(&res->chars[len], ".", 1);
-            memcpy(&res->chars[len + 1], ext, e_len);
+            memcpy((cstr)&res->chars[len], ".", 1);
+            memcpy((cstr)&res->chars[len + 1], ext, e_len);
         }
     }
     return res;
@@ -2814,7 +2833,7 @@ path path_change_ext(path a, cstr ext) {
 path path_cwd(sz size) {
     path a = new(path);
     a->chars = calloc(size, 1);
-    char* res = getcwd(a->chars, size);
+    char* res = getcwd((cstr)a->chars, size);
     assert(res != null, "getcwd failure");
     return a;
 }
@@ -2841,13 +2860,13 @@ object path_read(path a, AType type) {
         sz flen = ftell(f);
         fseek(f, 0, SEEK_SET);
         string a = new(string, alloc, flen);
-        size_t n = fread(a->chars, 1, flen, f);
+        size_t n = fread((cstr)a->chars, 1, flen, f);
         fclose(f);
         assert(n == flen, "could not read enough bytes");
         a->len   = flen;
         if (!is_obj)
             return a;
-        object obj = parse(a->chars, type);
+        object obj = parse((cstr)a->chars, type);
         return obj;
     }
     assert(false, "not implemented");
@@ -2878,7 +2897,7 @@ void* primitive_ffi_arb(AType ptype) {
 #define MAX_PATH_LEN 4096
 
 array path_ls(path a, string pattern, bool recur) {
-    cstr base_dir = a->chars;
+    cstr base_dir = (cstr)a->chars;
     assert(path_is_dir(a), "ls: must be called on directory");
     array list = new(array, alloc, 32); // Initialize array for storing paths
     DIR *dir = opendir(base_dir);
@@ -3215,6 +3234,18 @@ bool  vecf64_cast_bool (vecf64 a) {
     return false;
 }
 
+veci8 veci8_load(path uri) {
+    FILE* f = fopen(uri->chars, "rb");
+    verify(f, "cannot open path: %o", uri);
+    fseek(f, 0, SEEK_END);
+    sz flen = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    veci8 res = A_valloc(typeid(veci8), typeid(i8), flen, flen, true);
+    verify(fread(res, flen, 1, f) == 1, "could not read path: %o", uri);
+    fclose(f);
+    return res;
+}
+
 veci8 veci8_cross(veci8 a, veci8 b) {
     vec3i8 result = vec3i8(
         a->y * b->z - a->z * b->y,
@@ -3275,14 +3306,21 @@ f64 veci8_length(veci8 a) {
     return sqrt((f32)len_sq);
 }
 
-i64 shape_total(veci64 a) {
-    A header = A_header(a);
-    i64* data = vdata(a);
-    if (header->count == 0) return 0;
+i64 shape_total(shape a) {
+    i64* data = a->data;
     i64 total = 1;
-    for (int i = 0; i < header->count; i++)
+    for (int i = 0; i < a->count; i++)
         total *= data[i];
     return total;
+}
+
+i64 shape_compare(shape a, shape b) {
+    if (a->count != b->count)
+        return a->count - b->count;
+    for (int i = 0; i < a->count; i++)
+        if (a->data[i] != b->data[i])
+            return a->data[i] - b->data[i];
+    return 0;
 }
 
 vec2i8 veci8_cast_vec2i8(veci8 a) { return vec2i8(a->x, a->y); }
@@ -3400,21 +3438,36 @@ i64 veci64_product(veci64 a) {
     return product;
 }
 
+shape shape_from(i64 count, i64* values) {
+    shape res = shape(count, count);
+    memcpy(res->data, values, sizeof(i64) * count);
+    return res;
+}
+
+shape shape_read(FILE* f) {
+    i32 n_dims;
+    i64 data[256];
+    verify(fread(&n_dims, sizeof(i32), 1, f) == 1, "n_dims");
+    verify(n_dims < 256, "invalid");
+    verify(fread(data, sizeof(i64), n_dims, f) == n_dims, "shape_read data");
+    shape res = shape(count, n_dims);
+    memcpy(res->data, data, sizeof(i64) * n_dims);
+    return res;
+}
 
 shape new_shape(i64 size, ...) {
     va_list args;
     va_start(args, size);
-    i64 dim_count = 0;
+    i64 n_dims = 0;
     for (i64 arg = size; arg; arg = va_arg(args, i64))
-        dim_count++;
+        n_dims++;
     
     va_start(args, size);
-    i64* res = calloc(sizeof(i64), dim_count);
+    shape res = shape(count, n_dims);
     i64  index = 0;
     for (i64 arg = size; arg; arg = va_arg(args, i64))
-        res[index++] = arg;
-
-    return A_vec(typeid(i64), dim_count, res);
+        res->data[index++] = arg;
+    return res;
 }
 
 
@@ -3429,23 +3482,10 @@ object A_mat(AType type, i32 rows, i32 cols, object vdata) {
 }
 
 object A_vec(AType type, i32 count, object vdata) {
-    //AType type = typeid(veci64);
     veci64 res = A_alloc(type, count, true);
     if (vdata)
         memcpy(res, vdata, count * type->size);
     return res;
-}
-
-none shape_set(object obj, i64* dim, i64 dim_count) {
-    A a = A_header(obj);
-    if (dim_count > 1) {
-        veci64 shape = A_vec(typeid(i64), dim_count, dim);
-        a->alloc = 1;
-        for (int i = 0; i < dim_count; i++)
-            a->alloc *= dim[i];
-    } else {
-        a->alloc = dim ? dim[0] : 1; // unit or default is 1
-    }
 }
 
 matf matf_operator__mul(matf mat, vec4f v) {
@@ -3512,12 +3552,12 @@ void mat4f_with_quatf(matf mat, quatf q) {
 
 i64 matf_rows(matf a) {
     AType f = isa(a);
-    return (&f->vmember_shape->x)[0];
+    return f->vmember_shape->data[0];
 }
 
 i64 matf_cols(matf a) {
     AType f = isa(a);
-    return (&f->vmember_shape->x)[1];
+    return f->vmember_shape->data[1];
 }
 
 matf matf_mul(matf a, matf b) {
@@ -3739,8 +3779,9 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             *remainder = scan + 5;
         return A_bool(is_true); 
     }
-    else if (*scan == '[')
+    else if (*scan == '[') {
         return parse_array (scan, schema, remainder);
+    }
     
     else if ((*scan >= '0' && *scan <= '9') || *scan == '-') {
         origin = scan;
@@ -3766,7 +3807,7 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
         origin = scan;
         res = construct_with(schema ? schema : typeid(string), parse_json_string(origin, &scan));
     }
-    else if (*scan == '{') {
+    else if (*scan == '{') { /// Type will make us convert to the object, from map, and set is_map back to false; what could possibly get crossed up with this one
         AType use_schema = schema ? schema : typeid(map);
         bool is_map = use_schema == typeid(map);
         map required = null;
@@ -3791,8 +3832,9 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             if (*scan != '\"') return null;
             origin        = scan;
             string name   = parse_json_string(origin, &scan);
-            Member member = is_map ? null : A_member(use_schema, A_MEMBER_PROP, name->chars);
-            if (!member && !is_map) {
+            bool is_type  = cmp(name, "Type") == 0;
+            Member member = is_map ? null : A_member(use_schema, A_MEMBER_PROP, name->chars, true);
+            if (!is_type && !member && !is_map) {
                 print("property '%o' not found in type: %s", name, use_schema->name);
                 return null;
             }
@@ -3803,12 +3845,19 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
                 rm(required, name);
             }
             object value = parse_object(scan, member ? member->type : null, &scan); /// issue with parsing a map type (attributes)
+            if (is_type) {
+                string type_name = value;
+                use_schema = A_find_type(type_name->chars);
+                verify(use_schema, "type not found: %o", type_name);
+            }
             AType type = isa(value);
             scan = ws(&scan[0]);
             if   (!value)
                 return null;
-            string s_value = value;
-            set(props, name, value);
+            if (!is_type) {
+                string s_value = value;
+                set(props, name, value);
+            }
             if (*scan == ',') {
                 scan++;
                 continue;
@@ -3829,7 +3878,7 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
     if (remainder) *remainder = scan;
     return res;
 }
-
+ 
 array parse_array_objects(cstr* s, AType element_type) {
     cstr scan = *s;
     array res = array(alloc, 64);
@@ -3839,9 +3888,14 @@ array parse_array_objects(cstr* s, AType element_type) {
             break;
         }
         object a = parse_object(scan, element_type, &scan);
+        static int test2 = 2;
+        test2++;
+        if (test2 == 19) {
+            test2 = test2;
+        }
         push(res, a);
         scan = ws(scan);
-        if (scan[0] == ',') {
+        if (scan && scan[0] == ',') {
             scan = ws(&scan[1]);
             continue;
         }
@@ -3855,7 +3909,7 @@ object parse_array(cstr s, AType schema, cstr* remainder) {
     verify(*scan == '[', "expected array '['");
     scan = ws(&scan[1]);
     object res = null;
-    if (!schema || schema->src == typeid(array)) {
+    if (!schema || (schema->src == typeid(array))) {
         AType element_type = schema ? schema->meta.meta_0 : typeid(object);
         res = parse_array_objects(&scan, element_type);
     } else if (schema == typeid(veci64) || schema->src == typeid(veci64)) {
@@ -3865,7 +3919,7 @@ object parse_array(cstr s, AType schema, cstr* remainder) {
         int n = 0;
         each(arb, object, a) {
             verify(isa(a) == typeid(i64), "expected i64");
-            ((i64*)res)[n] = *(i64*)a;
+            ((i64*)res)[n++] = *(i64*)a;
         }
     } else if (schema      == typeid(mat4f) || schema      == typeid(quatf) || 
                schema->src == typeid(matf)  || schema->src == typeid(vecf)) {
@@ -3880,7 +3934,9 @@ object parse_array(cstr s, AType schema, cstr* remainder) {
             else if (a_type == typeid(f64)) ((f32*)res)[n++] =  (float)*(double*)a;
             else fault("unexpected type");
         }
-        
+    } else if (constructs_with(schema, typeid(array))) {
+        array arb = parse_array_objects(&scan, typeid(i64));
+        res = construct_with(schema, arb);
     } else {
         fault("unhandled vector type: %s", schema ? schema->name : null);
     }
@@ -3893,9 +3949,20 @@ object parse(cstr s, AType schema) {
     return parse_object(s, schema, null);
 }
 
+shape shape_with_array(shape a, array dims) {
+    num count = len(dims);
+    each (dims, object, e) {
+        i64* i = instanceof(e, i64);
+        a->data[a->count++] = *i;
+    }
+    return a;
+}
+
 define_class(quatf)
 
 define_class(message)
+
+define_class(shape)
 
 define_vector_base(mat, f32,  f)
 

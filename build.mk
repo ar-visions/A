@@ -180,8 +180,8 @@ APPS_IMPORTS       = $(call process_imports,app)
 LIB_IMPORTS        = $(call process_imports,lib)
 release		      ?= 0
 APP			      ?= 0
-CC 			       = $(IMPORT)/bin/clang
-CXX			       = $(IMPORT)/bin/clang++
+CC 			       = gcc # $(IMPORT)/bin/clang
+CXX			       = g++ # $(IMPORT)/bin/clang++
 MAKEFLAGS         += --no-print-directory
 LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(IMPORT)/include
 APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(IMPORT)/include
@@ -226,8 +226,8 @@ CFLAGS 		   	   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-Wno-incompatible-pointer-types -Wfatal-errors -std=gnu11 -DMODULE="\"$(PROJECT)\"" \
 	-Wno-incompatible-library-redeclaration -fvisibility=default
 #ifeq ($(ASAN),1)
-#CFLAGS := $(CFLAGS) -fsanitize=address
-#LDFLAGS := $(LDFLAGS) -fsanitize=address
+CFLAGS := $(CFLAGS) -fsanitize=address
+LDFLAGS := $(LDFLAGS) -fsanitize=address
 #endif
 SRC_TRANSLATION   := $(SRC_ROOT)/translation/A-translation.c
 BUILD_TRANSLATION := $(BUILD_DIR)/A-translation
@@ -489,7 +489,7 @@ $(BUILD_DIR)/$(PROJECT)-flat:
 
 # compiling
 # ---------------------------------------------
-# lib
+# lib (todo: allow -flags to be placed in import)
 $(BUILD_DIR)/lib/%.o: $(BUILD_DIR)/lib/%.c
 	$(CC) $(CFLAGS) $(LIB_INCLUDES) $(LIB_CFLAGS) -c $< -o $@
 $(BUILD_DIR)/lib/%.o: $(BUILD_DIR)/lib/%.cc

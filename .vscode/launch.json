@@ -11,13 +11,58 @@
             "cwd": "${workspaceFolder}/../silver/silver"
         },
         {
-            "name": "Python: hyperspace:train",
+            "name": "Python: vision:annotate",
             "type": "debugpy",
-            "args": ["-b", "4", "-m", "track", "-s", "target,mostly-center", "-i", "64", "-q", "4", "-r", "1", "-e", "1", "--learning-rate", "0.0001"],
+            "args": ["-a", "scale", "-s", "center-offset"],
             "request": "launch",
-            "program": "${workspaceFolder}/../hyperspace/app/vision-train.py",
+            "program": "${workspaceFolder}/../hyperspace/vision-annotate.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/../hyperspace/app"
+            "cwd": "${workspaceFolder}/../hyperspace/"
+        },
+        {
+            "name": "Python: train:base",
+            "type": "debugpy",
+            "args": ["-b", "1", "-m", "base", "-s", "center-offset", "-i", "32", "-r", "1", "-e", "8", "--learning-rate", "0.0001"],
+            "request": "launch",
+            "program": "${workspaceFolder}/../hyperspace/vision-train.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../hyperspace/"
+        },
+        {
+            "name": "Python: train:target",
+            "type": "debugpy",
+            "args": ["-b", "1", "-m", "target", "-s", "center-offset", "-i", "32", "-r", "16", "-e", "16", "--learning-rate", "0.0001"],
+            "request": "launch",
+            "program": "${workspaceFolder}/../hyperspace/vision-train.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../hyperspace/"
+        },
+        {
+            "name": "Python: train:eyes",
+            "type": "debugpy",
+            "args": ["-b", "1", "-m", "eyes", "-s", "center-offset", "-i", "32", "-r", "32", "-e", "8", "--learning-rate", "0.001"],
+            "request": "launch",
+            "program": "${workspaceFolder}/../hyperspace/vision-train.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../hyperspace/"
+        },
+        {
+            "name": "Python: train:track",
+            "type": "debugpy",
+            "args": ["-b", "2", "-m", "track", "-s", "center-offset", "-i", "32", "-r", "16", "-e", "16", "--learning-rate", "0.001"],
+            "request": "launch",
+            "program": "${workspaceFolder}/../hyperspace/vision-train.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../hyperspace/"
+        },
+        {
+            "name": "Python: train:record",
+            "type": "debugpy",
+            "args": ["-s", "center_off", "-f"],
+            "request": "launch",
+            "program": "${workspaceFolder}/../hyperspace/vision-record.py",
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}/../hyperspace/"
         },
         {
             "name": "A-generate",
@@ -67,11 +112,9 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/../ai/debug/ai-test",
-            "args": [
-                "module.c"
-            ],
+            "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../ai/debug",
+            "cwd": "${workspaceFolder}/../hyperspace/res",
             "environment": [
             ],
             "MIMode": "gdb",

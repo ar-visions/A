@@ -17,6 +17,10 @@
 			"path": "../ion"
 		},
 		{
+			"name": "vec",
+			"path": "../vec"
+		},
+		{
 			"name": "trinity",
 			"path": "../trinity"
 		},
@@ -270,7 +274,14 @@
 			"ai": "cpp",
 			"ai-methods": "cpp",
 			"ai-init": "cpp",
-			"ai-intern": "cpp"
+			"ai-intern": "cpp",
+			"math.h": "c",
+			"pbr": "cpp",
+			"vector-methods": "cpp",
+			"vec": "c",
+			"vec-init": "c",
+			"vec-methods": "c",
+			"vec-intern": "c"
 		}
 	}
 }

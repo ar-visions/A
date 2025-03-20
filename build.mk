@@ -180,8 +180,8 @@ APPS_IMPORTS       = $(call process_imports,app)
 LIB_IMPORTS        = $(call process_imports,lib)
 release		      ?= 0
 APP			      ?= 0
-CC 			       = gcc # $(IMPORT)/bin/clang
-CXX			       = g++ # $(IMPORT)/bin/clang++
+CC 			       = $(IMPORT)/bin/clang
+CXX			       = $(IMPORT)/bin/clang++
 MAKEFLAGS         += --no-print-directory
 LIB_INCLUDES       = -I$(BUILD_DIR)/lib  -I$(IMPORT)/include
 APP_INCLUDES       = -I$(BUILD_DIR)/app  -I$(BUILD_DIR)/lib -I$(IMPORT)/include
@@ -225,10 +225,10 @@ CFLAGS 		   	   = $(if $(filter 1,$(release)),,-g) -fPIC -fno-exceptions \
 	-Wno-write-strings -Wno-compare-distinct-pointer-types -Wno-deprecated-declarations \
 	-Wno-incompatible-pointer-types -Wfatal-errors -std=gnu11 -DMODULE="\"$(PROJECT)\"" \
 	-Wno-incompatible-library-redeclaration -fvisibility=default
-#ifeq ($(ASAN),1)
+ifeq ($(ASAN),1)
 CFLAGS := $(CFLAGS) -fsanitize=address
 LDFLAGS := $(LDFLAGS) -fsanitize=address
-#endif
+endif
 SRC_TRANSLATION   := $(SRC_ROOT)/translation/A-translation.c
 BUILD_TRANSLATION := $(BUILD_DIR)/A-translation
 
@@ -242,109 +242,23 @@ endif
 
 all: $(ALL_TARGETS)
 
-# how do we add to ALL_TARGETS if PROJECT_HEADER exists and METHODS_HEADER does not? (might be nice to allow the user to make one)
-# Generate method macros header
+# for both headers:
+# we make unique macros for each so we may expand other calls within
+# otherwise we are limited by 1 expansion policy
+# we also facilitate different expansion for class vs struct
+# this makes for more intuitive, more readable c code.
+# it costs the pre-processor nothing to parse this, even for hundreds of methods
+
+# generate method macros header (PROJECT-method)
 $(METHODS_HEADER): $(PROJECT_HEADER)
-	@if [ ! -f $@ ] || [ $(PROJECT_HEADER) -nt $@ ]; then \
-		rm -f $@; \
-		echo "/* generated methods interface */" > $@; \
-		echo "#ifndef _$(UPROJECT)_METHODS_H_" >> $@; \
-		echo "#define _$(UPROJECT)_METHODS_H_" >> $@; \
-		echo >> $@; \
-		grep -o 'i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*[[:alnum:]_]*' $(PROJECT_HEADER) | \
-		$(SED) 's/i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*\([[:alnum:]_]*\).*/\1/' | \
-		while read method; do \
-			if [ -n "$$method" ]; then \
-				echo "#undef $$method\n#define $$method(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->$$method(_i_, ## __VA_ARGS__); })" >> $@; \
-			fi; \
-		done; \
-		echo >> $@; \
-		echo "#endif /* _$(UPROJECT)_METHODS_H_ */" >> $@; \
-	fi
+	@bash $(ATYPE_ROOT)/method.sh $(METHODS_HEADER) $(PROJECT_HEADER) $(UPROJECT)
 
-# generate wrappers (macros named same as each class found in *_schema) around new() macro
+# generate init macros header (PROJECT-init)
 $(INIT_HEADER): $(PROJECT_HEADER)
-	@if [ ! -f $@ ] || [ $(PROJECT_HEADER) -nt $@ ]; then \
-		rm -f $@; \
-		echo "/* generated methods interface */" > $@; \
-		echo "#ifndef _$(UPROJECT)_INIT_H_" >> $@; \
-		echo "#define _$(UPROJECT)_INIT_H_" >> $@; \
-		echo >> $@; \
-		grep -o 'declare_\(class\|mod\|meta\|vector\)[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-		$(SED) -E 's/declare_(class|mod|meta|vector)[[:space:]]*\([[:space:]]*([^,)]*)[[:space:]]*(,[[:space:]]*([^,)[:space:]]*))?/\1 \2 \4/' | \
-		while read type class_name arg; do \
-			if [ -z "$${class_name}" ]; then \
-				continue; \
-			fi; \
-			echo "#ifndef NDEBUG" >> $@; \
-			echo "    //#define TC_$${class_name}(MEMBER, VALUE) A_validate_type(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)" >> $@; \
-			echo "    #define TC_$${class_name}(MEMBER, VALUE) VALUE" >> $@; \
-			echo "#else" >> $@; \
-			echo "    #define TC_$${class_name}(MEMBER, VALUE) VALUE" >> $@; \
-			echo "#endif" >> $@; \
-			echo "#define _ARG_COUNT_IMPL_$${class_name}(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N" >> $@; \
-			echo "#define _ARG_COUNT_I_$${class_name}(...) _ARG_COUNT_IMPL_$${class_name}(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)" >> $@; \
-			echo "#define _ARG_COUNT_$${class_name}(...)   _ARG_COUNT_I_$${class_name}(\"A-type\", ## __VA_ARGS__)" >> $@; \
-			echo "#define _COMBINE_$${class_name}_(A, B)   A##B" >> $@; \
-			echo "#define _COMBINE_$${class_name}(A, B)    _COMBINE_$${class_name}_(A, B)" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_0( TYPE)" >> $@; \
-			if [ "$$type" = "meta" ] || [ "$$type" = "vector" ]; then \
-				echo "#define _N_ARGS_$${class_name}_1( TYPE, a)" >> $@; \
-			else \
-				echo "#define _N_ARGS_$${class_name}_1( TYPE, a) _Generic((a), TYPE##_schema(TYPE, GENERICS, object) const void *: (void)0)(instance, a)" >> $@; \
-			fi; \
-			echo "#define _N_ARGS_$${class_name}_2( TYPE, a,b) instance->a = TC_$${class_name}(a,b);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_4( TYPE, a,b, c,d) _N_ARGS_$${class_name}_2(TYPE, a,b) instance->c = TC_$${class_name}(c,d);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_6( TYPE, a,b, c,d, e,f) _N_ARGS_$${class_name}_4(TYPE, a,b, c,d) instance->e = TC_$${class_name}(e,f);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_8( TYPE, a,b, c,d, e,f, g,h) _N_ARGS_$${class_name}_6(TYPE, a,b, c,d, e,f) instance->g = TC_$${class_name}(g,h);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_10(TYPE, a,b, c,d, e,f, g,h, i,j) _N_ARGS_$${class_name}_8(TYPE, a,b, c,d, e,f, g,h) instance->i = TC_$${class_name}(i,j);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_12(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) _N_ARGS_$${class_name}_10(TYPE, a,b, c,d, e,f, g,h, i,j) instance->l = TC_$${class_name}(l,m);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_14(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) _N_ARGS_$${class_name}_12(TYPE, a,b, c,d, e,f, g,h, i,j, l,m) instance->n = TC_$${class_name}(n,o);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_16(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) _N_ARGS_$${class_name}_14(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o) instance->p = TC_$${class_name}(p,q);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_18(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) _N_ARGS_$${class_name}_16(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q) instance->r = TC_$${class_name}(r,s);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_20(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) _N_ARGS_$${class_name}_18(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s) instance->t = TC_$${class_name}(t,u);" >> $@; \
-			echo "#define _N_ARGS_$${class_name}_22(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u, v,w) _N_ARGS_$${class_name}_20(TYPE, a,b, c,d, e,f, g,h, i,j, l,m, n,o, p,q, r,s, t,u) instance->v = TC_$${class_name}(v,w);" >> $@; \
-			echo "#define _N_ARGS_HELPER2_$${class_name}(TYPE, N, ...)  _COMBINE_$${class_name}(_N_ARGS_$${class_name}_, N)(TYPE, ## __VA_ARGS__)" >> $@; \
-			echo "#define _N_ARGS_$${class_name}(TYPE,...)    _N_ARGS_HELPER2_$${class_name}(TYPE, _ARG_COUNT_$${class_name}(__VA_ARGS__), ## __VA_ARGS__)" >> $@; \
-			echo "#define $${class_name}(...) ({ \\" >> $@; \
-			echo "    $${class_name} instance = ($${class_name})A_alloc(typeid($${class_name}), 1, true); \\" >> $@; \
-			echo "    _N_ARGS_$${class_name}($${class_name}, ## __VA_ARGS__); \\" >> $@; \
-			echo "    A_initialize((object)instance); \\" >> $@; \
-			echo "    instance; \\" >> $@; \
-			echo "})" >> $@; \
-		done; \
-		echo >> $@; \
-		echo "#endif /* _$(UPROJECT)_INIT_H_ */" >> $@; \
-	fi
+	@bash $(ATYPE_ROOT)/init.sh $(INIT_HEADER) $(PROJECT_HEADER) $(UPROJECT)
 
-$(INTERN_HEADER):
-	@if [ ! -f $@ ] || [ $(PROJECT_HEADER) -nt $@ ]; then \
-		rm -f $@; \
-		echo "/* generated methods interface */" > $@; \
-		echo "#ifndef _$(UPROJECT)_INTERN_H_" >> $@; \
-		echo "#define _$(UPROJECT)_INTERN_H_" >> $@; \
-		echo >> $@; \
-		grep -o 'declare_class[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-		$(SED) 's/declare_class[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
-		while read class_name; do \
-			echo "#define $${class_name}_intern\t\tintern($$class_name)" >> $@; \
-		done; \
-		echo >> $@; \
-		echo >> $@; \
-		grep -o 'declare_mod[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-		$(SED) 's/declare_mod[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
-		while read class_name; do \
-			echo "#define $${class_name}_intern\t\tintern($$class_name)" >> $@; \
-		done; \
-		echo >> $@; \
-		grep -o 'declare_meta[[:space:]]*([[:space:]]*[^,)]*' $(PROJECT_HEADER) | \
-		$(SED) 's/declare_meta[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/' | \
-		while read class_name; do \
-			echo "#define $${class_name}_intern\t\tintern($$class_name)" >> $@; \
-		done; \
-		echo >> $@; \
-		echo "#endif /* _$(UPROJECT)_INTERN_H_ */" >> $@; \
-	fi
+$(INTERN_HEADER): $(PROJECT_HEADER)
+	@bash $(ATYPE_ROOT)/intern.sh $(INTERN_HEADER) $(PROJECT_HEADER) $(UPROJECT)
 
 # A-type subprocedure syntax is a good thing it just cant happen now, and we should still attempt to say the file is c
 ifeq ($(PROJECT),AAAAA) # disabled for now

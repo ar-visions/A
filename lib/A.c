@@ -10,6 +10,68 @@
 #endif
 #include <math.h>
 
+object parse(cstr s, AType schema);
+
+shape shape_with_array(shape a, array dims) {
+    num count = len(dims);
+    each (dims, object, e) {
+        i64* i = instanceof(e, i64);
+        a->data[a->count++] = *i;
+    }
+    return a;
+}
+
+i64 shape_total(shape a) {
+    i64* data = a->data;
+    i64 total = 1;
+    for (int i = 0; i < a->count; i++)
+        total *= data[i];
+    return total;
+}
+
+i64 shape_compare(shape a, shape b) {
+    if (a->count != b->count)
+        return a->count - b->count;
+    for (int i = 0; i < a->count; i++)
+        if (a->data[i] != b->data[i])
+            return a->data[i] - b->data[i];
+    return 0;
+}
+
+shape shape_from(i64 count, i64* values) {
+    shape res = shape(count, count);
+    memcpy(res->data, values, sizeof(i64) * count);
+    return res;
+}
+
+shape shape_read(FILE* f) {
+    i32 n_dims;
+    i64 data[256];
+    verify(fread(&n_dims, sizeof(i32), 1, f) == 1, "n_dims");
+    verify(n_dims < 256, "invalid");
+    verify(fread(data, sizeof(i64), n_dims, f) == n_dims, "shape_read data");
+    shape res = shape(count, n_dims);
+    memcpy(res->data, data, sizeof(i64) * n_dims);
+    return res;
+}
+
+shape shape_new(i64 size, ...) {
+    va_list args;
+    va_start(args, size);
+    i64 n_dims = 0;
+    for (i64 arg = size; arg; arg = va_arg(args, i64))
+        n_dims++;
+    
+    va_start(args, size);
+    shape res = shape(count, n_dims);
+    i64  index = 0;
+    for (i64 arg = size; arg; arg = va_arg(args, i64))
+        res->data[index++] = arg;
+    return res;
+}
+
+define_class(shape)
+
 /// block-chain will go here in quanta
 
 __thread array     af_stack;
@@ -502,206 +564,6 @@ array array_of_cstr(cstr first, ...) {
     return a;
 }
 
-raw push_generic(object a) {
-    A aa = A_header(a);
-    verify (!aa->shape, "shape undefined");
-    return A_realloc(a, aa->count + 1);
-}
-
-none vecf64_push(vecf64 a, f64 v) {
-    f64* ptr = push_generic(a);
-    *ptr = v;
-}
-
-none vecf_push(vecf a, f32 v) {
-    f32* ptr = push_generic(a);
-    *ptr = v;
-}
-
-
-
-f64 vecf64_last(vecf64 a) {
-    f64* ptr = A_data(a);
-    A f = A_header(a);
-    return ptr[f->count];
-}
-
-f64 vecf64_first(vecf64 a) {
-    f64* ptr = A_data(a);
-    return ptr[0];
-}
-
-
-i8 veci8_last(veci8 a) {
-    i8* ptr = A_data(a);
-    A f = A_header(a);
-    return ptr[f->count];
-}
-
-i8 veci8_first(veci8 a) {
-    i8* ptr = A_data(a);
-    return ptr[0];
-}
-
-
-f32 vecf_last(vecf a) {
-    f32* ptr = A_data(a);
-    A f = A_header(a);
-    return ptr[f->count];
-}
-
-f32 vecf_first(vecf a) {
-    f32* ptr = A_data(a);
-    return ptr[0];
-}
-
-
-i64 veci64_last(veci64 a) {
-    i64* ptr = A_data(a);
-    A f = A_header(a);
-    return ptr[f->count];
-}
-
-i64 veci64_first(veci64 a) {
-    i64* ptr = A_data(a);
-    return ptr[0];
-}
-
-
-
-none veci64_push(veci64 a, i64 v) {
-    i64* ptr = push_generic(a);
-    *ptr = v;
-}
-
-none veci8_push(veci8 a, i8 v) {
-    i8* ptr = push_generic(a);
-    *ptr = v;
-}
-
-vecf64 vecf64_typed_copy(vecf64 a) {
-    return vecf64(A_data(a));
-}
-
-vecf vecf_typed_copy(vecf a) {
-    return vecf(A_data(a));
-}
-
-veci64 veci64_typed_copy(veci64 a) {
-    return veci64(A_data(a));
-}
-
-veci8 veci8_typed_copy(veci8 a) {
-    return veci8(A_data(a));
-}
-
-veci8  new_veci8(object data) {
-    A a = A_header(data);
-    i8* values = data;
-    if (a->count == 2) return vec2i8(values[0], values[1]);
-    if (a->count == 3) return vec3i8(values[0], values[1], values[2]);
-    if (a->count == 4) return vec4i8(values[0], values[1], values[2], values[3]);
-    veci8 def = new(veci8);
-    A def_a = A_header(def);
-    def_a->data = hold(data); /// drop logic handles data reallocation cases
-    return def;
-}
-
-veci64 new_veci64(object data) {
-    A a = A_header(data);
-    i64* values = data;
-    if (a->count == 2) return vec2i64(values[0], values[1]);
-    if (a->count == 3) return vec3i64(values[0], values[1], values[2]);
-    if (a->count == 4) return vec4i64(values[0], values[1], values[2], values[3]);
-    veci64 def = new(veci64);
-    A def_a = A_header(def);
-    def_a->data = hold(data);
-    return def;
-}
-
-vecf64 new_vecf64(object data) {
-    A a = A_header(data);
-    f64* values = data;
-    if (a->count == 2) return vec2f64(values[0], values[1]);
-    if (a->count == 3) return vec3f64(values[0], values[1], values[2]);
-    if (a->count == 4) return vec4f64(values[0], values[1], values[2], values[3]);
-    vecf64 def = new(vecf64);
-    A def_a = A_header(def);
-    def_a->data = hold(data);
-    return def;
-}
-
-vecf   new_vecf(object data) {
-    A a = A_header(data);
-    f32* values = data;
-    if (a->count == 2) return vec2f(values[0], values[1]);
-    if (a->count == 3) return vec3f(values[0], values[1], values[2]);
-    if (a->count == 4) return vec4f(values[0], values[1], values[2], values[3]);
-    vecf def = new(vecf);
-    A def_a = A_header(def);
-    def_a->data = hold(data);
-    return def;
-}
-
-i8    veci8_get (veci8  a, num i)          { i8*    m = A_data(a); return m[i]; }
-i64   veci64_get(veci64 a, num i)          { i64*   m = A_data(a); return m[i]; }
-f32   vecf_get  (vecf   a, num i)          { float* m = A_data(a); return m[i]; }
-real  vecf64_get(vecf64 a, num i)          { real*  m = A_data(a); return m[i]; }
-i8    veci8_set (veci8  a, num i, i8   n)  { i8*    m = A_data(a); i8    r = m[i]; m[i] = n; return r; }
-i64   veci64_set(veci64 a, num i, i64  n)  { i64*   m = A_data(a); i64   r = m[i]; m[i] = n; return r; }
-f32   vecf_set  (vecf   a, num i, f32  n)  { float* m = A_data(a); float r = m[i]; m[i] = n; return r; }
-real  vecf64_set(vecf64 a, num i, real n)  { real*  m = A_data(a); real  r = m[i]; m[i] = n; return r; }
-
-sz    veci8_len (veci8  a) { return A_header(a)->count; }
-sz    veci64_len(veci64 a) { return A_header(a)->count; }
-sz    vecf_len  (vecf   a) { return A_header(a)->count; }
-sz    vecf64_len(vecf64 a) { return A_header(a)->count; }
-
-num veci8_index_of(veci8 a, i8 n) {
-    i8* v = A_header(a)->data;
-    num c = A_header(a)->count;
-    for (num i = 0; i < c; i++) if (v[i] == n) return i; return -1;
-}
-
-num veci64_index_of(veci64 a, i64 n) {
-    i64* v = A_header(a)->data;
-    num c = A_header(a)->count;
-    for (num i = 0; i < c; i++) if (v[i] == n) return i; return -1;
-}
-
-num vecf64_index_of(vecf64 a, f64 n) {
-    f64* v = A_header(a)->data;
-    num c = A_header(a)->count;
-    for (num i = 0; i < c; i++) if (v[i] == n) return i; return -1;
-}
-
-num vecf_index_of(vecf a, f32 n) {
-    f32* v = A_header(a)->data;
-    num c = A_header(a)->count;
-    for (num i = 0; i < c; i++) if (v[i] == n) return i; return -1;
-}
-
-/// type system is not running when this is called
-veci64 veci64_of(i64 first, ...) {
-    i64 count = 0;
-    va_list args;
-    va_start(args, first);
-    for (i64 arg = first; arg != 0; arg = va_arg(args, i64))
-        count++;
-    
-    A a = calloc(1024 + sizeof(A) + sizeof(i64) * (count + 1), 1);
-    a->count = count;
-    a->type  = typeid(i64);
-    a->data  = &a[1];
-    a->alloc = count;
-    veci64 vec = &a[1];
-    va_start(args, first);
-    i64 index = 0;
-    for (i64 arg = first; arg != 0; arg = va_arg(args, i64))
-        ((i64*)vec)[index++] = arg;
-    return vec;
-}
-
 void  array_weak_push(array a, object obj) {
     if (a->alloc == a->len) {
         array_expand(a);
@@ -1167,6 +1029,10 @@ A A_with_cereal(object a, cereal cs) {
         return res;
     }
     else {
+        bool can = constructs_with(f->type, typeid(string));
+        if (can) {
+            return construct_with(f->type, string(cs));
+        }
         printf("implement ctr cstr for %s\n", f->type->name);
         exit(-1);
     }
@@ -1315,27 +1181,7 @@ void A_serialize(AType type, string res, object a) {
         else if (type == typeid(f64)) len = sprintf(buf, "%f",   *(f64*)a);
         else if (type == typeid(f32)) len = sprintf(buf, "%f",   *(f32*)a);
         else if (type == typeid(cstr)) len = sprintf(buf, "%s",  *(cstr*)a);
-        else if (type == typeid(vec2i8))   len = sprintf(buf, "%i %i",               (int)(((i8*) a)[0]), (int)(((i8*) a)[1]));
-        else if (type == typeid(vec2f))    len = sprintf(buf, "%.4f %.4f",           ((f32*)a)[0], ((f32*)a)[1]);
-        else if (type == typeid(vec2f64))  len = sprintf(buf, "%.4f %.4f",           ((f64*)a)[0], ((f64*)a)[1]);
-        else if (type == typeid(vec3i8))   len = sprintf(buf, "%i %i %i",            (int)(((i8*) a)[0]), (int)(((i8*) a)[1]), (int)((((i8*) a)[2])));
-        else if (type == typeid(vec3f))    len = sprintf(buf, "%.4f %.4f %.4f",      ((f32*)a)[0], ((f32*)a)[1], ((f32*)a)[2]);
-        else if (type == typeid(vec3f64))  len = sprintf(buf, "%.4f %.4f %.4f",      ((f64*)a)[0], ((f64*)a)[1], ((f64*)a)[2]);
-        else if (type == typeid(vec4i8))   len = sprintf(buf, "%i %i %i %i",         (int)(((i8*) a)[0]), (int)(((i8*) a)[1]), (int)(((i8*) a)[2]), (int)(((i8*) a)[3]));
-        else if (type == typeid(vec4f))    len = sprintf(buf, "%.4f %.4f %.4f %.4f", ((f32*)a)[0], ((f32*)a)[1], ((f32*)a)[2], ((f32*)a)[3]);
-        else if (type == typeid(vec4f64))  len = sprintf(buf, "%.4f %.4f %.4f %.4f", ((f64*)a)[0], ((f64*)a)[1], ((f64*)a)[2], ((f32*)a)[3]);
-        else if (type == typeid(mat4f)) {
-            len = 0;
-            fault("implement m4x4");
-        }
-        else if (type == typeid(mat3f)) {
-            len = 0;
-            fault("implement m3x3");
-        }
-        else if (type == typeid(mat2f)) {
-            len = 0;
-            fault("implement m2x2");
-        }
+        else if (type == typeid(symbol)) len = sprintf(buf, "%s",  *(cstr*)a);
         else {
             fault("implement primitive cast to str: %s", type->name);
         }
@@ -1355,49 +1201,15 @@ void A_serialize(AType type, string res, object a) {
 string A_cast_string(A a) {
     AType type = isa(a);
     A a_header = A_header(a);
-    if (instanceof(a, string)) return a;
     bool  once = false;
+    if (instanceof(a, string)) return (string)a;
     string res = new(string, alloc, 1024);
     if (type->traits & A_TRAIT_PRIMITIVE)
         A_serialize(type, res, a);
     else {
         //append(res, type->name);
         append(res, "[");
-        if (type->src == typeid(matf)) {
-            if (type == typeid(mat4f)) {
-                for (int r = 0; r < 4 * 4; r++) {
-                    if (r) append(res, ", ");
-                    A_serialize(typeid(f32), res, A_f32(((mat4f)a)->m[r]));
-                }
-            } else if (type == typeid(mat3f)) {
-                for (int r = 0; r < 3 * 3; r++) {
-                    if (r) append(res, ", ");
-                    A_serialize(typeid(f32), res, A_f32(((mat3f)a)->m[r]));
-                }
-            } else if (type == typeid(mat2f)) {
-                for (int r = 0; r < 2 * 2; r++) {
-                    if (r) append(res, ", ");
-                    A_serialize(typeid(f32), res, A_f32(((mat2f)a)->m[r]));
-                }
-            } else {
-                fault("implement generic");
-            }
-        } else if (type == typeid(veci64) || type->src == typeid(veci64)) {
-            for (int r = 0; r < a_header->count; r++) {
-                if (r) append(res, ", ");
-                A_serialize(typeid(i64), res, A_i64((&((veci64)a)->x)[r]));
-            }
-        } else if (type == typeid(vecf) || type->src == typeid(vecf)) {
-            for (int r = 0; r < a_header->count; r++) {
-                if (r) append(res, ", ");
-                A_serialize(typeid(f32), res, A_f32((&((vecf)a)->x)[r]));
-            }
-        } else if (type == typeid(vecf64) || type->src == typeid(vecf64)) {
-            for (int r = 0; r < a_header->count; r++) {
-                if (r) append(res, ", ");
-                A_serialize(typeid(f64), res, A_f64((&((vecf64)a)->x)[r]));
-            }
-        } else for (num i = 0; i < type->member_count; i++) {
+        for (num i = 0; i < type->member_count; i++) {
             type_member_t* m = &type->members[i];
             // todo: intern members wont be registered
             if (m->member_type & (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN)) {
@@ -2375,6 +2187,8 @@ void vector_init(vector a) {
     f->count = 0;
     f->scalar = f->type->meta.meta_0 ? f->type->meta.meta_0 : a->type ? a->type : typeid(i8);
     verify(f->scalar, "scalar not set");
+    if (a->shape)
+        a->alloc = total(a->shape);
     A_realloc(a, a->alloc);
 }
 
@@ -2393,6 +2207,18 @@ none vector_with_path(vector a, path file_path) {
     size_t n = fread(f->data, 1, flen, ff);
     verify(n == flen, "could not read file: %o", f);
     fclose(ff);
+}
+
+ARef vector_get(vector a, num index) {
+    num location = index * a->type->size;
+    i8* arb = data(a);
+    return &arb[location];
+}
+
+none vector_set(vector a, num index, ARef element) {
+    num location = index * a->type->size;
+    i8* arb = data(a);
+    memcpy(&arb[location], element, a->type->size); 
 }
 
 void vector_realloc(vector a, sz size) {
@@ -2644,6 +2470,13 @@ path path_temp(symbol tmpl) {
 path path_with_string(path a, string s) {
     a->chars = copy_cstr((cstr)s->chars);
     return a;
+}
+
+bool path_is_ext(path a, symbol e) {
+    string ex = ext(a);
+    if (ex && cmp(ex, e) == 0)
+        return true;
+    return false;
 }
 
 bool path_cast_bool(path a) {
@@ -2932,741 +2765,6 @@ array path_ls(path a, string pattern, bool recur) {
     return list;
 }
 
-// -----------------------------------------------------------
-// vec generics (f, f64, and i8)
-// -----------------------------------------------------------
-mat4f new_mat4f(f32* x0) {
-    mat4f r = A_alloc(typeid(mat4f), 1, true);
-    AType  type = typeid(mat4f);
-    if (x0)
-        memcpy(r->m, x0, sizeof(f32) * type->vmember_count);
-    else {
-        r->m[4 * 0 + 0] = 1.0f;
-        r->m[4 * 1 + 1] = 1.0f;
-        r->m[4 * 2 + 2] = 1.0f;
-        r->m[4 * 3 + 3] = 1.0f;
-    }
-    return r;
-}
-
-mat3f new_mat3f(f32* x0) {
-    mat3f r = A_alloc(typeid(mat3f), 1, true);
-    AType  type = typeid(mat3f);
-    if (x0)
-        memcpy(r->m, x0, sizeof(f32) * type->vmember_count);
-    else {
-        r->m[3 * 0 + 0] = 1.0f;
-        r->m[3 * 1 + 1] = 1.0f;
-        r->m[3 * 2 + 2] = 1.0f;
-    }
-    return r;
-}
-
-mat2f new_mat2f(f32* x0) {
-    mat2f r = A_alloc(typeid(mat2f), 1, true);
-    AType  type = typeid(mat2f);
-    if (x0)
-        memcpy(r->m, x0, sizeof(f32) * type->vmember_count);
-    else {
-        r->m[2 * 0 + 0] = 1.0f;
-        r->m[2 * 1 + 1] = 1.0f;
-    }
-    return r;
-}
-
-bool    matf_cast_bool   (matf a) {
-    AType  type = isa(a);
-    for (int i = 0; i < type->vmember_count; i++)
-        if (a->m[i] != 0.0f) return true;
-    return false;
-}
-
-quatf new_quatf(f32 x, f32 y, f32 z, f32 w) {
-    quatf r = A_alloc(typeid(quatf), 1, true);
-    r->x = x;
-    r->y = y;
-    r->z = z;
-    r->w = w;
-    return r;
-}
-
-vec2i8 new_vec2i8(i8 x, i8 y) {
-    vec2i8 r = A_alloc(typeid(vec2i8), 1, true);
-    r->x = x;
-    r->y = y;
-    return r;
-}
-
-vec3i8 new_vec3i8(i8 x, i8 y, i8 z) {
-    vec3i8 r = A_alloc(typeid(vec3i8), 1, true);
-    r->x = x;
-    r->y = y;
-    r->z = z;
-    return r;
-}
-
-vec4i8 new_vec4i8(i8 x, i8 y, i8 z, i8 w) {
-    vec4i8 r = A_alloc(typeid(vec4i8), 1, true);
-    r->x = x;
-    r->y = y;
-    r->z = z;
-    r->w = w;
-    return r;
-}
-
-vec2i64 new_vec2i64(i64 x, i64 y) {
-    vec2i64 r = A_alloc(typeid(vec2i64), 1, true);
-    r->x = x;
-    r->y = y;
-    return r;
-}
-
-vec3i64 new_vec3fi64(i64 x, i64 y, i64 z) {
-    vec3i64 r = A_alloc(typeid(vec3i64), 1, true);
-    r->x = x;
-    r->y = y;
-    r->z = z;
-    return r;
-}
-
-vec4i64 new_vec4i64(i64 x, i64 y, i64 z, i64 w) {
-    vec4i8 r = A_alloc(typeid(vec4i8), 1, true);
-    r->x = x;
-    r->y = y;
-    r->z = z;
-    r->w = w;
-    return r;
-}
-
-vec2f new_vec2f(float x, float y) {
-    vec2f r = A_alloc(typeid(vec2f), 1, true);
-    r->x = x;
-    r->y = y;
-    return r;
-}
-
-vec3f new_vec3f(float x, float y, float z) {
-    vec3f r = A_alloc(typeid(vec3f), 1, true);
-    r->x = x;
-    r->y = y;
-    r->z = z;
-    return r;
-}
-
-vec4f new_vec4f(float x, float y, float z, float w) {
-    vec4f r = A_alloc(typeid(vec4f), 1, true);
-    r->x = x;
-    r->y = y;
-    r->z = z;
-    r->w = w;
-    return r;
-}
-
-
-
-
-vec2f64 new_vec2f64(f64 x, f64 y) {
-    vec2f64 r = A_alloc(typeid(vec2f64), 1, true);
-    r->x = x;
-    r->y = y;
-    return r;
-}
-
-
-vec3i64 new_vec3i64(i64 x, i64 y, i64 z) {
-    vec3i64 r = A_alloc(typeid(vec3i64), 1, true);
-    r->x = x;
-    r->y = y;
-    r->z = z;
-    return r;
-}
-
-vec3f64 new_vec3f64(f64 x, f64 y, f64 z) {
-    vec3f64 r = A_alloc(typeid(vec3f64), 1, true);
-    r->x = x;
-    r->y = y;
-    r->z = z;
-    return r;
-}
-
-
-vec4f64 new_vec4f64(f64 x, f64 y, f64 z, f64 w) {
-    vec4f64 r = A_alloc(typeid(vec4f64), 1, true);
-    r->x = x;
-    r->y = y;
-    r->z = z;
-    r->w = w;
-    return r;
-}
-
-vecf vecf_cross(vecf a, vecf b) {
-    vec3f result = vec3f(
-        a->y * b->z - a->z * b->y,
-        a->z * b->x - a->x * b->z,
-        a->x * b->y - a->y * b->x);
-    return result;
-}
-
-vecf vecf_normalize(vecf a) {
-    f32   len_sq = 0.0f;
-    AType type   = isa(a);
-    for (int i = 0; i < type->vmember_count; i++)
-        len_sq += (&a->x)[i] * (&a->x)[i];
-    f32   len    = sqrtf(len_sq);
-    
-    if (len > 0) {
-        vecf res = A_copy(a);
-        for (int i = 0; i < type->vmember_count; i++)
-            (&res->x)[i] /= len;
-        return res;
-    }
-    return a;
-}
-
-vecf vecf_mix(vecf a, vecf b, f64 f) {
-    vecf   res  = A_copy(a);
-    f32*   fres = &res->x;
-    AType  type = isa(a);
-    verify(type == isa(b) || instanceof(a, vecf) || instanceof(b, vecf),
-        "vector mismatch"); // allow for generics
-    for (int i = 0; i < type->vmember_count; i++) {
-        f32 fa  = (&a->x)[i];
-        f32 fb  = (&b->x)[i];
-        fres[i] = fa * (1.0f - f) + fb * f;
-    }
-    return res;
-}
-
-f64 vecf_dot(vecf a, vecf b) {
-    f64  r = 0.0;
-    AType  type = isa(a);
-    for (int i = 0; i < type->vmember_count; i++)
-        r += (&a->x)[i] * (&b->x)[i];
-    return r;
-}
-
-f64 vecf_length(vecf a) {
-    f64 r = 0.0;
-    AType  type = isa(a);
-    for (int i = 0; i < type->vmember_count; i++)
-        r += (&a->x)[i] * (&a->x)[i];
-    return sqrt(r);
-}
-
-vec2f   vecf_cast_vec2f  (vecf a) { return vec2f  (a->x, a->y); }
-vec3f   vecf_cast_vec3f  (vecf a) { return vec3f  (a->x, a->y, a->z); }
-vec4f   vecf_cast_vec4f  (vecf a) { return vec4f  (a->x, a->y, a->z, a->w); }
-vec2f64 vecf_cast_vec2f64(vecf a) { return vec2f64(a->x, a->y); }
-vec3f64 vecf_cast_vec3f64(vecf a) { return vec3f64(a->x, a->y, a->z); }
-vec4f64 vecf_cast_vec4f64(vecf a) { return vec4f64(a->x, a->y, a->z, a->w); }
-vec2i8  vecf_cast_vec2i8 (vecf a) { return vec2i8 (a->x, a->y); }
-vec3i8  vecf_cast_vec3i8 (vecf a) { return vec3i8 (a->x, a->y, a->z); }
-vec4i8  vecf_cast_vec4i8 (vecf a) { return vec4i8 (a->x, a->y, a->z, a->w); }
-
-bool    vecf_cast_bool   (vecf a) {
-    AType  type = isa(a);
-    for (int i = 0; i < type->vmember_count; i++)
-        if ((&a->x)[i] != 0.0f) return true;
-    return false;
-}
-
-
-
-vecf64 vecf64_cross(vecf64 a, vecf64 b) {
-    vec3f64 result = vec3f64(
-        a->y * b->z - a->z * b->y,
-        a->z * b->x - a->x * b->z,
-        a->x * b->y - a->y * b->x);
-    return result;
-}
-
-vecf64 vecf64_normalize(vecf64 a) {
-    f32   len_sq = 0.0f;
-    AType type   = isa(a);
-    for (int i = 0; i < type->vmember_count; i++)
-        len_sq += (&a->x)[i] * (&a->x)[i];
-    f32   len    = sqrtf(len_sq);
-    
-    if (len > 0) {
-        vecf64 res = A_copy(a);
-        for (int i = 0; i < type->vmember_count; i++)
-            (&res->x)[i] /= len;
-        return res;
-    }
-    return a;
-}
-
-vecf64 vecf64_mix(vecf64 a, vecf64 b, f64 f) {
-    vecf64   res  = A_copy(a);
-    f32*   fres = &res->x;
-    AType  type = isa(a);
-    verify(type == isa(b) || instanceof(a, vecf64) || instanceof(b, vecf64),
-        "vector mismatch"); // allow for generics
-    for (int i = 0; i < type->vmember_count; i++) {
-        f32 fa  = (&a->x)[i];
-        f32 fb  = (&b->x)[i];
-        fres[i] = fa * (1.0f - f) + fb * f;
-    }
-    return res;
-}
-
-f64 vecf64_dot(vecf64 a, vecf64 b) {
-    AType type = isa(a);
-    f64  r = 0.0f;
-    for (int i = 0; i < type->vmember_count; i++) r += (&a->x)[i] * (&b->x)[i];
-    return r;
-}
-
-f64 vecf64_length(vecf64 a) {
-    AType type = isa(a);
-    float  r = 0.0f;
-    for (int i = 0; i < type->vmember_count; i++) r += (&a->x)[i] * (&a->x)[i];
-    return sqrtf(r);
-}
-
-vec2f64 vecf64_cast_vec2f  (vecf64 a) { return vec2f64(a->x, a->y); }
-vec3f64 vecf64_cast_vec3f64(vecf64 a) { return vec3f64(a->x, a->y, a->z); }
-vec4f64 vecf64_cast_vec4f64(vecf64 a) { return vec4f64(a->x, a->y, a->z, a->w); }
-bool  vecf64_cast_bool (vecf64 a) {
-    AType type = isa(a);
-    for (int i = 0; i < type->vmember_count; i++)
-        if ((&a->x)[i] != 0.0f) return true;
-    return false;
-}
-
-veci8 veci8_load(path uri) {
-    FILE* f = fopen(uri->chars, "rb");
-    verify(f, "cannot open path: %o", uri);
-    fseek(f, 0, SEEK_END);
-    sz flen = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    veci8 res = A_valloc(typeid(veci8), typeid(i8), flen, flen, true);
-    verify(fread(res, flen, 1, f) == 1, "could not read path: %o", uri);
-    fclose(f);
-    return res;
-}
-
-veci8 veci8_cross(veci8 a, veci8 b) {
-    vec3i8 result = vec3i8(
-        a->y * b->z - a->z * b->y,
-        a->z * b->x - a->x * b->z,
-        a->x * b->y - a->y * b->x
-    );
-    return result;
-}
-
-veci8 veci8_normalize(veci8 a) {
-    i32 len_sq = 0;
-    AType type = isa(a);
-
-    for (int i = 0; i < type->vmember_count; i++)
-        len_sq += (&a->x)[i] * (&a->x)[i];
-
-    if (len_sq > 0) {
-        veci8 res = A_copy(a);
-        for (int i = 0; i < type->vmember_count; i++)
-            (&res->x)[i] = (&a->x)[i] * 255 / len_sq;
-        return res;
-    }
-    return a;
-}
-
-veci8 veci8_mix(veci8 a, veci8 b, f64 ff) {
-    i32 f = ff * 255;
-    veci8 res = A_copy(a);
-    i8* fres = &res->x;
-    AType type = isa(a);
-
-    verify(
-        type == isa(b) || instanceof(a, veci8) || instanceof(b, veci8),
-        "vector mismatch"
-    );
-
-    for (int i = 0; i < type->vmember_count; i++) {
-        i8 fa = (&a->x)[i];
-        i8 fb = (&b->x)[i];
-        fres[i] = (fa * (255 - f) + fb * f) / 255;
-    }
-    return res;
-}
-
-f64 veci8_dot(veci8 a, veci8 b) {
-    AType type = isa(a);
-    i32 r = 0;
-    for (int i = 0; i < type->vmember_count; i++)
-        r += (&a->x)[i] * (&b->x)[i];
-    return r;
-}
-
-f64 veci8_length(veci8 a) {
-    AType type = isa(a);
-    i32 len_sq = 0;
-    for (int i = 0; i < type->vmember_count; i++)
-        len_sq += (&a->x)[i] * (&a->x)[i];
-    return sqrt((f32)len_sq);
-}
-
-i64 shape_total(shape a) {
-    i64* data = a->data;
-    i64 total = 1;
-    for (int i = 0; i < a->count; i++)
-        total *= data[i];
-    return total;
-}
-
-i64 shape_compare(shape a, shape b) {
-    if (a->count != b->count)
-        return a->count - b->count;
-    for (int i = 0; i < a->count; i++)
-        if (a->data[i] != b->data[i])
-            return a->data[i] - b->data[i];
-    return 0;
-}
-
-vec2i8 veci8_cast_vec2i8(veci8 a) { return vec2i8(a->x, a->y); }
-vec3i8 veci8_cast_vec3i8(veci8 a) { return vec3i8(a->x, a->y, a->z); }
-vec4i8 veci8_cast_vec4i8(veci8 a) { return vec4i8(a->x, a->y, a->z, a->w); }
-
-bool veci8_cast_bool(veci8 a) {
-    AType type = isa(a);
-    for (int i = 0; i < type->vmember_count; i++) {
-        if ((&a->x)[i] != 0) return true;
-    }
-    return false;
-}
-
-
-
-
-
-
-
-veci64 veci64_cross(veci64 a, veci64 b) {
-    vec3i64 result = vec3i64(
-        a->y * b->z - a->z * b->y,
-        a->z * b->x - a->x * b->z,
-        a->x * b->y - a->y * b->x
-    );
-    return result;
-}
-
-veci64 veci64_normalize(veci64 a) {
-    i32 len_sq = 0;
-    AType type = isa(a);
-
-    for (int i = 0; i < type->vmember_count; i++)
-        len_sq += (&a->x)[i] * (&a->x)[i];
-
-    if (len_sq > 0) {
-        veci64 res = A_copy(a);
-        for (int i = 0; i < type->vmember_count; i++)
-            (&res->x)[i] = (&a->x)[i] * 255 / len_sq;
-        return res;
-    }
-    return a;
-}
-
-veci64 veci64_mix(veci64 a, veci64 b, f64 ff) {
-    i32 f = ff * 255;
-    veci64 res = A_copy(a);
-    i64* fres = &res->x;
-    AType type = isa(a);
-
-    verify(
-        type == isa(b) || instanceof(a, veci64) || instanceof(b, veci64),
-        "vector mismatch"
-    );
-
-    for (int i = 0; i < type->vmember_count; i++) {
-        i64 fa = (&a->x)[i];
-        i64 fb = (&b->x)[i];
-        fres[i] = (fa * (255 - f) + fb * f) / 255;
-    }
-    return res;
-}
-
-f64 veci64_dot(veci64 a, veci64 b) {
-    AType type = isa(a);
-    i32 r = 0;
-    for (int i = 0; i < type->vmember_count; i++)
-        r += (&a->x)[i] * (&b->x)[i];
-    return r;
-}
-
-f64 veci64_length(veci64 a) {
-    AType type = isa(a);
-    i32 len_sq = 0;
-    for (int i = 0; i < type->vmember_count; i++)
-        len_sq += (&a->x)[i] * (&a->x)[i];
-    return sqrt((f32)len_sq);
-}
-
-vec2i64 veci64_cast_vec2i64(veci64 a) { return vec2i64(a->x, a->y); }
-vec3i64 veci64_cast_vec3i64(veci64 a) { return vec3i64(a->x, a->y, a->z); }
-vec4i64 veci64_cast_vec4i64(veci64 a) { return vec4i64(a->x, a->y, a->z, a->w); }
-
-bool veci64_cast_bool(veci64 a) {
-    AType type = isa(a);
-    for (int i = 0; i < type->vmember_count; i++) {
-        if ((&a->x)[i] != 0) return true;
-    }
-    return false;
-}
-
-
-/// total vector length, shape and all (or its count otherwise if its 1D)
-i64 vlength(object a) {
-    A     header = A_header(a);
-    AType type = header->type;
-    A     header_shape = header->shape ? A_header(header->shape) : null;
-    if (!header_shape)
-        return header->count;
-    i64  product = 1;
-    i64* shape_data = header_shape->data;
-    for (int i = 0; i < header_shape->count; i++) product *= shape_data[i];
-    return product;
-}
-
-/// shape takes precedence here
-i64 veci64_product(veci64 a) {
-    A aa = A_header(a);
-    i64* data  = aa->data;
-    i64  count = vlength(a);
-    i64  product = 1;
-    for (int i = 0; i < count; i++)
-        product *= data[i];
-    return product;
-}
-
-shape shape_from(i64 count, i64* values) {
-    shape res = shape(count, count);
-    memcpy(res->data, values, sizeof(i64) * count);
-    return res;
-}
-
-shape shape_read(FILE* f) {
-    i32 n_dims;
-    i64 data[256];
-    verify(fread(&n_dims, sizeof(i32), 1, f) == 1, "n_dims");
-    verify(n_dims < 256, "invalid");
-    verify(fread(data, sizeof(i64), n_dims, f) == n_dims, "shape_read data");
-    shape res = shape(count, n_dims);
-    memcpy(res->data, data, sizeof(i64) * n_dims);
-    return res;
-}
-
-shape new_shape(i64 size, ...) {
-    va_list args;
-    va_start(args, size);
-    i64 n_dims = 0;
-    for (i64 arg = size; arg; arg = va_arg(args, i64))
-        n_dims++;
-    
-    va_start(args, size);
-    shape res = shape(count, n_dims);
-    i64  index = 0;
-    for (i64 arg = size; arg; arg = va_arg(args, i64))
-        res->data[index++] = arg;
-    return res;
-}
-
-
-object A_mat(AType type, i32 rows, i32 cols, object vdata) {
-    object res = A_alloc2(type, typeid(f32), veci64_of(rows, cols, 0), true);
-    // we must set the rows and columns on a field in object
-    A f = A_header(res);
-
-    if (vdata)
-        memcpy(res, vdata, rows * cols * type->size);
-    return res;
-}
-
-object A_vec(AType type, i32 count, object vdata) {
-    veci64 res = A_alloc(type, count, true);
-    if (vdata)
-        memcpy(res, vdata, count * type->size);
-    return res;
-}
-
-matf matf_operator__mul(matf mat, vec4f v) {
-    return vec4f(1.0f, 1.0f, 1.0f, 1.0f);
-}
-
-/// vec4f treated as axis x/y/z + theta (w) args
-none quatf_with_vec4f(quatf q, vec4f v) {
-    f32   theta        = v->w;
-    f32   half_theta   = theta * 0.5f;
-    f32   s_half_theta = sinf(half_theta);
-    q->x = v->x * s_half_theta;
-    q->y = v->y * s_half_theta;
-    q->z = v->z * s_half_theta;
-    q->w = cosf(half_theta);
-}
-
-void mat2f_with_floats(matf mat, floats f) {
-    memcpy(mat->m, f, sizeof(float) * 2 * 2);
-}
-
-void mat3f_with_floats(matf mat, floats f) {
-    memcpy(mat->m, f, sizeof(float) * 3 * 3);
-}
-
-void mat4f_with_floats(matf mat, floats f) {
-    memcpy(mat->m, f, sizeof(float) * 4 * 4);
-}
-
-void mat4f_with_quatf(matf mat, quatf q) {
-    /// values are at mat->values[0...15] [ row-major ]
-    f32 x = q->x, y = q->y, z = q->z, w = q->w;
-    f32 xx = x * x;
-    f32 yy = y * y;
-    f32 zz = z * z;
-    f32 xy = x * y;
-    f32 xz = x * z;
-    f32 yz = y * z;
-    f32 wx = w * x;
-    f32 wy = w * y;
-    f32 wz = w * z;
-
-    // Fill matrix values in row-major order
-    mat->m[0]  = 1.0f - 2.0f * (yy + zz); // Row 1, Col 1
-    mat->m[1]  = 2.0f * (xy - wz);        // Row 1, Col 2
-    mat->m[2]  = 2.0f * (xz + wy);        // Row 1, Col 3
-    mat->m[3]  = 0.0f;                    // Row 1, Col 4
-
-    mat->m[4]  = 2.0f * (xy + wz);        // Row 2, Col 1
-    mat->m[5]  = 1.0f - 2.0f * (xx + zz); // Row 2, Col 2
-    mat->m[6]  = 2.0f * (yz - wx);        // Row 2, Col 3
-    mat->m[7]  = 0.0f;                    // Row 2, Col 4
-
-    mat->m[8]  = 2.0f * (xz - wy);        // Row 3, Col 1
-    mat->m[9]  = 2.0f * (yz + wx);        // Row 3, Col 2
-    mat->m[10] = 1.0f - 2.0f * (xx + yy); // Row 3, Col 3
-    mat->m[11] = 0.0f;                    // Row 3, Col 4
-
-    mat->m[12] = 0.0f;                    // Row 4, Col 1
-    mat->m[13] = 0.0f;                    // Row 4, Col 2
-    mat->m[14] = 0.0f;                    // Row 4, Col 3
-    mat->m[15] = 1.0f;                    // Row 4, Col 4
-}
-
-i64 matf_rows(matf a) {
-    AType f = isa(a);
-    return f->vmember_shape->data[0];
-}
-
-i64 matf_cols(matf a) {
-    AType f = isa(a);
-    return f->vmember_shape->data[1];
-}
-
-matf matf_mul(matf a, matf b) {
-    // lets multiply mat (rows(mat), cols(mat)) * b (b.rows, b.cols)
-    i64 rows_a = matf_rows(a);
-    i64 cols_a = matf_cols(a);
-    i64 rows_b = matf_rows(b);
-    i64 cols_b = matf_cols(b);
-
-    // Validate matrix dimensions
-    if (cols_a != rows_b) {
-        fault("a-columns and b-rows do not match for multiplication: (%ix%i) * (%ix%i)\n",
-            (int)rows_a, (int)cols_a, (int)rows_b, (int)cols_b);
-    }
-
-    // Create the result matrix
-    AType mtype = typeid(matf);
-    if (rows_a == 4 && cols_b == 4) mtype = typeid(mat4f);
-    matf result = A_mat(mtype, rows_a, cols_b, null);
-
-    // Perform multiplication
-    for (i64 i = 0; i < rows_a; ++i) {
-        for (i64 j = 0; j < cols_b; ++j) {
-            result->m[i * cols_b + j] = 0; // Initialize element
-            for (i64 k = 0; k < cols_a; ++k) {
-                result->m[i * cols_b + j] += a->m[i * cols_a + k] * b->m[k * cols_b + j];
-            }
-        }
-    }
-
-    return result;
-}
-
-vec4f matf_mul_v4(matf a, vec4f b) {
-    i64 rows_a = matf_rows(a);
-    i64 cols_a = matf_cols(a);
-
-    // Validate vector size
-    if (cols_a != 4)
-        fault("columns (%i) do not match vector size (4)\n", (int)cols_a);
-
-    vec4f result = vec4f(0, 0, 0, 0);
-
-    // Perform multiplication
-    for (i64 i = 0; i < rows_a; ++i) {
-        for (i64 j = 0; j < 4; ++j) {
-            (&result->x)[i] += a->m[i * cols_a + j] * (&b->x)[j];
-        }
-    }
-
-    return result;
-}
-
-matf matf_scale(matf a, vecf factors) {
-    matf res = A_copy(a);
-    u32 size = isa(a)->vmember_count;
-    for (u32 i = 0; i < size; ++i)
-        res->m[i * (size + 1)] = (&factors->x)[i];
-    return res;
-}
-
-// any 'shape' in A-type model applies on top of vmember_count
-matf matf_translate(matf a, vecf offsets) {
-    matf res = A_copy(a);
-    u32 size = isa(a)->vmember_count;
-    i64 rows = matf_rows(a);
-    i64 cols = matf_cols(a);
-    for (u32 i = 0; i < rows - 1; ++i)
-        res->m[i * cols + (cols - 1)] = (&offsets->x)[i];
-    return res;
-}
-
-matf matf_rotate(matf mat, quatf q) {
-    matf res = A_copy(mat);
-    u32 size = isa(mat)->vmember_count;
-    verify(size == 16, "rotation currently supports only 4x4 matrices");
-
-    // quaternion rotation
-    f32 x = q->x, y = q->y, z = q->z, w = q->w;
-    f32 xx = x * x, yy = y * y, zz = z * z;
-    f32 xy = x * y, xz = x * z, yz = y * z;
-    f32 wx = w * x, wy = w * y, wz = w * z;
-
-    res->m[0]  = 1.0f - 2.0f * (yy + zz);
-    res->m[1]  = 2.0f * (xy - wz);
-    res->m[2]  = 2.0f * (xz + wy);
-    res->m[3]  = 0.0f;
-
-    res->m[4]  = 2.0f * (xy + wz);
-    res->m[5]  = 1.0f - 2.0f * (xx + zz);
-    res->m[6]  = 2.0f * (yz - wx);
-    res->m[7]  = 0.0f;
-
-    res->m[8]  = 2.0f * (xz - wy);
-    res->m[9]  = 2.0f * (yz + wx);
-    res->m[10] = 1.0f - 2.0f * (xx + yy);
-    res->m[11] = 0.0f;
-
-    res->m[12] = 0.0f;
-    res->m[13] = 0.0f;
-    res->m[14] = 0.0f;
-    res->m[15] = 1.0f;
-    return res;
-}
-
-
-
-
-
 // idea:
 // silver should: swap = and : ... so : is const, and = is mutable-assign
 // we serialize our data with : and we do not think of this as a changeable form, its our data and we want it intact, lol
@@ -3912,20 +3010,19 @@ object parse_array(cstr s, AType schema, cstr* remainder) {
     if (!schema || (schema->src == typeid(array))) {
         AType element_type = schema ? schema->meta.meta_0 : typeid(object);
         res = parse_array_objects(&scan, element_type);
-    } else if (schema == typeid(veci64) || schema->src == typeid(veci64)) {
+    } else if (schema->vmember_type == typeid(i64)) { // should support all vector types of i64 (needs type bounds check with vmember_count)
         array arb = parse_array_objects(&scan, typeid(i64));
         int vcount = len(arb);
-        res = A_alloc2(schema, typeid(i64), veci64_of(vcount, 0), true);
+        res = A_alloc2(schema, typeid(i64), shape_new(vcount, 0), true);
         int n = 0;
         each(arb, object, a) {
             verify(isa(a) == typeid(i64), "expected i64");
             ((i64*)res)[n++] = *(i64*)a;
         }
-    } else if (schema      == typeid(mat4f) || schema      == typeid(quatf) || 
-               schema->src == typeid(matf)  || schema->src == typeid(vecf)) {
+    } else if (schema->vmember_type == typeid(f32)) { // should support all vector types of f32 (needs type bounds check with vmember_count)
         array arb = parse_array_objects(&scan, typeid(f32));
         int vcount = len(arb);
-        res = A_alloc2(schema, typeid(f32), veci64_of(vcount, 0), true);
+        res = A_alloc2(schema, typeid(f32), shape_new(vcount, 0), true);
         int n = 0;
         each(arb, object, a) {
             AType a_type = isa(a);
@@ -3949,46 +3046,7 @@ object parse(cstr s, AType schema) {
     return parse_object(s, schema, null);
 }
 
-shape shape_with_array(shape a, array dims) {
-    num count = len(dims);
-    each (dims, object, e) {
-        i64* i = instanceof(e, i64);
-        a->data[a->count++] = *i;
-    }
-    return a;
-}
-
-define_class(quatf)
-
 define_class(message)
-
-define_class(shape)
-
-define_vector_base(mat, f32,  f)
-
-define_vector_base(vec, i8,  i8)
-define_vector_base(vec, i64, i64)
-define_vector_base(vec, f32, f)
-define_vector_base(vec, f64, f64)
-
-define_vector(mat, 4, f32, f,   4, 4)
-define_vector(mat, 3, f32, f,   3, 3)
-define_vector(mat, 2, f32, f,   2, 2)
-
-define_vector(vec, 2, i8,  i8,  2)
-define_vector(vec, 2, i64, i64, 2)
-define_vector(vec, 2, f32, f,   2)
-define_vector(vec, 2, f64, f64, 2)
-
-define_vector(vec, 3, i8,  i8,  2)
-define_vector(vec, 3, i64, i64, 2)
-define_vector(vec, 3, f32, f,   2)
-define_vector(vec, 3, f64, f64, 2)
-
-define_vector(vec, 4, i8,  i8,  4, 4)
-define_vector(vec, 4, i64, i64, 4, 4)
-define_vector(vec, 4, f32, f,   4, 4)
-define_vector(vec, 4, f64, f64, 4, 4)
 
 define_class(A)
 define_meta(object, A, A)
@@ -4047,7 +3105,6 @@ define_class(AF)
 
 define_meta(ATypes,           array, AType)
 define_meta(array_map,        array, map)
-define_meta(array_mat4f,      array, mat4f)
-define_meta(array_mat3f,      array, mat3f)
-define_meta(array_mat2f,      array, mat2f)
 define_meta(array_string,     array, string)
+
+

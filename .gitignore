@@ -6,3 +6,5 @@ silver-debug
 target
 Cargo.lock
 debug
+debug/*
+

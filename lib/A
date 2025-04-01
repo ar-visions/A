@@ -92,7 +92,8 @@ enum A_MEMBER {
     A_MEMBER_INDEX     = 1024,
     A_MEMBER_ENUMV     = 2048,
     A_MEMBER_OVERRIDE  = 4096,
-    A_MEMBER_VPROP     = 8192
+    A_MEMBER_VPROP     = 8192,
+    A_MEMBER_ATTR      = 16384,
 };
 
 typedef enum A_MEMBER AMember;
@@ -148,6 +149,7 @@ typedef struct type_member_t {
     meta_t          args;
     void*           ptr;
     void*           method;
+    i64             id;
 } type_member_t;
 
 _Pragma("pack(pop)")
@@ -167,6 +169,7 @@ typedef bool(*global_init_fn)();
 
 #define   enum_value_DECL(E, N)             E##_##N,
 #define   enum_value_COUNT(E, N)            1,
+#define   enum_value_METHOD(E, N)
 #define   enum_value_IMPL(E, N) \
     E##_type.members[E## _type.member_count].name     = #N; \
     E##_type.members[E## _type.member_count].offset   = E##_##N;\
@@ -175,8 +178,26 @@ typedef bool(*global_init_fn)();
     E##_type.member_count++;
 #define   enum_value(X,Y, N)                enum_value_##Y(X, N)
 
+
+#define   enum_method_DECL(E, R, N, ...)
+#define   enum_method_COUNT(E, R, N, ...)
+#define   enum_method_IMPL(E, R, N, ...) \
+    E##_type . N = & E## _ ## N; \
+    E##_type.members[E##_type.member_count].name    = #N; \
+    E##_type.members[E##_type.member_count].args    = (meta_t) { emit_types(__VA_ARGS__) }; \
+    E##_type.members[E##_type.member_count].type    = (AType)&R##_type; \
+    E##_type.members[E##_type.member_count].offset  = offsetof(E##_f, N); \
+    E##_type.members[E##_type.member_count].ptr     = (void*)& E##_##N; \
+    E##_type.members[E##_type.member_count].member_type = A_MEMBER_SMETHOD; \
+    E##_type.member_count++; 
+#define   enum_method_METHOD(E, R, N, ...)    R (*N)(E value __VA_OPT__(,) __VA_ARGS__);
+#define   enum_method(E,Y,R,N,...)            enum_method_##Y(E,R,N __VA_OPT__(,) __VA_ARGS__)
+
+
+
 #define   enum_value_v_DECL(E, N, VAL)             E##_##N = VAL,
 #define   enum_value_v_COUNT(E, N, VAL)            1,
+#define   enum_value_v_METHOD(E, N, VAL)
 #define   enum_value_v_IMPL(E, N, VAL) \
     E##_type.members[E## _type.member_count].name     = #N; \
     E##_type.members[E## _type.member_count].offset   = E##_##N;\
@@ -186,6 +207,7 @@ typedef bool(*global_init_fn)();
 
 #define   enum_value_vargs_DECL(E, N, VAL,...)             E##_##N = VAL,
 #define   enum_value_vargs_COUNT(E, N, VAL,...)            1,
+#define   enum_value_vargs_METHOD(E, N, VAL,...)
 #define   enum_value_vargs_IMPL(E, N, VAL,...) \
     E##_type.members[E## _type.member_count].name     = #N; \
     E##_type.members[E## _type.member_count].offset   = E##_##N;\
@@ -210,7 +232,6 @@ typedef bool(*global_init_fn)();
 #define   enum_value_v_5(X,Y, N,VAL,T1,T2,T3,T4) enum_value_vargs_##Y(X, N,VAL,T1,T2,T3,T4)
 #define   enum_value_v(X,Y, N,VAL, ...) \
     CONCAT(enum_value_v_, ARG_COUNT_NO_ZERO(__VA_ARGS__))(X,Y, N,VAL __VA_OPT__(,) __VA_ARGS__)
-
 
 
 #define sqr(x) ({ \
@@ -402,8 +423,7 @@ typedef bool(*global_init_fn)();
 
 
 #define   i_ctr_public_INST(X, ARG)
-#define   i_ctr_public_INTERN(X, ARG)
-#define   i_ctr_public_ISIZE(X, ARG)
+#define   i_ctr_public_INST_EXTERN(X, ARG)
 #define   i_ctr_public_DECL(X, ARG)
 #define   i_ctr_public_GENERICS(X, ARG) ARG: X##_type.with_##ARG,
 
@@ -419,17 +439,16 @@ typedef bool(*global_init_fn)();
 #define   i_ctr_public_PROTO(X, ARG)
 #define   i_ctr_public_METHOD(X, ARG)      X (*with_##ARG)(X, ARG);
 #define   i_ctr_intern_INST(X, ARG)
-#define   i_ctr_intern_INTERN(X, ARG)
-#define   i_ctr_intern_ISIZE(X, ARG)
+#define   i_ctr_intern_INST_EXTERN(X, ARG)
 #define   i_ctr_intern_INIT(X, ARG) 
 #define   i_ctr_intern_PROTO(X, ARG)
 #define   i_ctr_intern_METHOD(X, ARG)
 #define   i_ctr(X, Y, T, ARG)              i_ctr_##T##_##Y(X, ARG)
 
 
-#define   i_prop_public_INST(X, R, N)         R N;  
-#define   i_prop_public_INTERN(X, R, N) 
-#define   i_prop_public_ISIZE(X, R, N)        
+
+#define   i_prop_public_INST(X, R, N)         R N;
+#define   i_prop_public_INST_EXTERN(X, R, N)  i_prop_public_INST(X, R, N)
 #define   i_prop_public_DECL(X, R, N)
 #define   i_prop_public_GENERICS(X, R, N)
 #define   i_prop_public_INIT(X, R, N) \
@@ -442,8 +461,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_public_METHOD(X, R, N)
 
 #define   i_prop_required_INST(X, R, N)         i_prop_public_INST(X, R, N)
-#define   i_prop_required_INTERN(X, R, N)
-#define   i_prop_required_ISIZE(X, R, N)        
+#define   i_prop_required_INST_EXTERN(X, R, N)  i_prop_public_INST(X, R, N)
 #define   i_prop_required_DECL(X, R, N)
 #define   i_prop_required_GENERICS(X, R, N)
 #define   i_prop_required_INIT(X, R, N) \
@@ -452,9 +470,8 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_PROTO(X, R, N)  
 #define   i_prop_required_METHOD(X, R, N)
 
-#define   i_prop_intern_INST(X, R, N)          
-#define   i_prop_intern_INTERN(X, R, N)         R N;
-#define   i_prop_intern_ISIZE(X, R, N)          +sizeof(void*)
+#define   i_prop_intern_INST(X, R, N)           R N;
+#define   i_prop_intern_INST_EXTERN(X, R, N)
 #define   i_prop_intern_DECL(X, R, N)
 #define   i_prop_intern_GENERICS(X, R, N)
 #define   i_prop_intern_INIT(X, R, N)
@@ -467,9 +484,8 @@ typedef bool(*global_init_fn)();
 
 
 
-#define   i_prop_public_INST_field(X, R, N, M2)         R N;  
-#define   i_prop_public_INTERN_field(X, R, N, M2) 
-#define   i_prop_public_ISIZE_field(X, R, N, M2)        
+#define   i_prop_public_INST_field(X, R, N, M2)         R N;
+#define   i_prop_public_INST_EXTERN_field(X, R, N, M2)  i_prop_public_INST_field(X, R, N, M2)
 #define   i_prop_public_DECL_field(X, R, N, M2)
 #define   i_prop_public_GENERICS_field(X, R, N, M2)
 #define   i_prop_public_INIT_field(X, R, N, M2) \
@@ -482,8 +498,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_public_METHOD_field(X, R, N, M2)
 
 #define   i_prop_required_INST_field(X, R, N, M2)         i_prop_public_INST_field(X, R, N, M2)
-#define   i_prop_required_INTERN_field(X, R, N, M2)
-#define   i_prop_required_ISIZE_field(X, R, N, M2)        
+#define   i_prop_required_INST_EXTERN_field(X, R, N, M2)  i_prop_public_INST_field(X, R, N, M2)
 #define   i_prop_required_DECL_field(X, R, N, M2)
 #define   i_prop_required_GENERICS_field(X, R, N, M2)
 #define   i_prop_required_INIT_field(X, R, N, M2) \
@@ -492,9 +507,8 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_PROTO_field(X, R, N, M2)  
 #define   i_prop_required_METHOD_field(X, R, N, M2)
 
-#define   i_prop_intern_INST_field(X, R, N, M2)          
-#define   i_prop_intern_INTERN_field(X, R, N, M2)         R N;
-#define   i_prop_intern_ISIZE_field(X, R, N, M2)          +sizeof(void*)
+#define   i_prop_intern_INST_field(X, R, N, M2)           R N;
+#define   i_prop_intern_INST_EXTERN_field(X, R, N, M2)
 #define   i_prop_intern_DECL_field(X, R, N, M2)
 #define   i_prop_intern_GENERICS_field(X, R, N, M2)
 #define   i_prop_intern_INIT_field(X, R, N, M2)          fault("field is not exposed when intern");
@@ -523,9 +537,9 @@ typedef bool(*global_init_fn)();
     CONCAT(i_prop_, ARG_COUNT_NO_ZERO(__VA_ARGS__))(X, Y, T, R, N __VA_OPT__(,) __VA_ARGS__)
 
 
-#define   i_vprop_public_INST(X, R, N)         R* N;  
-#define   i_vprop_public_INTERN(X, R, N) 
-#define   i_vprop_public_ISIZE(X, R, N)        
+
+#define   i_vprop_public_INST(X, R, N)         R* N;
+#define   i_vprop_public_INST_EXTERN(X, R, N)  i_vprop_public_INST(X, R, N)   
 #define   i_vprop_public_DECL(X, R, N)
 #define   i_vprop_public_GENERICS(X, R, N)
 #define   i_vprop_public_INIT(X, R, N) \
@@ -538,8 +552,7 @@ typedef bool(*global_init_fn)();
 #define   i_vprop_public_METHOD(X, R, N)
 
 #define   i_vprop_required_INST(X, R, N)         i_vprop_public_INST(X, R, N)
-#define   i_vprop_required_INTERN(X, R, N)
-#define   i_vprop_required_ISIZE(X, R, N)        
+#define   i_vprop_required_INST_EXTERN(X, R, N)  i_vprop_public_INST(X, R, N)
 #define   i_vprop_required_DECL(X, R, N)
 #define   i_vprop_required_GENERICS(X, R, N)
 #define   i_vprop_required_INIT(X, R, N) \
@@ -548,9 +561,8 @@ typedef bool(*global_init_fn)();
 #define   i_vprop_required_PROTO(X, R, N)  
 #define   i_vprop_required_METHOD(X, R, N)
 
-#define   i_vprop_intern_INST(X, R, N)          
-#define   i_vprop_intern_INTERN(X, R, N)         R* N;
-#define   i_vprop_intern_ISIZE(X, R, N)          +sizeof(void*)
+#define   i_vprop_intern_INST(X, R, N)           R* N;
+#define   i_vprop_intern_INST_EXTERN(X, R, N)        
 #define   i_vprop_intern_DECL(X, R, N)
 #define   i_vprop_intern_GENERICS(X, R, N)
 #define   i_vprop_intern_INIT(X, R, N)
@@ -561,9 +573,37 @@ typedef bool(*global_init_fn)();
 
 
 
+#define i_attr_INST(X, ENUM, VALUE, ...)
+#define i_attr_INST_EXTERN(X, ENUM, VALUE, ...)
+#define i_attr_DECL(X, ENUM, VALUE, ...)
+#define i_attr_GENERICS(X, ENUM, VALUE, ...)
+#define i_attr_INIT(X, ENUM, VALUE, ...) \
+    X##_type.members[X##_type.member_count].name = #VALUE; \
+    X##_type.members[X##_type.member_count].id   = ENUM##_##VALUE; \
+    X##_type.members[X##_type.member_count].type = (AType)&ENUM##_type; \
+    X##_type.members[X##_type.member_count].args = (meta_t) { emit_types(__VA_ARGS__) }; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_ATTR; \
+    X##_type.member_count++;
+#define i_attr_PROTO(X, ENUM, VALUE, ...)  
+#define i_attr_METHOD(X, ENUM, VALUE, ...)  
+
+/*
+    i_attr   (X,Y, Surface,    color,         rgba8) \
+    i_attr   (X,Y, Surface,    normal,        rgba8) \
+    i_attr   (X,Y, Surface,    emission,      rgbaf) \
+    i_attr   (X,Y, Surface,    rough,         u8) \
+    i_attr   (X,Y, Surface,    metal,         u8) \
+    i_attr   (X,Y, Surface,    height,        f32) \
+    i_attr   (X,Y, Surface,    ao,            u8) \
+    i_attr   (X,Y, Surface,    environment,   rgbaf, IBL) \
+*/
+
+#define i_attr(X, Y, ENUM, VALUE, ...) i_attr_##Y(X, ENUM, VALUE, __VA_ARGS__)
+
+
+
 #define   i_array_public_INST(X, R, S, N)         R N[S];  
-#define   i_array_public_INTERN(X, R, S, N) 
-#define   i_array_public_ISIZE(X, R, S, N)        
+#define   i_array_public_INST_EXTERN(X, R, S, N)  i_array_public_INST(X, R, S, N)
 #define   i_array_public_DECL(X, R, S, N)
 #define   i_array_public_GENERICS(X, R, S, N)
 #define   i_array_public_INIT(X, R, S, N) \
@@ -576,9 +616,8 @@ typedef bool(*global_init_fn)();
 #define   i_array_public_PROTO(X, R, S, N)  
 #define   i_array_public_METHOD(X, R, S, N)
 
-#define   i_array_intern_INST(X, R, S, N)          
-#define   i_array_intern_INTERN(X, R, S, N)         R N[S];
-#define   i_array_intern_ISIZE(X, R, S, N)          +sizeof(R[S])
+#define   i_array_intern_INST(X, R, S, N)         R N[S];
+#define   i_array_intern_INST_EXTERN(X, R, S, N)  ARef _##N[S];
 #define   i_array_intern_DECL(X, R, S, N)
 #define   i_array_intern_GENERICS(X, R, S, N)
 #define   i_array_intern_INIT(X, R, S, N)
@@ -587,69 +626,43 @@ typedef bool(*global_init_fn)();
 #define   i_array(X, Y, T, R, S, N) i_array_##T##_##Y(X, R, S, N)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-/*
-#define   i_ctr_public_INST(X, ARG)
-#define   i_ctr_public_INTERN(X, ARG)
-#define   i_ctr_public_ISIZE(X, ARG)
-#define   i_ctr_public_DECL(X, ARG)
-#define   i_ctr_public_GENERICS(X, ARG) ARG: X##_type.with_##ARG,
-
-#define   i_ctr_public_INIT(X, ARG) \
-    X##_type.with_##ARG = & X##_with_##ARG; \
-    X##_type.members[X##_type.member_count].name        = stringify(with_##ARG); \
-    X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(ARG) }; \
-    X##_type.members[X##_type.member_count].type        = (AType)&ARG##_type; \
-    X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, with_##ARG); \
-    X##_type.members[X##_type.member_count].ptr         = (void*)& X##_with_##ARG; \
-    X##_type.members[X##_type.member_count].member_type = A_MEMBER_CONSTRUCT; \
-    X##_type.member_count++;  
-#define   i_ctr_public_PROTO(X, ARG)
-#define   i_ctr_public_METHOD(X, ARG)      X (*with_##ARG)(X, ARG);
-#define   i_ctr_intern_INST(X, ARG)
-#define   i_ctr_intern_INTERN(X, ARG)
-#define   i_ctr_intern_ISIZE(X, ARG)
-#define   i_ctr_intern_INIT(X, ARG) 
-#define   i_ctr_intern_PROTO(X, ARG)
-#define   i_ctr_intern_METHOD(X, ARG)
-#define   i_ctr(X, Y, T, ARG)              i_ctr_##T##_##Y(X, ARG)
-*/
-
-
-
-
 #define   i_struct_ctr_INST(X, ARG)
-#define   i_struct_ctr_INTERN(X, ARG)
-#define   i_struct_ctr_ISIZE(X, ARG)
+#define   i_struct_ctr_INST_EXTERN(X, ARG)
 #define   i_struct_ctr_DECL(X, ARG)
-#define   i_struct_ctr_GENERICS(X, ARG) ARG: X##_type.with_##ARG,
+#define   i_struct_ctr_GENERICS(X, ARG) ARG*: X##_type.with_##ARG,
 #define   i_struct_ctr_INIT(X, ARG) \
     X##_type.with_##ARG = & X##_with_##ARG; \
     X##_type.members[X##_type.member_count].name        = stringify(with_##ARG); \
-    X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(ARG) }; \
+    X##_type.members[X##_type.member_count].args        = (meta_t) { }; \
     X##_type.members[X##_type.member_count].type        = (AType)&ARG##_type; \
     X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, with_##ARG); \
     X##_type.members[X##_type.member_count].ptr         = (void*)& X##_with_##ARG; \
     X##_type.members[X##_type.member_count].member_type = A_MEMBER_CONSTRUCT; \
     X##_type.member_count++;  
 #define   i_struct_ctr_PROTO(X, ARG)
-#define   i_struct_ctr_METHOD(X, ARG)      X (*with_##ARG)(ARG);
+#define   i_struct_ctr_METHOD(X, ARG)      X (*with_##ARG)(ARG*);
 #define   i_struct_ctr(X, Y, ARG)          i_struct_ctr_##Y(X, ARG)
 
-#define   i_struct_array_INST(X, R, S, N)         R N[S];  
-#define   i_struct_array_INTERN(X, R, S, N) 
-#define   i_struct_array_ISIZE(X, R, S, N)        
+#define   i_struct_ctr_obj_INST(X, ARG)
+#define   i_struct_ctr_obj_INST_EXTERN(X, ARG)
+#define   i_struct_ctr_obj_DECL(X, ARG)
+#define   i_struct_ctr_obj_GENERICS(X, ARG) ARG: X##_type.with_##ARG,
+#define   i_struct_ctr_obj_INIT(X, ARG) \
+    X##_type.with_##ARG = & X##_with_##ARG; \
+    X##_type.members[X##_type.member_count].name        = stringify(with_##ARG); \
+    X##_type.members[X##_type.member_count].args        = (meta_t) { }; \
+    X##_type.members[X##_type.member_count].type        = (AType)&ARG##_type; \
+    X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, with_##ARG); \
+    X##_type.members[X##_type.member_count].ptr         = (void*)& X##_with_##ARG; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_CONSTRUCT; \
+    X##_type.member_count++;  
+#define   i_struct_ctr_obj_PROTO(X, ARG)
+#define   i_struct_ctr_obj_METHOD(X, ARG)      X (*with_##ARG)(ARG);
+#define   i_struct_ctr_obj(X, Y, ARG)          i_struct_ctr_obj_##Y(X, ARG)
+
+
+#define   i_struct_array_INST(X, R, S, N)         R N[S];
+#define   i_struct_array_INST_EXTERN(X, R, S, N)  i_struct_array_INST(X, R, S, N)
 #define   i_struct_array_DECL(X, R, S, N)
 #define   i_struct_array_GENERICS(X, R, S, N)
 #define   i_struct_array_INIT(X, R, S, N) \
@@ -663,8 +676,8 @@ typedef bool(*global_init_fn)();
 #define   i_struct_array_METHOD(X, R, S, N)        
 #define   i_struct_array(X, Y, R, S, N) i_struct_array_##Y(X, R, S, N)
 
-#define   i_struct_prop_INST(X, R, N)         R N;  
-#define   i_struct_prop_ISIZE(X, R, N)        
+#define   i_struct_prop_INST(X, R, N)         R N;
+#define   i_struct_prop_INST_EXTERN(X, R, N)  i_struct_prop_INST(X, R, N)
 #define   i_struct_prop_DECL(X, R, N)
 #define   i_struct_prop_GENERICS(X, R, N)
 #define   i_struct_prop_INIT(X, R, N) \
@@ -676,12 +689,10 @@ typedef bool(*global_init_fn)();
     X##_type.member_count++;
 #define   i_struct_prop_PROTO(X, R, N)  
 #define   i_struct_prop_METHOD(X, R, N)      
-#define   i_struct_prop_INTERN(X, R, N)         R N;
 #define   i_struct_prop(X, Y, R, N) i_struct_prop_##Y(X, R, N)
 
 #define   i_struct_cast_INST(X, R)
-#define   i_struct_cast_INTERN(X, R)
-#define   i_struct_cast_ISIZE(X, R)
+#define   i_struct_cast_INST_EXTERN(X, R)
 #define   i_struct_cast_DECL(X, R)
 #define   i_struct_cast_GENERICS(X, R)
 #define   i_struct_cast_INIT(X, R) \
@@ -697,8 +708,7 @@ typedef bool(*global_init_fn)();
 #define   i_struct_cast(X, Y, R)                i_struct_cast_##Y(X, R)
 
 #define   i_struct_method_INST(    X, R, N, ...)
-#define   i_struct_method_INTERN(  X, R, N, ...)
-#define   i_struct_method_ISIZE(  X, R, N, ...)
+#define   i_struct_method_INST_EXTERN(    X, R, N, ...)
 #define   i_struct_method_DECL(    X, R, N, ...)    R X##_##N(X* __VA_OPT__(,) __VA_ARGS__);
 #define   i_struct_method_GENERICS(X, R, N, ...)
 #define   i_struct_method_INIT(    X, R, N, ...) \
@@ -716,8 +726,7 @@ typedef bool(*global_init_fn)();
 
 
 #define   i_struct_static_INST(    X, R, N, ...)
-#define   i_struct_static_INTERN(  X, R, N, ...)
-#define   i_struct_static_ISIZE(  X, R, N, ...)
+#define   i_struct_static_INST_EXTERN(X, R, N, ...)
 #define   i_struct_static_DECL(    X, R, N, ...)    R X##_##N(__VA_ARGS__);
 #define   i_struct_static_GENERICS(X, R, N, ...)
 #define   i_struct_static_INIT(    X, R, N, ...) \
@@ -741,9 +750,8 @@ typedef bool(*global_init_fn)();
 
 
 
-#define   i_inlay_public_INST(X, R, N)         struct _##R N;  
-#define   i_inlay_public_INTERN(X, R, N) 
-#define   i_inlay_public_ISIZE(X, R, N)        
+#define   i_inlay_public_INST(X, R, N)         struct _##R N;
+#define   i_inlay_public_INST_EXTERN(X, R, N)  struct _##R N; 
 #define   i_inlay_public_DECL(X, R, N)
 #define   i_inlay_public_GENERICS(X, R, N)
 #define   i_inlay_public_INIT(X, R, N) \
@@ -756,8 +764,7 @@ typedef bool(*global_init_fn)();
 #define   i_inlay_public_METHOD(X, R, N)
 
 #define   i_inlay_required_INST(X, R, N)         i_inlay_public_INST(X, R, N)
-#define   i_inlay_required_INTERN(X, R, N)
-#define   i_inlay_required_ISIZE(X, R, N)        
+#define   i_inlay_required_INST_EXTERN(X, R, N)  i_inlay_public_INST_EXTERN(X, R, N)
 #define   i_inlay_required_DECL(X, R, N)
 #define   i_inlay_required_GENERICS(X, R, N)
 #define   i_inlay_required_INIT(X, R, N) \
@@ -766,9 +773,8 @@ typedef bool(*global_init_fn)();
 #define   i_inlay_required_PROTO(X, R, N)  
 #define   i_inlay_required_METHOD(X, R, N)
 
-#define   i_inlay_intern_INST(X, R, N)          
-#define   i_inlay_intern_INTERN(X, R, N)         struct _##R N;
-#define   i_inlay_intern_ISIZE(X, R, N)          +sizeof(R)
+#define   i_inlay_intern_INST(X, R, N)            struct _##R N;
+#define   i_inlay_intern_INST_EXTERN(X, R, N)     i_inlay_intern_INST(X, R, N)
 #define   i_inlay_intern_DECL(X, R, N)
 #define   i_inlay_intern_GENERICS(X, R, N)
 #define   i_inlay_intern_INIT(X, R, N)
@@ -782,8 +788,7 @@ typedef bool(*global_init_fn)();
 
 
 #define   s_method_public_INST(X, R, N, ...)
-#define   s_method_public_INTERN(X, R, N, ...)
-#define   s_method_public_ISIZE(X, R, N)          
+#define   s_method_public_INST_EXTERN(X, R, N, ...)
 #define   s_method_public_DECL(X, R, N, ...)       R X##_##N(__VA_ARGS__);
 #define   s_method_public_GENERICS(X, R, N, ...)
 #define   s_method_public_INIT(X, R, N, ...) \
@@ -798,8 +803,7 @@ typedef bool(*global_init_fn)();
 #define   s_method_public_METHOD(X, R, N, ...)    R (*N)(__VA_ARGS__);
 
 #define   s_method_intern_INST(X, R, N, ...)
-#define   s_method_intern_INTERN(X, R, N, ...)
-#define   s_method_intern_ISIZE(X, R, N, ...)
+#define   s_method_intern_INST_EXTERN(X, R, N, ...)
 #define   s_method_intern_DECL(X, R, N, ...)
 #define   s_method_intern_GENERICS(X, R, N, ...)
 #define   s_method_intern_INIT(X, R, N, ...)      
@@ -808,8 +812,7 @@ typedef bool(*global_init_fn)();
 #define   s_method(X, Y, T, R, N, ...)            s_method_##T##_##Y(X, R, N, ##__VA_ARGS__)
 
 #define   i_method_public_INST(    X, R, N, ...)
-#define   i_method_public_INTERN(  X, R, N, ...)
-#define   i_method_public_ISIZE(  X, R, N, ...)
+#define   i_method_public_INST_EXTERN(  X, R, N, ...)
 #define   i_method_public_DECL(    X, R, N, ...)    R X##_##N(__VA_ARGS__);
 #define   i_method_public_GENERICS(X, R, N, ...)
 #define   i_method_public_INIT(    X, R, N, ...) \
@@ -824,8 +827,7 @@ typedef bool(*global_init_fn)();
 #define   i_method_public_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
 
 #define   i_method_intern_INST(    X, R, N, ...)
-#define   i_method_intern_INTERN(  X, R, N, ...)
-#define   i_method_intern_ISIZE(  X, R, N, ...)
+#define   i_method_intern_INST_EXTERN(  X, R, N, ...)
 #define   i_method_intern_DECL(    X, R, N, ...)
 #define   i_method_intern_GENERICS(X, R, N, ...)
 #define   i_method_intern_INIT(    X, R, N, ...)    
@@ -856,8 +858,7 @@ CPU_Caps detect_cpu_caps();
     X##_type.member_count++; \
 
 #define   i_SIMD_neon64_INST(    X, R, N, ...)
-#define   i_SIMD_neon64_INTERN(  X, R, N, ...)
-#define   i_SIMD_neon64_ISIZE(  X, R, N, ...)
+#define   i_SIMD_neon64_INST_EXTERN(  X, R, N, ...)
 #define   i_SIMD_neon64_DECL(    X, R, N, ...)
 #define   i_SIMD_neon64_GENERICS(X, R, N, ...)
 #define   i_SIMD_neon64_INIT(    X, R, N, ...) \
@@ -869,8 +870,7 @@ CPU_Caps detect_cpu_caps();
 #define   i_SIMD_neon64_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
 
 #define   i_SIMD_neon32_INST(    X, R, N, ...)
-#define   i_SIMD_neon32_INTERN(  X, R, N, ...)
-#define   i_SIMD_neon32_ISIZE(  X, R, N, ...)
+#define   i_SIMD_neon32_INST_EXTERN(  X, R, N, ...)
 #define   i_SIMD_neon32_DECL(    X, R, N, ...)
 #define   i_SIMD_neon32_GENERICS(X, R, N, ...)
 #define   i_SIMD_neon32_INIT(    X, R, N, ...) \
@@ -882,8 +882,7 @@ CPU_Caps detect_cpu_caps();
 #define   i_SIMD_neon32_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
 
 #define   i_SIMD_avx512_INST(    X, R, N, ...)
-#define   i_SIMD_avx512_INTERN(  X, R, N, ...)
-#define   i_SIMD_avx512_ISIZE(  X, R, N, ...)
+#define   i_SIMD_avx512_INST_EXTERN(  X, R, N, ...)
 #define   i_SIMD_avx512_DECL(    X, R, N, ...)
 #define   i_SIMD_avx512_GENERICS(X, R, N, ...)
 #define   i_SIMD_avx512_INIT(    X, R, N, ...) \
@@ -895,8 +894,7 @@ CPU_Caps detect_cpu_caps();
 #define   i_SIMD_avx512_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
 
 #define   i_SIMD_avx2_INST(    X, R, N, ...)
-#define   i_SIMD_avx2_INTERN(  X, R, N, ...)
-#define   i_SIMD_avx2_ISIZE(  X, R, N, ...)
+#define   i_SIMD_avx2_INST_EXTERN(  X, R, N, ...)
 #define   i_SIMD_avx2_DECL(    X, R, N, ...)
 #define   i_SIMD_avx2_GENERICS(X, R, N, ...)
 #define   i_SIMD_avx2_INIT(    X, R, N, ...) \
@@ -908,8 +906,7 @@ CPU_Caps detect_cpu_caps();
 #define   i_SIMD_avx2_METHOD(X, R, N, ...)      R (*N)(__VA_ARGS__);
 
 #define   i_SIMD_avx_INST(    X, R, N, ...)
-#define   i_SIMD_avx_INTERN(  X, R, N, ...)
-#define   i_SIMD_avx_ISIZE(  X, R, N, ...)
+#define   i_SIMD_avx_INST_EXTERN(  X, R, N, ...)
 #define   i_SIMD_avx_DECL(    X, R, N, ...)
 #define   i_SIMD_avx_GENERICS(X, R, N, ...)
 #define   i_SIMD_avx_INIT(    X, R, N, ...) \
@@ -929,8 +926,7 @@ CPU_Caps detect_cpu_caps();
 (X, Y, R, ARCH, N, ...) i_SIMD_##ARCH##_##Y(X, R, N, X, ## __VA_ARGS__)
 
 #define   i_operator_public_INST(X, R, N, ARG)
-#define   i_operator_public_INTERN(X, R, N, ARG)
-#define   i_operator_public_ISIZE(X, R, N, ARG)
+#define   i_operator_public_INST_EXTERN(X, R, N, ARG)
 #define   i_operator_public_DECL(X, R, N, ARG)
 #define   i_operator_public_GENERICS(X, R, N, ARG)
 #define   i_operator_public_INIT(X, R, N, ARG) \
@@ -946,8 +942,7 @@ CPU_Caps detect_cpu_caps();
 #define   i_operator_public_METHOD(X, R, N, ARG)    R (*operator_ ## N)(X, ARG);
 
 #define   i_operator_intern_INST(X, R, N, ARG)
-#define   i_operator_intern_INTERN(X, R, N, ARG)
-#define   i_operator_intern_ISIZE(X, R, N, ARG)
+#define   i_operator_intern_INST_EXTERN(X, R, N, ARG)
 #define   i_operator_intern_DECL(X, R, N, ARG)
 #define   i_operator_intern_GENERICS(X, R, N, ARG)
 #define   i_operator_intern_INIT(X, R, N, ARG)      
@@ -956,8 +951,7 @@ CPU_Caps detect_cpu_caps();
 #define   i_operator(X, Y, T, R, N, ARG)            i_operator_##T##_##Y(X, R, N, ARG)
 
 #define   i_cast_public_INST(X, R)
-#define   i_cast_public_INTERN(X, R)
-#define   i_cast_public_ISIZE(X, R)
+#define   i_cast_public_INST_EXTERN(X, R)
 #define   i_cast_public_DECL(X, R)
 #define   i_cast_public_GENERICS(X, R)
 #define   i_cast_public_INIT(X, R) \
@@ -972,8 +966,7 @@ CPU_Caps detect_cpu_caps();
 #define   i_cast_public_METHOD(X, R)        R (*cast_##R)(X);
 
 #define   i_cast_intern_INST(X, R)
-#define   i_cast_intern_INTERN(X, R)
-#define   i_cast_intern_ISIZE(X, R)
+#define   i_cast_intern_INST_EXTERN(X, R)
 #define   i_cast_intern_DECL(X, R)
 #define   i_cast_intern_GENERICS(X, R)
 #define   i_cast_intern_INIT(X, R)          
@@ -982,8 +975,7 @@ CPU_Caps detect_cpu_caps();
 #define   i_cast(X, Y, T, R)                i_cast_##T##_##Y(X, R)
 
 #define   i_index_public_INST(X, R, ...)
-#define   i_index_public_INTERN(X, R, ...)
-#define   i_index_public_ISIZE(X, R, ...)
+#define   i_index_public_INST_EXTERN(X, R, ...)
 #define   i_index_public_DECL(X, R, ...)
 #define   i_index_public_GENERICS(X, R, ...)
 #define   i_index_public_INIT(X, R, ...) \
@@ -998,8 +990,7 @@ CPU_Caps detect_cpu_caps();
 #define i_index_public_METHOD(X, R, ...)                R (*emit_idx_symbol(index,__VA_ARGS__))(X, ##__VA_ARGS__);
 
 #define i_index_intern_INST(X, R, ...)
-#define i_index_intern_INTERN(X, R, ...)
-#define i_index_intern_ISIZE(X, R, ...)
+#define i_index_intern_INST_EXTERN(X, R, ...)
 #define i_index_intern_DECL(X, R, ...)
 #define i_index_intern_GENERICS(X, R, ...)
 #define i_index_intern_INIT(X, R, ...)
@@ -1008,9 +999,7 @@ CPU_Caps detect_cpu_caps();
 #define i_index(X, Y, T, R, ...)                        i_index_##T##_##Y(X, R, ##__VA_ARGS__)
 
 #define i_vargs_public_INST(X, R, N, ...)
-#define i_vargs_public_INTERN(X, R, N, ...)
-#define i_vargs_public_ISIZE(X, R, N, ...)
-#define i_vargs_public_ISIZE(X, R, N, ...)
+#define i_vargs_public_INST_EXTERN(X, R, N, ...)
 #define i_vargs_public_DECL(X, R, N, ...)
 #define i_vargs_public_GENERICS(X, R, N, ...)
 #define i_vargs_public_INIT(X, R, N, ...)               i_method_public_INIT(X, R, N, __VA_ARGS__)  
@@ -1018,8 +1007,7 @@ CPU_Caps detect_cpu_caps();
 #define i_vargs_public_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
 
 #define i_vargs_intern_INST(X, R, N, ...)
-#define i_vargs_intern_INTERN(X, R, N, ...)
-#define i_vargs_intern_ISIZE(X, R, N, ...)
+#define i_vargs_intern_INST_EXTERN(X, R, N, ...)
 #define i_vargs_intern_DECL(X, R, N, ...)
 #define i_vargs_intern_GENERICS(X, R, N, ...)
 #define i_vargs_intern_INIT(X, R, N, ...)               i_method_intern_INIT(X, R, N, __VA_ARGS__)  
@@ -1028,8 +1016,7 @@ CPU_Caps detect_cpu_caps();
 #define i_vargs(X, Y, T, R, N, ...)                     i_vargs_##T##_##Y(X, R, N, __VA_ARGS__)
 
 #define s_vargs_public_INST(X, R, N, ...)
-#define s_vargs_public_INTERN(X, R, N, ...)
-#define s_vargs_public_ISIZE(X, R, N, ...)
+#define s_vargs_public_INST_EXTERN(X, R, N, ...)
 #define s_vargs_public_DECL(X, R, N, ...)               R X##_##N(__VA_ARGS__, ...);
 #define s_vargs_public_GENERICS(X, R, N, ...)
 #define s_vargs_public_INIT(X, R, N, ...)               s_method_public_INIT(X, R, N, ##__VA_ARGS__)
@@ -1037,8 +1024,7 @@ CPU_Caps detect_cpu_caps();
 #define s_vargs_public_METHOD(X, R, N, ...)             R (*N)(__VA_ARGS__, ...);
 
 #define s_vargs_intern_INST(X, R, N, ...)
-#define s_vargs_intern_INTERN(X, R, N, ...)
-#define s_vargs_intern_ISIZE(X, R, N, ...)
+#define s_vargs_intern_INST_EXTERN(X, R, N, ...)
 #define s_vargs_intern_DECL(X, R, N, ...)
 #define s_vargs_intern_GENERICS(X, R, N, ...)
 #define s_vargs_intern_INIT(X, R, N, ...)               s_method_intern_INIT(X, R, N, ##__VA_ARGS__)
@@ -1047,8 +1033,7 @@ CPU_Caps detect_cpu_caps();
 #define s_vargs(X, Y, T, R, N, ...)                     s_vargs_##T##_##Y(X, R, N, ##__VA_ARGS__)
 
 #define i_override_method_INST(X, N)
-#define i_override_method_INTERN(X, N)
-#define i_override_method_ISIZE(X, N)
+#define i_override_method_INST_EXTERN(X, N)
 #define i_override_method_DECL(X, N)
 #define i_override_method_GENERICS(X, N)
 #define i_override_method_INIT(X, N) \
@@ -1058,8 +1043,7 @@ CPU_Caps detect_cpu_caps();
 #define i_override_method_METHOD(X, N)
 
 #define i_override_ctr_INST(X, R)
-#define i_override_ctr_INTERN(X, N)
-#define i_override_ctr_ISIZE(X, N)
+#define i_override_ctr_INST_EXTERN(X, N)
 #define i_override_ctr_DECL(X, R)
 #define i_override_ctr_GENERICS(X, N)
 #define i_override_ctr_INIT(X, R)                       X##_type . with_##R = & X##_with_##R;
@@ -1067,8 +1051,7 @@ CPU_Caps detect_cpu_caps();
 #define i_override_ctr_METHOD(X, R)
 
 #define i_override_cast_INST(X, R)
-#define i_override_cast_INTERN(X, R)
-#define i_override_cast_ISIZE(X, R)
+#define i_override_cast_INST_EXTERN(X, R)
 #define i_override_cast_DECL(X, R)
 #define i_override_cast_GENERICS(X, N)
 #define i_override_cast_INIT(X, R)                      X##_type . cast_##R = & X##_cast_##R;
@@ -1076,8 +1059,7 @@ CPU_Caps detect_cpu_caps();
 #define i_override_cast_METHOD(X, R)
 
 #define i_override_idx_INST(X, R)
-#define i_override_idx_INTERN(X, R)
-#define i_override_idx_ISIZE(X, R)
+#define i_override_idx_INST_EXTERN(X, R)
 #define i_override_idx_DECL(X, R)
 #define i_override_idx_GENERICS(X, R)
 #define i_override_idx_INIT(X, R)                    X##_type . idx_##R = & X##_idx_##R;
@@ -1186,11 +1168,6 @@ typedef struct method_t {
     void*           arb; \
     meta_t          meta; \
 
-#define intern(X)  X##_schema(X, INTERN, object)
-/// this gives you a kind of design-time check for intern access,  i suppose..
-/// however we would need to emit it in both cases
-#define  isize(X) u8 __##X##_intern[0 X##_schema(X, ISIZE, object)];
-
 #ifdef __cplusplus
 #define declare_typedef(X) \
     typedef struct _ ## X* X;
@@ -1211,7 +1188,6 @@ typedef struct method_t {
     _Pragma("pack(push, 1)") \
     typedef struct _ ## X { \
         X##_schema (X, INST) \
-        X##_intern \
         struct _##X##_f* f; \
     } *X; \
     X##_schema (X, DECL) \
@@ -1256,7 +1232,8 @@ typedef struct method_t {
     _Pragma("pack(push, 1)") \
     typedef struct _##E##_f { \
         A_f_members(A) \
-        A_schema (A, METHOD) \
+        A_schema   (A, METHOD) \
+        E##_schema (A, METHOD) \
     } E##_f, *E##_ft; \
     _Pragma("pack(pop)") \
     enum { E##_ENUM_COUNT = ENUM_COUNT(E##_schema(E, COUNT)) }; \
@@ -1281,7 +1258,7 @@ void        A_lazy_init(global_init_fn fn);
             return false; \
         } else { \
             memcpy(type_ref, base_ref, sizeof(A_f)); \
-            static type_member_t members[16 + E##_ENUM_COUNT + sizeof(E##_type) / sizeof(void*)]; \
+            static type_member_t members[64 + E##_ENUM_COUNT + sizeof(E##_type) / sizeof(void*)]; \
             memset(&E##_type, 0, sizeof(E##_type)); \
             E##_type.parent_type = (__typeof__(E##_type.parent_type))& A_type; \
             E##_type.name     = #E;                 \
@@ -1302,7 +1279,7 @@ void        A_lazy_init(global_init_fn fn);
     typedef struct _##AA* AA; \
     _Pragma("pack(push, 1)") \
     typedef struct _##AA { \
-        AA##_schema (AA, INST, __VA_ARGS__) AA##_intern \
+        AA##_intern (AA, INST, __VA_ARGS__) \
         struct _##AA##_f* f; \
     } *AA; \
     AA##_schema (AA, DECL, __VA_ARGS__) \
@@ -1333,8 +1310,8 @@ void        A_lazy_init(global_init_fn fn);
     typedef struct _##AA* AA; \
     _Pragma("pack(push, 1)") \
     typedef struct _##AA { \
-        BASE##_schema (AA, INST, __VA_ARGS__) \
-        AA##_schema (AA, INST, __VA_ARGS__) \
+        BASE##_intern (AA, INST, __VA_ARGS__) \
+        AA##_intern (AA, INST, __VA_ARGS__) \
         struct _##AA##_f* f; \
     } *AA; \
     typedef struct _##AA##_f { \
@@ -1351,7 +1328,7 @@ void        A_lazy_init(global_init_fn fn);
     typedef struct _##AA* AA; \
     _Pragma("pack(push, 1)") \
     typedef struct _##AA { \
-        BASE##_schema (AA, INST, __VA_ARGS__) \
+        BASE##_intern (AA, INST, __VA_ARGS__) \
         struct _##AA##_f* f; \
     } *AA; \
     typedef struct _##AA##_f { \
@@ -1400,7 +1377,7 @@ void        A_lazy_init(global_init_fn fn);
     _Pragma("pack(pop)")
 
 /// six levels of sub-class should be fine --gates 1985 [not bill]
-#define dm_f_1(A0)          A0##_schema (A0, INST) A0##_intern
+#define dm_f_1(A0)          A0##_intern (A0, INST) // for internal it calls A##_schema(A, INST), for external the macro is set to A##_schema(A, Y##_EXTERN)
 #define dm_f_2(A0, A1)      dm_f_1(A1)     dm_f_1(A0)
 #define dm_f_3(A0, A1, A2)  dm_f_2(A1, A2) dm_f_1(A0)
 
@@ -1445,7 +1422,7 @@ void* primitive_ffi_arb(AType);
         } else { \
             memset(type_ref, 0,        sizeof(A0##_f)); \
             memcpy(type_ref, base_ref, sizeof(A_f)); \
-            static type_member_t members[16 + sizeof(A0##_type) / sizeof(void*)]; \
+            static type_member_t members[64 + sizeof(A0##_type) / sizeof(void*)]; \
             type_ref->parent_type = (__typeof__(type_ref->parent_type))&A_type; \
             type_ref->name     = #A0;       \
             type_ref->module   = MODULE;    \
@@ -1472,25 +1449,25 @@ void* primitive_ffi_arb(AType);
 /// alias lets use tag types with an array of types, enabling 
 /// design-time and runtime template-like functionality, with 
 /// permutation of the class-type and instance-type
-#define define_arb(A0, A1, TYPE_SZ, TRAIT, VMEMBER_COUNT, VMEMBER_TYPE, ...) \
+#define define_arb(TYPE, BASE, TYPE_SZ, TRAIT, VMEMBER_COUNT, VMEMBER_TYPE, ...) \
     _Pragma("pack(push, 1)") \
-    A       A0##_head; \
-    A0##_f  A0##_type; \
+    A       TYPE##_head; \
+    TYPE##_f  TYPE##_type; \
     _Pragma("pack(pop)") \
-    static __attribute__((constructor)) bool Aglobal_##A0() { \
-        A0##_f* type_ref = &A0##_type; \
-        A1##_f* base_ref = &A1##_type; \
+    static __attribute__((constructor)) bool Aglobal_##TYPE() { \
+        TYPE##_f* type_ref = &TYPE##_type; \
+        BASE##_f* base_ref = &BASE##_type; \
         if ((AType)type_ref == (AType)base_ref) \
-            type_ref->name = #A0; \
+            type_ref->name = #TYPE; \
         if ((AType)type_ref != (AType)base_ref && (!base_ref->traits && !base_ref->size)) { \
-            A_lazy_init((global_init_fn)&Aglobal_##A0); \
+            A_lazy_init((global_init_fn)&Aglobal_##TYPE); \
             return false; \
         } else { \
-            memset(type_ref, 0,        sizeof(A0##_f)); \
-            memcpy(type_ref, base_ref, sizeof(A1##_f)); \
-            static type_member_t members[16 + sizeof(A0##_type) / sizeof(void*)]; \
-            type_ref->parent_type = (__typeof__(type_ref->parent_type))&A1##_type; \
-            type_ref->name     = #A0;       \
+            memset(type_ref, 0,        sizeof(TYPE##_f)); \
+            memcpy(type_ref, base_ref, sizeof(BASE##_f)); \
+            static type_member_t members[64 + sizeof(TYPE##_type) / sizeof(void*)]; \
+            type_ref->parent_type = (__typeof__(type_ref->parent_type))&BASE##_type; \
+            type_ref->name     = #TYPE;       \
             type_ref->module   = MODULE;    \
             type_ref->members  = members;   \
             type_ref->member_count = 0; \
@@ -1498,12 +1475,12 @@ void* primitive_ffi_arb(AType);
             type_ref->vmember_count = VMEMBER_COUNT; \
             type_ref->vmember_type = (AType)VMEMBER_TYPE; \
             type_ref->traits   = TRAIT;     \
-            type_ref->arb       = primitive_ffi_arb(typeid(A0)); \
-            A0##_schema( A0, INIT, __VA_ARGS__ ) \
+            type_ref->arb       = primitive_ffi_arb(typeid(TYPE)); \
+            TYPE##_schema( TYPE, INIT, __VA_ARGS__ ) \
             A_push_type((AType)type_ref);    \
             return true;                     \
-        }                                    \
-    }
+        } \
+    } \
 
 
 #define define_meta(ALIAS_TYPE, SRC_TYPE, ...) \
@@ -1586,7 +1563,7 @@ struct _sz { i64 value; };
     i_prop  (X,Y, public, i64,       alloc) \
     i_prop  (X,Y, public, i64,       count) \
     i_method(X,Y, public, none,      init) \
-    i_method(X,Y, public, none,      destructor) \
+    i_method(X,Y, public, none,      dealloc) \
     i_method(X,Y, public, i32,       compare,    X) \
     i_method(X,Y, public, u64,       hash) \
     i_method(X,Y, public, object,    copy) \
@@ -1690,10 +1667,7 @@ declare_primitive(floats,       raw)
     i_prop    (X,Y, public, X,         prev) \
     i_prop    (X,Y, public, object,    value) \
     i_prop    (X,Y, public, object,    key) \
-    i_override(X,Y, method, hash)
-#ifndef item_intern
-#define item_intern
-#endif        
+    i_override(X,Y, method, hash)    
 declare_class(item)
 
 /// lets mimmick the structure in llama.cpp
@@ -1701,10 +1675,7 @@ declare_class(item)
     i_prop(X,Y, public,   cstr, role) \
     i_prop(X,Y, public,   cstr, content) \
     i_override(X,Y, method, init) \
-    i_override(X,Y, method, destructor)
-#ifndef message_intern
-#define message_intern isize(message)
-#endif
+    i_override(X,Y, method, dealloc)
 declare_class(message)
 
 /// linked-list of elemental data
@@ -1714,6 +1685,7 @@ declare_class(message)
     i_prop  (X,Y, public,    i64,     count) \
     i_method(X,Y, public,    object,  pop) \
     i_method(X,Y, public,    item,    push, object) \
+    i_method(X,Y, public,    item,    insert_after, object, i32) \
     i_method(X,Y, public,    num,     index_of, object) \
     i_method(X,Y, public,    item,     item_of, object) \
     i_method(X,Y, public,    none,    sort,   ARef) \
@@ -1721,9 +1693,6 @@ declare_class(message)
     i_method(X,Y, public,    none,    remove_item, item) \
     i_method(X,Y, public,    object,  get,  object) \
     i_method(X,Y, public,    num,     count)
-#ifndef list_intern
-#define list_intern
-#endif
 declare_class(list)
 
 /// array of elemental data
@@ -1778,10 +1747,7 @@ typedef struct _path* path;
     i_prop(X,Y, public,   i64,  count) \
     i_prop(X,Y, public,   i64,  alloc) \
     i_method(X,Y, public, none, append, object, i32) \
-    i_override(X,Y, method, destructor)
-#ifndef buffer_intern
-#define buffer_intern isize(buffer)
-#endif
+    i_override(X,Y, method, dealloc)
 declare_class(buffer)
 */
 
@@ -1798,11 +1764,8 @@ declare_class(buffer)
     i_prop(X,Y,   public,   handle, id) \
     i_prop(X,Y,   public,   bool,   text_mode) \
     i_override(X,Y, method, init) \
-    i_override(X,Y, method, destructor) \
+    i_override(X,Y, method, dealloc) \
     i_override(X,Y, cast,   bool)
-#ifndef file_intern
-#define file_intern isize(file)
-#endif
 declare_class(file)
 
 typedef struct _array* array;
@@ -1813,9 +1776,6 @@ typedef struct _array* array;
     i_ctr(X,Y, public, array) \
     i_prop(X,Y, public, i64, count) \
     i_array(X,Y, public, i64, 16, data)
-#ifndef shape_intern
-#define shape_intern
-#endif
 declare_class(shape)
 
 
@@ -1848,9 +1808,6 @@ declare_class(shape)
     i_override  (X,Y, method, init) \
     i_override  (X,Y, cast,   bool) \
     i_override  (X,Y, cast,   string)
-#ifndef path_intern
-#define path_intern
-#endif
 declare_class(path)
 
 path path_temp(symbol tmpl);
@@ -1858,7 +1815,7 @@ path path_temp(symbol tmpl);
 #define vector_schema(X,Y,...) \
     i_prop      (X,Y, public, num,     alloc) \
     i_prop      (X,Y, public, AType,   type) \
-    i_prop      (X,Y, public, shape,   shape) \
+    i_prop      (X,Y, public, shape,   vshape) \
     i_method    (X,Y, public, none,    concat, ARef, num) \
     i_method    (X,Y, public, ARef,    get,  num) \
     i_method    (X,Y, public, none,    set,  num, ARef) \
@@ -1869,9 +1826,6 @@ path path_temp(symbol tmpl);
     i_method    (X,Y, public, sz,      len) \
     i_ctr       (X,Y, public, path) \
     i_override  (X,Y, method, init)
-#ifndef vector_intern
-#define vector_intern
-#endif
 declare_class(vector)
 
 none vector_with_path(vector a, path file_path);
@@ -1884,9 +1838,6 @@ none vector_with_path(vector a, path file_path);
     i_prop    (X,Y, public,   object, ctx) \
     i_prop    (X,Y, required, handle, addr) \
     i_method  (X,Y, public,   object, invoke, object)
-#ifndef subprocedure_intern
-#define subprocedure_intern
-#endif
 declare_class(subprocedure)
 
 #define subproc(targ, faddr, context) new(subprocedure, target, targ, ctx, context, addr, faddr) 
@@ -1922,9 +1873,6 @@ declare_class(subprocedure)
     i_override       (X,Y, method, init) \
     i_override       (X,Y, cast,   bool) \
     i_override       (X,Y, cast,   string)
-#ifndef array_intern
-#define array_intern
-#endif
 declare_class(array, object)
 
 #define ATypes_schema(X,Y,...)
@@ -1936,10 +1884,7 @@ declare_meta(ATypes, array, AType)
     s_method    (X,Y, public, AF,    fetch, num) \
     s_method    (X,Y, public, AF,    create, sz) \
     i_override  (X,Y, method, init) \
-    i_override  (X,Y, method, destructor)
-#ifndef AF_intern
-#define AF_intern
-#endif
+    i_override  (X,Y, method, dealloc)
 declare_class(AF)
 
 #define hashmap_schema(X,Y,...) \
@@ -1957,19 +1902,12 @@ declare_class(AF)
     i_override  (X,Y, cast,   string) \
     i_override  (X,Y, method, init) \
     i_override  (X,Y, cast,   bool)
-#ifndef hashmap_intern
-#define hashmap_intern
-#endif
-
 declare_class(hashmap)
 
 #define pair_schema(X,Y,...) \
     i_prop      (X,Y, public, item,    ref) \
     i_prop      (X,Y, public, object,  key) \
     i_prop      (X,Y, public, object,  value)
-#ifndef pair_intern
-#define pair_intern
-#endif
 declare_class(pair)
 
 extern int fault_level;
@@ -1997,9 +1935,6 @@ declare_enum(level)
     i_override  (X,Y, method,  init) \
     i_override  (X,Y, cast,    string) \
     i_override  (X,Y, cast,    bool)
-#ifndef map_intern
-#define map_intern  isize(map)
-#endif
 declare_mod(map, list)
 
 #define fn_schema(X,Y,...) \
@@ -2008,9 +1943,6 @@ declare_mod(map, list)
     i_prop      (X,Y, public, object,    context) \
     i_method    (X,Y, public, object,    call, array) \
     i_override  (X,Y, method,    hash)
-#ifndef fn_intern
-#define fn_intern isize(fn)
-#endif
 declare_class(fn)
 
 #define string_schema(X,Y,...) \
@@ -2046,9 +1978,6 @@ declare_class(fn)
     i_override(X,Y,   method, init) \
     i_override(X,Y,   cast,   bool) \
     i_override(X,Y,   method, copy)
-#ifndef string_intern
-#define string_intern
-#endif
 declare_class(string)
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
@@ -2120,7 +2049,7 @@ cstr copy_cstr(cstr input);
 
 #define evalues(MM, TT, EE) \
     if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
-        for (TT EE = ((pair)_i->value)->value, e0 = EE; EE == e0; e0++) \
+        for (TT EE = ((item)_i->value)->value, e0 = EE; EE == e0; e0++) \
 
 #define ekeys(MM, TT, EE) \
     if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
@@ -2272,6 +2201,7 @@ declare_meta(array_map,        array, map)
 // we still define type + shape together, so vec + 3 is vec3, if its mat, 4x4 then mat4x4f.. its simple shape in type
 // it has its own unique type identity.
 
+#include <A-public>
 #ifdef __cplusplus
 }
 #endif

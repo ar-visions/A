@@ -206,7 +206,7 @@ LIB_TARGET   	   = $(if $(strip $(LIB_OBJS)),$(BUILD_DIR)/lib$(PROJECT).so)
 APP_TARGETS	 	   = $(patsubst $(SRCAPP_DIR)/%.c, $(BUILD_DIR)/%, $(wildcard $(SRCAPP_DIR)/*.c)) \
 					 $(patsubst $(SRCAPP_DIR)/%.cc, $(BUILD_DIR)/%, $(wildcard $(SRCAPP_DIR)/*.cc))
 TARGET_FLAGS 	   = -shared
-ALL_TARGETS  	   = run-import methods $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
+ALL_TARGETS  	   = run-import public_header methods $(LIB_TARGET) $(APP_TARGETS) $(BUILD_DIR)/$(PROJECT)-flat $(BUILD_DIR)/$(PROJECT)-includes tests
 APP_FLAGS    	   = 
 PROJECT_HEADER_R   = $(if $(wildcard $(BUILD_DIR)/lib/$(PROJECT)),lib/$(PROJECT),$(if $(wildcard $(BUILD_DIR)/app/$(PROJECT)),app/$(PROJECT),))
 PROJECT_HEADER     = $(BUILD_DIR)/$(PROJECT_HEADER_R)
@@ -216,6 +216,7 @@ IMPORT_TEST_HEADER = $(BUILD_DIR)/test/import
 METHODS_HEADER 	   = $(BUILD_DIR)/$(PROJECT_HEADER_R)-methods
 INIT_HEADER        = $(BUILD_DIR)/$(PROJECT_HEADER_R)-init
 INTERN_HEADER      = $(BUILD_DIR)/$(PROJECT_HEADER_R)-intern
+PUBLIC_HEADER      = $(BUILD_DIR)/$(PROJECT_HEADER_R)-public
 upper 		       = $(shell echo $(1) | tr '[:lower:]' '[:upper:]')
 LINKER 			   = $(if $(filter %.cc %.cpp,$(LIB_SRCS)), $(CXX), $(CC))
 UPROJECT 	       = $(call upper,$(PROJECT))
@@ -231,6 +232,12 @@ LDFLAGS := $(LDFLAGS) -fsanitize=address
 endif
 SRC_TRANSLATION   := $(SRC_ROOT)/translation/A-translation.c
 BUILD_TRANSLATION := $(BUILD_DIR)/A-translation
+
+define newline
+
+
+endef
+
 
 
 ifneq ($(release),0)
@@ -249,16 +256,7 @@ all: $(ALL_TARGETS)
 # this makes for more intuitive, more readable c code.
 # it costs the pre-processor nothing to parse this, even for hundreds of methods
 
-# generate method macros header (PROJECT-method)
-$(METHODS_HEADER): $(PROJECT_HEADER)
-	@bash $(ATYPE_ROOT)/method.sh $(METHODS_HEADER) $(PROJECT_HEADER) $(UPROJECT)
 
-# generate init macros header (PROJECT-init)
-$(INIT_HEADER): $(PROJECT_HEADER)
-	@bash $(ATYPE_ROOT)/init.sh $(INIT_HEADER) $(PROJECT_HEADER) $(UPROJECT)
-
-$(INTERN_HEADER): $(PROJECT_HEADER)
-	@bash $(ATYPE_ROOT)/intern.sh $(INTERN_HEADER) $(PROJECT_HEADER) $(UPROJECT)
 
 # A-type subprocedure syntax is a good thing it just cant happen now, and we should still attempt to say the file is c
 ifeq ($(PROJECT),AAAAA) # disabled for now
@@ -280,59 +278,47 @@ build_translation:
 
 endif
 
-# this code is less ugly than maintaining headers.
-# here is where we may include generated headers, too.
-# A-type projects provide extra defs in -methods and -init
-# Collect all .c and .cc files
-# Get only files with NO extension (user modules)
-LIB_MODULES := $(foreach f,$(wildcard $(SRC_ROOT)/lib/*),$(if $(suffix $f),,$(notdir $f)))
+LIB_IMPORTS := $(subst $(newline), ,$(strip $(LIB_IMPORTS)))
+APPS_IMPORTS := $(subst $(newline), ,$(strip $(APPS_IMPORTS)))
 
-define generate_import_header
-	@if [ ! -f $(1) ] || [ "$(SRC_ROOT)/import" -nt $(1) ]; then \
-		rm -f $(1); \
-		echo "/* generated import interface */" > $(1); \
-		echo "#ifndef _$(UPROJECT)_IMPORT_$(2)_H_" >> $(1); \
-		echo "#define _$(UPROJECT)_IMPORT_$(2)_H_" >> $(1); \
-		$(foreach import, $(3), \
-			if [ "$(PROJECT)" != "$(import)" ]; then \
-				if [ -f "$(IMPORT)/include/$(import)-methods" ]; then \
-				echo "#include <$(import)>" >> $(1) ; \
-				echo "#include <$(import)-methods>" >> $(1) ; \
-				fi; \
-			fi;) \
-		echo "#include <$(PROJECT)-intern>" >> $(1) ; \
-		echo "#include <$(PROJECT)>" >> $(1); \
-		$(foreach name, $(LIB_MODULES), \
-			echo "#include <$(basename $(notdir $(name)))>" >> $(1) ; \
-		) \
-		echo "#include <$(PROJECT)-methods>" >> $(1); \
-		echo "#include <A-reserve>" >> $(1); \
-		$(foreach import, $(3), \
-			if [ "$(PROJECT)" != "$(import)" ]; then \
-				if [ -f "$(IMPORT)/include/$(import)-methods" ]; then \
-					echo "#include <$(import)-init>" >> $(1) ; \
-				fi; \
-			fi;) \
-		echo "#include <$(PROJECT)-init>" >> $(1); \
-		echo >> $(1); \
-		echo "#endif" >> $(1); \
-	fi
-endef
+# generate method macros header (PROJECT-method)
+$(METHODS_HEADER): $(PROJECT_HEADER)
+	@bash $(ATYPE_ROOT)/method.sh $(METHODS_HEADER) $(PROJECT_HEADER) $(PROJECT) $(UPROJECT)
+
+# generate init macros header (PROJECT-init)
+$(INIT_HEADER): $(PROJECT_HEADER)
+	@bash $(ATYPE_ROOT)/init.sh $(INIT_HEADER) $(PROJECT_HEADER) $(PROJECT) $(UPROJECT)
+
+$(INTERN_HEADER): $(PROJECT_HEADER)
+	@bash $(ATYPE_ROOT)/intern.sh $(INTERN_HEADER) $(PROJECT_HEADER) $(PROJECT) $(UPROJECT)
+	@bash $(ATYPE_ROOT)/public.sh $(PUBLIC_HEADER) $(PROJECT_HEADER) $(PROJECT) $(UPROJECT)
+
+$(PUBLIC_HEADER): $(PROJECT_HEADER)
+	@bash $(ATYPE_ROOT)/public.sh $(PUBLIC_HEADER) $(PROJECT_HEADER) $(PROJECT) $(UPROJECT)
 
 $(IMPORT_LIB_HEADER):
-	$(call generate_import_header,$@,LIB,$(LIB_IMPORTS),lib)
+	@SRC_ROOT="$(SRC_ROOT)" bash $(ATYPE_ROOT)/import_header.sh $(IMPORT_LIB_HEADER) $(PROJECT_HEADER) $(PROJECT) $(UPROJECT) $(LIB_IMPORTS)
 
 $(IMPORT_APP_HEADER):
-	$(call generate_import_header,$@,APP,$(APPS_IMPORTS),app)
+	@SRC_ROOT="$(SRC_ROOT)" bash $(ATYPE_ROOT)/import_header.sh $(IMPORT_APP_HEADER) $(PROJECT_HEADER) $(PROJECT) $(UPROJECT) $(APPS_IMPORTS)
+
+$(IMPORT_ALL):
+	@SRC_ROOT="$(SRC_ROOT)" bash $(ATYPE_ROOT)/headers.sh $(IMPORT_APP_HEADER) $(PROJECT_HEADER) $(PROJECT) $(UPROJECT) $(APPS_IMPORTS)
 
 $(IMPORT_TEST_HEADER):
-	$(call generate_import_header,$@,TEST,$(TEST_IMPORTS),test)
+	@SRC_ROOT="$(SRC_ROOT)" bash $(ATYPE_ROOT)/import_header.sh $(IMPORT_TEST_HEADER) $(PROJECT_HEADER) $(PROJECT) $(UPROJECT) $(LIB_IMPORTS)
 
 .PRECIOUS: *.o
 .SUFFIXES:
-.PHONY: all clean install run-import tests verify process_c_files methods clean $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
+.PHONY: all clean install run-import tests verify process_c_files public_header methods clean headers $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(METHODS_HEADER) $(INIT_HEADER) $(PUBLIC_HEADER) $(INTERN_HEADER) 
 
-methods: $(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER)
+public_header: $(PUBLIC_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER)
+
+methods: $(METHODS_HEADER) $(PUBLIC_HEADER) $(INIT_HEADER) $(INTERN_HEADER)
+
+# we need to make all headers in one call, and one script.
+$(METHODS_HEADER) $(INIT_HEADER) $(INTERN_HEADER) $(PUBLIC_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER): | run-import headers
+
 
 define process_src
 	@for file in $(SRC_ROOT)/$(1)/*.c; do \
@@ -371,9 +357,9 @@ process_c_files:
 # Fix Makefile behavior with this; otherwise its On Error Resume Next -- style functionality.  not exactly what most people want
 .NOTPARALLEL:
 
+
 define RUN_IMPORT_SCRIPT
-	@echo "running import script"
-	@bash $(ATYPE_ROOT)/import.sh --b $(BUILD_DIR) --i $(SRC_ROOT)/import || { echo "import script failed"; exit 1; }
+	@BUILT_PROJECTS="$(BUILT_PROJECTS)" bash $(ATYPE_ROOT)/import.sh --b $(BUILD_DIR) --i $(SRC_ROOT)/import || { echo "import script failed"; exit 1; }
 endef
 
 # Add this call to the import script before building
@@ -487,6 +473,10 @@ install: all
 		install -m 644 $(INIT_HEADER) $(IMPORT)/include/; \
 	fi
 
+	@if [ -f "$(PUBLIC_HEADER)" ]; then \
+		install -m 644 $(PUBLIC_HEADER) $(IMPORT)/include/; \
+	fi
+
 	@if [ -f "$(INTERN_HEADER)" ]; then \
 		install -m 644 $(INTERN_HEADER) $(IMPORT)/include/; \
 	fi
@@ -506,6 +496,6 @@ install: all
 	fi
 
 clean:
-	rm -rf $(BUILD_DIR)/lib$(PROJECT).so $(BUILD_DIR)/$(PROJECT) $(BUILD_DIR)/app $(BUILD_DIR)/lib $(BUILD_DIR)/test $(METHODS_HEADER) \
+	rm -rf $(BUILD_DIR)/silver-token $(BUILD_DIR)/lib$(PROJECT).so $(BUILD_DIR)/$(PROJECT) $(BUILD_DIR)/app $(BUILD_DIR)/lib $(BUILD_DIR)/test $(METHODS_HEADER) \
 		   $(INIT_HEADER) $(INTERN_HEADER) $(IMPORT_LIB_HEADER) $(IMPORT_APP_HEADER) $(IMPORT_TEST_HEADER) \
 		   $(REFLECT_TARGET) $(BUILD_DIR)/*-flat $(BUILD_DIR)/*-includes $(BUILD_DIR)/*.tmp.c

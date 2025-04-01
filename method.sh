@@ -8,12 +8,12 @@ fi
 
 METHODS_HEADER=$1
 PROJECT_HEADER=$2
-UPROJECT=$3
+PROJECT=$3
+UPROJECT=$4
 SED=${SED:-sed}
 
 # Only regenerate if necessary
 if [ ! -f "$METHODS_HEADER" ] || [ "$PROJECT_HEADER" -nt "$METHODS_HEADER" ]; then
-    echo "Generating $METHODS_HEADER from $PROJECT_HEADER..."
     rm -f "$METHODS_HEADER"
     echo "/* generated methods interface */" > "$METHODS_HEADER"
     echo "#ifndef _${UPROJECT}_METHODS_H_" >> "$METHODS_HEADER"
@@ -33,6 +33,4 @@ if [ ! -f "$METHODS_HEADER" ] || [ "$PROJECT_HEADER" -nt "$METHODS_HEADER" ]; th
     echo "#endif /* _${UPROJECT}_METHODS_H_ */" >> "$METHODS_HEADER"
     
     echo "Successfully generated $METHODS_HEADER"
-else
-    echo "File $METHODS_HEADER is up to date."
 fi

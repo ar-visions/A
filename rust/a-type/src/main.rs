@@ -297,7 +297,7 @@ A_type!(obj {
 
     // Methods from A_schema
     method init()                        -> ();
-    method destructor()                  -> ();
+    method dealloc()                  -> ();
     method compare(other: *mut A)        -> i32;
     method hash()                        -> u64;
     method copy()                        -> *mut c_void;

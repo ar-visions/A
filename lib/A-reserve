@@ -1,5 +1,5 @@
 //#ifndef _A_RESERVE_
 //#define _A_RESERVE_
 #undef init
-#undef destructor
+#undef dealloc
 //#endif

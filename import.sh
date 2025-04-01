@@ -1,7 +1,7 @@
 #!/bin/bash
 (
     # built projects from environment
-    BUILT_PROJECTS="${BUILT_PROJECTS:-}"
+    AVOID_PROJECTS="${BUILT_PROJECTS:-}"
     CALLER_BUILD_DIR=""
 
     # Set the NPROC_CMD variable based on the operating system
@@ -86,7 +86,6 @@
     # Add the last current_line if it exists
     if [ ! -z "$current_line" ]; then
         projects+=("$current_line")
-        #echo "import: $current_line"
     fi
 
     SRC_DIR="${SRC_DIR:-$SRC}"
@@ -108,25 +107,23 @@
     mkdir -p checkout
     cd       checkout
 
-    echo "processing projects ${projects[@]}"
-    for project1 in "${projects[@]}"; do
-        PROJECT_NAME1=$(echo "$project" | cut -d ' ' -f 1)
-        echo "$PROJECT_NAME1"
+    OUR_PROJECTS=""
+    for project in "${projects[@]}"; do
+        PROJECT_NAME=$(echo "$project" | cut -d ' ' -f 1)
+        OUR_PROJECTS="$OUR_PROJECTS,$PROJECT_NAME"
     done
 
     # iterate through projects, cloning and building
     for project in "${projects[@]}"; do
         PROJECT_NAME=$(echo "$project" | cut -d ' ' -f 1)
 
-        echo "project: $PROJECT_NAME"
-
         # check if project already built during this command stack
-        if [[ ",$BUILT_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
+        if [[ ",$AVOID_PROJECTS," == *",$PROJECT_NAME,"* ]]; then
             print "skipping $PROJECT_NAME - already built"
             continue
         fi
 
-        REPO_URL=$(   echo "$project" | cut -d ' ' -f 2)
+        REPO_URL=$(echo "$project" | cut -d ' ' -f 2)
         IS_GCLIENT=
 
         if [[ "$REPO_URL" == *"googlesource.com/"* ]]; then
@@ -255,14 +252,23 @@
 
             # check out the specific commit, branch, or tag if provided
             if [ -n "$COMMIT" ]; then
-                echo "checking out $COMMIT for $TARGET_DIR"
-                git checkout "$COMMIT"
-                if [ $? -ne 0 ]; then
-                    echo "checkout failed for $TARGET_DIR at $COMMIT"
-                    exit 1
-                fi
-                if [ -n "$IS_GCLIENT" ]; then
-                    gclient sync -D
+                CURRENT_COMMIT=$(git rev-parse HEAD)
+                
+                # Calculate the length of the target commit hash
+                COMMIT_LENGTH=${#COMMIT}
+                
+                # Extract the same number of characters from the current commit
+                CURRENT_COMMIT_PREFIX=${CURRENT_COMMIT:0:$COMMIT_LENGTH}
+                if [ "$CURRENT_COMMIT_PREFIX" != "$COMMIT" ]; then
+                    echo "checking out $COMMIT for $TARGET_DIR"
+                    git checkout "$COMMIT"
+                    if [ $? -ne 0 ]; then
+                        echo "checkout failed for $TARGET_DIR at $COMMIT"
+                        exit 1
+                    fi
+                    if [ -n "$IS_GCLIENT" ]; then
+                        gclient sync -D
+                    fi
                 fi
             fi
         fi
@@ -276,7 +282,8 @@
         # check if this is a cmake project, otherwise use autotools
         # or if there is "-S " in BUILD_CONFIG
         if [ -n "$IS_GCLIENT" ]; then
-            echo "[$PROJECT_NAME] gclient"
+            #echo "[$PROJECT_NAME] gclient"
+            IS_GCLIENT_="1"
         elif [ -f "silver-build.sh" ]; then
             silver_build="1"
             echo "[$PROJECT_NAME] build"
@@ -299,9 +306,9 @@
             elif [ -f "import" ]; then
                 A_MAKE="1"
                 BUILD_TYPE="-g"
-                echo "A-Make for $PROJECT_NAME"
             elif [ -f "Makefile" ]; then
-                echo "regular Makefile for $PROJECT_NAME"
+                #echo "regular Makefile for $PROJECT_NAME"
+                NO_OPERATION="1"
             else
                 echo "resource project: $PROJECT_NAME"
                 IS_RESOURCE=1
@@ -320,11 +327,13 @@
 
         mkdir -p $BUILD_FOLDER
         cd $BUILD_FOLDER
+        BUILT=
 
         if [ -n "$silver_build" ]; then
             # arbitrary build process is sometimes needed; some repos have no Make, etc
             echo 'running silver-build.sh'
             (cd .. && bash silver-build.sh)
+            BUILT=1
         else
             if [ "$REBUILD" == "all" ] || [ "$REBUILD" == "$PROJECT_NAME" ]; then
                 echo "rebuilding ${TARGET_DIR}"
@@ -350,6 +359,8 @@
             
             # proceed if there is a newer file than silver-token, or no silver-token
             if [ ! -f "silver-token" ] || find .. -type f -newer "silver-token" | grep -q . ; then
+                BUILT="1"
+
                 # we need more than this: it needs to also check if a dependency registered to this project changes
                 # to do that, we should run the import on the project without the make process
                 BUILD_CONFIG=$(echo "$BUILD_CONFIG" | sed "s|\$IMPORT|$IMPORT|g")
@@ -436,6 +447,7 @@
                 elif [ -n "$rust" ]; then
                     cargo build --$build --manifest-path ../Cargo.toml --target-dir . || { echo "$COMPILE_ERROR"; exit 1; }
                 elif [ "$A_MAKE" = "1" ]; then
+                    export BUILT_PROJECTS="$OUR_PROJECTS"
                     make $MFLAGS -f ../Makefile || { echo "$COMPILE_ERROR"; exit 1; }
                 else
                     cd ..
@@ -443,7 +455,7 @@
                     cd $BUILD_FOLDER
                 fi
                 ts1=$(find . -type f -exec $STAT -c %Y {} + | sort -n | tail -1)
-                echo "-> project $PROJECT_NAME = $ts0 $ts1"
+                #echo "-> project $PROJECT_NAME = $ts0 $ts1"
                 if [ $? -ne 0 ]; then
                     echo "build failure for $TARGET_DIR"
                     exit 1
@@ -489,16 +501,14 @@
             echo "im-a-token" >> silver-token  # only create this if all steps succeed
         fi
 
-        COMMANDS=""
-        for command in "${COMMAND_LIST[@]}"; do
-            echo "$PROJECT_NAME:command > $command\n"
-            COMMANDS="${COMMANDS}${command}; "
-        done
-        bash -c "${COMMANDS}"
-
-        BUILT_PROJECTS+=",${PROJECT_NAME}"
-        echo "project-built: $PROJECT_NAME"
-        export BUILT_PROJECTS
+        if [ -n "$BUILT" ]; then
+            COMMANDS=""
+            for command in "${COMMAND_LIST[@]}"; do
+                echo "$PROJECT_NAME:command > $command\n"
+                COMMANDS="${COMMANDS}${command}; "
+            done
+            bash -c "${COMMANDS}"
+        fi
         ) || exit 1
 
     done

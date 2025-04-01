@@ -753,9 +753,17 @@ void A_start() {
         /// for each member of type
         for (num m = 0; m < type->member_count; m++) {
             type_member_t* mem = &type->members[m];
+            if (strcmp(type->name, "rgb8") == 0) {
+                int test2 = 2;
+                test2 += 2;
+            }
             if (mem->member_type & (A_MEMBER_IMETHOD | A_MEMBER_SMETHOD)) {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
+                if (!address) {
+                    int test2 = 2;
+                    test2 += 2;
+                }
                 assert(address, "no address");
                 array args = allocate(array, alloc, mem->args.count);
                 for (num i = 0; i < mem->args.count; i++)
@@ -825,7 +833,14 @@ object A_set_property(object instance, symbol name, object value) {
     type_member_t* m = A_member(type, (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN), (cstr)name, true);
     verify(m, "%s not found on object %s", name, type->name);
     object   *mdata = (object*)((cstr)instance + m->offset);
-    if (A_is_inlay(m)) {
+    if (m->type->traits & A_TRAIT_STRUCT) {
+        AType value_type = isa(value);
+        A header = A_header(value);
+        verify(value_type == m->type->vmember_type, "%s: expected vmember_type (%s) to equal isa(value) (%s)",
+            name, m->type->vmember_type->name, type->name);
+        verify(m->type->size == value_type->size * header->count, "vector size mismatch for %s", name);
+        memcpy(mdata, value, m->type->size);
+    } else if (A_is_inlay(m)) {
         // copy inlay data
         memcpy(mdata, value, m->type->size);
     } else {
@@ -942,7 +957,7 @@ object A_bool(bool data) { return A_primitive(&bool_type, &data); }
 
 /// A -------------------------
 void A_init(A a) { }
-void A_destructor(A a) {
+void A_dealloc(A a) {
     // go through objects type fields/offsets; 
     // when type is A-based, we release; 
     // this part is 'auto-release', our pool is an AF pool, or auto-free.
@@ -1530,7 +1545,7 @@ string string_escape(string input) {
     return string((symbol)escaped); /// with cstr constructor, it does not 'copy' but takes over life cycle
 }
 
-void  string_destructor(string a)          { free((cstr)a->chars); }
+void  string_dealloc(string a)          { free((cstr)a->chars); }
 num   string_compare(string a, string b)   { return strcmp(a->chars, b->chars); }
 num   string_cmp(string a, symbol b)       { return strcmp(a->chars, b); }
 bool  string_eq(string a, symbol b)        { return strcmp(a->chars, b) == 0; }
@@ -1653,7 +1668,7 @@ void message_init(message a) {
     a->content = strdup(a->content);
 }
 
-void message_destructor(message a) {
+void message_dealloc(message a) {
     free(a->role);
     free(a->content);
 }
@@ -1756,9 +1771,14 @@ item hashmap_lookup(hashmap a, object key) {
     u64 h = a->unmanaged ? (u64)((void*)key) : hash(key);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
-    for (item f = bucket->first; f; f = f->next)
-        if (compare(f->key, key) == 0)
-            return f;
+    if (a->unmanaged) {
+        for (item f = bucket->first; f; f = f->next)
+            if (f->key == key)
+                return f;
+    } else
+        for (item f = bucket->first; f; f = f->next)
+            if (compare(f->key, key) == 0)
+                return f;
     return null;
 }
 
@@ -1969,16 +1989,16 @@ object A_hold(object a) {
     return a;
 }
 
-//#undef destructor
+//#undef dealloc
 
 void A_free(object a) {
     A       aa = A_header(a);
     A_f*  type = aa->type;
     void* prev = null;
     while (type) {
-        if (prev != type->destructor) {
-            type->destructor(a);
-            prev = type->destructor;
+        if (prev != type->dealloc) {
+            type->dealloc(a);
+            prev = type->dealloc;
         }
         if (type == &A_type)
             break;
@@ -2035,6 +2055,32 @@ item list_push(list a, object e) {
         a->first      = n;
     }
     a->last = n;
+    a->count++;
+    return n;
+}
+
+item list_insert_after(list a, object e, i32 after) {
+    num index = 0;
+    item found = null;
+    for (item ai = a->first; ai; ai = ai->next) {
+        if (after == index) {
+            found = ai;
+            break;
+        }
+        index++;
+    }
+    item n = item(value, e);
+    if (!found) {
+        a->first = a->last = n;
+    } else {
+        n->next = null;
+        n->prev = found;
+        found->next = n;
+        if (found->prev)
+            found->prev->next = n;
+        if (a->last == found)
+            a->last = n;
+    }
     a->count++;
     return n;
 }
@@ -2187,8 +2233,8 @@ void vector_init(vector a) {
     f->count = 0;
     f->scalar = f->type->meta.meta_0 ? f->type->meta.meta_0 : a->type ? a->type : typeid(i8);
     verify(f->scalar, "scalar not set");
-    if (a->shape)
-        a->alloc = total(a->shape);
+    if (a->vshape)
+        a->alloc = total(a->vshape);
     A_realloc(a, a->alloc);
 }
 
@@ -2240,6 +2286,8 @@ void vector_concat(vector a, ARef any, num count) {
     i64 size = data_stride(a);
     memcpy(&ptr[f->count * size], any, size * count);
     f->count += count;
+    if (a->vshape)
+        a->vshape->data[a->vshape->count - 1] = f->count;
 }
 
 void vector_push(vector a, A any) {
@@ -2320,7 +2368,7 @@ AF A_pool(sz start_size) {
     return AF_create(start_size);
 }
 
-void AF_destructor(AF a) {
+void AF_dealloc(AF a) {
     int f = index_of(af_stack, a);
     assert(f >= 0, "invalid af-stack index");
     remove_weak(af_stack, f);
@@ -2445,7 +2493,7 @@ void file_close(file f) {
     }
 }
 
-void file_destructor(file f) {
+void file_dealloc(file f) {
     file_close(f);
 }
 
@@ -2909,6 +2957,14 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
         AType use_schema = schema ? schema : typeid(map);
         bool is_map = use_schema == typeid(map);
         map required = null;
+        array fields = null;
+        type_member_t* fields_member = null;
+        if (use_schema) {
+            fields_member = A_member(use_schema, A_MEMBER_PROP, "fields", true);
+            if (fields_member && fields_member->type == typeid(array))
+                fields = array();
+        }
+
         if (!is_map) {
             /// required fields
             required = map();
@@ -2930,6 +2986,7 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             if (*scan != '\"') return null;
             origin        = scan;
             string name   = parse_json_string(origin, &scan);
+            if (fields) push(fields, name);
             bool is_type  = cmp(name, "Type") == 0;
             Member member = is_map ? null : A_member(use_schema, A_MEMBER_PROP, name->chars, true);
             if (!is_type && !member && !is_map) {
@@ -2942,6 +2999,10 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             if (required && contains(required, name)) {
                 rm(required, name);
             }
+            if (strcmp(name->chars, "rotation") == 0) {
+                int test2 = 2;
+                test2 += 2;
+            }
             object value = parse_object(scan, member ? member->type : null, &scan); /// issue with parsing a map type (attributes)
             if (is_type) {
                 string type_name = value;
@@ -2949,6 +3010,12 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
                 verify(use_schema, "type not found: %o", type_name);
             }
             AType type = isa(value);
+            if (strcmp(type->name, "quatf") == 0) {
+                f32 values[4];
+                memcpy(values, value, sizeof(values));
+                int test2 = 2;
+                test2 += 2;
+            }
             scan = ws(&scan[0]);
             if   (!value)
                 return null;
@@ -2972,6 +3039,8 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
         }
         if (remainder) *remainder = ws(scan);
         res = construct_with(use_schema, props); // makes a bit more sense to implement required here
+        if (fields_member)
+            memcpy(&((i8*)res)[fields_member->offset], &fields, sizeof(array));
     }
     if (remainder) *remainder = scan;
     return res;
@@ -2986,11 +3055,6 @@ array parse_array_objects(cstr* s, AType element_type) {
             break;
         }
         object a = parse_object(scan, element_type, &scan);
-        static int test2 = 2;
-        test2++;
-        if (test2 == 19) {
-            test2 = test2;
-        }
         push(res, a);
         scan = ws(scan);
         if (scan && scan[0] == ',') {
@@ -3022,7 +3086,7 @@ object parse_array(cstr s, AType schema, cstr* remainder) {
     } else if (schema->vmember_type == typeid(f32)) { // should support all vector types of f32 (needs type bounds check with vmember_count)
         array arb = parse_array_objects(&scan, typeid(f32));
         int vcount = len(arb);
-        res = A_alloc2(schema, typeid(f32), shape_new(vcount, 0), true);
+        res = A_alloc(typeid(f32), vcount, true);
         int n = 0;
         each(arb, object, a) {
             AType a_type = isa(a);
@@ -3034,6 +3098,31 @@ object parse_array(cstr s, AType schema, cstr* remainder) {
     } else if (constructs_with(schema, typeid(array))) {
         array arb = parse_array_objects(&scan, typeid(i64));
         res = construct_with(schema, arb);
+    } else if (schema->src == typeid(vector)) {
+        AType scalar_type = schema->meta.meta_0;
+        verify(scalar_type, "scalar type required when using vector (define a meta-type of vector with type)");
+        
+        array prelim = parse_array_objects(&scan, null);
+        int count = len(prelim);
+        // this should contain multiple arrays of scalar values; we want to convert each array to our 'scalar_type'
+        // for instance, we may parse [[1,2,3,4,5...16],...] mat4x4's; we merely need to validate vmember_count and vmember_type and convert
+        // if we have a vmember_count of 0 then we are dealing with a single primitive type
+        vector vres = A_alloc(schema, 1, true);
+        vres->vshape = shape_new(count, 0);
+        A_initialize(vres);
+        i8* vdata = data(vres);
+        int index = 0;
+        each (prelim, object, o) {
+            AType itype = isa(o);
+            if (itype->traits & A_TRAIT_PRIMITIVE) {
+                /// parse object here (which may require additional
+                memcpy(&vdata[index], o, scalar_type->size);
+                index += scalar_type->size;
+            } else {
+                fault("implement struct parsing");
+            }
+        }
+        res = vres;
     } else {
         fault("unhandled vector type: %s", schema ? schema->name : null);
     }

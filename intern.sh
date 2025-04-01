@@ -9,14 +9,14 @@ fi
 
 INTERN_HEADER=$1
 PROJECT_HEADER=$2
-UPROJECT=$3
+PROJECT=$3
+UPROJECT=$4
 
 SED=${SED:-sed}
 
 # Only regenerate if necessary
 if [ ! -f "$INTERN_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INTERN_HEADER" ]; then
-    echo "Generating $INTERN_HEADER from $PROJECT_HEADER..."
-    
+
     # Start the file with header comments and include guards
     rm -f "$INTERN_HEADER"
     echo "/* generated methods interface */" > "$INTERN_HEADER"
@@ -32,7 +32,8 @@ if [ ! -f "$INTERN_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INTERN_HEADER" ]; then
         $SED "s/declare_${type}[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/" | \
         while read class_name; do
             if [ -n "$class_name" ]; then
-                echo "#define ${class_name}_intern		intern(${class_name})" >> "$INTERN_HEADER"
+                echo "#undef ${class_name}_intern" >> "$INTERN_HEADER"
+                echo "#define ${class_name}_intern(AA,YY,...) AA##_schema(AA,YY, __VA_ARGS__)" >> "$INTERN_HEADER"
             fi
         done
         
@@ -43,6 +44,4 @@ if [ ! -f "$INTERN_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INTERN_HEADER" ]; then
     echo "#endif /* _${UPROJECT}_INTERN_H_ */" >> "$INTERN_HEADER"
     
     echo "Successfully generated $INTERN_HEADER"
-else
-    echo "File $INTERN_HEADER is up to date."
 fi

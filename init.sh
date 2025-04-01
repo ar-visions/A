@@ -9,13 +9,12 @@ fi
 
 INIT_HEADER=$1
 PROJECT_HEADER=$2
-UPROJECT=$3
+PROJECT=$3
+UPROJECT=$4
 SED=${SED:-sed}
 
 # Only regenerate if necessary
 if [ ! -f "$INIT_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INIT_HEADER" ]; then
-    echo "Generating $INIT_HEADER from $PROJECT_HEADER..."
-    
     # Start the file with header comments and include guards
     rm -f "$INIT_HEADER"
     echo "/* generated methods interface */" > "$INIT_HEADER"
@@ -99,6 +98,4 @@ if [ ! -f "$INIT_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INIT_HEADER" ]; then
     echo "#endif /* _${UPROJECT}_INIT_H_ */" >> "$INIT_HEADER"
     
     echo "Successfully generated $INIT_HEADER"
-else
-    echo "File $INIT_HEADER is up to date."
 fi

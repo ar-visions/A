@@ -21,6 +21,10 @@
 			"path": "../vec"
 		},
 		{
+			"name":	"gltf",
+			"path": "../gltf"
+		},
+		{
 			"name": "trinity",
 			"path": "../trinity"
 		},
@@ -281,7 +285,14 @@
 			"vec": "c",
 			"vec-init": "c",
 			"vec-methods": "c",
-			"vec-intern": "c"
+			"vec-intern": "c",
+			"__functional_03": "c",
+			"target": "c",
+			"vulkan.h": "c",
+			"gltf": "cpp",
+			"gltf-init": "cpp",
+			"gltf-intern": "cpp",
+			"gltf-methods": "cpp"
 		}
 	}
 }

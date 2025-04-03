@@ -33,7 +33,7 @@
             "label": "build-silver",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../silver/debug"
+                "cwd": "${workspaceFolder}/../silver-lang"
             },
             "group": {
                 "kind": "build",
@@ -48,20 +48,20 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "windows": {
-                "command": "msbuild silver.sln /t:silver"
+                "command": "msbuild silver-lang.sln /t:silver-lang"
             },
             "osx": {
-                "command": "make -f ../Makefile -j8"
+                "command": "make -j8"
             },
             "linux": {
-                "command": "make -f ../Makefile -j8"
+                "command": "make -j8"
             }
         },
         {
             "label": "build-A-generate",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../A/debug"
+                "cwd": "${workspaceFolder}/../A"
             },
             "group": {
                 "kind": "build",
@@ -79,17 +79,17 @@
                 "command": "msbuild silver.sln /t:silver"
             },
             "osx": {
-                "command": "make -f ../Makefile -j8"
+                "command": "make -j8"
             },
             "linux": {
-                "command": "make -f ../Makefile -j8"
+                "command": "make -j8"
             }
         },
         {
             "label": "build-vec",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../vec/debug"
+                "cwd": "${workspaceFolder}/../vec"
             },
             "group": {
                 "kind": "build",
@@ -104,17 +104,17 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             },
             "linux": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             }
         },
         {
             "label": "build-ether",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../ether/debug"
+                "cwd": "${workspaceFolder}/../ether"
             },
             "group": {
                 "kind": "build",
@@ -129,17 +129,17 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             },
             "linux": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             }
         },
         {
             "label": "build-orbiter",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../orbiter/debug"
+                "cwd": "${workspaceFolder}/../orbiter"
             },
             "group": {
                 "kind": "build",
@@ -154,17 +154,17 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             },
             "linux": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             }
         },
         {
             "label": "build-quanta",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../quanta/debug"
+                "cwd": "${workspaceFolder}/../quanta"
             },
             "group": {
                 "kind": "build",
@@ -179,17 +179,17 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             },
             "linux": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             }
         },
         {
             "label": "build-A",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../A/debug"
+                "cwd": "${workspaceFolder}/../A"
             },
             "group": {
                 "kind": "build",
@@ -204,17 +204,17 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make -f ../Makefile install"
+                "command": "make"
             },
             "linux": {
-                "command": "make -f ../Makefile install"
+                "command": "make"
             }
         },
         {
             "label": "build-trinity",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../trinity/debug"
+                "cwd": "${workspaceFolder}/../trinity"
             },
             "group": {
                 "kind": "build",
@@ -229,17 +229,17 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             },
             "linux": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             }
         },
         {
             "label": "build-hyperspace",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../hyperspace/debug"
+                "cwd": "${workspaceFolder}/../hyperspace"
             },
             "group": {
                 "kind": "build",
@@ -254,17 +254,17 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             },
             "linux": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             }
         },
         {
             "label": "build-ai",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../ai/debug"
+                "cwd": "${workspaceFolder}/../ai"
             },
             "group": {
                 "kind": "build",
@@ -279,10 +279,10 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             },
             "linux": {
-                "command": "make -f ../Makefile install -j8"
+                "command": "make -j8"
             }
         },
         {

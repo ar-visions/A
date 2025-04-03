@@ -295,6 +295,7 @@ void debug() {
     return;
 }
 
+
 void A_init_recur(object a, AType current, raw last_init) {
     if (current == &A_type) return;
     void(*init)(object) = ((A_f*)current)->init;

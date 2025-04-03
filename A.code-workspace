@@ -5,8 +5,8 @@
 			"path": "."
 		},
 		{
-			"name": "silver",
-			"path": "../silver"
+			"name": "silver-lang",
+			"path": "../silver-lang"
 		},
 		{
 			"name": "ether",

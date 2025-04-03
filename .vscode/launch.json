@@ -248,10 +248,10 @@
             "name": "silver",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../silver/debug/silver",
+            "program": "${workspaceFolder}/../silver-lang/debug/silver",
             "args": [
-                "silver88.cms",
-                "--install", "/home/kalen/src/silver-import"
+                "${workspaceFolder}/../silver-lang/debug/silver88.cms",
+                "--import", "/home/kalen/src/silver-lang/import"
             ],
             "environment": [
                 {
@@ -264,7 +264,7 @@
                 }
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../silver/debug",
+            "cwd": "${workspaceFolder}/../silver-lang/debug",
             "MIMode": "gdb",
             "presentation": {
                 "hidden": false,

@@ -108,7 +108,8 @@ enum A_TRAIT {
     A_TRAIT_ALIAS     = 64,
     A_TRAIT_ABSTRACT  = 128,
     A_TRAIT_VECTOR    = 256,
-    A_TRAIT_STRUCT    = 512
+    A_TRAIT_STRUCT    = 512,
+    A_TRAIT_PTR_SIZE  = 1024
 };
 
 _Pragma("pack(push, 1)")
@@ -300,7 +301,7 @@ typedef bool(*global_init_fn)();
 #define _N_STRUCT_ARGS_HELPER2(TYPE, N, ...)  _COMBINE(_N_STRUCT_ARGS_, N)(TYPE, ## __VA_ARGS__)
 #define _N_STRUCT_ARGS(TYPE,...)    _N_STRUCT_ARGS_HELPER2(TYPE, _ARG_COUNT(__VA_ARGS__), ## __VA_ARGS__)
 
-#define structure(TYPE, ...) _N_STRUCT_ARGS(TYPE, __VA_ARGS__);
+#define structure_of(TYPE, ...) _N_STRUCT_ARGS(TYPE, __VA_ARGS__);
   
 
 
@@ -471,7 +472,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_METHOD(X, R, N)
 
 #define   i_prop_intern_INST(X, R, N)           R N;
-#define   i_prop_intern_INST_EXTERN(X, R, N)
+#define   i_prop_intern_INST_EXTERN(X, R, N)    R _##N;
 #define   i_prop_intern_DECL(X, R, N)
 #define   i_prop_intern_GENERICS(X, R, N)
 #define   i_prop_intern_INIT(X, R, N)
@@ -514,6 +515,38 @@ typedef bool(*global_init_fn)();
 #define   i_prop_intern_INIT_field(X, R, N, M2)          fault("field is not exposed when intern");
 #define   i_prop_intern_PROTO_field(X, R, N, M2)  
 #define   i_prop_intern_METHOD_field(X, R, N, M2)  
+
+
+
+
+
+#define   i_prop_public_INST_as(X, R, N, M2)
+#define   i_prop_public_INST_EXTERN_as(X, R, N, M2)
+#define   i_prop_public_DECL_as(X, R, N, M2)
+#define   i_prop_public_GENERICS_as(X, R, N, M2)
+#define   i_prop_public_INIT_as(X, R, N, M2) \
+    verify(false, "'as' keyword is used for internals")
+#define   i_prop_public_PROTO_as(X, R, N, M2)  
+#define   i_prop_public_METHOD_as(X, R, N, M2)
+
+#define   i_prop_required_INST_as(X, R, N, M2)
+#define   i_prop_required_INST_EXTERN_as(X, R, N, M2)
+#define   i_prop_required_DECL_as(X, R, N, M2)
+#define   i_prop_required_GENERICS_as(X, R, N, M2)
+#define   i_prop_required_INIT_as(X, R, N, M2) \
+    verify(false, "'as' keyword used with internals and cannot be required");
+#define   i_prop_required_PROTO_as(X, R, N, M2)  
+#define   i_prop_required_METHOD_as(X, R, N, M2)
+
+#define   i_prop_intern_INST_as(X, R, N, M2)           R N;
+#define   i_prop_intern_INST_EXTERN_as(X, R, N, M2)    M2 _##N;
+#define   i_prop_intern_DECL_as(X, R, N, M2)
+#define   i_prop_intern_GENERICS_as(X, R, N, M2)
+#define   i_prop_intern_INIT_as(X, R, N, M2)
+#define   i_prop_intern_PROTO_as(X, R, N, M2)  
+#define   i_prop_intern_METHOD_as(X, R, N, M2)  
+
+
 
 
 
@@ -1310,7 +1343,7 @@ void        A_lazy_init(global_init_fn fn);
     typedef struct _##AA* AA; \
     _Pragma("pack(push, 1)") \
     typedef struct _##AA { \
-        BASE##_intern (AA, INST, __VA_ARGS__) \
+        BASE##_intern (BASE, INST, __VA_ARGS__) \
         AA##_intern (AA, INST, __VA_ARGS__) \
         struct _##AA##_f* f; \
     } *AA; \
@@ -1573,9 +1606,8 @@ struct _sz { i64 value; };
     i_ctr(   X,Y, public, cereal) \
     i_cast(  X,Y, public, string) \
     i_cast(  X,Y, public, bool)
-#ifndef A_intern
-#define A_intern
-#endif
+#define A_intern(AA,YY,...)      A_schema(AA,YY,__VA_ARGS__)
+#define object_intern(AA,YY,...) AA##_schema(AA,YY,__VA_ARGS__)
 declare_base(A)
 
 declare_base_meta(object, A, A)

@@ -1,6 +1,0 @@
-libffi https://github.com/libffi/libffi 3d0ce1e
-
-lib:
-    ffi m
-app:
-    llama

@@ -1,0 +1,6 @@
+#line 1 "/home/kalen/src/A/lib/A-reserve"
+//#ifndef _A_RESERVE_
+//#define _A_RESERVE_
+#undef init
+#undef dealloc
+//#endif

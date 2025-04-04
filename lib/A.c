@@ -1,4 +1,7 @@
-#include <import>
+#include <A-intern>
+#include <A-public>
+#include <A>
+#include <A-init>
 #include <A-reserve>
 #include <ffi.h>
 #undef bool
@@ -624,6 +627,7 @@ none array_init(array a) {
         array_alloc_sz(a, a->alloc);
 }
 
+#ifdef USE_FFI
 method_t* method_with_address(handle address, AType rtype, array atypes, AType method_owner) {
     const num max_args = (sizeof(meta_t) - sizeof(num)) / sizeof(AType);
     method_t* method = calloc(1, sizeof(method_t));
@@ -651,6 +655,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     assert(status == FFI_OK, "status == %i", (i32)status);
     return method;
 }
+#endif
 
 /// should work on statics or member functions the same; its up to the caller to push the self in there
 fn A_lambda(object target, Member member, object context) {
@@ -661,6 +666,8 @@ fn A_lambda(object target, Member member, object context) {
     return f;
 }
 
+
+#ifdef USE_FFI
 object A_method_call(method_t* a, array args) {
     const num max_args = 8;
     void* arg_values[max_args];
@@ -679,14 +686,19 @@ object A_method_call(method_t* a, array args) {
     else
         return (object) result[0];
 }
+#endif
 
 /// this calls type methods
 object A_method(AType type, cstr method_name, array args) {
+#ifdef USE_FFI
     type_member_t* mem = A_member(type, A_MEMBER_IMETHOD | A_MEMBER_SMETHOD, method_name, false);
     assert(mem->method, "method not set");
     method_t* m = mem->method;
     object res = A_method_call(m, args);
     return res;
+#else
+    return null;
+#endif
 }
 
 object A_convert(AType type, object input) {
@@ -696,6 +708,7 @@ object A_convert(AType type, object input) {
 }
 
 object A_method_vargs(object instance, cstr method_name, int n_args, ...) {
+#ifdef USE_FFI
     AType type = isa(instance);
     type_member_t* mem = A_member(type, A_MEMBER_IMETHOD | A_MEMBER_SMETHOD, method_name, false);
     assert(mem->method, "method not set");
@@ -711,6 +724,9 @@ object A_method_vargs(object instance, cstr method_name, int n_args, ...) {
     va_end(vargs);
     object res = A_method_call(m, args);
     return res;
+#else
+    return null;
+#endif
 }
 
 
@@ -770,7 +786,9 @@ void A_start() {
                 for (num i = 0; i < mem->args.count; i++)
                     args->elements[i] = (object)((A_f**)&mem->args.meta_0)[i];
                 args->len = mem->args.count;
+#ifdef USE_FFI
                 mem->method = method_with_address(address, mem->type, args, type);
+#endif
             }
         }
     }
@@ -2063,16 +2081,22 @@ item list_push(list a, object e) {
 item list_insert_after(list a, object e, i32 after) {
     num index = 0;
     item found = null;
-    for (item ai = a->first; ai; ai = ai->next) {
-        if (after == index) {
-            found = ai;
-            break;
+    if (after >= 0)
+        for (item ai = a->first; ai; ai = ai->next) {
+            if (after <= index) {
+                found = ai;
+                break;
+            }
+            index++;
         }
-        index++;
-    }
     item n = item(value, e);
     if (!found) {
-        a->first = a->last = n;
+        n->next = a->first;
+        if (a->first)
+            a->first->prev = n;
+        a->first = n;
+        if (!a->last)
+             a->last = n;
     } else {
         n->next = null;
         n->prev = found;
@@ -2403,7 +2427,11 @@ u64 fn_hash(fn f) {
 }
 
 object fn_call(fn f, array args) {
+#ifdef USE_FFI
     return A_method_call(f->method, args);
+#else
+    return null;
+#endif
 }
 
 bool create_symlink(path target, path link) {
@@ -2756,6 +2784,7 @@ object path_read(path a, AType type) {
 }
 
 void* primitive_ffi_arb(AType ptype) {
+#ifdef USE_FFI
     if (ptype == typeid(u8))        return &ffi_type_uint8;
     if (ptype == typeid(i8))        return &ffi_type_sint8;
     if (ptype == typeid(u16))       return &ffi_type_uint16;
@@ -2773,6 +2802,9 @@ void* primitive_ffi_arb(AType ptype) {
     if (ptype == typeid(sz))        return &ffi_type_sint64;
     if (ptype == typeid(none))      return &ffi_type_void;
     return &ffi_type_pointer;
+#else
+    return null;
+#endif
 }
 
 

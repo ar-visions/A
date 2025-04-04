@@ -519,6 +519,39 @@ typedef bool(*global_init_fn)();
 
 
 
+#define   i_prop_public_INST_of(X, R, N, M2) R N;
+#define   i_prop_public_INST_EXTERN_of(X, R, N, M2)
+#define   i_prop_public_DECL_of(X, R, N, M2)
+#define   i_prop_public_GENERICS_of(X, R, N, M2)
+#define   i_prop_public_INIT_of(X, R, N, M2) \
+    X##_type.members[X##_type.member_count].name     = #M2; \
+    X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
+    X##_type.members[X##_type.member_count].type     = (AType)&R##_type; \
+    X##_type.members[X##_type.member_count].args     = (meta_t) { &M2##_type };; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_PROP; \
+    X##_type.member_count++;
+
+#define   i_prop_public_PROTO_of(X, R, N, M2)  
+#define   i_prop_public_METHOD_of(X, R, N, M2)
+
+#define   i_prop_required_INST_of(X, R, N, M2) R N;
+#define   i_prop_required_INST_EXTERN_of(X, R, N, M2)
+#define   i_prop_required_DECL_of(X, R, N, M2)
+#define   i_prop_required_GENERICS_of(X, R, N, M2)
+#define   i_prop_required_INIT_of(X, R, N, M2) \
+    i_prop_public_INIT_of(X, R, N, M2)
+#define   i_prop_required_PROTO_of(X, R, N, M2)  
+#define   i_prop_required_METHOD_of(X, R, N, M2)
+
+#define   i_prop_intern_INST_of(X, R, N, M2)           R N;
+#define   i_prop_intern_INST_EXTERN_of(X, R, N, M2)    M2 _##N;
+#define   i_prop_intern_DECL_of(X, R, N, M2)
+#define   i_prop_intern_GENERICS_of(X, R, N, M2)
+#define   i_prop_intern_INIT_of(X, R, N, M2)
+#define   i_prop_intern_PROTO_of(X, R, N, M2)  
+#define   i_prop_intern_METHOD_of(X, R, N, M2)  
+
+
 
 #define   i_prop_public_INST_as(X, R, N, M2)
 #define   i_prop_public_INST_EXTERN_as(X, R, N, M2)

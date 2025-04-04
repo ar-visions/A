@@ -3,4 +3,6 @@ debug
 release
 target
 Cargo.lock
-
+bin
+lib
+checkout

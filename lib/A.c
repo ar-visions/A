@@ -1630,6 +1630,16 @@ none  string_append_count(string a, symbol b, i32 blen) {
     ((cstr)a->chars)[a->len] = 0;
 }
 
+string string_trim(string a) {
+    cstr s = cstring(a);
+    int count = len(a);
+    while (*s == ' ') {
+        s++;
+        count--;
+    }
+    return string(chars, s, ref_length, count);
+}
+
 none  string_push(string a, u32 b) {
     sz blen = 1;
     if (blen + a->len >= a->alloc)
@@ -2534,6 +2544,10 @@ none path_init(path a) {
         memcpy((cstr)a->chars, arg, len + 1);
 }
 
+none path_cd(path a) {
+    chdir(a->chars);
+}
+
 path path_temp(symbol tmpl) {
     path p = null;
     do {
@@ -2547,6 +2561,10 @@ path path_temp(symbol tmpl) {
 path path_with_string(path a, string s) {
     a->chars = copy_cstr((cstr)s->chars);
     return a;
+}
+
+num path_len(path a) {
+    return strlen(cstring(a));
 }
 
 bool path_is_ext(path a, symbol e) {
@@ -2604,6 +2622,17 @@ bool path_make_dir(path a) {
     }
     struct stat st = {0};
     return stat(cs, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+i64 path_modified_time(path a) {
+    struct stat st;
+    if (stat((cstr)a->chars, &st) != 0) return 0;
+
+    #if defined(__APPLE__)
+        return (i64)(st.st_mtimespec.tv_sec) * 1000 + st.st_mtimespec.tv_nsec / 1000000;
+    #else
+        return (i64)(st.st_mtim.tv_sec) * 1000 + st.st_mtim.tv_nsec / 1000000;
+    #endif
 }
 
 bool path_is_dir(path a) {

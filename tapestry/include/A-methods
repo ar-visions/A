@@ -2,6 +2,18 @@
 #ifndef _A_METHODS_H_
 #define _A_METHODS_H_
 
+#undef cd
+#define cd(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->cd(_i_, ## __VA_ARGS__); })
+
+#undef make
+#define make(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->make(_i_, ## __VA_ARGS__); })
+
+#undef modified_time
+#define modified_time(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->modified_time(_i_, ## __VA_ARGS__); })
+
+#undef trim
+#define trim(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->trim(_i_, ## __VA_ARGS__); })
+
 #undef init
 #define init(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->init(_i_, ## __VA_ARGS__); })
 #undef dealloc

@@ -74,6 +74,31 @@
             "cwd": "${workspaceFolder}/../hyperspace/"
         },
         {
+            "name": "tapestry",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../A/tapestry/tapestry",
+            "args": [
+                "/home/kalen/src/tapestry",
+                "-b", "..",
+                "-s", "../.."
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../A/tapestry",
+            "environment": [
+                {
+                    "name": "LD_LIBRARY_PATH",
+                    "value": "/home/kalen/src/A/tapestry/lib"
+                }
+            ],
+            "MIMode": "gdb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
             "name": "A-generate",
             "type": "cppdbg",
             "request": "launch",

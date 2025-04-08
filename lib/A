@@ -527,7 +527,7 @@ typedef bool(*global_init_fn)();
     X##_type.members[X##_type.member_count].name     = #M2; \
     X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
     X##_type.members[X##_type.member_count].type     = (AType)&R##_type; \
-    X##_type.members[X##_type.member_count].args     = (meta_t) { &M2##_type };; \
+    X##_type.members[X##_type.member_count].args     = (meta_t) { 1, (AType)&M2##_type };; \
     X##_type.members[X##_type.member_count].member_type = A_MEMBER_PROP; \
     X##_type.member_count++;
 
@@ -1852,6 +1852,7 @@ declare_class(shape)
     i_method    (X,Y, public, bool,   is_empty) \
     i_method    (X,Y, public, bool,   is_dir) \
     i_method    (X,Y, public, path,   directory) \
+    i_method    (X,Y, public, none,   cd) \
     i_method    (X,Y, public, string, stem) \
     i_method    (X,Y, public, string, ext) \
     i_method    (X,Y, public, string, filename) \
@@ -1861,6 +1862,7 @@ declare_class(shape)
     i_method    (X,Y, public, path,   change_ext, cstr) \
     i_method    (X,Y, public, array,  ls, string, bool) \
     i_method    (X,Y, public, bool,   move, path) \
+    i_method    (X,Y, public, i64,    modified_time) \
     s_method    (X,Y, public, path,   cwd, sz) \
     s_method    (X,Y, public, path,   temp, symbol) \
     i_ctr       (X,Y, public, string) \
@@ -2024,6 +2026,7 @@ declare_class(fn)
     i_method  (X,Y,   public, none,    append_count, symbol, i32) \
     i_method  (X,Y,   public, none,    push, u32) \
     i_method  (X,Y,   public, none,    concat, string) \
+    i_method  (X,Y,   public, string,  trim) \
     i_method  (X,Y,   public, string,  mid, num, num) \
     i_method  (X,Y,   public, none,    reserve, num) \
     i_method  (X,Y,   public, none,    write, handle, bool) \

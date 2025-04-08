@@ -5,4 +5,6 @@ target
 Cargo.lock
 bin
 lib
+tokens
 checkout
+*.o

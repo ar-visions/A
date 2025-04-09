@@ -1111,8 +1111,16 @@ CPU_Caps detect_cpu_caps();
 #define i_override_ctr_INST(X, R)
 #define i_override_ctr_INST_EXTERN(X, N)
 #define i_override_ctr_DECL(X, R)
-#define i_override_ctr_GENERICS(X, N)
-#define i_override_ctr_INIT(X, R)                       X##_type . with_##R = & X##_with_##R;
+#define i_override_ctr_GENERICS(X, N)                   N: X##_type.with_##N,
+#define i_override_ctr_INIT(X, R) \
+    X##_type . with_##R = & X##_with_##R; \
+    X##_type.members[X##_type.member_count].name        = stringify(with_##R); \
+    X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(R) }; \
+    X##_type.members[X##_type.member_count].type        = (AType)&R##_type; \
+    X##_type.members[X##_type.member_count].offset      = offsetof(X##_f, with_##R); \
+    X##_type.members[X##_type.member_count].ptr         = (void*)& X##_with_##R; \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_CONSTRUCT; \
+    X##_type.member_count++; 
 #define i_override_ctr_PROTO(X, R)
 #define i_override_ctr_METHOD(X, R)
 
@@ -1843,42 +1851,6 @@ typedef struct _array* array;
     i_array(X,Y, public, i64, 16, data)
 declare_class(shape)
 
-
-#define path_schema(X,Y,...) \
-    i_prop      (X,Y, public, symbol, chars) \
-    i_method    (X,Y, public, bool,   exists) \
-    i_method    (X,Y, public, bool,   make_dir) \
-    i_method    (X,Y, public, bool,   is_ext, symbol) \
-    i_method    (X,Y, public, bool,   is_empty) \
-    i_method    (X,Y, public, bool,   is_dir) \
-    i_method    (X,Y, public, path,   directory) \
-    i_method    (X,Y, public, none,   cd) \
-    i_method    (X,Y, public, string, stem) \
-    i_method    (X,Y, public, string, ext) \
-    i_method    (X,Y, public, string, filename) \
-    i_method    (X,Y, public, path,   absolute) \
-    i_method    (X,Y, public, path,   parent) \
-    i_method    (X,Y, public, object, read, AType) \
-    i_method    (X,Y, public, path,   change_ext, cstr) \
-    i_method    (X,Y, public, array,  ls, string, bool) \
-    i_method    (X,Y, public, bool,   move, path) \
-    i_method    (X,Y, public, i64,    modified_time) \
-    s_method    (X,Y, public, path,   cwd, sz) \
-    s_method    (X,Y, public, path,   temp, symbol) \
-    i_ctr       (X,Y, public, string) \
-    i_ctr       (X,Y, public, symbol) \
-    i_ctr       (X,Y, public, cstr) \
-    i_cast      (X,Y, public, cstr) \
-    i_cast      (X,Y, public, sz) \
-    i_override  (X,Y, ctr,    cereal) \
-    i_override  (X,Y, method, hash) \
-    i_override  (X,Y, method, init) \
-    i_override  (X,Y, cast,   bool) \
-    i_override  (X,Y, cast,   string)
-declare_class(path)
-
-path path_temp(symbol tmpl);
-
 #define vector_schema(X,Y,...) \
     i_prop      (X,Y, public, num,     alloc) \
     i_prop      (X,Y, public, AType,   type) \
@@ -2019,6 +1991,8 @@ declare_class(fn)
     i_prop    (X,Y,   public, num,     len) \
     i_prop    (X,Y,   public, u64,     h) \
     i_method  (X,Y,   public, sz,      len) \
+    i_method  (X,Y,   public, string,  ucase) \
+    i_method  (X,Y,   public, string,  lcase) \
     i_method  (X,Y,   public, array,   split, symbol) \
     i_method  (X,Y,   public, string,  escape) \
     i_method  (X,Y,   public, num,     index_of, symbol) \
@@ -2047,6 +2021,40 @@ declare_class(fn)
     i_override(X,Y,   cast,   bool) \
     i_override(X,Y,   method, copy)
 declare_class(string)
+
+
+#define path_schema(X,Y,...) \
+    i_method    (X,Y, public, bool,   exists) \
+    i_method    (X,Y, public, bool,   make_dir) \
+    i_method    (X,Y, public, bool,   is_ext, symbol) \
+    i_method    (X,Y, public, bool,   is_empty) \
+    i_method    (X,Y, public, bool,   is_dir) \
+    i_method    (X,Y, public, path,   directory) \
+    i_method    (X,Y, public, none,   cd) \
+    i_method    (X,Y, public, string, stem) \
+    i_method    (X,Y, public, string, ext) \
+    i_method    (X,Y, public, string, filename) \
+    i_method    (X,Y, public, path,   absolute) \
+    i_method    (X,Y, public, path,   parent) \
+    i_method    (X,Y, public, object, read, AType) \
+    i_method    (X,Y, public, path,   change_ext, cstr) \
+    i_method    (X,Y, public, array,  ls, string, bool) \
+    i_method    (X,Y, public, bool,   move, path) \
+    i_method    (X,Y, public, i64,    modified_time) \
+    s_method    (X,Y, public, path,   cwd, sz) \
+    s_method    (X,Y, public, path,   temp, symbol) \
+    i_ctr       (X,Y, public, string) \
+    i_override  (X,Y, ctr,  symbol) \
+    i_override  (X,Y, ctr,  cstr) \
+    i_override  (X,Y, cast, cstr) \
+    i_override  (X,Y, cast, sz) \
+    i_override  (X,Y, method, hash) \
+    i_override  (X,Y, method, init) \
+    i_override  (X,Y, cast,   bool) \
+    i_override  (X,Y, cast,   string)
+declare_mod(path, string)
+
+path path_temp(symbol tmpl);
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
 object A_formatter(AType rtype, FILE* f, object opt, symbol templ, ...);

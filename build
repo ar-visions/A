@@ -2,4 +2,5 @@ import:
     libffi https://github.com/libffi/libffi 3d0ce1e
 
 lib:
+    $(bash headers.sh)
     ffi m

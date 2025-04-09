@@ -58,6 +58,37 @@
             }
         },
         {
+            "label": "build-tapestry",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../A/tapestry",
+                "env": {
+                    "CFLAGS": "-g2"
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "windows": {
+                "command": "msbuild silver-lang.sln /t:silver-lang"
+            },
+            "osx": {
+                "command": "make -j8"
+            },
+            "linux": {
+                "command": "make -j8"
+            }
+        },
+        {
             "label": "build-A-generate",
             "type": "shell",
 			"options": {

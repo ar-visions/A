@@ -79,19 +79,17 @@
             "request": "launch",
             "program": "${workspaceFolder}/../A/tapestry/tapestry",
             "args": [
-                "/home/kalen/src/tapestry",
-                "-b", "..",
-                "-s", "../.."
+                "/Users/kalen/src/A"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../A/tapestry",
             "environment": [
                 {
                     "name": "LD_LIBRARY_PATH",
-                    "value": "/home/kalen/src/A/tapestry/lib"
+                    "value": "/home/kalen/src/A/tapestry"
                 }
             ],
-            "MIMode": "gdb",
+            "MIMode": "lldb",
             "presentation": {
                 "hidden": false,
                 "group": "",

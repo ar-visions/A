@@ -1,13 +1,11 @@
-CC = gcc
+# tapestry Makefile; this project builds A-type/silver projects and their imports
+CC      = gcc
 PROJECT = tapestry
-CFLAGS := $(CFLAGS) -I. -I./include -I../lib -std=c11 -fPIC -fno-exceptions \
-	-D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS \
-	-Wno-write-strings -Wno-compare-distinct-pointer-types -Wno-deprecated-declarations \
-	-Wno-incompatible-pointer-types -Wfatal-errors -std=gnu11 -DMODULE="\"$(PROJECT)\"" \
-	-Wno-incompatible-library-redeclaration -fvisibility=default
-
-OBJS = tapestry.o A.o
-TARGET = tapestry
+CFLAGS := $(CFLAGS) -I. -I./include -I../lib -fPIC \
+	-Wno-incompatible-pointer-types -Wfatal-errors \
+	-std=gnu11 -DMODULE="\"$(PROJECT)\""
+OBJS    = tapestry.o A.o
+TARGET  = tapestry
 
 all: $(TARGET)
 

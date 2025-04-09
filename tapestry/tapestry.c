@@ -5,20 +5,24 @@
 #include <sys/stat.h>
 #include <utime.h>
 
+#define get_type(T0) T0
+
 #define line(...)       new(line,       __VA_ARGS__)
 #define tapestry(...)   new(tapestry,   __VA_ARGS__)
 #define build(...)      new(build,      __VA_ARGS__)
 #define import(...)     new(import,     __VA_ARGS__)
 #define flag(...)       new(flag,       __VA_ARGS__)
+#define word(...)       new(word,       __VA_ARGS__)
 
 static path   src;
 static path   install;
 static string dbg;
+static string directive;
 
 #if defined(__linux__)
-static symbol platform = "windows";
-#elif defined(_WIN32)
 static symbol platform = "linux";
+#elif defined(_WIN32)
+static symbol platform = "windows";
 #elif defined(__APPLE__)
 static symbol platform = "darwin";
 #endif
@@ -30,19 +34,34 @@ static cstr ws(cstr p) {
     return scan;
 }
 
-static string token_eval(string input) {
-    string cmd = form(string, "sh -c \"%o\"", input);
+
+string word_shell_evaluate(word w, map env) {
+    /// create environment string
+    string env_str = string(32);
+    pairs(env, i) { // for tapestry use-case: TARGET=%s BUILD=%s PROJECT=%s UPROJECT=%s
+        string name  = i->key;
+        string value = escape((string)i->value); /// this is great to do
+        string f     = form(string, "%o=\"%o\"", name, value);
+        concat(env_str, f);
+        concat(env_str, " ");
+        drop(value);
+    }
+    string cmd = form(string, "%o sh -c \"echo %s\"",
+        env_str, w->chars);
     FILE* pipe = popen(cstring(cmd), "r");
     if (!pipe) return string("");
     char   buf[1024];
     string result = string(alloc, 64);
-    while (fgets(buf, sizeof(buf), pipe))
+    while (fgets(buf, sizeof(buf), pipe)) {
+        int len = strlen(buf);
+        if (len && buf[len - 1] == '\n') buf[len - 1] = 0;
         append(result, buf);
+    }
     pclose(pipe);
     return trim(result);
 }
 
-static cstr read_token(cstr i, string* result) {
+static cstr read_word(cstr i, word* result) {
     i = ws(i);
     if (*i == '\n') {
         *result = null;
@@ -55,7 +74,8 @@ static cstr read_token(cstr i, string* result) {
         append_count(res, i, 1);
         i++;
     }
-    *result = token_eval(res);
+    *result = word(chars, res->chars);
+    drop(res);
     return i;
 }
 
@@ -73,24 +93,27 @@ static cstr read_indent(cstr i, i32* result) {
     return i;
 }
 
-static array read_lines(path f) {
+static array read_lines(build a, path f) {
     array  lines   = array(256);
     string content = read (f, typeid(string));
     cstr   origin  = cstring(content);
     cstr   scan    = origin;
     while (scan && *scan) {
-        string t = null;
-        scan = read_token(scan, &t);
-        if (!t)
-            break;
         i32 indent = 0;
         scan = read_indent(scan, &indent);
-        line l = line(indent, indent, tokens, array(32));
+        word w = null;
+        scan = read_word(scan, &w);
+        if (!w) {
+            if (*scan == '\n')
+                scan++;
+            continue;
+        }
+        line l = line(indent, indent, text, array(32));
         for (;;) {
-            push(l->tokens, t);
-            t = null;
-            scan = read_token(scan, &t);
-            if (!t)
+            push(l->text, w);
+            w = null;
+            scan = read_word(scan, &w);
+            if (!w)
                 break;
         }
         push(lines, l);
@@ -100,10 +123,10 @@ static array read_lines(path f) {
 
 string import_cast_string(import a) {
     string config = string(alloc, 128);
-    each (a->config, string, t) {
+    each (a->config, string, conf) {
         if (len(config))
             append(config, " ");
-        concat(config, t);
+        concat(config, conf);
     }
     return config;
 }
@@ -123,18 +146,35 @@ string flag_cast_string(flag a) {
     return res;
 }
 
+bool is_debug(string name) {
+    string f = form(string, ",%o,", dbg);
+    string s = form(string, ",%o,", name);
+    return strstr(f->chars, s->chars) != null;
+}
+
 none build_with_path(build a, path f) {
-    a->imports = array(32);
+    a->imports      = array(64);
     a->project_path = directory(f);
-    array lines = read_lines(f);
-    import im = null;
+    a->name         = filename(a->project_path);
+    cstr build_dir  = is_debug(a->name) ? "debug" : "release";
+    a->build_path   = form(path, "%o/%s", a->project_path, build_dir);
+    a->app          = array(64);
+    a->test               = array(64);
+    a->lib                = array(64);
+    map environment       = map();
+    array  lines          = read_lines(a, f);
+    import im             = null;
     string last_platform  = null;
     string last_directive = null;
     string top_directive  = null;
     bool   is_import      = true;
 
+    set(environment, string("PROJECT"),      a->name);
+    set(environment, string("PROJECT_PATH"), a->project_path);
+    set(environment, string("BUILD_PATH"),   a->build_path);
+    
     each(lines, line, l) {
-        string first = get(l->tokens, 0);
+        word   first = get(l->text, 0);
         i32    flen  = len(first);
 
         // now we can go by the indent levels on each line
@@ -142,16 +182,22 @@ none build_with_path(build a, path f) {
             verify(first->chars[flen - 1] == ':', "expected base-directive and ':'");
             last_directive = mid(first, 0, flen - 1);
             verify(cmp(last_directive, "import") == 0 ||
-                   cmp(last_directive, "link")   == 0, "expected import or link directive");
+                   cmp(last_directive, "lib")    == 0 ||
+                   cmp(last_directive, "app")    == 0 ||
+                   cmp(last_directive, "test")   == 0, "expected import or target directive");
             is_import = cmp(last_directive, "import") == 0;
             top_directive = copy(last_directive);
+            set(environment, string("DIRECTIVE"), top_directive);
         } else if (l->indent == 1) {
             if (is_import) {
-                string name   = get(l->tokens, 0);
-                string uri    = get(l->tokens, 1);
-                string commit = get(l->tokens, 2);
-                im = import(name, name, uri, uri, commit, commit,
-                    config, array(32), commands, array(32));
+                word name   = get(l->text, 0);
+                word uri    = get(l->text, 1);
+                word commit = get(l->text, 2);
+                im = import(
+                    name,   shell_evaluate(name, environment),
+                    uri,    shell_evaluate(uri,  environment),
+                    commit, shell_evaluate(commit, environment),
+                    config, array(64), commands, array(16));
                 push(a->imports, im);
                 last_platform = null;
             } else {
@@ -161,7 +207,8 @@ none build_with_path(build a, path f) {
                     cmp(top_directive, "app")  == 0 ? a->app  : 
                     cmp(top_directive, "test") == 0 ? a->test : null;
                 verify(flags, "invalid directive: %o", top_directive);
-                each (l->tokens, string, t) {
+                each (l->text, word, w) {
+                    string t = shell_evaluate(w, environment);
                     bool is_cflag  = t->chars[0] == '-';
                     bool is_static = t->chars[0] == '@';
                     push(flags, flag(name, t,
@@ -175,24 +222,18 @@ none build_with_path(build a, path f) {
                 if (cmp(first, ">") == 0) {
                     // combine tokens into singular string
                     string cmd = string(alloc, 64);
-                    each(l->tokens, string, t) {
+                    each(l->text, word, w) {
                         if (len(cmd))
                             append(cmd, " ");
-                        concat(cmd, t);
+                        concat(cmd, shell_evaluate(w, environment));
                     }
                     push(im->commands, cmd);
                 } else
-                each(l->tokens, string, t)
-                    push(im->config, t);
+                each(l->text, word, w)
+                    push(im->config, shell_evaluate(w, environment));
             }
         }
     }
-}
-
-bool is_debug(string name) {
-    string f = form(string, ",%o,", dbg);
-    string s = form(string, ",%o,", name);
-    return strstr(f->chars, s->chars) != null;
 }
 
 /// handle autoconfig (if present) and resultant / static Makefile
@@ -201,11 +242,12 @@ bool import_make(import im) {
     struct stat build_token,
                 installed_token;
     bool        debug      = is_debug(im->name);
-    symbol      build_type = debug ? "debug" : "release";
-    path        build_path = form(path, "%o/%s", im->import_path, build_type);
     path t0 = form(path, "tapestry-token");
     path t1 = form(path, "%o/tokens/%o", install, im->name);
 
+    make_dir(im->build_path);
+    cd(im->build_path);
+    
     if (file_exists("%o", t0) && file_exists("%o", t1)) {
         /// get modified date on token, compare it to one in install dir
         int istat_build   = stat(cstring(t0), &build_token);
@@ -313,15 +355,24 @@ static bool is_dbg(cstr name) {
 }
 
 none build_init(build a) {
+    bool debug = is_dbg(cstring(a->name));
+    a->name = filename(a->project_path);
+    
     /// make checkouts or symlink, then build & install
     each (a->imports, import, im) {
         cd(install);
+        bool debug = is_debug(im->name);
+        symbol build_type = debug ? "debug" : "release";
+        im->build_path = form(path, "%o/%s", im->import_path, build_type);
+
+        path checkout = form(path, "%o/checkout", install);
 
         /// checkout or symlink
-        if (!dir_exists("%o/checkout/%o", install, im->name)) {
+        if (!dir_exists("%o/%o", checkout, im->name)) {
+            cd(checkout);
             if (A_len(src) && dir_exists("%o/%o", src, im->name)) {
-                string cmd = form(string, "ln -s %o/%o %o/checkout/%o",
-                    src, im->name, install, im->name);
+                string cmd = form(string, "ln -s %o/%o %o/%o",
+                    src, im->name, checkout, im->name);
                 verify (system(cstring(cmd)) == 0, "symlink");
             } else {
                 string cmd = form(string, "git clone %o %o --no-checkout && cd %o && git checkout %o && cd ..",
@@ -335,8 +386,6 @@ none build_init(build a) {
 
         /// build project with evaluated config
         i32* c = null, *b = null, *i = null;
-        bool debug = is_dbg(cstring(im->name));
-        im->build_path = form(path, "%o/%s", im->import_path, debug ? "debug" : "release");
         cd(im->build_path);
 
         /// make is implicit install in our modeling
@@ -345,35 +394,42 @@ none build_init(build a) {
 
     /// goto project path
     cd(a->project_path);
-    symbol      build_type = debug ? "debug" : "release";
-    a->build_path = form(path, "%o/%s", a->project_path, build_type);
-    cstr CC     = getenv("CC");     if (!CC)     CC     = "gcc";
-    cstr CXX    = getenv("CXX");    if (!CXX)    CXX    = "g++";
-    cstr CFLAGS = getenv("CFLAGS"); if (!CFLAGS) CFLAGS = "";
-    cstr CXXFLAGS = getenv("CXXFLAGS"); if (!CXXFLAGS) CXXFLAGS = "";
-    string name = filename(a->project_path);
-    bool cpp    = false;
-    cstr compilers[2] = { CC, CXX };
+    AType type = isa(a->build_path);
+    make_dir(a->build_path);
+    path   build_lib    = form(path, "%o/lib", a->build_path);
+    path   build_app    = form(path, "%o/app", a->build_path);
+    path   build_test   = form(path, "%o/test", a->build_path);
+    cstr   CC           = getenv("CC");       if (!CC)       CC       = "gcc";
+    cstr   CXX          = getenv("CXX");      if (!CXX)      CXX      = "g++";
+    cstr   CFLAGS       = getenv("CFLAGS");   if (!CFLAGS)   CFLAGS   = "";
+    cstr   CXXFLAGS     = getenv("CXXFLAGS"); if (!CXXFLAGS) CXXFLAGS = "";
+    string name         = filename(a->project_path);
+    bool   cpp          = false;
+    cstr   compilers[2] = { CC, CXX };
+
     /// iterate through directives
     struct directive {
         array list;
         cstr  dir;
+        path  build_dir;
     } directives[3] = {
-        {a->lib, "lib"}, {a->app, "app"}, {a->test, "test"}
+        { a->lib,  "lib",  build_lib  },
+        { a->app,  "app",  build_app  },
+        { a->test, "test", build_test }
     };
-    for (int i = 0; i < sizeof(directives) / sizeof(directive); i++) {
+    for (int i = 0; i < sizeof(directives) / sizeof(struct directive); i++) {
         struct directive* flags = &directives[i];
-        bool is_lib = strcmp(flags->dir, "lib") == 0;
-        path  dir = form(path, "%o/%s", a->project_path, flags->dir);
+        bool  is_lib  = strcmp(flags->dir, "lib") == 0;
+        path  dir    = form(path, "%o/%s", a->project_path, flags->dir);
         if (!dir_exists("%o", dir)) continue;
-        array c   = ls(dir, ".c",   false); // returns absolute paths
-        array cc  = ls(dir, ".cc",  false);
-        array src = array(32);
-        cpp      |= len(cc) > 0;
+        array c      = ls(dir, string(".c"),   false); // returns absolute paths
+        array cc     = ls(dir, string(".cc"),  false);
+        array src    = array(32);
+        cpp         |= len(cc) > 0;
         array obj    = array(64);
         array obj_c  = array(64);
         array obj_cc = array(64);
-        path href = form(path, "%o/%o", dir, name);
+        path  href   = form(path, "%o/%o", dir, name);
         if (!file_exists("%o", href))
              href = form(path, "%o/%o.h", dir, name);
         
@@ -412,10 +468,14 @@ none build_init(build a) {
             if (!lang->std) continue;
             string compiler = form(string, "%s -std=%s %s %o",
                 lang->compiler, lang->std, l == 0 ? CFLAGS : CXXFLAGS, l == 0 ? cflags : cxxflags);
+            /// for each source file, make objects file names, 
+            /// and compile them if they are modified prior to source
             each(lang->source, path, src) {
-                path o_path  = form(path, "%o.o", src);
+                string o_file = form(string, "%o.o",    filename(src));
+                path   o_path = form(path,   "%o/%o.o", a->build_path, o_file);
                 push(lang->objs, o_path);
-
+                push(obj, o_path);
+                
                 /// recompile if newer / includes differ
                 i64 mtime = modified_time(src);
                 if (mtime > modified_time(o_path) || (htime && htime > mtime)) {
@@ -437,15 +497,15 @@ none build_init(build a) {
         if (is_lib) {
             string cmd = form(string, "%o -shared %o -o %o", cpp ? CXX : CC,
                 obj, name);
-            verify(system(cstring(cmd)) == 0, "lib");
+            verify (system(cstring(cmd)) == 0, "lib");
         } else {
             each (obj_c, path, obj) {
                 string cmd = form(string, "%s %o -o %o", CC, obj, name);
-                verify(system(cstring(cmd)) == 0, "app");
+                verify (system(cstring(cmd)) == 0, "app");
             }
             each (obj_cc, path, obj) {
                 string cmd = form(string, "%s %o -o %o", CXX, obj, name);
-                verify(system(cstring(cmd)) == 0, "app");
+                verify (system(cstring(cmd)) == 0, "app");
             }
         }
     }
@@ -453,17 +513,20 @@ none build_init(build a) {
 
 int main(int argc, cstr argv[]) {
     A_start();
-    cstr  SRC = getenv("SRC"), INSTALL = getenv("INSTALL");
-    cstr  DBG = getenv("DBG");
+    cstr  SRC             = getenv("SRC");
+    cstr  INSTALL         = getenv("INSTALL");
+    cstr  DBG             = getenv("DBG");
     path  default_loc     = form  (path, "%s", ".");
     path  default_src     = form  (path, "%s", SRC     ? SRC     : "");
     path  default_install = form  (path, "%s", INSTALL ? INSTALL : ".");
     map   args            = A_args(argc, argv,
-        "build", default_loc, "install", default_install, "src", default_src, null);
+        "build",   default_loc,
+        "install", default_install,
+        "src",     default_src, null);
 
-    path loc_unrel     = get(args, string("build"));
-    path src_unrel     = get(args, string("src"));
-    path install_unrel = get(args, string("install"));
+    path  loc_unrel       = get (args, string("build"));
+    path  src_unrel       = get (args, string("src"));
+    path  install_unrel   = get (args, string("install"));
 
     dbg      = DBG ? string(DBG) : string("");
     src      = absolute(src_unrel);
@@ -483,6 +546,7 @@ int main(int argc, cstr argv[]) {
     return 0;
 }
 define_class(line)
+define_mod(word, string)
 define_class(import)
 define_class(build)
 define_class(flag)

@@ -1114,7 +1114,7 @@ object construct_with(AType type, object data) {
             /// no meaningful way to do this generically, we prefer to call these first
             if (mem->type == typeid(path) && data_type == typeid(string)) {
                 result = A_alloc(type, 1, true);
-                ((void(*)(object, path))addr)(result, path(((string)data)->chars));
+                ((void(*)(object, path))addr)(result, path(((string)data)));
                 break;
             }
             if (mem->type == data_type) {
@@ -1517,6 +1517,18 @@ void vector_init(vector a);
 
 sz vector_len(vector a) {
     return A_header(a)->count;
+}
+
+string string_ucase(string a) {
+    string res = string(a->chars);
+    for (cstr s = res->chars; *s; ++s) *s = toupper((unsigned char)*s);
+    return res;
+}
+
+string string_lcase(string a) {
+    string res = string(a->chars);
+    for (cstr s = res->chars; *s; ++s) *s = tolower((unsigned char)*s);
+    return res;
 }
 
 string string_escape(string input) {
@@ -2540,8 +2552,10 @@ none path_init(path a) {
     cstr arg = (cstr)a->chars;
     num  len = arg ? strlen(arg) : 0;
     a->chars = calloc(len + 1, 1);
-    if (arg)
+    if (arg) {
         memcpy((cstr)a->chars, arg, len + 1);
+        a->len = len;
+    }
 }
 
 none path_cd(path a) {
@@ -2560,6 +2574,7 @@ path path_temp(symbol tmpl) {
 
 path path_with_string(path a, string s) {
     a->chars = copy_cstr((cstr)s->chars);
+    a->len   = strlen(a->chars);
     return a;
 }
 
@@ -2590,18 +2605,15 @@ string path_cast_string(path a) {
     return new(string, chars, a->chars);
 }
 
-path path_with_cereal(path a, cereal cs) {
-    a->chars = copy_cstr((cstr)cs);
-    return a;
-}
-
 path path_with_cstr(path a, cstr cs) {
     a->chars = copy_cstr((cstr)cs);
+    a->len   = strlen(a->chars);
     return a;
 }
 
 path path_with_symbol(path a, symbol cs) {
     a->chars = copy_cstr((cstr)cs);
+    a->len   = strlen(a->chars);
     return a;
 }
 
@@ -2707,6 +2719,7 @@ path path_absolute(path a) {
     path  result   = new(path);
     cstr  rpath    = realpath(a->chars, null);
     result->chars  = rpath ? strdup(rpath) : copy_cstr("");
+    result->len    = strlen(result->chars);
     return result;
 }
 
@@ -2714,6 +2727,7 @@ path path_absolute(path a) {
 path path_directory(path a) {
     path result = new(path);
     result->chars = dirname(strdup(a->chars));
+    result->len    = strlen(result->chars);
     return result;
 }
 
@@ -2794,18 +2808,18 @@ object path_read(path a, AType type) {
     FILE* f = fopen(a->chars, "rb");
     if (!f) return null;
     bool is_obj = type && !(type->traits & A_TRAIT_PRIMITIVE);
-    if (type == typeid(string) || is_obj) {
-        fseek(f, 0, SEEK_END);
-        sz flen = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        string a = new(string, alloc, flen);
-        size_t n = fread((cstr)a->chars, 1, flen, f);
-        fclose(f);
-        assert(n == flen, "could not read enough bytes");
-        a->len   = flen;
-        if (!is_obj)
-            return a;
-        object obj = parse((cstr)a->chars, type);
+    fseek(f, 0, SEEK_END);
+    sz flen = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    string str = new(string, alloc, flen);
+    size_t n = fread((cstr)str->chars, 1, flen, f);
+    fclose(f);
+    assert(n == flen, "could not read enough bytes");
+    str->len   = flen;
+    if (type == typeid(string))
+        return str;
+    if (is_obj) {
+        object obj = parse((cstr)str->chars, type);
         return obj;
     }
     assert(false, "not implemented");
@@ -2839,6 +2853,7 @@ void* primitive_ffi_arb(AType ptype) {
 
 #define MAX_PATH_LEN 4096
 
+
 array path_ls(path a, string pattern, bool recur) {
     cstr base_dir = (cstr)a->chars;
     assert(path_is_dir(a), "ls: must be called on directory");
@@ -2858,7 +2873,7 @@ array path_ls(path a, string pattern, bool recur) {
 
         if (stat(abs, &statbuf) == 0) {
             if (S_ISREG(statbuf.st_mode)) {
-                if (!pattern->len || strstr(abs, pattern->chars))
+                if (!pattern || !pattern->len || strstr(abs, pattern->chars))
                     push(list, new(path, chars, abs));
                 
             } else if (S_ISDIR(statbuf.st_mode)) {
@@ -3061,10 +3076,6 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             if (required && contains(required, name)) {
                 rm(required, name);
             }
-            if (strcmp(name->chars, "rotation") == 0) {
-                int test2 = 2;
-                test2 += 2;
-            }
             object value = parse_object(scan, member ? member->type : null, &scan); /// issue with parsing a map type (attributes)
             if (is_type) {
                 string type_name = value;
@@ -3238,7 +3249,7 @@ define_enum(OPType)
 define_enum(Exists)
 define_enum(level)
 
-define_class(path)
+define_mod(path, string)
 define_class(file)
 define_class(string)
 

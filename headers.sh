@@ -5,9 +5,7 @@ if [ ! -f "$PROJECT_HEADER" ]; then
     PROJECT_HEADER="$PROJECT_PATH/app/$PROJECT"
 fi 
 GEN_DIR="$BUILD_PATH/$DIRECTIVE"
-#PROJECT="$3"
 UPROJECT=$(echo "$PROJECT" | tr '[:lower:]' '[:upper:]')
-#IMPORT_HEADER="$GEN_DIR/import"
 METHODS_HEADER="$GEN_DIR/$PROJECT-methods"
 INTERN_HEADER="$GEN_DIR/$PROJECT-intern"
 PUBLIC_HEADER="$GEN_DIR/$PROJECT-public"
@@ -28,27 +26,22 @@ if [ ! -f "$IMPORT_HEADER" ]; then
     echo "/* imports: ${IMPORTS[*]} */" >> "$IMPORT_HEADER"
     for import in "${IMPORTS[@]}"; do
         if [ "$import" != "$PROJECT" ]; then
-            if [ -f "$SILVER_IMPORT/include/${import}-methods" ]; then
+            if [ -f "$TAPESTRY/include/${import}-methods" ]; then
                 echo "#include <${import}-public> // from {import}" >> "$IMPORT_HEADER"
             else
-                echo "// #include <${import}-public> // has no $SILVER_IMPORT/include/${import}-methods" >> "$IMPORT_HEADER"
+                echo "// #include <${import}-public> // has no $TAPESTRY/include/${import}-methods" >> "$IMPORT_HEADER"
             fi
         fi
     done
 
     echo "#include <${PROJECT}-intern> // line 52 uses {PROJECT}" >> "$IMPORT_HEADER"
     echo "#include <${PROJECT}>" >> "$IMPORT_HEADER"
-    #for name in $LIB_MODULES; do
-    #    base=$(basename "$name")
-    #    echo "#include <${base%.*}>" >> "$IMPORT_HEADER"
-    #done
     echo "#include <${PROJECT}-methods>" >> "$IMPORT_HEADER"
     echo "#include <A-reserve>" >> "$IMPORT_HEADER"
-    # must have PROJECT-init's last! ... these define macros that have the same name as the type, so we cannot process our types through macro expansion with these in place
-    # it also makes it not possible to define macros for types within our modules without manual header sequencing between them
+
     for import in "${IMPORTS[@]}"; do
         if [ "$import" != "$PROJECT" ]; then
-            if [ -f "$SILVER_IMPORT/include/${import}-methods" ]; then
+            if [ -f "$TAPESTRY/include/${import}-methods" ]; then
                 echo "#include <${import}-init>" >> "$IMPORT_HEADER"
             fi
         fi
@@ -143,7 +136,6 @@ if [ ! -f "$INIT_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INIT_HEADER" ]; then
     echo "#endif /* _${UPROJECT}_INIT_H_ */" >> "$INIT_HEADER"
 fi
 
-
 # Only regenerate if necessary
 if [ ! -f "$METHODS_HEADER" ] || [ "$PROJECT_HEADER" -nt "$METHODS_HEADER" ]; then
     rm -f "$METHODS_HEADER"
@@ -194,7 +186,6 @@ if [ ! -f "$PUBLIC_HEADER" ] || [ "$PROJECT_HEADER" -nt "$PUBLIC_HEADER" ]; then
     echo "#include <${PROJECT}-methods>"        >> "$PUBLIC_HEADER" ; \
     echo "#endif /* _${UPROJECT}_PUBLIC_ */"    >> "$PUBLIC_HEADER"
 fi
-
 
 # Only regenerate if necessary
 if [ ! -f "$INTERN_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INTERN_HEADER" ]; then

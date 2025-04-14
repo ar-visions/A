@@ -9,6 +9,10 @@
 			"path": "../silver-lang"
 		},
 		{
+			"name": "tapestry",
+			"path": "../tapestry"
+		},
+		{
 			"name": "ether",
 			"path": "../ether"
 		},

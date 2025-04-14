@@ -93,7 +93,7 @@
                     "value": "clang"
                 },
                 {
-                    "name": "TAPESTRY_INSTALL",
+                    "name": "TAPESTRY",
                     "value": "/Users/kalen/src/A/tapestry"
                 }
             ],

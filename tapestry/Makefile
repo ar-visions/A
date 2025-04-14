@@ -12,6 +12,9 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CC) -o tapestry $^ -lm 
 
+A.o: ../lib/A.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
 

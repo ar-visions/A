@@ -8,3 +8,8 @@ lib
 tokens
 checkout
 *.o
+tapestry/tapestry
+tapestry/include
+!tapestry/include/A
+!tapestry/include/A-*
+tapestry/share

@@ -6,19 +6,14 @@
 #include <utime.h>
 
 #define get_type(T0) T0
-
-#define line(...)       new(line,       __VA_ARGS__)
 #define tapestry(...)   new(tapestry,   __VA_ARGS__)
-#define build(...)      new(build,      __VA_ARGS__)
 #define import(...)     new(import,     __VA_ARGS__)
 #define flag(...)       new(flag,       __VA_ARGS__)
-#define word(...)       new(word,       __VA_ARGS__)
-
 static path   src;
 static path   install;
+static path   include;
 static string dbg;
 static string directive;
-
 #if defined(__linux__)
 static symbol platform = "linux";
 #elif defined(_WIN32)
@@ -26,100 +21,6 @@ static symbol platform = "windows";
 #elif defined(__APPLE__)
 static symbol platform = "darwin";
 #endif
-
-static cstr ws(cstr p) {
-    cstr scan = p;
-    while (*scan && *scan != '\n' && isspace(*scan))
-        scan++;
-    return scan;
-}
-
-
-string word_shell_evaluate(word w, map env) {
-    /// create environment string
-    string env_str = string(32);
-    pairs(env, i) { // for tapestry use-case: TARGET=%s BUILD=%s PROJECT=%s UPROJECT=%s
-        string name  = i->key;
-        string value = escape((string)i->value); /// this is great to do
-        string f     = form(string, "%o=\"%o\"", name, value);
-        concat(env_str, f);
-        concat(env_str, " ");
-        drop(value);
-    }
-    string cmd = form(string, "%o sh -c \"echo %s\"",
-        env_str, w->chars);
-    FILE* pipe = popen(cstring(cmd), "r");
-    if (!pipe) return string("");
-    char   buf[1024];
-    string result = string(alloc, 64);
-    while (fgets(buf, sizeof(buf), pipe)) {
-        int len = strlen(buf);
-        if (len && buf[len - 1] == '\n') buf[len - 1] = 0;
-        append(result, buf);
-    }
-    pclose(pipe);
-    return trim(result);
-}
-
-static cstr read_word(cstr i, word* result) {
-    i = ws(i);
-    if (*i == '\n') {
-        *result = null;
-        return i;
-    }
-    string res = null;
-    while (*i && !isspace(*i)) {
-        if (!res)
-             res = string(alloc, 64);
-        append_count(res, i, 1);
-        i++;
-    }
-    *result = word(chars, res->chars);
-    drop(res);
-    return i;
-}
-
-static cstr read_indent(cstr i, i32* result) {
-    int t = 0;
-    int s = 0;
-    while (*i == ' ' || *i == '\t') {
-        if (*i == ' ')
-            s++;
-        else if (*i == '\t')
-            t++;
-        i++;
-    }
-    *result = t + s / 4;
-    return i;
-}
-
-static array read_lines(build a, path f) {
-    array  lines   = array(256);
-    string content = read (f, typeid(string));
-    cstr   origin  = cstring(content);
-    cstr   scan    = origin;
-    while (scan && *scan) {
-        i32 indent = 0;
-        scan = read_indent(scan, &indent);
-        word w = null;
-        scan = read_word(scan, &w);
-        if (!w) {
-            if (*scan == '\n')
-                scan++;
-            continue;
-        }
-        line l = line(indent, indent, text, array(32));
-        for (;;) {
-            push(l->text, w);
-            w = null;
-            scan = read_word(scan, &w);
-            if (!w)
-                break;
-        }
-        push(lines, l);
-    }
-    return lines;
-}
 
 string import_cast_string(import a) {
     string config = string(alloc, 128);
@@ -132,7 +33,7 @@ string import_cast_string(import a) {
 }
 
 string flag_cast_string(flag a) {
-    string res = string(64);
+    string res = string(alloc, 64);
 
     if (a->is_cflag)
         concat(res, a->name);
@@ -152,7 +53,7 @@ bool is_debug(string name) {
     return strstr(f->chars, s->chars) != null;
 }
 
-none build_with_path(build a, path f) {
+none tapestry_with_path(tapestry a, path f) {
     a->imports      = array(64);
     a->project_path = directory(f);
     a->name         = filename(a->project_path);
@@ -162,22 +63,20 @@ none build_with_path(build a, path f) {
     a->test               = array(64);
     a->lib                = array(64);
     map environment       = map();
-    array  lines          = read_lines(a, f);
+    array  lines          = read(f, typeid(array));
     import im             = null;
     string last_platform  = null;
     string last_directive = null;
     string top_directive  = null;
     bool   is_import      = true;
 
+    /// for each line, process by indentation level, and evaluate tokens
     set(environment, string("PROJECT"),      a->name);
     set(environment, string("PROJECT_PATH"), a->project_path);
     set(environment, string("BUILD_PATH"),   a->build_path);
-    
     each(lines, line, l) {
-        word   first = get(l->text, 0);
+        string first = get(l->text, 0);
         i32    flen  = len(first);
-
-        // now we can go by the indent levels on each line
         if (l->indent == 0) {
             verify(first->chars[flen - 1] == ':', "expected base-directive and ':'");
             last_directive = mid(first, 0, flen - 1);
@@ -190,13 +89,15 @@ none build_with_path(build a, path f) {
             set(environment, string("DIRECTIVE"), top_directive);
         } else if (l->indent == 1) {
             if (is_import) {
-                word name   = get(l->text, 0);
-                word uri    = get(l->text, 1);
-                word commit = get(l->text, 2);
+                string name   = evaluate(get(l->text, 0), environment);
+                string uri    = evaluate(get(l->text, 1), environment);
+                string commit = evaluate(get(l->text, 2), environment);
                 im = import(
-                    name,   shell_evaluate(name, environment),
-                    uri,    shell_evaluate(uri,  environment),
-                    commit, shell_evaluate(commit, environment),
+                    tapestry, a,
+                    name,   name,
+                    uri,    uri,
+                    commit, commit,
+                    environment, map(),
                     config, array(64), commands, array(16));
                 push(a->imports, im);
                 last_platform = null;
@@ -207,12 +108,18 @@ none build_with_path(build a, path f) {
                     cmp(top_directive, "app")  == 0 ? a->app  : 
                     cmp(top_directive, "test") == 0 ? a->test : null;
                 verify(flags, "invalid directive: %o", top_directive);
-                each (l->text, word, w) {
-                    string t = shell_evaluate(w, environment);
-                    bool is_cflag  = t->chars[0] == '-';
-                    bool is_static = t->chars[0] == '@';
-                    push(flags, flag(name, t,
-                        is_static, is_static, is_cflag, is_cflag));
+                each (l->text, string, w) {
+                    pairs(environment, i) {
+                        string name = i->key;
+                        string value = i->value;
+                    }
+                    string t = evaluate(w, environment); // PROJECT is missing null char
+                    if (len(t)) {
+                        bool is_cflag  = t->chars[0] == '-';
+                        bool is_static = t->chars[0] == '@';
+                        push(flags, flag(name, t,
+                            is_static, is_static, is_cflag, is_cflag));
+                    }
                 }
             }
         } else {
@@ -222,15 +129,33 @@ none build_with_path(build a, path f) {
                 if (cmp(first, ">") == 0) {
                     // combine tokens into singular string
                     string cmd = string(alloc, 64);
-                    each(l->text, word, w) {
+                    each(l->text, string, w) {
                         if (len(cmd))
                             append(cmd, " ");
-                        concat(cmd, shell_evaluate(w, environment));
+                        concat(cmd, evaluate(w, environment));
                     }
                     push(im->commands, cmd);
-                } else
-                each(l->text, word, w)
-                    push(im->config, shell_evaluate(w, environment));
+                } else {
+                    each(l->text, string, w) {
+                        /// if its VAR=VAL then this is not 'config' but rather environment
+                        char f = w->chars[0];
+                        if (isalpha(f)) {
+                            cstr e = strstr(w->chars, "=");
+                            char name[128];
+                            sz   ln = (sz)(e - w->chars);
+                            verify(ln < 128, "invalid data");
+                            memcpy(name, w->chars, ln);
+                            name[ln] = 0;
+                            char value[128];
+                            sz value_ln = len(w) - ln - 1;
+                            memcpy(value, &w->chars[ln + 1], value_ln);
+                            string n   = trim(string(name));
+                            string val = trim(string(value));
+                            set(im->environment, n, val);
+                        } else
+                            push(im->config, evaluate(w, environment));
+                    }
+                }
             }
         }
     }
@@ -238,21 +163,20 @@ none build_with_path(build a, path f) {
 
 /// handle autoconfig (if present) and resultant / static Makefile
 bool import_make(import im) {
-    i64         conf_status = INT64_MIN;
-    struct stat build_token,
-                installed_token;
-    bool        debug      = is_debug(im->name);
+    i64 conf_status = INT64_MIN;
+    struct stat build_token, installed_token;
+    bool debug      = is_debug(im->name);
     path t0 = form(path, "tapestry-token");
     path t1 = form(path, "%o/tokens/%o", install, im->name);
 
     make_dir(im->build_path);
     cd(im->build_path);
+    string env = serialize_environment(im->environment, false);
     
     if (file_exists("%o", t0) && file_exists("%o", t1)) {
         /// get modified date on token, compare it to one in install dir
         int istat_build   = stat(cstring(t0), &build_token);
         int istat_install = stat(cstring(t1), &installed_token);
-
         if (istat_build == 0 && istat_install)
             conf_status = (i64)(build_token.st_mtime - installed_token.st_mtime);
     }
@@ -289,51 +213,72 @@ bool import_make(import im) {
         verify(system(cstring(cmd)) == 0, "rust compilation");
 
     } else if (file_exists("../CMakeLists.txt")) {
-
-        /// cmake configure
+        /// configure
         if (!file_exists("CMakeCache.txt")) {
             string cmd = form(string, "cmake -B . -S .. %o", im);
             int  iconf = system(cstring(cmd));
             verify(iconf == 0, "%o: configure failed", im->name);
         }
     
-        /// build if needed
-        string  cmd = form(string, "cmake --build .");
+        /// build & install
+        string  cmd = form(string, "%o cmake --build .", env);
         int    icmd = system(cstring(cmd));
-        
-        /// install if needed
-        string inst = form(string, "cmake --install .");
+        string inst = form(string, "%o cmake --install .", env);
         int   iinst = system(cstring(inst));
 
     } else {
+        cstr Makefile = "Makefile";
+        if (!file_exists("Makefile")) {
+            if (file_exists("../configure.ac") || file_exists("../configure") || file_exists("../config")) {
+                /// generate configuration scripts if available
+                
 
-        if (file_exists("../configure.ac") || file_exists("../configure") || file_exists("../config")) {
-            /// generate configuration scripts if available
-            if (!file_exists("../configure") && file_exists("../configure.ac")) {
-                verify(system("autoupdate ..")    == 0, "autoupdate");
-                verify(system("autoreconf -i ..") == 0, "autoreconf");
-            }
+                pairs(im->environment, i) {
+                    string name = i->key;
+                    string value = i->value;
+                    print("env[%o] = %o", name, value);
+                }
 
-            /// prefer our pre/generated script configure, fallback to config
-            cstr configure = file_exists("../configure") ? "../configure" : "../config";
-            if (file_exists("%s", configure)) {
-                string cmd_conf = form(string, "%s%s --prefix=%o %o",
-                    configure,
-                    debug ? " --enable-debug" : "",
-                    install,
-                    im);
-                verify(system(cstring(cmd_conf)) == 0, configure);
+                if (!file_exists("../configure") && file_exists("../configure.ac")) {
+                    verify(system("autoupdate ..")    == 0, "autoupdate");
+                    verify(system("autoreconf -i ..") == 0, "autoreconf");
+                }
+                /// prefer our pre/generated script configure, fallback to config
+                cstr configure = file_exists("../configure") ? "../configure" : "../config";
+                if (file_exists("%s", configure)) {
+                    string cmd_conf = form(string, "%o %s%s --prefix=%o %o",
+                        env,
+                        configure,
+                        debug ? " --enable-debug" : "",
+                        install,
+                        im);
+                    printf("---------------------------\n");
+                    print("configure: %o", cmd_conf);
+                    printf("---------------------------\n");
+                    verify(system(cstring(cmd_conf)) == 0, configure);
+                }
             }
         }
-
-        if (file_exists("../Makefile")) {
-            /// now run make install
-            string make = form(string, "make -f ../Makefile install");
-            verify(system(cstring(make)) == 0, "make install");
+        if (file_exists("%s", Makefile)) {
+            string make = form(string, "%o make -f %s install", env, Makefile);
+            verify(system(cstring(make)) == 0, "%o", make);
         }
     }
 
-    /// create token file here, as long as no errors
+    cd(im->build_path);
+    if (dir_exists("share")) {
+        /// copy this to our build folder, we must accumulate 'share' resources into our own
+        /// when we package apps, this accumulation of share is desired
+        /// its not a practical thing to crawl-through multiple overlapping projects that exist in different folders
+        path from = form(path, "share");
+        path to   = form(path, "%o/share", im->tapestry->build_path);
+        cp(from, to, true, true);
+    }
+
+    /// create tokens to indicate no errors during config/build/install
+    /// we place two: one in the build folder and one in the tokens folder
+    /// their modified timestamps must match, and their files must be newer
+    /// than anything in the build folder
     cstr both[2] = { cstring(t0), cstring(t1) };
     for (int i = 0; i < 2; i++) {
         FILE* ftoken = fopen(both[i], "wb");
@@ -354,60 +299,65 @@ static bool is_dbg(cstr name) {
     return dbg ? strstr(dbg, name) != 0 : false;
 }
 
-none build_init(build a) {
-    bool debug = is_dbg(cstring(a->name));
-    a->name = filename(a->project_path);
-    
+i32 tapestry_import(tapestry a) {
     /// make checkouts or symlink, then build & install
     each (a->imports, import, im) {
-        cd(install);
-        bool debug = is_debug(im->name);
+        bool   debug      = is_debug(im->name);
         symbol build_type = debug ? "debug" : "release";
-        im->build_path = form(path, "%o/%s", im->import_path, build_type);
+        path checkout     = form(path, "%o/checkout", install);
+        im->import_path   = form(path, "%o/%o", checkout, im->name);
+        im->build_path    = form(path, "%o/%s", im->import_path, build_type);
 
-        path checkout = form(path, "%o/checkout", install);
-
-        /// checkout or symlink
         if (!dir_exists("%o/%o", checkout, im->name)) {
+            print("checkout = %o", checkout);
             cd(checkout);
             if (A_len(src) && dir_exists("%o/%o", src, im->name)) {
                 string cmd = form(string, "ln -s %o/%o %o/%o",
                     src, im->name, checkout, im->name);
                 verify (system(cstring(cmd)) == 0, "symlink");
             } else {
+                print("cwd = %o", path_cwd(2048));
                 string cmd = form(string, "git clone %o %o --no-checkout && cd %o && git checkout %o && cd ..",
                     im->uri, im->name, im->name, im->commit);
                 verify (system(cstring(cmd)) == 0, "git clone");
             }
         }
-        
         string n = im->name;
-        im->import_path = form(path, "%o/%o", install, im->name);
-
-        /// build project with evaluated config
         i32* c = null, *b = null, *i = null;
+        make_dir(im->build_path);
         cd(im->build_path);
-
-        /// make is implicit install in our modeling
         make(im);
     }
+    return 0;
+}
 
-    /// goto project path
+i32 tapestry_install(tapestry a) {
+    path   install_lib  = form(path, "%o/lib",  install);
+    path   install_bin  = form(path, "%o/app",  install);
+    return 0;
+}
+
+i32 tapestry_build(tapestry a) {
+    int  error_code = 0;
+    bool debug = is_dbg(cstring(a->name));
+
     cd(a->project_path);
     AType type = isa(a->build_path);
     make_dir(a->build_path);
-    path   build_lib    = form(path, "%o/lib", a->build_path);
-    path   build_app    = form(path, "%o/app", a->build_path);
+    path   build_lib    = form(path, "%o/lib",  a->build_path);
+    path   build_app    = form(path, "%o/app",  a->build_path);
     path   build_test   = form(path, "%o/test", a->build_path);
-    cstr   CC           = getenv("CC");       if (!CC)       CC       = "gcc";
-    cstr   CXX          = getenv("CXX");      if (!CXX)      CXX      = "g++";
+    cstr   CC           = getenv("CC");       if (!CC)       CC       = "clang";
+    cstr   CXX          = getenv("CXX");      if (!CXX)      CXX      = "clang++";
     cstr   CFLAGS       = getenv("CFLAGS");   if (!CFLAGS)   CFLAGS   = "";
     cstr   CXXFLAGS     = getenv("CXXFLAGS"); if (!CXXFLAGS) CXXFLAGS = "";
     string name         = filename(a->project_path);
+    string n2           = copy(name);
     bool   cpp          = false;
     cstr   compilers[2] = { CC, CXX };
+    a->lib_targets      = array();
+    a->bin_targets      = array();
 
-    /// iterate through directives
     struct directive {
         array list;
         cstr  dir;
@@ -419,9 +369,16 @@ none build_init(build a) {
     };
     for (int i = 0; i < sizeof(directives) / sizeof(struct directive); i++) {
         struct directive* flags = &directives[i];
-        bool  is_lib  = strcmp(flags->dir, "lib") == 0;
-        path  dir    = form(path, "%o/%s", a->project_path, flags->dir);
+        bool  is_lib    = strcmp(flags->dir, "lib") == 0;
+        path  dir       = form(path, "%o/%s", a->project_path, flags->dir);
+        path  lib_src   = form(path, "%o/%s", a->project_path, "lib");
+        path  build_dir = form(path, "%o/%s", a->build_path, flags->dir);
+        make_dir(flags->build_dir);
         if (!dir_exists("%o", dir)) continue;
+        cd(flags->build_dir);
+
+        bool is_app  = (i == 1);
+
         array c      = ls(dir, string(".c"),   false); // returns absolute paths
         array cc     = ls(dir, string(".cc"),  false);
         array src    = array(32);
@@ -430,12 +387,12 @@ none build_init(build a) {
         array obj_c  = array(64);
         array obj_cc = array(64);
         path  href   = form(path, "%o/%o", dir, name);
+        array files  = ls(dir, null, false);
+        i64   htime  = 0;
+
         if (!file_exists("%o", href))
              href = form(path, "%o/%o.h", dir, name);
-        
-        array files = ls(dir, null, false);
-        i64   htime = 0;
-
+    
         /// get latest header modified (including project header)
         each (files, path, f) {
             string e = ext(f);
@@ -446,7 +403,6 @@ none build_init(build a) {
                     htime = mt;
             }
         }
-
         string cflags = string(alloc, 64);
         string cxxflags = string(alloc, 64);
         each(flags->list, flag, fl) {
@@ -462,31 +418,47 @@ none build_init(build a) {
             array objs;
             cstr  compiler;
             cstr  std;
-        } langs[2] = {{c, obj_c, compilers[0], "c11"}, {cc, obj_cc, compilers[1], "c++17"}};
+        } langs[2] = {
+            {c,  obj_c,  compilers[0], "gnu11"},
+            {cc, obj_cc, compilers[1], "c++17"}
+        };
+        i64 latest_o = 0;
         for (int l = 0; l < 2; l++) {
             struct lang* lang = &langs[l];
             if (!lang->std) continue;
-            string compiler = form(string, "%s -std=%s %s %o",
-                lang->compiler, lang->std, l == 0 ? CFLAGS : CXXFLAGS, l == 0 ? cflags : cxxflags);
+            string compiler = form(string, "%s -g2 -c -std=%s %s %o -I%o -I%o -I%o",
+                lang->compiler, lang->std,
+                l == 0 ? CFLAGS : CXXFLAGS, /// CFLAGS from env come first
+                l == 0 ? cflags : cxxflags, /// ... then project-based flags
+                dir, lib_src, include); /// finally, an explicit -I of our directive
+            
             /// for each source file, make objects file names, 
             /// and compile them if they are modified prior to source
             each(lang->source, path, src) {
-                string o_file = form(string, "%o.o",    filename(src));
+                string module = filename(src);
+                string module_name = stem(src);
+                string o_file = form(string, "%o.o",    module);
                 path   o_path = form(path,   "%o/%o.o", a->build_path, o_file);
+                latest_o = max(latest_o, modified_time(o_path));
                 push(lang->objs, o_path);
                 push(obj, o_path);
-                
+                print("adding obj: %o", o_path);
+
                 /// recompile if newer / includes differ
                 i64 mtime = modified_time(src);
                 if (mtime > modified_time(o_path) || (htime && htime > mtime)) {
-                    string cmd = form(string, "%o %o -o %o", compiler, src, o_path);
+                    string cmd = form(string, "%o -DMODULE=\"\\\"%o\\\"\" %o -o %o", compiler, module_name, src, o_path);
+                    print("compile: %o", cmd);
                     verify(system(cstring(cmd)) == 0, "compilation");
+                    latest_o = max(latest_o, modified_time(o_path));
                 }
             }
         }
 
         // link
         string lflags = string(alloc, 64);
+        concat(lflags, form(string, "-L%o/lib ", a->build_path));
+        concat(lflags, form(string, "-L%o/lib ", install));
         each(flags->list, flag, fl) {
             if (!fl->is_cflag) {
                 concat(lflags, cast(string, fl));
@@ -495,58 +467,113 @@ none build_init(build a) {
         }
 
         if (is_lib) {
-            string cmd = form(string, "%o -shared %o -o %o", cpp ? CXX : CC,
-                obj, name);
-            verify (system(cstring(cmd)) == 0, "lib");
+            path output_lib = form(path, "%o/lib/lib%o.so", a->build_path, n2);
+            if (modified_time(output_lib) < latest_o) {
+                string cmd = form(string, "%s -shared %o %o -o %o",
+                    cpp ? CXX : CC,
+                    lflags, obj, output_lib);
+                print("linking (lib): %o", cmd);
+                verify (system(cstring(cmd)) == 0, "lib");
+                path lib = form(path, "%o/lib%o.so", flags->build_dir, n2);
+                push(a->lib_targets, lib);
+            }
         } else {
             each (obj_c, path, obj) {
-                string cmd = form(string, "%s %o -o %o", CC, obj, name);
-                verify (system(cstring(cmd)) == 0, "app");
+                string module_name = stem(obj);
+                path output = form(path, "%o/%s/%o", a->build_path, flags->dir, module_name);
+                if (modified_time(output) < modified_time(obj)) {
+                    string cmd = form(string, "%s %o %o -o %o",
+                        CC, lflags, obj, output);
+                    char cwd[1024];
+                    getcwd(cwd, sizeof(cwd));
+                    print("linking (c): %o", cmd);
+                    verify (system(cstring(cmd)) == 0, "app");
+                }
+                if (is_app)
+                    push(a->bin_targets, output);
             }
             each (obj_cc, path, obj) {
-                string cmd = form(string, "%s %o -o %o", CXX, obj, name);
-                verify (system(cstring(cmd)) == 0, "app");
+                string module_name = stem(obj);
+                path output_o = form(path, "%o/%s/%o", a->build_path, flags->dir, module_name);
+                if (modified_time(output_o) < modified_time(obj)) {
+                    string cmd = form(string, "%s %o %o %o -o %o",
+                        CXX, lflags, obj, output_o);
+                    print("linking (cc): %o", cmd);
+                    verify (system(cstring(cmd)) == 0, "app");
+                }
             }
+            // run test here, to verify prior to install; will need updated PATH so they may run the apps we built just prior to test
         }
     }
+    return error_code;
+}
+
+/// initialization path
+none tapestry_init(tapestry a) {
+    a->name = filename(a->project_path);
 }
 
 int main(int argc, cstr argv[]) {
     A_start();
+    print("running tapestry");
     cstr  SRC             = getenv("SRC");
-    cstr  INSTALL         = getenv("INSTALL");
+    cstr  INSTALL         = getenv("TAPESTRY_INSTALL");
     cstr  DBG             = getenv("DBG");
-    path  default_loc     = form  (path, "%s", ".");
+    path  default_path    = form  (path, "%s", ".");
     path  default_src     = form  (path, "%s", SRC     ? SRC     : "");
     path  default_install = form  (path, "%s", INSTALL ? INSTALL : ".");
     map   args            = A_args(argc, argv,
-        "build",   default_loc,
+        "path",    default_path,
         "install", default_install,
         "src",     default_src, null);
 
-    path  loc_unrel       = get (args, string("build"));
+    print("TAPESTRY_INSTALL = %s", INSTALL);
+
+    path  path_unrel      = get (args, string("path"));
     path  src_unrel       = get (args, string("src"));
     path  install_unrel   = get (args, string("install"));
 
     dbg      = DBG ? string(DBG) : string("");
     src      = absolute(src_unrel);
     install  = absolute(install_unrel);
-    path loc = absolute(loc_unrel);
+    print("install is set to %o", install);
+    
+    include  = form(path, "%o/include", install);
+    path loc = absolute(path_unrel);
     path f   = null;
+
+    make_dir(form(path, "%o",           install));
+    make_dir(form(path, "%o/lib",       install));
+    make_dir(form(path, "%o/bin",       install));
+    make_dir(form(path, "%o/tokens",    install));
+
+    if (len(loc))
+        cd(loc);
 
     if (dir_exists("%o", loc) && file_exists("%o/build", loc))
         f  = form(path, "%o/build", loc);
     else if (file_exists("%o", loc))
         f  = form(path, "%o", loc);
     else
-        fault("build: not-found at location %o", loc);
+        fault("tapestry: cannot build from path[ %o ]", loc);
     
-    path abs = absolute(f);
-    build  b = build(abs);
+    print("test2");
+
+    path     af = absolute(f);
+    tapestry t  = tapestry(af);
+    
+    print("test2 2");
+
+    print("running import");
+    i32 import_code  = tapestry_import (t); if (import_code  != 0) return import_code;
+    print("running build");
+    i32 build_code   = tapestry_build  (t); if (build_code   != 0) return build_code;
+    print("running install");
+    i32 install_code = tapestry_install(t); if (install_code != 0) return install_code;
+    print("success");
     return 0;
 }
-define_class(line)
-define_mod(word, string)
+
 define_class(import)
-define_class(build)
+define_class(tapestry)
 define_class(flag)

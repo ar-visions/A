@@ -13,6 +13,10 @@
 #endif
 #include <math.h>
 
+#ifndef line
+#define line(...)       new(line,       __VA_ARGS__)
+#endif
+
 object parse(cstr s, AType schema);
 
 shape shape_with_array(shape a, array dims) {
@@ -544,7 +548,7 @@ void array_push_objects(array a, A f, ...) {
 }
 
 array array_of(object first, ...) {
-    array a = new(array);
+    array a = new(array, alloc, 32);
     va_list args;
     va_start(args, first);
     if (first) {
@@ -1543,7 +1547,7 @@ string string_escape(string input) {
         {'\r', "\\r"},
     };
     int escape_count = sizeof(escape_map) / sizeof(escape_map[0]);
-    int input_len    = strlen(input);
+    int input_len    = len(input);
     int extra_space  = 0;
     for (int i = 0; i < input_len; i++)
         for (int j = 0; j < escape_count; j++)
@@ -1572,8 +1576,10 @@ string string_escape(string input) {
         }
         if (!found) escaped[pos++] = input->chars[i];
     }
-    escaped[pos] = '\0';    /// null-terminate result
-    return string((symbol)escaped); /// with cstr constructor, it does not 'copy' but takes over life cycle
+    escaped[pos] = '\0';
+    string res = string((symbol)escaped); /// with cstr constructor, it does not 'copy' but takes over life cycle
+    free(escaped);
+    return res;
 }
 
 void  string_dealloc(string a)          { free((cstr)a->chars); }
@@ -2706,7 +2712,7 @@ string path_filename(path a) {
     for (num i = len - 1; i >= 0; i--) {
         if (cs[i] == '/' || i == 0) {
             cstr start = &cs[i + (cs[i] == '/')];
-            int n_bytes = len - i;
+            int n_bytes = len - i - 1;
             memcpy((cstr)res->chars, start, n_bytes);
             res->len = n_bytes;
             break;
@@ -2804,7 +2810,150 @@ u64 path_hash(path a) {
     return fnv1a_hash(a->chars, strlen(a->chars), OFFSET_BASIS);
 }
 
+string serialize_environment(map environment, bool export) {
+    string env = string(alloc, 32);
+    pairs(environment, i) { // for tapestry use-case: TARGET=%s BUILD=%s PROJECT=%s UPROJECT=%s
+        string name  = i->key;
+        string value = escape((string)i->value); /// this is great to do
+        string f     = form(string, "%o=\"%o\"", name, value);
+        if (export && !len(env)) append(env, "export ");
+        concat(env, f);
+        append(env, " ");
+    }
+    if (len(env)) append(env, " && ");
+    return env;
+}
+
+/// tapestry parsing, can be used in silver as well
+string evaluate(string w, map environment) {
+    /// create environment string
+    string env = serialize_environment(environment, true);
+    string esc = escape(w);
+    string cmd = form(string, "%o bash -c \"echo '%o'\"", env, esc);
+
+    FILE* pipe = popen(cstring(cmd), "r");
+    if  (!pipe)  return string("");
+    char   buf[1024];
+    string result = string(alloc, 64);
+    while (fgets(buf, sizeof(buf), pipe)) {
+        int len = strlen(buf);
+        if (len && buf[len - 1] == '\n') buf[len - 1] = 0;
+        append(result, buf);
+    }
+    pclose(pipe);
+    return trim(result);
+}
+
+static cstr ws_inline(cstr p) {
+    cstr scan = p;
+    while (*scan && isspace(*scan) && *scan != '\n')
+        scan++;
+    return scan;
+}
+
+/// 'word' can contain shell script; and there can be spaces inside
+/// so its not a traditional token parser, however word is a decent name for this compare to token (used in silver)
+static cstr read_word(cstr i, string* result) {
+    i = ws_inline(i);
+    *result = null;
+
+    if (*i == '\n' || !*i)
+        return i;
+
+    int depth = 0;
+
+    while (*i) {
+        // stop only if: outside nesting AND hit whitespace
+        if (depth == 0 && isspace(*i)) break;
+
+        // detect start of $(...) anywhere
+        if (*i == '$' && *(i + 1) == '(') {
+            if (!*result) *result = string(alloc, 64);
+            append_count(*result, i, 2);
+            i += 2;
+            depth++;
+            continue;
+        }
+
+        // track end of $(...)
+        if (*i == ')' && depth > 0) {
+            append_count(*result, i, 1);
+            i++;
+            depth--;
+            continue;
+        }
+
+        // quoted strings inside word (optional but safe)
+        if (*i == '"' || *i == '\'') {
+            char quote = *i;
+            if (!*result) *result = string(alloc, 64);
+            append_count(*result, i, 1);
+            i++;
+            while (*i && *i != quote) {
+                if (*i == '\\' && *(i + 1)) {
+                    append_count(*result, i, 1);
+                    i++;
+                }
+                append_count(*result, i, 1);
+                i++;
+            }
+            if (*i) {
+                append_count(*result, i, 1);
+                i++;
+            }
+            continue;
+        }
+
+        if (!*result) *result = string(alloc, 64);
+        append_count(*result, i, 1);
+        i++;
+    }
+
+    return i;
+}
+
+static cstr read_indent(cstr i, i32* result) {
+    int t = 0;
+    int s = 0;
+    while (*i == ' ' || *i == '\t') {
+        if (*i == ' ')
+            s++;
+        else if (*i == '\t')
+            t++;
+        i++;
+    }
+    *result = t + s / 4;
+    return i;
+}
+
+static array read_lines(path f) {
+    array  lines   = array(256);
+    string content = read(f, typeid(string));
+    cstr   scan    = cstring(content);
+
+    while (*scan) {
+        i32 indent = 0;
+        scan = read_indent(scan, &indent);
+        array words = array(32);
+        for (;;) {
+            string w = null;
+            scan = read_word(scan, &w);
+            if (!w) break;
+            push(words, w);
+        }
+        if (len(words)) {
+            line l = line(indent, indent, text, words);
+            push(lines, l);
+        }
+        if (*scan == '\n') scan++;
+    }
+
+    return lines;
+}
+
 object path_read(path a, AType type) {
+    if (type == typeid(array))
+        return read_lines(a);
     FILE* f = fopen(a->chars, "rb");
     if (!f) return null;
     bool is_obj = type && !(type->traits & A_TRAIT_PRIMITIVE);
@@ -2854,6 +3003,46 @@ void* primitive_ffi_arb(AType ptype) {
 #define MAX_PATH_LEN 4096
 
 
+static none copy_file(path from, path to) {
+    FILE *src = fopen(cstring(from), "rb");
+    FILE *dst = fopen(cstring(to), "wb");
+    verify(src && dst, "copy_file: cannot open file");
+
+    char buffer[8192];
+    size_t n;
+    while ((n = fread(buffer, 1, sizeof(buffer), src)) > 0)
+        fwrite(buffer, 1, n, dst);
+
+    fclose(src);
+    fclose(dst);
+}
+
+none path_cp(path from, path to, bool recur, bool if_newer) {
+    if (dir_exists("%o", from) && file_exists("%o", to))
+        fault("attempting to copy from directory to a file");
+    
+    if (file_exists("%o", from)) {
+        if (!if_newer || modified_time(from) > modified_time(to))
+            copy_file(from, to);
+    } else {
+        verify(is_dir(from), "source must be directory");
+        make_dir(to);
+    
+        DIR *dir = opendir(cstring(from));
+        struct dirent *entry;
+        verify(dir, "opendir");
+    
+        while ((entry = readdir(dir)) != null) {
+            if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+                continue;
+            path src = form(path, "%o/%s", from, entry->d_name);
+            path dst = form(path, "%o/%s", to,   entry->d_name);
+            cp(src, dst, recur, if_newer);
+        }
+        closedir(dir);
+    }
+}
+
 array path_ls(path a, string pattern, bool recur) {
     cstr base_dir = (cstr)a->chars;
     assert(path_is_dir(a), "ls: must be called on directory");
@@ -2864,13 +3053,11 @@ array path_ls(path a, string pattern, bool recur) {
     struct stat statbuf;
 
     assert (dir, "opendir");
-
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
         snprintf(abs, sizeof(abs), "%s/%s", base_dir, entry->d_name);
-
         if (stat(abs, &statbuf) == 0) {
             if (S_ISREG(statbuf.st_mode)) {
                 if (!pattern || !pattern->len || strstr(abs, pattern->chars))
@@ -3244,6 +3431,8 @@ define_primitive(handle, raw, 0)
 define_primitive(Member, raw, 0)
 define_primitive(ARef,   ref, 0)
 define_primitive(floats, raw, 0)
+
+define_class(line)
 
 define_enum(OPType)
 define_enum(Exists)

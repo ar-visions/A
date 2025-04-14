@@ -45,6 +45,8 @@ typedef float*              floats;
 typedef struct _A*          A;
 typedef struct type_member_t* Member;
 
+#define forward(t) typedef struct _##t* t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -120,7 +122,7 @@ typedef struct meta_t {
                     meta_4, meta_5, meta_6, meta_7, meta_8, meta_9;
 } meta_t;
 
-typedef struct _shape* shape;
+forward(shape)
 
 typedef struct ftable_t {
     struct ftable_t* parent_type;
@@ -1622,9 +1624,7 @@ void* primitive_ffi_arb(AType);
 #define define_abstract(X, ...) \
     define_arb(X, A, 0, A_TRAIT_ABSTRACT, 0, null, __VA_ARGS__)
 
-
-typedef struct _string* string;
-
+forward(string)
 struct _sz { i64 value; };
 
 #define A_schema(X,Y,...) \
@@ -1777,8 +1777,6 @@ declare_class(list)
 // ":", "+=", "-=", "*=", "/=", "|=",
 // "&=", "^=", ">>=", "<<=", "%=", null);
 
-typedef struct _string* string;
-
 #define OPType_schema(X,Y,...) \
     enum_value(X,Y, _undefined) \
     enum_value(X,Y, _add) \
@@ -1811,7 +1809,7 @@ typedef struct _string* string;
     enum_value(X,Y, _assign_left)
 declare_enum(OPType)
 
-typedef struct _path* path;
+forward(path)
 /*
 #define buffer_schema(X,Y,...) \
     i_ctr (X,Y, public,   path) \
@@ -1841,7 +1839,7 @@ declare_class(buffer)
     i_override(X,Y, cast,   bool)
 declare_class(file)
 
-typedef struct _array* array;
+forward(array)
 
 #define shape_schema(X,Y,...) \
     i_method(X,Y, public, i64, total) \
@@ -2022,13 +2020,13 @@ declare_class(fn)
     i_override(X,Y,   method, copy)
 declare_class(string)
 
-
 #define path_schema(X,Y,...) \
     i_method    (X,Y, public, bool,   exists) \
     i_method    (X,Y, public, bool,   make_dir) \
     i_method    (X,Y, public, bool,   is_ext, symbol) \
     i_method    (X,Y, public, bool,   is_empty) \
     i_method    (X,Y, public, bool,   is_dir) \
+    i_method    (X,Y, public, none,   cp, path, bool, bool) \
     i_method    (X,Y, public, path,   directory) \
     i_method    (X,Y, public, none,   cd) \
     i_method    (X,Y, public, string, stem) \
@@ -2053,6 +2051,13 @@ declare_class(string)
     i_override  (X,Y, cast,   bool) \
     i_override  (X,Y, cast,   string)
 declare_mod(path, string)
+
+#define line_schema(X,Y,...) \
+    i_prop(X,Y, public, i32, indent) \
+    i_prop(X,Y, public, array, text, of, string)
+#undef line_intern
+#define line_intern(X,Y,...) line_schema(X,Y,__VA_ARGS__)
+declare_class(line)
 
 path path_temp(symbol tmpl);
 
@@ -2158,6 +2163,8 @@ object     A_alloc (AType type, num    count, bool af_pool);
 object     A_alloc_extra(AType type, num extra, bool af_pool);
 object     A_alloc2(AType type, AType scalar, shape shape, bool af_pool);
 object     A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool);
+string     evaluate(string, map);
+string     serialize_environment(map environment, bool export);
 
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size

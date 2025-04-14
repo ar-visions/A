@@ -1,36 +1,31 @@
 #!/bin/bash
-
-silver="$(cd "$(dirname "$0")" && pwd)"
-
 IMPORT_HEADER="$BUILD_PATH/$DIRECTIVE/import"
-PROJECT_HEADER="$PROJECT_PATH/$DIRECTIVE/$PROJECT"
+PROJECT_HEADER="$PROJECT_PATH/lib/$PROJECT"
+if [ ! -f "$PROJECT_HEADER" ]; then
+    PROJECT_HEADER="$PROJECT_PATH/app/$PROJECT"
+fi 
 GEN_DIR="$BUILD_PATH/$DIRECTIVE"
 #PROJECT="$3"
-UPROJECT="${PROJECT^^}"
-
+UPROJECT=$(echo "$PROJECT" | tr '[:lower:]' '[:upper:]')
 #IMPORT_HEADER="$GEN_DIR/import"
 METHODS_HEADER="$GEN_DIR/$PROJECT-methods"
 INTERN_HEADER="$GEN_DIR/$PROJECT-intern"
 PUBLIC_HEADER="$GEN_DIR/$PROJECT-public"
 INIT_HEADER="$GEN_DIR/$PROJECT-init"
-
 SED=${SED:-sed}
-
 shift 4
 IMPORTS=("$@")
 
-# regen check
-# add silver rule to base.mk, so if silver is newer, headers are re-generated
+mkdir -p $GEN_DIR
+cp -p $PROJECT_HEADER $GEN_DIR/
+
 if [ ! -f "$IMPORT_HEADER" ]; then
     rm -f "$IMPORT_HEADER"
-
     echo "/* generated import interface */" >> "$IMPORT_HEADER"
     echo "#ifndef _${UPROJECT}_IMPORT_${PROJECT}_" >> "$IMPORT_HEADER"
     echo "#define _${UPROJECT}_IMPORT_${PROJECT}_" >> "$IMPORT_HEADER"
     echo "" >> "$IMPORT_HEADER"
-
     echo "/* imports: ${IMPORTS[*]} */" >> "$IMPORT_HEADER"
-
     for import in "${IMPORTS[@]}"; do
         if [ "$import" != "$PROJECT" ]; then
             if [ -f "$SILVER_IMPORT/include/${import}-methods" ]; then
@@ -43,15 +38,12 @@ if [ ! -f "$IMPORT_HEADER" ]; then
 
     echo "#include <${PROJECT}-intern> // line 52 uses {PROJECT}" >> "$IMPORT_HEADER"
     echo "#include <${PROJECT}>" >> "$IMPORT_HEADER"
-
     #for name in $LIB_MODULES; do
     #    base=$(basename "$name")
     #    echo "#include <${base%.*}>" >> "$IMPORT_HEADER"
     #done
-
     echo "#include <${PROJECT}-methods>" >> "$IMPORT_HEADER"
     echo "#include <A-reserve>" >> "$IMPORT_HEADER"
-
     # must have PROJECT-init's last! ... these define macros that have the same name as the type, so we cannot process our types through macro expansion with these in place
     # it also makes it not possible to define macros for types within our modules without manual header sequencing between them
     for import in "${IMPORTS[@]}"; do
@@ -61,12 +53,10 @@ if [ ! -f "$IMPORT_HEADER" ]; then
             fi
         fi
     done
-
     echo "#include <${PROJECT}-init>" >> "$IMPORT_HEADER"
     echo "" >> "$IMPORT_HEADER"
     echo "#endif" >> "$IMPORT_HEADER"
 fi
-
 
 # Only regenerate if necessary
 if [ ! -f "$INIT_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INIT_HEADER" ]; then
@@ -151,8 +141,6 @@ if [ ! -f "$INIT_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INIT_HEADER" ]; then
     # Close the include guard
     echo >> "$INIT_HEADER"
     echo "#endif /* _${UPROJECT}_INIT_H_ */" >> "$INIT_HEADER"
-    
-    echo "Successfully generated $INIT_HEADER"
 fi
 
 
@@ -175,8 +163,6 @@ if [ ! -f "$METHODS_HEADER" ] || [ "$PROJECT_HEADER" -nt "$METHODS_HEADER" ]; th
     # Close the include guard
     echo >> "$METHODS_HEADER"
     echo "#endif /* _${UPROJECT}_METHODS_H_ */" >> "$METHODS_HEADER"
-    
-    echo "Successfully generated $METHODS_HEADER"
 fi
 
 
@@ -236,3 +222,6 @@ if [ ! -f "$INTERN_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INTERN_HEADER" ]; then
     
     echo "#endif /* _${UPROJECT}_INTERN_H_ */" >> "$INTERN_HEADER"
 fi
+
+# return include path
+echo "-I${GEN_DIR}"

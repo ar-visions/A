@@ -292,7 +292,9 @@
 			"gltf": "cpp",
 			"gltf-init": "cpp",
 			"gltf-intern": "cpp",
-			"gltf-methods": "cpp"
+			"gltf-methods": "cpp",
+			"a-public": "c",
+			"simd": "c"
 		}
 	}
 }

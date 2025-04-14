@@ -1,6 +1,24 @@
 import:
     libffi https://github.com/libffi/libffi 3d0ce1e
+        CC=gcc
 
 lib:
     $(bash headers.sh)
+    -fPIC
+    -fno-exceptions
+	-Wno-write-strings
+    -Wno-compare-distinct-pointer-types
+    -Wno-deprecated-declarations
+	-Wno-incompatible-pointer-types
+    -Wfatal-errors
+	-Wno-incompatible-library-redeclaration
+    -fvisibility=default
     ffi m
+
+app:
+    $(bash headers.sh)
+    A
+
+test:
+    $(bash headers.sh)
+    A

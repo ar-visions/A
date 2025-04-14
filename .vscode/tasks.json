@@ -63,6 +63,7 @@
 			"options": {
                 "cwd": "${workspaceFolder}/../A/tapestry",
                 "env": {
+                    "CC": "clang",
                     "CFLAGS": "-g2"
                 }
             },

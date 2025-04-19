@@ -1544,7 +1544,7 @@ string string_escape(string input) {
         {'\t', "\\t"},
         {'\"', "\\\""},
         {'\\', "\\\\"},
-        {'\r', "\\r"},
+        {'\r', "\\r"}
     };
     int escape_count = sizeof(escape_map) / sizeof(escape_map[0]);
     int input_len    = len(input);
@@ -2661,7 +2661,6 @@ bool path_is_dir(path a) {
     return true;
 }
 
-
 bool path_is_empty(path a) {
     int    n = 0;
     struct dirent *d;
@@ -2827,13 +2826,16 @@ string serialize_environment(map environment, bool export) {
 /// tapestry parsing, can be used in silver as well
 string evaluate(string w, map environment) {
     /// create environment string
+    if (!strstr(w->chars, "$("))
+        return w;
+    
     string env = serialize_environment(environment, true);
     string esc = escape(w);
-    string cmd = form(string, "%o bash -c \"echo '%o'\"", env, esc);
-
+    string cmd = form(string, "%o bash -c \"echo %o\"", env, esc);
     FILE* pipe = popen(cstring(cmd), "r");
     if  (!pipe)  return string("");
     char   buf[1024];
+
     string result = string(alloc, 64);
     while (fgets(buf, sizeof(buf), pipe)) {
         int len = strlen(buf);
@@ -3004,8 +3006,9 @@ void* primitive_ffi_arb(AType ptype) {
 
 
 static none copy_file(path from, path to) {
+    path f_to = is_dir(to) ? form(path, "%o/%o", to, filename(from)) : hold(to);
     FILE *src = fopen(cstring(from), "rb");
-    FILE *dst = fopen(cstring(to), "wb");
+    FILE *dst = fopen(cstring(f_to), "wb");
     verify(src && dst, "copy_file: cannot open file");
 
     char buffer[8192];
@@ -3021,8 +3024,9 @@ none path_cp(path from, path to, bool recur, bool if_newer) {
     if (dir_exists("%o", from) && file_exists("%o", to))
         fault("attempting to copy from directory to a file");
     
+    bool same_kind = is_dir(from) == is_dir(to);
     if (file_exists("%o", from)) {
-        if (!if_newer || modified_time(from) > modified_time(to))
+        if (!if_newer || (!same_kind || modified_time(from) > modified_time(to)))
             copy_file(from, to);
     } else {
         verify(is_dir(from), "source must be directory");
@@ -3045,8 +3049,9 @@ none path_cp(path from, path to, bool recur, bool if_newer) {
 
 array path_ls(path a, string pattern, bool recur) {
     cstr base_dir = (cstr)a->chars;
-    assert(path_is_dir(a), "ls: must be called on directory");
     array list = new(array, alloc, 32); // Initialize array for storing paths
+    if (!is_dir(a))
+        return list;
     DIR *dir = opendir(base_dir);
     char abs[MAX_PATH_LEN];
     struct dirent *entry;
@@ -3056,7 +3061,6 @@ array path_ls(path a, string pattern, bool recur) {
     while ((entry = readdir(dir)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
-
         snprintf(abs, sizeof(abs), "%s/%s", base_dir, entry->d_name);
         if (stat(abs, &statbuf) == 0) {
             if (S_ISREG(statbuf.st_mode)) {
@@ -3072,7 +3076,6 @@ array path_ls(path a, string pattern, bool recur) {
             }
         }
     }
-
     closedir(dir);
     return list;
 }

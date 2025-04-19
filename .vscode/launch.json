@@ -74,27 +74,92 @@
             "cwd": "${workspaceFolder}/../hyperspace/"
         },
         {
+            "name": "tapestry (ether)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../tapestry/bin/tapestry",
+            "args": [
+                "/Users/kalen/src/ether"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../tapestry",
+            "environment": [
+                {
+                    "name": "CC",
+                    "value": "clang"
+                }
+            ],
+            "MIMode": "lldb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
+            "name": "tapestry (silver)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../tapestry/bin/tapestry",
+            "args": [
+                "/Users/kalen/src/silver"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../tapestry",
+            "environment": [
+                {
+                    "name": "CC",
+                    "value": "clang"
+                }
+            ],
+            "MIMode": "lldb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
+            "name": "silver",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../silver/debug/app/silver",
+            "args": [
+                "${workspaceFolder}/../silver/silver88.cms"
+            ],
+            "environment": [
+                {
+                    "name": "DYLD_LIBRARY_PATH",
+                    "value": "/Users/kalen/src/tapestry/lib"
+                }
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../silver/debug",
+            "MIMode": "lldb",
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
             "name": "tapestry",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../A/tapestry/tapestry",
+            "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
                 "/Users/kalen/src/A"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../A/tapestry",
+            "cwd": "${workspaceFolder}/../tapestry",
             "environment": [
                 {
                     "name": "LD_LIBRARY_PATH",
-                    "value": "/Users/kalen/src/A/tapestry"
+                    "value": "/Users/kalen/src/tapestry/lib"
                 },
                 {
                     "name": "CC",
                     "value": "clang"
-                },
-                {
-                    "name": "TAPESTRY",
-                    "value": "/Users/kalen/src/A/tapestry"
                 }
             ],
             "MIMode": "lldb",
@@ -268,34 +333,6 @@
             "cwd": "${workspaceFolder}/../ether/debug",
             "environment": [
             ],
-            "MIMode": "gdb",
-            "presentation": {
-                "hidden": false,
-                "group": "",
-                "order": 1,
-            }
-        },
-        {
-            "name": "silver",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/../silver-lang/debug/silver",
-            "args": [
-                "${workspaceFolder}/../silver-lang/debug/silver88.cms",
-                "--import", "/home/kalen/src/silver-lang/import"
-            ],
-            "environment": [
-                {
-                    "name": "LSAN_OPTIONS",
-                    "value": "verbosity=1:log_threads=1:print_suppressions=1:report_objects=1"
-                },
-                {
-                    "name": "ASAN_OPTIONS",
-                    "value": "detect_leaks=1:verbosity=1"
-                }
-            ],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../silver-lang/debug",
             "MIMode": "gdb",
             "presentation": {
                 "hidden": false,

@@ -33,7 +33,7 @@
             "label": "build-silver",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../silver-lang"
+                "cwd": "${workspaceFolder}/../silver"
             },
             "group": {
                 "kind": "build",
@@ -48,7 +48,7 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "windows": {
-                "command": "msbuild silver-lang.sln /t:silver-lang"
+                "command": "msbuild silver.sln /t:silver"
             },
             "osx": {
                 "command": "make -j8"
@@ -61,7 +61,7 @@
             "label": "build-tapestry",
             "type": "shell",
 			"options": {
-                "cwd": "${workspaceFolder}/../A/tapestry",
+                "cwd": "${workspaceFolder}/../tapestry",
                 "env": {
                     "CC": "clang",
                     "CFLAGS": "-g2"
@@ -80,13 +80,13 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "windows": {
-                "command": "msbuild silver-lang.sln /t:silver-lang"
+                "command": "msbuild silver.sln /t:silver"
             },
             "osx": {
-                "command": "make -j8"
+                "command": "make"
             },
             "linux": {
-                "command": "make -j8"
+                "command": "make"
             }
         },
         {
@@ -161,10 +161,10 @@
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
             "osx": {
-                "command": "make -j8"
+                "command": "make"
             },
             "linux": {
-                "command": "make -j8"
+                "command": "make"
             }
         },
         {

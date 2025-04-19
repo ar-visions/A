@@ -11,20 +11,19 @@ INTERN_HEADER="$GEN_DIR/$PROJECT-intern"
 PUBLIC_HEADER="$GEN_DIR/$PROJECT-public"
 INIT_HEADER="$GEN_DIR/$PROJECT-init"
 SED=${SED:-sed}
-shift 4
-IMPORTS=("$@")
+IM="$IMPORTS"
 
 mkdir -p $GEN_DIR
 cp -p $PROJECT_HEADER $GEN_DIR/
 
+rm -f "$IMPORT_HEADER"
 if [ ! -f "$IMPORT_HEADER" ]; then
-    rm -f "$IMPORT_HEADER"
     echo "/* generated import interface */" >> "$IMPORT_HEADER"
     echo "#ifndef _${UPROJECT}_IMPORT_${PROJECT}_" >> "$IMPORT_HEADER"
     echo "#define _${UPROJECT}_IMPORT_${PROJECT}_" >> "$IMPORT_HEADER"
     echo "" >> "$IMPORT_HEADER"
-    echo "/* imports: ${IMPORTS[*]} */" >> "$IMPORT_HEADER"
-    for import in "${IMPORTS[@]}"; do
+    echo "/* imports: $IM <- new imports */" >> "$IMPORT_HEADER"
+    for import in $IM; do
         if [ "$import" != "$PROJECT" ]; then
             if [ -f "$TAPESTRY/include/${import}-methods" ]; then
                 echo "#include <${import}-public> // from {import}" >> "$IMPORT_HEADER"
@@ -39,7 +38,7 @@ if [ ! -f "$IMPORT_HEADER" ]; then
     echo "#include <${PROJECT}-methods>" >> "$IMPORT_HEADER"
     echo "#include <A-reserve>" >> "$IMPORT_HEADER"
 
-    for import in "${IMPORTS[@]}"; do
+    for import in $IM; do
         if [ "$import" != "$PROJECT" ]; then
             if [ -f "$TAPESTRY/include/${import}-methods" ]; then
                 echo "#include <${import}-init>" >> "$IMPORT_HEADER"

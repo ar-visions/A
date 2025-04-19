@@ -5,8 +5,8 @@
 			"path": "."
 		},
 		{
-			"name": "silver-lang",
-			"path": "../silver-lang"
+			"name": "silver",
+			"path": "../silver"
 		},
 		{
 			"name": "tapestry",
@@ -298,7 +298,8 @@
 			"gltf-intern": "cpp",
 			"gltf-methods": "cpp",
 			"a-public": "c",
-			"simd": "c"
+			"simd": "c",
+			"utime.h": "c"
 		}
 	}
 }

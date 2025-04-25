@@ -223,6 +223,9 @@
 			"options": {
                 "cwd": "${workspaceFolder}/../A"
             },
+            "env": {
+                "VERBOSE": "1"
+            },
             "group": {
                 "kind": "build",
                 "isDefault": true

@@ -358,11 +358,18 @@ typedef bool(*global_init_fn)();
         instance; \
     })
 
-#define allocate(T, ...) \
+#define create(T, ...) \
     ({ \
         T instance = (T)A_alloc(typeid(T), 1, false); \
         _N_ARGS(instance, ## __VA_ARGS__); \
         A_initialize((A)instance); \
+        instance; \
+    })
+
+#define allocate(T, ...) \
+    ({ \
+        T instance = (T)A_alloc(typeid(T), 1, false); \
+        _N_ARGS(instance, ## __VA_ARGS__); \
         instance; \
     })
 
@@ -1822,11 +1829,13 @@ forward(path)
 declare_class(buffer)
 */
 
+/*
+new rule: no redefining C methods
 #define file_schema(X,Y,...) \
     i_method(X,Y, public,   bool,   write, object) \
-    i_method(X,Y, public,   object, read,  AType) \
+    i_method(X,Y, public,   object, file_read,  AType) \
     i_method(X,Y, public,   string, gets) \
-    i_method(X,Y, public,   none,   close) \
+    i_method(X,Y, public,   none,   file_close) \
     i_prop(X,Y,   public,   path,   src) \
     i_prop(X,Y,   public,   bool,   read) \
     i_prop(X,Y,   public,   bool,   write) \
@@ -1838,6 +1847,7 @@ declare_class(buffer)
     i_override(X,Y, method, dealloc) \
     i_override(X,Y, cast,   bool)
 declare_class(file)
+*/
 
 forward(array)
 
@@ -1919,7 +1929,7 @@ declare_meta(ATypes, array, AType)
     i_prop      (X,Y, public, array, pool) \
     i_prop      (X,Y, public, sz,    start_size) \
     s_method    (X,Y, public, AF,    fetch, num) \
-    s_method    (X,Y, public, AF,    create, sz) \
+    s_method    (X,Y, public, AF,    initialize, sz) \
     i_override  (X,Y, method, init) \
     i_override  (X,Y, method, dealloc)
 declare_class(AF)
@@ -2074,7 +2084,8 @@ extern FILE* logger;
 
 #define         form(T, t, ...)   (T)A_formatter(typeid(T), null,   (object)false, (symbol)t, ## __VA_ARGS__)
 #define    formatter(t, ...)      ((string)A_formatter((AType)null,      null,   (object)false, (symbol)t, ## __VA_ARGS__))
-#define         exec(t, ...)      system(((string)A_formatter((AType)null, null, (object)false, (symbol)t, ## __VA_ARGS__))->chars)
+#define            f(t, ...)      ((string)A_formatter((AType)null,      null,   (object)false, (symbol)t, ## __VA_ARGS__))
+#define         exec(t, ...)      A_exec(((string)A_formatter((AType)null, null, (object)false, (symbol)t, ## __VA_ARGS__)))
 #define          tap(L)           (A_tap(L))
 #define        untap(L)           (A_untap(L))
 #define        A_log(L, t, ...)   A_formatter((AType)null,      stdout, str(L),  t, ## __VA_ARGS__)
@@ -2101,6 +2112,8 @@ extern FILE* logger;
     } while(0)
 
 cstr copy_cstr(cstr input);
+
+int A_exec(string cmd);
 
 #define backwards(container, E, e) \
     if (len(((array)container))) for (E e = get(((array)container), len(((array)container)) - 1), e0 = 0; e0 == 0; e0++) \
@@ -2231,8 +2244,8 @@ object      A_sz(sz);
 object      A_u64(u64);
 object      A_f32(f32);
 object      A_f64(f64);
-object          f(f32);
-object          r(f64);
+object  float32(f32);
+object   real64(f64);
 object      A_cstr(cstr);
 object      A_none();
 object      A_bool(bool);
@@ -2243,6 +2256,8 @@ void        A_push(object, object);
 void        A_start();
 map         A_args(int argc, symbol argv[], symbol default_arg, ...);
 A           A_header(object instance);
+pid_t       A_last_pid();
+
 #define head(o) A_header((object)o)
 
 //object      A_data(object instance);

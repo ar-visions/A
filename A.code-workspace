@@ -299,7 +299,9 @@
 			"gltf-methods": "cpp",
 			"a-public": "c",
 			"simd": "c",
-			"utime.h": "c"
+			"utime.h": "c",
+			"tapestry-public": "c",
+			"tapestry-methods": "c"
 		}
 	}
 }

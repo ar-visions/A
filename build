@@ -1,9 +1,11 @@
 import:
     libffi https://github.com/libffi/libffi 3d0ce1e
         CC=gcc
+        -lffi
+        -lm
 
-lib:
-    $(bash headers.sh)
+export:
+    $(bash $TAPESTRY/checkout/A/headers.sh)
     -fPIC
     -fno-exceptions
 	-Wno-write-strings
@@ -13,12 +15,3 @@ lib:
     -Wfatal-errors
 	-Wno-incompatible-library-redeclaration
     -fvisibility=default
-    ffi m
-
-app:
-    $(bash headers.sh)
-    A
-
-test:
-    $(bash headers.sh)
-    A

@@ -85,6 +85,10 @@
             "cwd": "${workspaceFolder}/../tapestry",
             "environment": [
                 {
+                    "name": "VERBOSE",
+                    "value": "1"
+                },
+                {
                     "name": "CC",
                     "value": "clang"
                 }
@@ -153,6 +157,10 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../tapestry",
             "environment": [
+                {
+                    "name": "VERBOSE",
+                    "value": "1"
+                },
                 {
                     "name": "LD_LIBRARY_PATH",
                     "value": "/Users/kalen/src/tapestry/lib"

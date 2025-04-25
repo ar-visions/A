@@ -12,6 +12,7 @@
 #include <cpuid.h>
 #endif
 #include <math.h>
+#include <errno.h>
 
 #ifndef line
 #define line(...)       new(line,       __VA_ARGS__)
@@ -321,6 +322,65 @@ object A_initialize(object a) {
     return a;
 }
 
+pid_t last_pid = 0;
+
+pid_t A_last_pid() {
+    return last_pid;
+}
+
+int A_exec(string cmd) {
+    int pipefd[2];
+    pipe(pipefd);
+
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        // child
+        setpgid(0, 0);
+        dup2(pipefd[0], STDIN_FILENO);
+        close(pipefd[1]); // close write
+        execlp("sh", "sh", "-s", null); // or "bash"
+        _exit(0);
+    } else if (pid > 0) {
+        last_pid = pid;
+        // parent
+        close(pipefd[0]); // close read
+        FILE *out = fdopen(pipefd[1], "w");
+        cstr verbose = getenv("VERBOSE");
+        if (verbose && strcmp(verbose, "0") != 0) {
+            printf("----------------------\n");
+            printf("%s\n", cstring(cmd));
+        }
+        fprintf(out, "%s\n", cstring(cmd));
+        fflush(out);
+        close(pipefd[1]);
+
+        int status;
+        int result;
+        do {
+            result = waitpid(pid, &status, 0);
+        } while (result == -1 && errno == EINTR);
+        last_pid = 0;
+
+        if (result == -1) {
+            perror("waitpid");
+            return -123456;
+        }
+
+        if (WIFEXITED(status)) {
+            return WEXITSTATUS(status);
+        } else if (WIFSIGNALED(status)) {
+            fprintf(stderr, "child terminated by signal: %s\n", strsignal(WTERMSIG(status)));
+            return -128 - WTERMSIG(status);  // POSIX style
+        }
+        fprintf(stderr, "unknown termination\n");
+        return -9999;
+    } else {
+        perror("fork");
+        return -1234;
+    }
+}
+
 object A_alloc(AType type, num count, bool af_pool) {
     sz map_sz = sizeof(map);
     sz A_sz = sizeof(struct _A);
@@ -564,11 +624,11 @@ array array_of(object first, ...) {
 }
 
 array array_of_cstr(cstr first, ...) {
-    array a = allocate(array);
+    array a = create(array);
     va_list args;
     va_start(args, first);
     for (cstr arg = first; arg; arg = va_arg(args, A))
-        push(a, allocate(string, chars, arg));
+        push(a, create(string, chars, arg));
     return a;
 }
 
@@ -740,7 +800,7 @@ static __attribute__((constructor)) bool Aglobal_AF();
 
 void A_start() {
     fault_level = level_err;
-    AF pool    = allocate(AF); /// leave pool open [ AF_type is not being populated; check for creation of AF_init and global
+    AF pool    = create(AF); /// leave pool open [ AF_type is not being populated; check for creation of AF_init and global
     log_fields = new(map, hsize, 32);
 
     int remaining = call_after_count;
@@ -786,7 +846,7 @@ void A_start() {
                     test2 += 2;
                 }
                 assert(address, "no address");
-                array args = allocate(array, alloc, mem->args.count);
+                array args = create(array, alloc, mem->args.count);
                 for (num i = 0; i < mem->args.count; i++)
                     args->elements[i] = (object)((A_f**)&mem->args.meta_0)[i];
                 args->len = mem->args.count;
@@ -972,8 +1032,8 @@ object A_u64(u64 data)   { return A_primitive(&u64_type, &data); }
 object A_f32(f32 data)   { return A_primitive(&f32_type, &data); }
 object  A_f64(f64 data)  { return A_primitive(&f64_type, &data); }
 object A_f128(f64 data)  { return A_primitive(&f128_type, &data); }
-object     f(f32 data)   { return A_primitive(&f32_type, &data); }
-object     r(f64 data)   { return A_primitive(&f64_type, &data); }
+object float32(f32 data)   { return A_primitive(&f32_type, &data); }
+object  real64(f64 data)   { return A_primitive(&f64_type, &data); }
 object A_cstr(cstr data) { return A_primitive(&cstr_type, &data); }
 object A_none()          { return A_primitive(&none_type, NULL); }
 object A_bool(bool data) { return A_primitive(&bool_type, &data); }
@@ -2404,21 +2464,21 @@ object subprocedure_invoke(subprocedure a, object arg) {
 
 void AF_init(AF a) {
     af_top = a;
-    a->pool = allocate(array, alloc, a->start_size ? a->start_size : 1024);
+    a->pool = create(array, alloc, a->start_size ? a->start_size : 1024);
     push_weak(a->pool, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
 
-    if (!af_stack) af_stack = allocate(array, alloc, 16);
+    if (!af_stack) af_stack = create(array, alloc, 16);
     push_weak(af_stack, a);
 }
 
-AF AF_create(sz start_size) {
-    AF a = allocate(AF, start_size, start_size);
+AF AF_initialize(sz start_size) {
+    AF a = create(AF, start_size, start_size);
     //AF_init(a);
     return a;
 }
 
 AF A_pool(sz start_size) {
-    return AF_create(start_size);
+    return AF_initialize(start_size);
 }
 
 void AF_dealloc(AF a) {
@@ -2467,6 +2527,7 @@ bool create_symlink(path target, path link) {
     return !is_err;
 }
 
+/*
 void file_init(file f) {
     verify(!(f->read && f->write), "cannot open for both read and write");
     cstr src = (cstr)(f->src ? f->src->chars : null);
@@ -2502,7 +2563,7 @@ string file_gets(file f) {
     return null;
 }
 
-bool file_write(file f, object o) {
+bool file_file_write(file f, object o) {
     AType type = isa(o);
     if (type == typeid(string)) {
         u16 nbytes    = ((string)o)->len;
@@ -2519,7 +2580,7 @@ bool file_write(file f, object o) {
 
 
 
-object file_read(file f, AType type) {
+object file_file_read(file f, AType type) {
     if (type == typeid(string)) {
         char bytes[65536];
         u16  nbytes;
@@ -2543,7 +2604,7 @@ object file_read(file f, AType type) {
     return success ? o : null;
 }
 
-void file_close(file f) {
+void file_file_close(file f) {
     if (f->id) {
         fclose(f->id);
         f->id = null;
@@ -2551,8 +2612,9 @@ void file_close(file f) {
 }
 
 void file_dealloc(file f) {
-    file_close(f);
+    file_file_close(f);
 }
+*/
 
 none path_init(path a) {
     cstr arg = (cstr)a->chars;
@@ -2730,9 +2792,12 @@ path path_absolute(path a) {
 
 
 path path_directory(path a) {
-    path result = new(path);
-    result->chars = dirname(strdup(a->chars));
-    result->len    = strlen(result->chars);
+    path  result  = new(path);
+    char* cp      = strdup(a->chars);
+    char* temp    = dirname(cp);
+    result->chars = strdup(temp);
+    result->len   = strlen(result->chars);
+    free(cp);
     return result;
 }
 
@@ -2754,6 +2819,7 @@ path path_parent(path a) {
     char *dir_name = dirname(cp);
     path  result   = new(path);
     result->chars  = strdup(dir_name);
+    free(cp);
     return result;
 }
 
@@ -3442,7 +3508,7 @@ define_enum(Exists)
 define_enum(level)
 
 define_mod(path, string)
-define_class(file)
+//define_class(file)
 define_class(string)
 
 define_class(item)

@@ -13,6 +13,7 @@
 #endif
 #include <math.h>
 #include <errno.h>
+#include <sys/wait.h>
 
 #ifndef line
 #define line(...)       new(line,       __VA_ARGS__)
@@ -2875,13 +2876,13 @@ u64 path_hash(path a) {
     return fnv1a_hash(a->chars, strlen(a->chars), OFFSET_BASIS);
 }
 
-string serialize_environment(map environment, bool export) {
+string serialize_environment(map environment, bool b_export) {
     string env = string(alloc, 32);
     pairs(environment, i) { // for tapestry use-case: TARGET=%s BUILD=%s PROJECT=%s UPROJECT=%s
         string name  = i->key;
         string value = escape((string)i->value); /// this is great to do
         string f     = form(string, "%o=\"%o\"", name, value);
-        if (export && !len(env)) append(env, "export ");
+        if (b_export && !len(env)) append(env, "export ");
         concat(env, f);
         append(env, " ");
     }
@@ -2891,24 +2892,68 @@ string serialize_environment(map environment, bool export) {
 
 /// tapestry parsing, can be used in silver as well
 string evaluate(string w, map environment) {
-    /// create environment string
-    if (!strstr(w->chars, "$("))
+    print("running eval on %o\n", w);
+
+    if (!strstr(w->chars, "$"))
         return w;
-    
+
     string env = serialize_environment(environment, true);
     string esc = escape(w);
-    string cmd = form(string, "%o bash -c \"echo %o\"", env, esc);
-    FILE* pipe = popen(cstring(cmd), "r");
-    if  (!pipe)  return string("");
-    char   buf[1024];
+    print("escaped: %o", esc);
 
+    int in_pipe[2];  // parent writes to child
+    int out_pipe[2]; // child writes to parent
+
+    if (pipe(in_pipe) != 0 || pipe(out_pipe) != 0) {
+        print("pipe creation failed\n");
+        return string("");
+    }
+
+    pid_t pid = fork();
+    if (pid < 0) {
+        print("fork failed\n");
+        return string("");
+    }
+
+    if (pid == 0) {
+        // child
+        dup2(in_pipe[0], STDIN_FILENO);  // read from parent's input
+        dup2(out_pipe[1], STDOUT_FILENO); // write to parent's output
+
+        close(in_pipe[1]); // close write side
+        close(out_pipe[0]); // close read side
+
+        const char* argv[] = { "bash", "-s", NULL };
+        execvp("bash", (char* const*)argv);
+
+        _exit(127); // if exec fails
+    }
+
+    // parent
+    close(in_pipe[0]);  // close unused read side
+    close(out_pipe[1]); // close unused write side
+
+    // send command to bash
+    FILE* in = fdopen(in_pipe[1], "w");
+    fprintf(in, "export %s\n", cstring(env));
+    fprintf(in, "echo \"%s\"\n", esc->chars);
+    fclose(in); // very important: tell bash EOF (no more input)
+
+    // read result
+    FILE* out = fdopen(out_pipe[0], "r");
+    char buf[1024];
     string result = string(alloc, 64);
-    while (fgets(buf, sizeof(buf), pipe)) {
+
+    while (fgets(buf, sizeof(buf), out)) {
         int len = strlen(buf);
         if (len && buf[len - 1] == '\n') buf[len - 1] = 0;
         append(result, buf);
     }
-    pclose(pipe);
+    fclose(out);
+
+    int status;
+    waitpid(pid, &status, 0); // wait for bash to finish
+
     return trim(result);
 }
 
@@ -3128,9 +3173,10 @@ array path_ls(path a, string pattern, bool recur) {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
         snprintf(abs, sizeof(abs), "%s/%s", base_dir, entry->d_name);
+        string s_abs = string(abs);
         if (stat(abs, &statbuf) == 0) {
             if (S_ISREG(statbuf.st_mode)) {
-                if (!pattern || !pattern->len || strstr(abs, pattern->chars))
+                if (!pattern || !pattern->len || ends_with(s_abs, pattern->chars))
                     push(list, new(path, chars, abs));
                 
             } else if (S_ISDIR(statbuf.st_mode)) {

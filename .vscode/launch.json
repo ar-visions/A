@@ -65,21 +65,21 @@
             "cwd": "${workspaceFolder}/../hyperspace/"
         },
         {
-            "name": "Python: train:record",
+            "name": "Python: vision:record",
             "type": "debugpy",
-            "args": ["-s", "center_off", "-f"],
+            "args": ["-s", "vision2", "-f"],
             "request": "launch",
             "program": "${workspaceFolder}/../hyperspace/vision-record.py",
             "console": "integratedTerminal",
-            "cwd": "${workspaceFolder}/../hyperspace/"
+            "cwd": "${workspaceFolder}/../hyperspace/",
         },
         {
-            "name": "tapestry (ether)",
+            "name": "tapestry (A)",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/Users/kalen/src/ether"
+                "/home/kalen/src/A"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../tapestry",
@@ -93,7 +93,100 @@
                     "value": "clang"
                 }
             ],
-            "MIMode": "lldb",
+            "osx": {
+                "MIMode": "lldb"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
+            "name": "tapestry (vec)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../tapestry/bin/tapestry",
+            "args": [
+                "/home/kalen/src/vec"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../tapestry",
+            "environment": [
+                {
+                    "name": "VERBOSE",
+                    "value": "1"
+                },
+                {
+                    "name": "CC",
+                    "value": "clang"
+                }
+            ],
+            "osx": {
+                "MIMode": "lldb"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
+            "name": "tapestry (ether)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../tapestry/bin/tapestry",
+            "args": [
+                "/home/kalen/src/ether"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../tapestry",
+            "environment": [
+                {
+                    "name": "VERBOSE",
+                    "value": "1"
+                },
+                {
+                    "name": "CC",
+                    "value": "clang"
+                }
+            ],
+            "osx": {
+                "MIMode": "lldb",
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
+            "name": "tapestry (trinity)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../tapestry/bin/tapestry",
+            "args": [
+                "/home/kalen/src/trinity"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../tapestry",
+            "environment": [
+                {
+                    "name": "VERBOSE",
+                    "value": "1"
+                },
+                {
+                    "name": "CC",
+                    "value": "gcc"
+                },
+                {
+                    "name": "CXX",
+                    "value": "g++"
+                }
+            ],
+            "osx": {
+                "MIMode": "lldb",
+            },
             "presentation": {
                 "hidden": false,
                 "group": "",
@@ -106,7 +199,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/Users/kalen/src/silver"
+                "/home/kalen/src/silver"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../tapestry",
@@ -152,7 +245,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/Users/kalen/src/A"
+                "/home/kalen/src/A"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../tapestry",
@@ -163,7 +256,7 @@
                 },
                 {
                     "name": "LD_LIBRARY_PATH",
-                    "value": "/Users/kalen/src/tapestry/lib"
+                    "value": "/home/kalen/src/tapestry/lib"
                 },
                 {
                     "name": "CC",
@@ -283,6 +376,10 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../orbiter/debug",
             "environment": [
+                {
+                    "name": "VERBOSE",
+                    "value": "1"
+                }
             ],
             "MIMode": "gdb",
             "presentation": {

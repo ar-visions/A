@@ -301,7 +301,9 @@
 			"simd": "c",
 			"utime.h": "c",
 			"tapestry-public": "c",
-			"tapestry-methods": "c"
+			"tapestry-methods": "c",
+			"tapestry": "c",
+			"quanta-flat": "cpp"
 		}
 	}
 }

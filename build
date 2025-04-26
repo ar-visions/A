@@ -7,7 +7,6 @@ import:
 export:
     $(bash $TAPESTRY/checkout/A/headers.sh)
     -fPIC
-    -fno-exceptions
 	-Wno-write-strings
     -Wno-compare-distinct-pointer-types
     -Wno-deprecated-declarations

@@ -2105,7 +2105,6 @@ extern FILE* logger;
         if (!(a)) { \
             A_formatter((AType)null, stderr, (object)true,  (symbol)t, ## __VA_ARGS__); \
             if (level_err >= fault_level) { \
-                raise(SIGSTOP); \
                 exit(1); \
             } \
         } \
@@ -2177,7 +2176,7 @@ object     A_alloc_extra(AType type, num extra, bool af_pool);
 object     A_alloc2(AType type, AType scalar, shape shape, bool af_pool);
 object     A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool);
 string     evaluate(string, map);
-string     serialize_environment(map environment, bool export);
+string     serialize_environment(map, bool);
 
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size

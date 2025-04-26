@@ -1586,13 +1586,13 @@ sz vector_len(vector a) {
 
 string string_ucase(string a) {
     string res = string(a->chars);
-    for (cstr s = res->chars; *s; ++s) *s = toupper((unsigned char)*s);
+    for (cstr s = (cstr)res->chars; *s; ++s) *s = toupper((unsigned char)*s);
     return res;
 }
 
 string string_lcase(string a) {
     string res = string(a->chars);
-    for (cstr s = res->chars; *s; ++s) *s = tolower((unsigned char)*s);
+    for (cstr s = (cstr)res->chars; *s; ++s) *s = tolower((unsigned char)*s);
     return res;
 }
 
@@ -2705,15 +2705,71 @@ bool path_make_dir(path a) {
     return stat(cs, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
+i64 get_stat_millis(struct stat* st) {
+#if defined(__APPLE__)
+    return (i64)(st->st_mtimespec.tv_sec) * 1000 + st->st_mtimespec.tv_nsec / 1000000;
+#else
+    return (i64)(st->st_mtim.tv_sec) * 1000 + st->st_mtim.tv_nsec / 1000000;
+#endif
+}
+
+path path_latest_modified(path a, ARef mvalue) {
+    cstr base_dir = (cstr)a->chars;
+    if (!is_dir(a))
+        return 0;
+    
+    DIR *dir = opendir(base_dir);
+    char abs[4096];
+    struct dirent *entry;
+    struct stat statbuf;
+    i64  latest   = 0;
+    path latest_f = null;
+
+    verify(dir, "opendir");
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        snprintf(abs, sizeof(abs), "%s/%s", base_dir, entry->d_name);
+        if (stat(abs, &statbuf) == 0) {
+            if (S_ISREG(statbuf.st_mode)) {
+                i64 stat_millis = get_stat_millis(&statbuf);
+                if (stat_millis > latest) {
+                    latest = stat_millis;
+                    *((i64*)mvalue) = latest;
+                    latest_f = path(abs);
+                }
+            } else if (S_ISDIR(statbuf.st_mode)) {
+                path subdir = new(path, chars, abs);
+                i64 sub_latest = 0;
+                path lf = path_latest_modified(subdir, &sub_latest);
+                if (sub_latest > latest) {
+                    latest = sub_latest;
+                    *((i64*)mvalue) = latest;
+                    latest_f = lf;
+                }
+            }
+        }
+    }
+    closedir(dir);
+    return latest_f;
+}
+ 
 i64 path_modified_time(path a) {
     struct stat st;
     if (stat((cstr)a->chars, &st) != 0) return 0;
 
-    #if defined(__APPLE__)
+    if (is_dir(a)) {
+        i64  mtime  = 0;
+        path latest = latest_modified(a, &mtime);
+        return mtime;
+    } else {
+#if defined(__APPLE__)
         return (i64)(st.st_mtimespec.tv_sec) * 1000 + st.st_mtimespec.tv_nsec / 1000000;
-    #else
+#else
         return (i64)(st.st_mtim.tv_sec) * 1000 + st.st_mtim.tv_nsec / 1000000;
-    #endif
+#endif
+    }
 }
 
 bool path_is_dir(path a) {

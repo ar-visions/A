@@ -209,7 +209,9 @@
                     "value": "clang"
                 }
             ],
-            "MIMode": "lldb",
+            "osx": {
+                "MIMode": "lldb"
+            },
             "presentation": {
                 "hidden": false,
                 "group": "",

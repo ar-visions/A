@@ -1472,14 +1472,43 @@ object A_formatter(AType type, FILE* f, object opt, symbol template, ...) {
     
     while (*scan) {
         /// format %o as object's string cast
-        if (*scan == '%' && *(scan + 1) == 'o') {
-            object      arg = va_arg(args, object);
+        char cmd[2] = { *scan, *(scan + 1) };
+        int column_size = 0;
+        int skip = 0;
+        int f = cmd[1];
+        /// column size formatting
+        if (cmd[0] == '%' && (cmd[1] == '-' || isdigit(cmd[1]))) {
+            /// register to fill this space
+            for (int n = 1; n; n++) {
+                if (!isdigit(cmd[1 + n])) {
+                    int column_digits = 1 + n;
+                    verify(column_digits < 32, "column size out of range");
+                    char val[32];
+                    memcpy(val, scan + 1, column_digits);
+                    val[column_digits] = 0;
+                    column_size = atoi(val);
+                    skip = 1 + column_digits + 1;
+                    cmd[1] = scan[skip - 1];
+                    break;
+                }
+            }
+        }
+        if (cmd[0] == '%' && cmd[1] == 'o') {
+            object arg = va_arg(args, object);
             string   a = arg ? cast(string, arg) : string((symbol)"null");
             num    len = a->len;
             reserve(res, len);
+            if (column_size < 0) {
+                for (int i = 0; i < -column_size - len; i++)
+                    ((cstr)res->chars)[res->len++] = ' ';
+            }
             memcpy((cstr)&res->chars[res->len], a->chars, len);
             res->len += len;
-            scan     += 2; // Skip over %o
+            if (column_size) {
+                for (int i = 0; i < column_size - len; i++)
+                    ((cstr)res->chars)[res->len++] = ' ';
+            }
+            scan     += skip ? skip : 2; // Skip over %o
         } else {
             /// format with vsnprintf
             const char* next_percent = strchr(scan, '%');
@@ -2948,8 +2977,6 @@ string serialize_environment(map environment, bool b_export) {
 
 /// tapestry parsing, can be used in silver as well
 string evaluate(string w, map environment) {
-    print("running eval on %o\n", w);
-
     if (!strstr(w->chars, "$"))
         return w;
 

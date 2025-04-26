@@ -103,6 +103,35 @@
             }
         },
         {
+            "name": "tapestry (orbiter)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../tapestry/bin/tapestry",
+            "args": [
+                "/home/kalen/src/orbiter"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../tapestry",
+            "environment": [
+                {
+                    "name": "VERBOSE",
+                    "value": "1"
+                },
+                {
+                    "name": "CC",
+                    "value": "clang"
+                }
+            ],
+            "osx": {
+                "MIMode": "lldb"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
             "name": "tapestry (vec)",
             "type": "cppdbg",
             "request": "launch",
@@ -177,11 +206,11 @@
                 },
                 {
                     "name": "CC",
-                    "value": "gcc"
+                    "value": "clang"
                 },
                 {
                     "name": "CXX",
-                    "value": "g++"
+                    "value": "clang++"
                 }
             ],
             "osx": {
@@ -333,74 +362,17 @@
             }
         },
         {
-            "name": "trinity-particles",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/../trinity/debug/particles",
-            "args": [
-                "module.c"
-            ],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../trinity/debug",
-            "environment": [
-            ],
-            "MIMode": "gdb",
-            "presentation": {
-                "hidden": false,
-                "group": "",
-                "order": 1,
-            }
-        },
-        {
-            "name": "trinity-hypercube",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/../trinity/debug/hypercube",
-            "args": [
-                "module.c"
-            ],
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../trinity/debug",
-            "environment": [
-            ],
-            "MIMode": "gdb",
-            "presentation": {
-                "hidden": false,
-                "group": "",
-                "order": 1,
-            }
-        },
-        {
             "name": "orbiter",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../orbiter/debug/orbiter",
+            "program": "${workspaceFolder}/../tapestry/bin/orbiter",
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../orbiter/debug",
+            "cwd": "${workspaceFolder}/../tapestry/share/orbiter",
             "environment": [
                 {
                     "name": "VERBOSE",
                     "value": "1"
                 }
-            ],
-            "MIMode": "gdb",
-            "presentation": {
-                "hidden": false,
-                "group": "",
-                "order": 1,
-            }
-        },
-        {
-            "name": "orbiter-command",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "${workspaceFolder}/../orbiter/debug/command",
-            "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../orbiter/debug",
-            "args": [
-                "-c", "2"
-            ],
-            "environment": [
             ],
             "MIMode": "gdb",
             "presentation": {

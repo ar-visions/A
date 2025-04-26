@@ -303,7 +303,8 @@
 			"tapestry-public": "c",
 			"tapestry-methods": "c",
 			"tapestry": "c",
-			"quanta-flat": "cpp"
+			"quanta-flat": "cpp",
+			"tapestry-init": "c"
 		}
 	}
 }

@@ -1,4 +1,5 @@
 #!/bin/bash
+BUILD_FILE="$PROJECT_PATH/build"
 IMPORT_HEADER="$BUILD_PATH/$DIRECTIVE/import"
 PROJECT_HEADER="$PROJECT_PATH/lib/$PROJECT"
 if [ ! -f "$PROJECT_HEADER" ]; then
@@ -14,10 +15,23 @@ SED=${SED:-sed}
 IM="$IMPORTS"
 
 mkdir -p $GEN_DIR
-cp -p $PROJECT_HEADER $GEN_DIR/
+#cp -p $PROJECT_HEADER $GEN_DIR/
 
-rm -f "$IMPORT_HEADER"
-if [ ! -f "$IMPORT_HEADER" ]; then
+base=$(basename "$PROJECT_HEADER")
+HEADER="$GEN_DIR/$base"
+
+if [ ! -f "$HEADER" ] || [ "$PROJECT_HEADER" -nt "$HEADER" ]; then
+    mkdir -p "$GEN_DIR"
+    {
+        echo "#line 1 \"$PROJECT_HEADER\""
+        cat "$PROJECT_HEADER"
+    } > "$GEN_DIR/temp"
+    mv "$GEN_DIR/temp" "$HEADER"
+fi
+
+
+if [ ! -f "$IMPORT_HEADER" ] || [ "$BUILD_FILE" -nt "$IMPORT_HEADER" ]; then
+    rm -f "$IMPORT_HEADER"
     echo "/* generated import interface */" >> "$IMPORT_HEADER"
     echo "#ifndef _${UPROJECT}_IMPORT_${PROJECT}_" >> "$IMPORT_HEADER"
     echo "#define _${UPROJECT}_IMPORT_${PROJECT}_" >> "$IMPORT_HEADER"

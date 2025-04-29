@@ -330,6 +330,17 @@ pid_t A_last_pid() {
 }
 
 int A_exec(string cmd) {
+    if (starts_with(cmd, "export ")) {
+        string a = mid(cmd, 7, len(cmd) - 7);
+        int i = index_of(a, "=");
+        assert(i >= 1, "invalid syntax");
+        string var   = trim(mid(a, 0, i));
+        string value = trim(mid(a, i + 1, len(a) - i - 1));
+        setenv((cstr)var->chars, (cstr)value->chars, 1);
+        print("export: setting %o to %o", var, value);
+        return 0;
+    }
+
     int pipefd[2];
     pipe(pipefd);
 
@@ -2939,6 +2950,25 @@ path path_change_ext(path a, cstr ext) {
     return res;
 }
 
+path path_app(cstr name) {
+    char exe[PATH_MAX];
+
+#if defined(__APPLE__)
+    uint32_t size = sizeof(exe);
+    if (_NSGetExecutablePath(exe, &size) != 0) return path(""); // fail safe
+#else
+    ssize_t len = readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+    if (len == -1) return path(""); // fail safe
+    exe[len] = '\0';
+#endif
+
+    cstr last = strrchr(exe, '/');
+    if (last) *last = '\0';
+    path res = form(path, "%s/../share/%s/", exe, name);
+    cd(res);
+    return res;
+}
+
 /// public statics are not 'static'
 path path_cwd(sz size) {
     path a = new(path);
@@ -2980,6 +3010,7 @@ string evaluate(string w, map environment) {
     if (!strstr(w->chars, "$"))
         return w;
 
+    if (!environment) environment = map();
     string env = serialize_environment(environment, true);
     string esc = escape(w);
     print("escaped: %o", esc);

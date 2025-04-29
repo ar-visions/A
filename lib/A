@@ -2050,6 +2050,7 @@ declare_class(string)
     i_method    (X,Y, public, bool,   move, path) \
     i_method    (X,Y, public, path,   latest_modified, ARef) \
     i_method    (X,Y, public, i64,    modified_time) \
+    s_method    (X,Y, public, path,   app, cstr) \
     s_method    (X,Y, public, path,   cwd, sz) \
     s_method    (X,Y, public, path,   temp, symbol) \
     i_ctr       (X,Y, public, string) \

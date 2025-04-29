@@ -4,12 +4,12 @@ release
 target
 Cargo.lock
 bin
-lib
 tokens
 checkout
 *.o
 tapestry/tapestry
 tapestry/include
+tapestry/lib
 !tapestry/include/A
 !tapestry/include/A-*
 tapestry/share

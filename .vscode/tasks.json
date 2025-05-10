@@ -132,6 +132,29 @@
             }
         },
         {
+            "label": "build-ion",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../ion"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "command": "make",
+            "windows": {
+                "command": "msbuild ion.sln /t:ion"
+            }
+        },
+        {
             "label": "build-tapestry",
             "type": "shell",
 			"options": {

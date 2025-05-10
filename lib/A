@@ -12,6 +12,7 @@
 #include <libgen.h>
 #include <unistd.h>
 #include <signal.h>
+#include <pthread.h>
 
 /// end-trim
 
@@ -1922,6 +1923,131 @@ declare_class(list)
 declare_enum(OPType)
 
 forward(path)
+
+
+#define Key_schema(X, YY) \
+    enum_value_v(X, YY, Undefined,      0) \
+    enum_value_v(X, YY, Space,         32) \
+    enum_value_v(X, YY, Apostrophe,    39) \
+    enum_value_v(X, YY, Comma,         44) \
+    enum_value_v(X, YY, Minus,         45) \
+    enum_value_v(X, YY, Period,        46) \
+    enum_value_v(X, YY, Slash,         47) \
+    enum_value_v(X, YY, K0,            48) \
+    enum_value_v(X, YY, K1,            49) \
+    enum_value_v(X, YY, K2,            50) \
+    enum_value_v(X, YY, K3,            51) \
+    enum_value_v(X, YY, K4,            52) \
+    enum_value_v(X, YY, K5,            53) \
+    enum_value_v(X, YY, K6,            54) \
+    enum_value_v(X, YY, K7,            55) \
+    enum_value_v(X, YY, K8,            56) \
+    enum_value_v(X, YY, K9,            57) \
+    enum_value_v(X, YY, SemiColon,     59) \
+    enum_value_v(X, YY, Equal,         61) \
+    enum_value_v(X, YY, A,             65) \
+    enum_value_v(X, YY, B,             66) \
+    enum_value_v(X, YY, C,             67) \
+    enum_value_v(X, YY, D,             68) \
+    enum_value_v(X, YY, E,             69) \
+    enum_value_v(X, YY, F,             70) \
+    enum_value_v(X, YY, G,             71) \
+    enum_value_v(X, YY, H,             72) \
+    enum_value_v(X, YY, I,             73) \
+    enum_value_v(X, YY, J,             74) \
+    enum_value_v(X, YY, K,             75) \
+    enum_value_v(X, YY, L,             76) \
+    enum_value_v(X, YY, M,             77) \
+    enum_value_v(X, YY, N,             78) \
+    enum_value_v(X, YY, O,             79) \
+    enum_value_v(X, YY, P,             80) \
+    enum_value_v(X, YY, Q,             81) \
+    enum_value_v(X, YY, R,             82) \
+    enum_value_v(X, YY, S,             83) \
+    enum_value_v(X, YY, T,             84) \
+    enum_value_v(X, YY, U,             85) \
+    enum_value_v(X, YY, V,             86) \
+    enum_value_v(X, YY, W,             87) \
+    enum_value_v(X, YY, X,             88) \
+    enum_value_v(X, YY, Y,             89) \
+    enum_value_v(X, YY, Z,             90) \
+    enum_value_v(X, YY, LeftBracket,   91) \
+    enum_value_v(X, YY, BackSlash,     92) \
+    enum_value_v(X, YY, RightBracket,  93) \
+    enum_value_v(X, YY, GraveAccent,   96) \
+    enum_value_v(X, YY, World1,       161) \
+    enum_value_v(X, YY, World2,       162) \
+    enum_value_v(X, YY, Escape,       256) \
+    enum_value_v(X, YY, Enter,        257) \
+    enum_value_v(X, YY, Tab,          258) \
+    enum_value_v(X, YY, Backspace,    259) \
+    enum_value_v(X, YY, Insert,       260) \
+    enum_value_v(X, YY, Delete,       261) \
+    enum_value_v(X, YY, Right,        262) \
+    enum_value_v(X, YY, Left,         263) \
+    enum_value_v(X, YY, Down,         264) \
+    enum_value_v(X, YY, Up,           265) \
+    enum_value_v(X, YY, PageUp,       266) \
+    enum_value_v(X, YY, PageDown,     267) \
+    enum_value_v(X, YY, Home,         268) \
+    enum_value_v(X, YY, End,          269) \
+    enum_value_v(X, YY, CapsLock,     280) \
+    enum_value_v(X, YY, ScrollLock,   281) \
+    enum_value_v(X, YY, NumLock,      282) \
+    enum_value_v(X, YY, PrintScreen,  283) \
+    enum_value_v(X, YY, Pause,        284) \
+    enum_value_v(X, YY, F1,           290) \
+    enum_value_v(X, YY, F2,           291) \
+    enum_value_v(X, YY, F3,           292) \
+    enum_value_v(X, YY, F4,           293) \
+    enum_value_v(X, YY, F5,           294) \
+    enum_value_v(X, YY, F6,           295) \
+    enum_value_v(X, YY, F7,           296) \
+    enum_value_v(X, YY, F8,           297) \
+    enum_value_v(X, YY, F9,           298) \
+    enum_value_v(X, YY, F10,          299) \
+    enum_value_v(X, YY, F11,          300) \
+    enum_value_v(X, YY, F12,          301) \
+    enum_value_v(X, YY, F13,          302) \
+    enum_value_v(X, YY, F14,          303) \
+    enum_value_v(X, YY, F15,          304) \
+    enum_value_v(X, YY, F16,          305) \
+    enum_value_v(X, YY, F17,          306) \
+    enum_value_v(X, YY, F18,          307) \
+    enum_value_v(X, YY, F19,          308) \
+    enum_value_v(X, YY, F20,          309) \
+    enum_value_v(X, YY, F21,          310) \
+    enum_value_v(X, YY, F22,          311) \
+    enum_value_v(X, YY, F23,          312) \
+    enum_value_v(X, YY, F24,          313) \
+    enum_value_v(X, YY, F25,          314) \
+    enum_value_v(X, YY, Kp0,          320) \
+    enum_value_v(X, YY, Kp1,          321) \
+    enum_value_v(X, YY, Kp2,          322) \
+    enum_value_v(X, YY, Kp3,          323) \
+    enum_value_v(X, YY, Kp4,          324) \
+    enum_value_v(X, YY, Kp5,          325) \
+    enum_value_v(X, YY, Kp6,          326) \
+    enum_value_v(X, YY, Kp7,          327) \
+    enum_value_v(X, YY, Kp8,          328) \
+    enum_value_v(X, YY, Kp9,          329) \
+    enum_value_v(X, YY, KpDecimal,    330) \
+    enum_value_v(X, YY, KpDivide,     331) \
+    enum_value_v(X, YY, KpMultiply,   332) \
+    enum_value_v(X, YY, KpSubtract,   333) \
+    enum_value_v(X, YY, KpAdd,        334) \
+    enum_value_v(X, YY, KpEnter,      335) \
+    enum_value_v(X, YY, KpEqual,      336) \
+    enum_value_v(X, YY, LeftShift,    340) \
+    enum_value_v(X, YY, LeftControl,  341) \
+    enum_value_v(X, YY, LeftAlt,      342) \
+    enum_value_v(X, YY, LeftSuper,    343) \
+    enum_value_v(X, YY, RightShift,   344) \
+    enum_value_v(X, YY, RightControl, 345) \
+    enum_value_v(X, YY, RightAlt,     346) \
+    enum_value_v(X, YY, RightSuper,   347) \
+    enum_value_v(X, YY, Menu,         348)
+declare_enum(Key)
 /*
 #define buffer_schema(X,Y,...) \
     i_ctr (X,Y, public,   path) \
@@ -2076,6 +2202,7 @@ declare_enum(level)
     i_prop      (X,Y, public,  sz,         hsize) \
     i_prop      (X,Y, public,  bool,       unmanaged) \
     i_method    (X,Y, public,  none,       set,        object, object) \
+    i_method    (X,Y, public,  item,       lookup,     object) \
     i_method    (X,Y, public,  item,       fetch,      object) \
     i_method    (X,Y, public,  bool,       rm,         object) \
     i_method    (X,Y, public,  bool,       contains,   object) \
@@ -2134,6 +2261,28 @@ declare_class(fn)
     i_override(X,Y,   cast,   bool) \
     i_override(X,Y,   method, copy)
 declare_class(string)
+
+
+#define watch_schema(X,Y,...) \
+    i_prop      (X,Y, public, path, res) \
+    i_prop      (X,Y, public, ARef, callback) \
+    i_prop      (X,Y, public, ARef, argument) \
+    i_method    (X,Y, public, none, pause) \
+    i_method    (X,Y, public, none, start) \
+    i_override  (X,Y, method, init)
+declare_class(watch)
+
+#define unit_schema(X,Y,...) \
+    i_ctr       (X,Y, public, string) \
+    i_prop      (X,Y, public, f64,   value) \
+    i_prop      (X,Y, public, i32,   unit) \
+    i_prop      (X,Y, public, AType, type)
+declare_class(unit)
+
+#define mutex_schema(X,Y,...) \
+    i_ctr       (X,Y, public, string) \
+    i_prop      (X,Y, public, pthread_mutex_t, mtx)
+declare_class(mutex)
 
 #define path_schema(X,Y,...) \
     i_method    (X,Y, public, bool,   exists) \

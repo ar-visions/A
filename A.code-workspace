@@ -318,7 +318,12 @@
 			"expected": "cpp",
 			"__functional_base": "cpp",
 			"__functional_base_03": "c",
-			"sk": "cpp"
+			"sk": "cpp",
+			"sk-methods": "c",
+			"__std_stream": "c",
+			"ion": "c",
+			"ion-init": "c",
+			"ion-methods": "c"
 		}
 	}
 }

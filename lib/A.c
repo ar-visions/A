@@ -1,8 +1,4 @@
-#include <A-intern>
-#include <A-public>
-#include <A>
-#include <A-init>
-#include <A-reserve>
+#include <import>
 #include <ffi.h>
 #undef bool
 #include <sys/stat.h>
@@ -2005,6 +2001,10 @@ bool map_rm(map a, object key) {
     return false;
 }
 
+item map_lookup(map a, object key) {
+    return lookup(a->hmap, key);
+}
+
 item map_fetch(map a, object key) {
     num prev = a->hmap->count;
     item i = fetch(a->hmap, key);
@@ -3624,6 +3624,59 @@ object parse(cstr s, AType schema) {
     return parse_object(s, schema, null, null);
 }
 
+none watch_init(watch a) {
+    /// todo: a-perfectly-good-watch ... dont-throw-away
+}
+
+none watch_dealloc(watch a) {
+    pause(a);
+}
+
+none watch_pause(watch a) {
+}
+
+none watch_start(watch a) {
+}
+
+unit unit_with_string(unit a, string s) {
+    s     = trim(s);
+    sz ln = len(s);
+    if (ln == 0)
+        return a;
+
+    AType  enum_type = isa(a)->meta.meta_0;
+    verify(enum_type, "not a meta-type -- not turtle enough for turtle club");
+    a->type = enum_type;
+    
+    bool al = isalpha(s->chars[ln - 1]);
+    if (!al) {
+        verify(!isalpha(s->chars), "expected single value when end is not alpha numeric");
+
+    } else {
+        string u = null;
+        for (int i = ln - 1; i >= 0; i--) {
+            bool al = isalpha(s->chars[i]);
+            if (!al) {
+                u        = mid(s, i + 1, ln - (i + 1));
+                a->unit  = A_enum_value(enum_type, u->chars);
+                string r = trim(mid(s, 0, i));
+                verify (sscanf(r->chars, "%lf", &a->value) == 1,
+                    "unit parsing for %s failed: value is %s",
+                    enum_type->name, r->chars);
+
+                break;
+            }
+        }
+        if (!u) {
+            a->unit  = A_enum_value(enum_type, s->chars);
+            a->value = 0;
+        }
+    }
+    return a;
+}
+
+define_class(watch)
+
 define_class(message)
 
 define_class(A)
@@ -3686,5 +3739,6 @@ define_class(AF)
 define_meta(ATypes,           array, AType)
 define_meta(array_map,        array, map)
 define_meta(array_string,     array, string)
+
 
 

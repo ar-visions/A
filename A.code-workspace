@@ -29,6 +29,14 @@
 			"path": "../gltf"
 		},
 		{
+			"name": "sk",
+			"path": "../sk"
+		},
+		{
+			"name": "img",
+			"path": "../img"
+		},
+		{
 			"name": "trinity",
 			"path": "../trinity"
 		},
@@ -308,7 +316,9 @@
 			"orbiter": "c",
 			"orbiter-init": "c",
 			"expected": "cpp",
-			"__functional_base": "cpp"
+			"__functional_base": "cpp",
+			"__functional_base_03": "c",
+			"sk": "cpp"
 		}
 	}
 }

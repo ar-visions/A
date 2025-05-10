@@ -74,7 +74,7 @@ struct type_member_t;
 struct _array;
 struct _A_f;
 
-#define a(...) array_of(__VA_ARGS__)
+#define a(...) array_of(__VA_ARGS__ __VA_OPT__(,) null)
 
 
 /// our A-type classes have many types of methods
@@ -204,7 +204,7 @@ typedef bool(*global_init_fn)();
 #define   enum_value_v_IMPL(E, N, VAL) \
     E##_type.members[E## _type.member_count].name     = #N; \
     E##_type.members[E## _type.member_count].offset   = E##_##N;\
-    E##_type.members[E## _type.member_count].type     = &i32_type; \
+    E##_type.members[E## _type.member_count].type     = (AType)&i32_type; \
     E##_type.members[E## _type.member_count].member_type = A_MEMBER_ENUMV; \
     E##_type.member_count++;
 
@@ -214,7 +214,7 @@ typedef bool(*global_init_fn)();
 #define   enum_value_vargs_IMPL(E, N, VAL,...) \
     E##_type.members[E## _type.member_count].name     = #N; \
     E##_type.members[E## _type.member_count].offset   = E##_##N;\
-    E##_type.members[E## _type.member_count].type     = &i32_type; \
+    E##_type.members[E## _type.member_count].type     = (AType)&i32_type; \
     E##_type.members[E## _type.member_count].member_type = A_MEMBER_ENUMV; \
     E##_type.members[E## _type.member_count].args     = (meta_t) { emit_types(__VA_ARGS__) }; \
     E##_type.member_count++;
@@ -431,6 +431,19 @@ typedef bool(*global_init_fn)();
 #define EXPAND_ARGS2(...)            EXPAND_ARGS_HELPER2(COUNT_ARGS(__VA_ARGS__), __VA_ARGS__)
 #define EXPAND_ARGS_HELPER2(N, ...)  combine_tokens(EXPAND_ARGS2_, N)(__VA_ARGS__)
 
+#define   i_ctr_interface_INST(X, ARG)
+#define   i_ctr_interface_INST_EXTERN(X, ARG)
+#define   i_ctr_interface_DECL(X, ARG)
+#define   i_ctr_interface_GENERICS(X, ARG)
+#define   i_ctr_interface_INIT(X, ARG) \
+    member_validate[validate_count++] = #ARG;
+#define   i_ctr_interface_PROTO(X, ARG)
+#define   i_ctr_interface_METHOD(X, ARG)
+
+
+
+
+
 
 #define   i_ctr_public_INST(X, ARG)
 #define   i_ctr_public_INST_EXTERN(X, ARG)
@@ -448,6 +461,7 @@ typedef bool(*global_init_fn)();
     X##_type.member_count++;  
 #define   i_ctr_public_PROTO(X, ARG)
 #define   i_ctr_public_METHOD(X, ARG)      X (*with_##ARG)(X, ARG);
+
 #define   i_ctr_intern_INST(X, ARG)
 #define   i_ctr_intern_INST_EXTERN(X, ARG)
 #define   i_ctr_intern_INIT(X, ARG) 
@@ -455,7 +469,22 @@ typedef bool(*global_init_fn)();
 #define   i_ctr_intern_METHOD(X, ARG)
 #define   i_ctr(X, Y, T, ARG)              i_ctr_##T##_##Y(X, ARG)
 
+#define   i_prop_opaque_INST(X, R, N)         R N;
+#define   i_prop_opaque_INST_EXTERN(X, R, N)  i_prop_public_INST(X, R, N)
+#define   i_prop_opaque_DECL(X, R, N)
+#define   i_prop_opaque_GENERICS(X, R, N)
+#define   i_prop_opaque_INIT(X, R, N)
+#define   i_prop_opaque_PROTO(X, R, N)  
+#define   i_prop_opaque_METHOD(X, R, N)
 
+#define   i_prop_interface_INST(X, R, N)
+#define   i_prop_interface_INST_EXTERN(X, R, N)
+#define   i_prop_interface_DECL(X, R, N)
+#define   i_prop_interface_GENERICS(X, R, N)
+#define   i_prop_interface_INIT(X, R, N) \
+    member_validate[validate_count++] = #N;
+#define   i_prop_interface_PROTO(X, R, N)  
+#define   i_prop_interface_METHOD(X, R, N)
 
 #define   i_prop_public_INST(X, R, N)         R N;
 #define   i_prop_public_INST_EXTERN(X, R, N)  i_prop_public_INST(X, R, N)
@@ -529,11 +558,11 @@ typedef bool(*global_init_fn)();
 
 
 #define   i_prop_public_INST_of(X, R, N, M2) R N;
-#define   i_prop_public_INST_EXTERN_of(X, R, N, M2)
+#define   i_prop_public_INST_EXTERN_of(X, R, N, M2) R N;
 #define   i_prop_public_DECL_of(X, R, N, M2)
 #define   i_prop_public_GENERICS_of(X, R, N, M2)
 #define   i_prop_public_INIT_of(X, R, N, M2) \
-    X##_type.members[X##_type.member_count].name     = #M2; \
+    X##_type.members[X##_type.member_count].name     = #N; \
     X##_type.members[X##_type.member_count].offset   = offsetof(struct _##X, N); \
     X##_type.members[X##_type.member_count].type     = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].args     = (meta_t) { 1, (AType)&M2##_type };; \
@@ -611,6 +640,13 @@ typedef bool(*global_init_fn)();
 #define i_prop(X, Y, T, R, N, ...) \
     CONCAT(i_prop_, ARG_COUNT_NO_ZERO(__VA_ARGS__))(X, Y, T, R, N __VA_OPT__(,) __VA_ARGS__)
 
+#define   i_vprop_interface_INST(X, R, N)
+#define   i_vprop_interface_INST_EXTERN(X, R, N)
+#define   i_vprop_interface_DECL(X, R, N)
+#define   i_vprop_interface_GENERICS(X, R, N) \
+    member_validate[validate_count++] = #N;
+#define   i_vprop_interface_PROTO(X, R, N)  
+#define   i_vprop_interface_METHOD(X, R, N)
 
 
 #define   i_vprop_public_INST(X, R, N)         R* N;
@@ -674,6 +710,17 @@ typedef bool(*global_init_fn)();
 */
 
 #define i_attr(X, Y, ENUM, VALUE, ...) i_attr_##Y(X, ENUM, VALUE, __VA_ARGS__)
+
+
+
+#define   i_array_interface_INST(X, R, S, N)
+#define   i_array_interface_INST_EXTERN(X, R, S, N)
+#define   i_array_interface_DECL(X, R, S, N)
+#define   i_array_interface_GENERICS(X, R, S, N)
+#define   i_array_interface_INIT(X, R, S, N) \
+    member_validate[validate_count++] = #N;
+#define   i_array_interface_PROTO(X, R, S, N)  
+#define   i_array_interface_METHOD(X, R, S, N)
 
 
 
@@ -860,6 +907,15 @@ typedef bool(*global_init_fn)();
 
 
 
+#define   s_method_interface_INST(X, R, N, ...)
+#define   s_method_interface_INST_EXTERN(X, R, N, ...)
+#define   s_method_interface_DECL(X, R, N, ...)
+#define   s_method_interface_GENERICS(X, R, N, ...)
+#define   s_method_interface_INIT(X, R, N, ...) \
+    member_validate[validate_count++] = #N;
+#define   s_method_interface_PROTO(X, R, N, ...)
+#define   s_method_interface_METHOD(X, R, N, ...)
+
 
 
 #define   s_method_public_INST(X, R, N, ...)
@@ -885,6 +941,16 @@ typedef bool(*global_init_fn)();
 #define   s_method_intern_PROTO(X, R, N, ...)
 #define   s_method_intern_METHOD(X, R, N, ...)    
 #define   s_method(X, Y, T, R, N, ...)            s_method_##T##_##Y(X, R, N, ##__VA_ARGS__)
+
+
+#define   i_method_interface_INST(X, R, N, ...)
+#define   i_method_interface_INST_EXTERN(X, R, N, ...)
+#define   i_method_interface_DECL(X, R, N, ...)
+#define   i_method_interface_GENERICS(X, R, N, ...)
+#define   i_method_interface_INIT(X, R, N, ...) \
+    member_validate[validate_count++] = #N;
+#define   i_method_interface_PROTO(X, R, N, ...)
+#define   i_method_interface_METHOD(X, R, N, ...)
 
 #define   i_method_public_INST(    X, R, N, ...)
 #define   i_method_public_INST_EXTERN(  X, R, N, ...)
@@ -1000,6 +1066,15 @@ CPU_Caps detect_cpu_caps();
 #define   i_SIMD\
 (X, Y, R, ARCH, N, ...) i_SIMD_##ARCH##_##Y(X, R, N, X, ## __VA_ARGS__)
 
+#define   i_operator_interface_INST(X, R, N, ARG)
+#define   i_operator_interface_INST_EXTERN(X, R, N, ARG)
+#define   i_operator_interface_DECL(X, R, N, ARG)
+#define   i_operator_interface_GENERICS(X, R, N, ARG)
+#define   i_operator_interface_INIT(X, R, N, ARG) \
+    member_validate[validate_count] = #N;
+#define   i_operator_interface_PROTO(X, R, N, ARG)
+#define   i_operator_interface_METHOD(X, R, N, ARG)
+
 #define   i_operator_public_INST(X, R, N, ARG)
 #define   i_operator_public_INST_EXTERN(X, R, N, ARG)
 #define   i_operator_public_DECL(X, R, N, ARG)
@@ -1025,6 +1100,17 @@ CPU_Caps detect_cpu_caps();
 #define   i_operator_intern_METHOD(X, R, N, ARG)    
 #define   i_operator(X, Y, T, R, N, ARG)            i_operator_##T##_##Y(X, R, N, ARG)
 
+
+#define   i_cast_interface_INST(X, R)
+#define   i_cast_interface_INST_EXTERN(X, R)
+#define   i_cast_interface_DECL(X, R)
+#define   i_cast_interface_GENERICS(X, R)
+#define   i_cast_interface_INIT(X, R) \
+    member_validate[validate_count++] = "cast_" #R;
+#define   i_cast_interface_PROTO(X, R)
+#define   i_cast_interface_METHOD(X, R)
+
+
 #define   i_cast_public_INST(X, R)
 #define   i_cast_public_INST_EXTERN(X, R)
 #define   i_cast_public_DECL(X, R)
@@ -1049,11 +1135,22 @@ CPU_Caps detect_cpu_caps();
 #define   i_cast_intern_METHOD(X, R)        
 #define   i_cast(X, Y, T, R)                i_cast_##T##_##Y(X, R)
 
-#define   i_index_public_INST(X, R, ...)
-#define   i_index_public_INST_EXTERN(X, R, ...)
-#define   i_index_public_DECL(X, R, ...)
-#define   i_index_public_GENERICS(X, R, ...)
-#define   i_index_public_INIT(X, R, ...) \
+
+#define i_index_interfacae_INST(X, R, ...)
+#define i_index_interfacae_INST_EXTERN(X, R, ...)
+#define i_index_interfacae_DECL(X, R, ...)
+#define i_index_interfacae_GENERICS(X, R, ...)
+#define i_index_interfacae_INIT(X, R, ...) \
+    member_validate[validate_count++] = "index_" #R;
+#define i_index_interface_PROTO(X, R, ...)
+#define i_index_interface_METHOD(X, R, ...)
+
+
+#define i_index_public_INST(X, R, ...)
+#define i_index_public_INST_EXTERN(X, R, ...)
+#define i_index_public_DECL(X, R, ...)
+#define i_index_public_GENERICS(X, R, ...)
+#define i_index_public_INIT(X, R, ...) \
     X##_type.emit_idx_symbol(index, __VA_ARGS__) = & emit_idx_symbol(X ## _index, __VA_ARGS__); \
     X##_type.members[X##_type.member_count].name        = stringify(emit_idx_symbol(index, __VA_ARGS__)); \
     X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(X, __VA_ARGS__) }; \
@@ -1333,7 +1430,7 @@ void        A_lazy_init(global_init_fn fn);
     _Pragma("pack(pop)") \
     static __attribute__((constructor)) bool global_##E() { \
         memset(&E ## _redirect, 0, sizeof(E ## _redirect)); \
-        E ## _redirect.type = &E ## _type; \
+        E ## _redirect.type = (AType)&E ## _type; \
         E ## _f* type_ref = &E ## _type; \
         A_f* base_ref     = &A_type; \
         if ((AType)type_ref != (AType)base_ref && base_ref->size == 0) { \
@@ -1532,7 +1629,7 @@ void* primitive_ffi_arb(AType);
 /// alias lets use tag types with an array of types, enabling 
 /// design-time and runtime template-like functionality, with 
 /// permutation of the class-type and instance-type
-#define define_arb(TYPE, BASE, TYPE_SZ, TRAIT, VMEMBER_COUNT, VMEMBER_TYPE, ...) \
+#define define_arb(TYPE, BASE, TYPE_SZ, TRAIT, VMEMBER_COUNT, VMEMBER_TYPE, POST_PUSH, ...) \
     _Pragma("pack(push, 1)") \
     A       TYPE##_head; \
     TYPE##_f  TYPE##_type; \
@@ -1540,6 +1637,8 @@ void* primitive_ffi_arb(AType);
     static __attribute__((constructor)) bool Aglobal_##TYPE() { \
         TYPE##_f* type_ref = &TYPE##_type; \
         BASE##_f* base_ref = &BASE##_type; \
+        int validate_count = 0; \
+        char* member_validate[256] = {}; \
         if ((AType)type_ref == (AType)base_ref) \
             type_ref->name = #TYPE; \
         if ((AType)type_ref != (AType)base_ref && (!base_ref->traits && !base_ref->size)) { \
@@ -1561,6 +1660,7 @@ void* primitive_ffi_arb(AType);
             type_ref->arb       = primitive_ffi_arb(typeid(TYPE)); \
             TYPE##_schema( TYPE, INIT, __VA_ARGS__ ) \
             A_push_type((AType)type_ref);    \
+            POST_PUSH; \
             return true;                     \
         } \
     } \
@@ -1616,20 +1716,25 @@ void* primitive_ffi_arb(AType);
     }
 
 #define define_mod(A0, A1, ...) \
-    define_arb(A0, A1, sizeof(struct _##A0), 0, 0, null, __VA_ARGS__)
+    define_arb(A0, A1, sizeof(struct _##A0), 0, 0, null, ({ \
+        for (int i = 0; i < validate_count; i++) { \
+            type_member_t* implemented = A_member((AType)type_ref, (enum A_MEMBER)0, member_validate[i], true); \
+            verify(implemented != null, "%s not implemented", member_validate[i]); \
+        }\
+    }), __VA_ARGS__)
 
 #define define_class(A0, ...) \
-    define_arb(A0, A, sizeof(struct _##A0), 0, 0, null, __VA_ARGS__)
+    define_arb(A0, A, sizeof(struct _##A0), 0, 0, null, ({}), __VA_ARGS__)
 
 #define define_struct(A0, ...) \
-    define_arb(A0, A, sizeof(struct _##A0), A_TRAIT_STRUCT, 0, null, __VA_ARGS__)
+    define_arb(A0, A, sizeof(struct _##A0), A_TRAIT_STRUCT, 0, null, ({}), __VA_ARGS__)
 
 /// primitives dont have construct/method support, but its abstract does
 #define define_primitive(X, Y, traits, ...) \
-    define_arb(X, Y, sizeof(X), traits | A_TRAIT_PRIMITIVE, 0, null, __VA_ARGS__)
+    define_arb(X, Y, sizeof(X), traits | A_TRAIT_PRIMITIVE, 0, null, ({}), __VA_ARGS__)
 
 #define define_abstract(X, ...) \
-    define_arb(X, A, 0, A_TRAIT_ABSTRACT, 0, null, __VA_ARGS__)
+    define_arb(X, A, 0, A_TRAIT_ABSTRACT, 0, null, ({}), __VA_ARGS__)
 
 forward(string)
 struct _sz { i64 value; };
@@ -2066,7 +2171,7 @@ declare_mod(path, string)
 
 #define line_schema(X,Y,...) \
     i_prop(X,Y, public, i32, indent) \
-    i_prop(X,Y, public, array, text, of, string)
+    i_prop(X,Y, public, array, text)
 #undef line_intern
 #define line_intern(X,Y,...) line_schema(X,Y,__VA_ARGS__)
 declare_class(line)

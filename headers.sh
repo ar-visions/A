@@ -47,6 +47,14 @@ if [ ! -f "$IMPORT_HEADER" ] || [ "$BUILD_FILE" -nt "$IMPORT_HEADER" ]; then
         fi
     done
 
+    for import in $IM; do
+        if [ "$import" != "$PROJECT" ]; then
+            if [ -f "$TAPESTRY/include/${import}-methods" ]; then
+                echo "#include <${import}>" >> "$IMPORT_HEADER"
+            fi
+        fi
+    done
+
     echo "#include <${PROJECT}-intern> // line 52 uses {PROJECT}" >> "$IMPORT_HEADER"
     echo "#include <${PROJECT}>" >> "$IMPORT_HEADER"
     echo "#include <${PROJECT}-methods>" >> "$IMPORT_HEADER"
@@ -59,6 +67,15 @@ if [ ! -f "$IMPORT_HEADER" ] || [ "$BUILD_FILE" -nt "$IMPORT_HEADER" ]; then
             fi
         fi
     done
+
+    for import in $IM; do
+        if [ "$import" != "$PROJECT" ]; then
+            if [ -f "$TAPESTRY/include/${import}-methods" ]; then
+                echo "#include <${import}-methods> // from {import}" >> "$IMPORT_HEADER"
+            fi
+        fi
+    done
+
     echo "#include <${PROJECT}-init>" >> "$IMPORT_HEADER"
     echo "" >> "$IMPORT_HEADER"
     echo "#endif" >> "$IMPORT_HEADER"
@@ -194,9 +211,9 @@ if [ ! -f "$PUBLIC_HEADER" ] || [ "$PROJECT_HEADER" -nt "$PUBLIC_HEADER" ]; then
         echo >> "$PUBLIC_HEADER"
     done
 
-    echo "#include <${PROJECT}>"                >> "$PUBLIC_HEADER" ; \
+    #echo "#include <${PROJECT}>"                >> "$PUBLIC_HEADER" ; \
     #echo "#include <${PROJECT}-init>"           >> "$PUBLIC_HEADER" ; \
-    echo "#include <${PROJECT}-methods>"        >> "$PUBLIC_HEADER" ; \
+    #echo "#include <${PROJECT}-methods>"        >> "$PUBLIC_HEADER" ; \
     echo "#endif /* _${UPROJECT}_PUBLIC_ */"    >> "$PUBLIC_HEADER"
 fi
 

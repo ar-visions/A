@@ -591,7 +591,7 @@ void array_operator__assign_sub(array a, num b) {
 
 object array_first(array a) {
     assert(a->len, "no items");
-    return a->elements[a->len - 1];
+    return a->elements[0];
 }
 
 object array_last(array a) {
@@ -898,7 +898,7 @@ none A_untap(symbol f) {
 type_member_t* A_member(AType type, enum A_MEMBER member_type, symbol name, bool poly) {
     for (num i = 0; i < type->member_count; i++) {
         type_member_t* mem = &type->members[i];
-        if (mem->member_type & member_type && strcmp(mem->name, name) == 0)
+        if ((member_type == 0) || (mem->member_type & member_type) && strcmp(mem->name, name) == 0)
             return mem;
     }
     if (poly && type->parent_type && type->parent_type != typeid(A))
@@ -3398,9 +3398,9 @@ string parse_json_string(cstr origin, cstr* remainder) {
     return res;
 }
 
-object parse_array(cstr s, AType schema, cstr* remainder);
+object parse_array(cstr s, AType schema, AType meta, cstr* remainder);
 
-object parse_object(cstr input, AType schema, cstr* remainder) {
+object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) {
     cstr   scan   = ws(input);
     cstr   origin = null;
     object res    = null;
@@ -3419,7 +3419,7 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
         return A_bool(is_true); 
     }
     else if (*scan == '[') {
-        return parse_array (scan, schema, remainder);
+        return parse_array (scan, schema, meta_type, remainder);
     }
     
     else if ((*scan >= '0' && *scan <= '9') || *scan == '-') {
@@ -3492,7 +3492,7 @@ object parse_object(cstr input, AType schema, cstr* remainder) {
             if (required && contains(required, name)) {
                 rm(required, name);
             }
-            object value = parse_object(scan, member ? member->type : null, &scan); /// issue with parsing a map type (attributes)
+            object value = parse_object(scan, member ? member->type : null, member ? member->args.meta_0 : null, &scan); /// issue with parsing a map type (attributes)
             if (is_type) {
                 string type_name = value;
                 use_schema = A_find_type(type_name->chars);
@@ -3543,7 +3543,7 @@ array parse_array_objects(cstr* s, AType element_type) {
             scan = ws(&scan[1]);
             break;
         }
-        object a = parse_object(scan, element_type, &scan);
+        object a = parse_object(scan, element_type, null, &scan);
         push(res, a);
         scan = ws(scan);
         if (scan && scan[0] == ',') {
@@ -3555,13 +3555,13 @@ array parse_array_objects(cstr* s, AType element_type) {
     return res;
 }
 
-object parse_array(cstr s, AType schema, cstr* remainder) {
+object parse_array(cstr s, AType schema, AType meta_type, cstr* remainder) {
     cstr scan = ws(s);
     verify(*scan == '[', "expected array '['");
     scan = ws(&scan[1]);
     object res = null;
-    if (!schema || (schema->src == typeid(array))) {
-        AType element_type = schema ? schema->meta.meta_0 : typeid(object);
+    if (!schema || (schema == typeid(array) || schema->src == typeid(array))) {
+        AType element_type = meta_type ? meta_type : (schema ? schema->meta.meta_0 : typeid(object));
         res = parse_array_objects(&scan, element_type);
     } else if (schema->vmember_type == typeid(i64)) { // should support all vector types of i64 (needs type bounds check with vmember_count)
         array arb = parse_array_objects(&scan, typeid(i64));
@@ -3621,7 +3621,7 @@ object parse_array(cstr s, AType schema, cstr* remainder) {
 
 // root will apply to objects contained within an array, or a top level object
 object parse(cstr s, AType schema) {
-    return parse_object(s, schema, null);
+    return parse_object(s, schema, null, null);
 }
 
 define_class(message)

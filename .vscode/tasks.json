@@ -58,6 +58,80 @@
             }
         },
         {
+            "label": "build-hyperspace",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../hyperspace"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "windows": {
+                "command": "msbuild silver.sln /t:hyperspace"
+            },
+            "osx": {
+                "command": "make"
+            },
+            "linux": {
+                "command": "make"
+            }
+        },
+        {
+            "label": "build-img",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../img"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "command": "make",
+            "windows": {
+                "command": "msbuild img.sln /t:img"
+            }
+        },
+        {
+            "label": "build-sk",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../sk"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "command": "make",
+            "windows": {
+                "command": "msbuild sk.sln /t:sk"
+            }
+        },
+        {
             "label": "build-tapestry",
             "type": "shell",
 			"options": {

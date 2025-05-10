@@ -248,6 +248,56 @@
             }
         },
         {
+            "name": "tapestry (ai)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../tapestry/bin/tapestry",
+            "args": [
+                "/home/kalen/src/ai"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../ai",
+            "environment": [
+                {
+                    "name": "CC",
+                    "value": "clang"
+                }
+            ],
+            "osx": {
+                "MIMode": "lldb"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
+            "name": "tapestry (hyperspace)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/../tapestry/bin/tapestry",
+            "args": [
+                "/home/kalen/src/hyperspace"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/../hyperspace",
+            "environment": [
+                {
+                    "name": "CC",
+                    "value": "clang"
+                }
+            ],
+            "osx": {
+                "MIMode": "lldb"
+            },
+            "presentation": {
+                "hidden": false,
+                "group": "",
+                "order": 1,
+            }
+        },
+        {
             "name": "silver",
             "type": "cppdbg",
             "request": "launch",
@@ -326,15 +376,12 @@
             }
         },
         {
-            "name": "hyperspace",
+            "name": "hyperspace-train",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/../hyperspace/debug/hyperspace-test",
-            "args": [
-                "module.c"
-            ],
+            "program": "${workspaceFolder}/../hyperspace/debug/bin/hyperspace-train",
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../hyperspace/debug",
+            "cwd": "${workspaceFolder}/../hyperspace/share",
             "environment": [
             ],
             "MIMode": "gdb",
@@ -351,7 +398,7 @@
             "program": "${workspaceFolder}/../ai/debug/ai-test",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/../hyperspace/res",
+            "cwd": "${workspaceFolder}/../tapestry/share/ai",
             "environment": [
             ],
             "MIMode": "gdb",

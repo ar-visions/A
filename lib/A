@@ -1448,9 +1448,7 @@ void        A_lazy_init(global_init_fn fn);
             E##_type.members  = members;            \
             E##_type.member_count = 0;              \
             E##_type.traits   = A_TRAIT_ENUM;       \
-#ifdef USE_FFI \
             E##_type.arb      = primitive_ffi_arb(typeid(i32)); \
-#endif \
             E##_schema( E, IMPL ); \
             A_push_type((AType)&E##_type); \
             return true; \
@@ -1613,9 +1611,7 @@ void* primitive_ffi_arb(AType);
             type_ref->member_count = 0; \
             type_ref->size     = 0;   \
             type_ref->vmember_count = VMEMBER_COUNT; \
-            #ifdef USE_FFI \
             type_ref->arb       = primitive_ffi_arb(typeid(A0)); \
-            #endif \
             A_push_type((AType)type_ref);    \
             return true;                     \
         }                                    \
@@ -1662,9 +1658,7 @@ void* primitive_ffi_arb(AType);
             type_ref->vmember_count = VMEMBER_COUNT; \
             type_ref->vmember_type = (AType)VMEMBER_TYPE; \
             type_ref->traits   = TRAIT;     \
-            #ifdef USE_FFI \
             type_ref->arb       = primitive_ffi_arb(typeid(TYPE)); \
-            #endif \
             TYPE##_schema( TYPE, INIT, __VA_ARGS__ ) \
             A_push_type((AType)type_ref);    \
             POST_PUSH; \

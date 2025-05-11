@@ -15,6 +15,7 @@
 #include <math.h>
 #include <errno.h>
 #include <sys/wait.h>
+#include <limits.h>
 
 #ifndef line
 #define line(...)       new(line,       __VA_ARGS__)
@@ -1104,20 +1105,31 @@ static cstr ws(cstr p) {
 string prep_cereal(cereal cs) {
     cstr   scan = (cstr)cs;
     string res;
+
     if (*scan == '\"') {
-        scan = scan + 1;
+        scan++; // skip opening quote
         cstr start = scan;
-        bool last_s = false;
-        while (*scan && *scan != '\\' && !last_s) {
-            if (*scan == '\\') last_s = true;
-            else last_s = false;
+        bool escaped = false;
+
+        while (*scan) {
+            if (escaped) {
+                escaped = false;
+            } else if (*scan == '\\') {
+                escaped = true;
+            } else if (*scan == '\"') {
+                break;
+            }
+            scan++;
         }
+
         assert(*scan == '\"', "missing end-quote");
-        i64 len = (i64)(scan - start) - 1;
-        res = string(alloc, len); // string performs + 1
+
+        i64 len = scan - start;
+        res = string(alloc, len); // string handles +1 for null-terminator
         memcpy((cstr)res->chars, start, len);
     } else
         res = string((symbol)scan);
+
     return res;
 }
 
@@ -1582,6 +1594,10 @@ object A_formatter(AType type, FILE* f, object opt, symbol template, ...) {
             fwrite("\n", 1, 1, f);
             fflush(f);
         }
+    }
+    if (f == stderr) {
+        fwrite("\033[0m", 4, 1, f); // ANSI reset
+        fflush(f);
     }
     /// cereal is pretty available, and we only need this on string and path
     return type ? (object)((A_f*)type)->with_cereal(A_alloc(type, 1, true), res->chars) : (object)res;

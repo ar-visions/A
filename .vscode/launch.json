@@ -79,7 +79,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/home/kalen/src/A"
+                "/src/A"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../tapestry",
@@ -108,7 +108,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/home/kalen/src/orbiter"
+                "/src/orbiter"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../tapestry",
@@ -137,7 +137,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/home/kalen/src/vec"
+                "/src/vec"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../tapestry",
@@ -166,7 +166,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/home/kalen/src/ether"
+                "/src/ether"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../tapestry",
@@ -195,7 +195,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/home/kalen/src/trinity"
+                "/src/trinity"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../tapestry",
@@ -228,7 +228,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/home/kalen/src/silver"
+                "/src/silver"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../tapestry",
@@ -253,7 +253,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/home/kalen/src/ai"
+                "/src/ai"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../ai",
@@ -278,7 +278,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/home/kalen/src/hyperspace"
+                "/src/hyperspace"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../hyperspace",
@@ -326,7 +326,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/../tapestry/bin/tapestry",
             "args": [
-                "/home/kalen/src/A"
+                "/src/A"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../tapestry",
@@ -337,7 +337,7 @@
                 },
                 {
                     "name": "LD_LIBRARY_PATH",
-                    "value": "/home/kalen/src/tapestry/lib"
+                    "value": "/src/tapestry/lib"
                 },
                 {
                     "name": "CC",
@@ -357,15 +357,15 @@
             "request": "launch",
             "program": "${workspaceFolder}/../A/debug/A-generate",
             "args": [
-                "-i", "/home/kalen/src/A/gen-test.c.ai",
-                "-o", "/home/kalen/src/A/gen-test.c"
+                "-i", "/src/A/gen-test.c.ai",
+                "-o", "/src/A/gen-test.c"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../A/debug",
             "environment": [
                 {
                     "name": "LD_LIBRARY_PATH",
-                    "value": "/home/kalen/src/import/lib"
+                    "value": "/src/import/lib"
                 }
             ],
             "MIMode": "gdb",
@@ -500,7 +500,7 @@
             "program": "${workspaceFolder}/../ether/debug/ether",
             "args": [
                 "--module",  "WGPU.si",
-                "--install", "/home/kalen/src/silver-import"
+                "--install", "/src/silver-import"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/../silver/debug",

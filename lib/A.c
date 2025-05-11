@@ -3,7 +3,8 @@
 #include <A-init>
 #include <A-methods>
 #include <A-reserve>
-#include <ffi.h>
+//#include <ffi.h>
+#undef USE_FFI
 #undef bool
 #include <sys/stat.h>
 #include <dirent.h>

@@ -23,10 +23,6 @@ import:
 			-DCLANG_DEFAULT_CXX_STDLIB=libc++
 			-DDEFAULT_SYSROOT=$(xcrun --sdk macosx --show-sdk-path)
 
-    libffi https://github.com/libffi/libffi 3d0ce1e
-        CC=gcc
-        -lffi
-
 export:
     $(bash $TAPESTRY/checkout/A/headers.sh)
     -fPIC

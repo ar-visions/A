@@ -1,4 +1,8 @@
-#include <import>
+#include <A-intern>
+#include <A>
+#include <A-init>
+#include <A-methods>
+#include <A-reserve>
 #include <ffi.h>
 #undef bool
 #include <sys/stat.h>
@@ -3638,6 +3642,12 @@ none watch_pause(watch a) {
 none watch_start(watch a) {
 }
 
+bool is_alphabetic(char ch) {
+    if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z'))
+        return true;
+    return false;
+}
+
 unit unit_with_string(unit a, string s) {
     s     = trim(s);
     sz ln = len(s);
@@ -3648,17 +3658,20 @@ unit unit_with_string(unit a, string s) {
     verify(enum_type, "not a meta-type -- not turtle enough for turtle club");
     a->type = enum_type;
     
-    bool al = isalpha(s->chars[ln - 1]);
+    bool al = is_alphabetic(s->chars[ln - 1]);
     if (!al) {
-        verify(!isalpha(s->chars), "expected single value when end is not alpha numeric");
-
+        verify(!is_alphabetic(s->chars[0]), "expected single value when end is not alpha numeric");
+        a->unit  = 0;
+        verify (sscanf(s->chars, "%lf", &a->value) == 1,
+            "unit parsing for %s failed: value is %s",
+            enum_type->name, s->chars);
     } else {
         string u = null;
         for (int i = ln - 1; i >= 0; i--) {
-            bool al = isalpha(s->chars[i]);
+            bool al = is_alphabetic(s->chars[i]);
             if (!al) {
                 u        = mid(s, i + 1, ln - (i + 1));
-                a->unit  = A_enum_value(enum_type, u->chars);
+                a->unit  = A_enum_value(enum_type, (cstr)u->chars);
                 string r = trim(mid(s, 0, i));
                 verify (sscanf(r->chars, "%lf", &a->value) == 1,
                     "unit parsing for %s failed: value is %s",
@@ -3668,7 +3681,7 @@ unit unit_with_string(unit a, string s) {
             }
         }
         if (!u) {
-            a->unit  = A_enum_value(enum_type, s->chars);
+            a->unit  = A_enum_value(enum_type, (cstr)s->chars);
             a->value = 0;
         }
     }

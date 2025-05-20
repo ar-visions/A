@@ -39,7 +39,7 @@ if [ ! -f "$IMPORT_HEADER" ] || [ "$BUILD_FILE" -nt "$IMPORT_HEADER" ]; then
     echo "/* imports: $IM <- new imports */" >> "$IMPORT_HEADER"
     for import in $IM; do
         if [ "$import" != "$PROJECT" ]; then
-            if [ -f "$TAPESTRY/include/${import}-methods" ]; then
+            if [ -f "$TAPESTRY/include/${import}-methods" ] || [ -f "$TAPESTRY/../$import/build" ]; then
                 echo "#include <${import}-public> // from {import}" >> "$IMPORT_HEADER"
             else
                 echo "// #include <${import}-public> // has no $TAPESTRY/include/${import}-methods" >> "$IMPORT_HEADER"
@@ -49,7 +49,7 @@ if [ ! -f "$IMPORT_HEADER" ] || [ "$BUILD_FILE" -nt "$IMPORT_HEADER" ]; then
 
     for import in $IM; do
         if [ "$import" != "$PROJECT" ]; then
-            if [ -f "$TAPESTRY/include/${import}-methods" ]; then
+            if [ -f "$TAPESTRY/include/${import}-methods" ] || [ -f "$TAPESTRY/../$import/build" ]; then
                 echo "#include <${import}>" >> "$IMPORT_HEADER"
             fi
         fi

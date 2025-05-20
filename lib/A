@@ -154,6 +154,7 @@ typedef struct type_member_t {
     void*           ptr;
     void*           method;
     i64             id;
+    i64             value;
 } type_member_t;
 
 _Pragma("pack(pop)")
@@ -382,7 +383,6 @@ typedef bool(*global_init_fn)();
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 #define fcall(I,M,...)              ({ __typeof__(I) _i_ = I; ftableI(_i_)->M(_i_, ## __VA_ARGS__); })
 #define mcall(I,M,...)              ({ __typeof__(I) _i_ = I; (_i_) ? ftableI(_i_)->M(_i_, ## __VA_ARGS__) : 0; })
-#define M(I,N,...)                  fcall(I,N, ## __VA_ARGS__)
 #define cstring(I)                  cast(cstr, I)
 #define val(T,V)                    A_primitive(typeid(T), (&(T){V}))
 #define idx_1(I,T1,V1)              M(I, index ##_## T1, V1)
@@ -685,33 +685,22 @@ typedef bool(*global_init_fn)();
 
 
 
-#define i_attr_INST(X, ENUM, VALUE, ...)
-#define i_attr_INST_EXTERN(X, ENUM, VALUE, ...)
-#define i_attr_DECL(X, ENUM, VALUE, ...)
-#define i_attr_GENERICS(X, ENUM, VALUE, ...)
-#define i_attr_INIT(X, ENUM, VALUE, ...) \
-    X##_type.members[X##_type.member_count].name = #VALUE; \
-    X##_type.members[X##_type.member_count].id   = ENUM##_##VALUE; \
-    X##_type.members[X##_type.member_count].type = (AType)&ENUM##_type; \
-    X##_type.members[X##_type.member_count].args = (meta_t) { emit_types(__VA_ARGS__) }; \
+#define i_attr_INST(        X, ENUM, ID, VALUE, ...)
+#define i_attr_INST_EXTERN( X, ENUM, ID, VALUE, ...)
+#define i_attr_DECL(        X, ENUM, ID, VALUE, ...)
+#define i_attr_GENERICS(    X, ENUM, ID, VALUE, ...)
+#define i_attr_INIT(        X, ENUM, ID, VALUE, ...) \
+    X##_type.members[X##_type.member_count].name        = #ID; \
+    X##_type.members[X##_type.member_count].id          = ENUM##_##ID; \
+    X##_type.members[X##_type.member_count].value       = VALUE; \
+    X##_type.members[X##_type.member_count].type        = (AType)&ENUM##_type; \
+    X##_type.members[X##_type.member_count].args        = (meta_t) { emit_types(__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].member_type = A_MEMBER_ATTR; \
     X##_type.member_count++;
-#define i_attr_PROTO(X, ENUM, VALUE, ...)  
-#define i_attr_METHOD(X, ENUM, VALUE, ...)  
+#define i_attr_PROTO(       X, ENUM, ID, VALUE, ...)  
+#define i_attr_METHOD(      X, ENUM, ID, VALUE, ...)  
 
-/*
-    i_attr   (X,Y, Surface,    color,         rgba8) \
-    i_attr   (X,Y, Surface,    normal,        rgba8) \
-    i_attr   (X,Y, Surface,    emission,      rgbaf) \
-    i_attr   (X,Y, Surface,    rough,         u8) \
-    i_attr   (X,Y, Surface,    metal,         u8) \
-    i_attr   (X,Y, Surface,    height,        f32) \
-    i_attr   (X,Y, Surface,    ao,            u8) \
-    i_attr   (X,Y, Surface,    environment,   rgbaf, IBL) \
-*/
-
-#define i_attr(X, Y, ENUM, VALUE, ...) i_attr_##Y(X, ENUM, VALUE, __VA_ARGS__)
-
+#define i_attr(X, Y, ENUM, ID, VALUE, ...) i_attr_##Y(X, ENUM, ID, VALUE, __VA_ARGS__)
 
 
 #define   i_array_interface_INST(X, R, S, N)
@@ -1308,6 +1297,10 @@ CPU_Caps detect_cpu_caps();
 
 #define i_override(X, Y, OT, N, ...) \
     CONCAT(i_override_, ARG_COUNT_NO_ZERO(__VA_ARGS__))(X, Y, OT, N __VA_OPT__(,) __VA_ARGS__)
+
+
+#define M(X, Y, VISIBILITY, NAME, ...) \
+    i_ ## NAME ## _ ## VISIBILITY ## _ ## Y (X, __VA_ARGS__)
 
 
 //#define i_override(X, Y, OT, N) i_override_##OT##_##Y(X, N)
@@ -2340,7 +2333,7 @@ extern FILE* logger;
 
 #define         form(T, t, ...)   (T)A_formatter(typeid(T), null,   (object)false, (symbol)t, ## __VA_ARGS__)
 #define    formatter(t, ...)      ((string)A_formatter((AType)null,      null,   (object)false, (symbol)t, ## __VA_ARGS__))
-#define            f(t, ...)      ((string)A_formatter((AType)null,      null,   (object)false, (symbol)t, ## __VA_ARGS__))
+#define            f(T, t, ...)   (T)A_formatter(typeid(T), null,   (object)false, (symbol)t, ## __VA_ARGS__)
 #define         exec(t, ...)      A_exec(((string)A_formatter((AType)null, null, (object)false, (symbol)t, ## __VA_ARGS__)))
 #define          tap(L)           (A_tap(L))
 #define        untap(L)           (A_untap(L))

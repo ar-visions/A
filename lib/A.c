@@ -335,7 +335,7 @@ int A_exec(string cmd) {
     if (starts_with(cmd, "export ")) {
         string a = mid(cmd, 7, len(cmd) - 7);
         int i = index_of(a, "=");
-        assert(i >= 1, "invalid syntax");
+        assert(i >= 1, "invalid syntax"); 
         string var   = trim(mid(a, 0, i));
         string value = trim(mid(a, i + 1, len(a) - i - 1));
         setenv((cstr)var->chars, (cstr)value->chars, 1);
@@ -472,8 +472,6 @@ object A_alloc2(AType type, AType scalar, shape s, bool af_pool) {
     }
     return a->data; /// return fields (object)
 }
-
-#define iarray(I,M,...) array_ ## M(I, M, __VA_ARGS__)
 
 
 /// array -------------------------
@@ -850,15 +848,11 @@ void A_start() {
             type_member_t* mem = &type->members[m];
             if (strcmp(type->name, "rgb8") == 0) {
                 int test2 = 2;
-                test2 += 2;
+                test2 += 2; 
             }
             if (mem->member_type & (A_MEMBER_IMETHOD | A_MEMBER_SMETHOD)) {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
-                if (!address) {
-                    int test2 = 2;
-                    test2 += 2;
-                }
                 assert(address, "no address");
                 array args = create(array, alloc, mem->args.count);
                 for (num i = 0; i < mem->args.count; i++)

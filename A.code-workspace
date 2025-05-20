@@ -29,6 +29,10 @@
 			"path": "../gltf"
 		},
 		{
+			"name":	"sfx",
+			"path": "../sfx"
+		},
+		{
 			"name": "sk",
 			"path": "../sk"
 		},

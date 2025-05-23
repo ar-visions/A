@@ -112,7 +112,8 @@ enum A_TRAIT {
     A_TRAIT_ABSTRACT  = 128,
     A_TRAIT_VECTOR    = 256,
     A_TRAIT_STRUCT    = 512,
-    A_TRAIT_PTR_SIZE  = 1024
+    A_TRAIT_PTR_SIZE  = 1024,
+    A_TRAIT_PUBLIC    = 2048
 };
 
 _Pragma("pack(push, 1)")
@@ -1720,6 +1721,9 @@ void* primitive_ffi_arb(AType);
 #define define_class(A0, ...) \
     define_arb(A0, A, sizeof(struct _##A0), 0, 0, null, ({}), __VA_ARGS__)
 
+#define define_public(A0, ...) \
+    define_arb(A0, A, sizeof(struct _##A0), A_TRAIT_PUBLIC, 0, null, ({}), __VA_ARGS__)
+
 #define define_struct(A0, ...) \
     define_arb(A0, A, sizeof(struct _##A0), A_TRAIT_STRUCT, 0, null, ({}), __VA_ARGS__)
 
@@ -2223,6 +2227,10 @@ declare_class(fn)
     i_prop    (X,Y,   public, num,     ref_length) \
     i_prop    (X,Y,   public, num,     len) \
     i_prop    (X,Y,   public, u64,     h) \
+    i_method  (X,Y,   public, bool,    is_numeric) \
+    i_method  (X,Y,   public, i32,     first) \
+    i_method  (X,Y,   public, i32,     last) \
+    i_method  (X,Y,   public, f64,     real_value) \
     i_method  (X,Y,   public, sz,      len) \
     i_method  (X,Y,   public, string,  ucase) \
     i_method  (X,Y,   public, string,  lcase) \
@@ -2273,8 +2281,10 @@ declare_class(watch)
 declare_class(unit)
 
 #define mutex_schema(X,Y,...) \
-    i_ctr       (X,Y, public, string) \
-    i_prop      (X,Y, public, pthread_mutex_t, mtx)
+    i_method    (X,Y, public, none, lock) \
+    i_method    (X,Y, public, none, unlock) \
+    i_prop      (X,Y, intern, struct mutex_t*, mtx, as, ARef) \
+    i_override  (X,Y, method, init, dealloc)
 declare_class(mutex)
 
 #define path_schema(X,Y,...) \

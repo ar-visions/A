@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <sys/wait.h>
 #include <limits.h>
+#include <sys/mman.h>
 
 #ifndef line
 #define line(...)       new(line,       __VA_ARGS__)
@@ -395,10 +396,20 @@ int A_exec(string cmd) {
     }
 }
 
+object A_alloc_instance(AType type, int n_bytes) {
+    object a;
+    if (type->traits & A_TRAIT_PUBLIC)
+        a = mmap(NULL, n_bytes,
+            PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+    else
+        a = calloc(1, n_bytes);
+    return a;
+}
+
 object A_alloc(AType type, num count, bool af_pool) {
     sz map_sz = sizeof(map);
-    sz A_sz = sizeof(struct _A);
-    object a      = calloc(1, A_sz + type->size * count);
+    sz A_sz   = sizeof(struct _A);
+    object a = A_alloc_instance(type, A_sz + type->size * count);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
     a->data       = &a[1];
@@ -416,7 +427,7 @@ object A_alloc(AType type, num count, bool af_pool) {
 object A_alloc_extra(AType type, num extra, bool af_pool) {
     sz map_sz = sizeof(map);
     sz A_sz = sizeof(struct _A);
-    object a      = calloc(1, A_sz + type->size + extra);
+    object a      = A_alloc_instance(type, A_sz + type->size + extra);
     a->refs       = af_pool ? 0 : 1;
     a->type       = type;
     a->data       = &a[1];
@@ -435,7 +446,7 @@ object A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool) {
     verify(type,   "type not set");
     verify(scalar, "scalar not set");
     i64 A_sz      = sizeof(struct _A);
-    object a      = calloc(1, A_sz + type->size);
+    object a      = A_alloc_instance(type, A_sz + type->size);
     a->refs       = af_pool ? 0 : 1;
     a->scalar     = scalar;
     a->type       = type;
@@ -456,7 +467,7 @@ object A_alloc2(AType type, AType scalar, shape s, bool af_pool) {
     i64 A_sz      = sizeof(struct _A);
     shape_ft* t2 = &shape_type;
     i64 count     = total(s);
-    object a      = calloc(1, A_sz + (scalar ? scalar->size : type->size) * count);
+    object a      = A_alloc_instance(type, A_sz + (scalar ? scalar->size : type->size) * count);
     a->refs       = af_pool ? 0 : 1;
     a->scalar     = scalar;
     a->type       = type;
@@ -864,6 +875,29 @@ void A_start() {
             }
         }
     }
+}
+
+
+struct mutex_t {
+    pthread_mutex_t obj;
+};
+
+none mutex_init(mutex m) {
+    pthread_mutex_init(&m->mtx, NULL);
+    m->mtx = calloc(sizeof(struct mutex_t), 1);
+    pthread_mutex_init(&m->mtx->obj, NULL);
+}
+
+none mutex_dealloc(mutex m) {
+    free(m->mtx);
+}
+
+none mutex_lock(mutex m) {
+    pthread_mutex_lock(&m->mtx->obj);
+}
+
+none mutex_unlock(mutex m) {
+    pthread_mutex_unlock(&m->mtx->obj);
 }
 
 map A_args(int argc, symbol argv[], symbol default_arg, ...) {
@@ -1634,6 +1668,26 @@ void vector_init(vector a);
 sz vector_len(vector a) {
     return A_header(a)->count;
 }
+
+bool string_is_numeric(string a) {
+    return a->chars[0] == '-' ||
+          (a->chars[0] >= '0' && a->chars[0] <= '9');
+}
+
+i32 string_first(string a) {
+    return a->len ? a->chars[0] : 0;
+}
+
+i32 string_last(string a) {
+    return a->len ? a->chars[a->len - 1] : 0;
+}
+
+f64 string_real_value(string a) {
+    double v = 0.0;
+    sscanf(a->chars, "%lf", &v);
+    return v;
+}
+
 
 string string_ucase(string a) {
     string res = string(a->chars);
@@ -3669,9 +3723,9 @@ unit unit_with_string(unit a, string s) {
     verify(enum_type, "not a meta-type -- not turtle enough for turtle club");
     a->type = enum_type;
     
-    bool al = is_alphabetic(s->chars[ln - 1]);
+    bool al = is_alphabetic(last(s));
     if (!al) {
-        verify(!is_alphabetic(s->chars[0]), "expected single value when end is not alpha numeric");
+        verify(!is_alphabetic(first(s)), "expected single value when end is not alpha numeric");
         a->unit  = 0;
         verify (sscanf(s->chars, "%lf", &a->value) == 1,
             "unit parsing for %s failed: value is %s",
@@ -3747,6 +3801,8 @@ define_enum(level)
 define_mod(path, string)
 //define_class(file)
 define_class(string)
+
+define_class(unit)
 
 define_class(item)
 //define_proto(collection) -- disabling for now during reduction to base + class + mod

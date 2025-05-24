@@ -906,7 +906,6 @@ none mutex_unlock(mutex m) {
 }
 
 none mutex_cond_broadcast(mutex m) {
-    // verify(m->cond, "cond must be set for conditional mutex");
     pthread_cond_broadcast(&m->mtx->lock);
 }
 
@@ -917,6 +916,7 @@ none mutex_cond_signal(mutex m) {
 none mutex_cond_wait(mutex m) {
     pthread_cond_wait(&m->mtx->cond, &m->mtx->lock);
 }
+
 
 map A_args(int argc, symbol argv[], symbol default_arg, ...) {
     va_list  args;
@@ -3732,7 +3732,7 @@ static none async_runner(thread_t* thread) {
         lock(thread->lock);
         thread->done = true;
         cond_signal(thread->lock);
-        cond_signal(t->global);
+        cond_broadcast(t->global);
 
         while (thread->next == thread->w)
             cond_wait(thread->lock);
@@ -3824,8 +3824,6 @@ object async_sync(async t, object w) {
     }
     return result;
 }
-
-define_class(async)
 
 /*
 struct inotify_event {
@@ -3930,12 +3928,13 @@ unit unit_with_string(unit a, string s) {
     return a;
 }
 
-define_class(watch)
-
-define_class(message)
-
 define_class(A)
 define_meta(object, A, A)
+
+define_class(watch)
+define_class(message)
+define_class(mutex)
+define_class(async)
 
 define_abstract(numeric)
 define_abstract(string_like)

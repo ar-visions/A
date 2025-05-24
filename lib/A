@@ -2290,7 +2290,8 @@ declare_class(unit)
     i_method    (X,Y, public, none, lock) \
     i_method    (X,Y, public, none, unlock) \
     i_method    (X,Y, public, none, cond_wait) \
-    i_method    (X,Y, public, none, cond, bool) \
+    i_method    (X,Y, public, none, cond_signal) \
+    i_method    (X,Y, public, none, cond_broadcast) \
     i_prop      (X,Y, intern, struct mutex_t*, mtx, as, ARef) \
     i_override  (X,Y, method, init, dealloc)
 declare_class(mutex)

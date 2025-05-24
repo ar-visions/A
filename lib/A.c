@@ -17,6 +17,8 @@
 #include <sys/wait.h>
 #include <limits.h>
 #include <sys/mman.h>
+#include <sys/inotify.h>
+
 
 #ifndef line
 #define line(...)       new(line,       __VA_ARGS__)
@@ -879,25 +881,41 @@ void A_start() {
 
 
 struct mutex_t {
-    pthread_mutex_t obj;
+    pthread_mutex_t lock;
+    pthread_cond_t  cond;
 };
 
 none mutex_init(mutex m) {
-    pthread_mutex_init(&m->mtx, NULL);
     m->mtx = calloc(sizeof(struct mutex_t), 1);
-    pthread_mutex_init(&m->mtx->obj, NULL);
+    pthread_mutex_init(&m->mtx->lock, null);
+    if (m->cond) pthread_cond_init(&m->mtx->cond, null);
 }
 
 none mutex_dealloc(mutex m) {
+    pthread_mutex_destroy(&m->mtx->lock);
+    if (m->cond) pthread_cond_destroy(&m->mtx->cond);
     free(m->mtx);
 }
 
 none mutex_lock(mutex m) {
-    pthread_mutex_lock(&m->mtx->obj);
+    pthread_mutex_lock(&m->mtx->lock);
 }
 
 none mutex_unlock(mutex m) {
-    pthread_mutex_unlock(&m->mtx->obj);
+    pthread_mutex_unlock(&m->mtx->lock);
+}
+
+none mutex_cond_broadcast(mutex m) {
+    // verify(m->cond, "cond must be set for conditional mutex");
+    pthread_cond_broadcast(&m->mtx->lock);
+}
+
+none mutex_cond_signal(mutex m) {
+    pthread_cond_signal(&m->mtx->lock);
+}
+
+none mutex_cond_wait(mutex m) {
+    pthread_cond_wait(&m->mtx->cond, &m->mtx->lock);
 }
 
 map A_args(int argc, symbol argv[], symbol default_arg, ...) {
@@ -3693,8 +3711,167 @@ object parse(cstr s, AType schema) {
     return parse_object(s, schema, null, null);
 }
 
+
+typedef struct thread_t {
+    pthread_t       obj;
+    mutex           lock;
+    i32             index;
+    bool            done;
+    object          w;
+    object          next;
+    async           t;
+    i32             jobs;
+} thread_t;
+
+static none async_runner(thread_t* thread) {
+    async t = thread->t;
+
+    for (; thread->next; unlock(thread->lock)) {
+        t->work_fn(thread->w);
+
+        lock(thread->lock);
+        thread->done = true;
+        cond_signal(thread->lock);
+        cond_signal(t->global);
+
+        while (thread->next == thread->w)
+            cond_wait(thread->lock);
+        
+        if (!thread->next)
+            break;
+        
+        thread->done = false;
+        drop(thread->w);
+        thread->w    = thread->next;
+        thread->jobs++; // set something so sync can know
+    }
+    unlock(thread->lock);
+}
+
+void async_init(async t) {
+    i32    n = len(t->work);
+    verify(n > 0, "no work given, no threads needed");
+    // we can then have a worker modulo restriction
+    // (1 by default to grab the next available work; 
+    //  or say modulo of work length to use a pool)
+    t->threads = (thread_t*)calloc(sizeof(thread_t), n);
+    t->global = mutex(cond, true);
+    for (int i = 0; i < n; i++) {
+        thread_t* thread = &t->threads[i];
+        thread->index = i;
+        thread->w     = hold(get(t->work, i));
+        thread->next  = thread->w;
+        thread->t     = hold(t);
+        thread->lock  = mutex(cond, true);
+        lock(thread->lock);
+        pthread_create    (&thread->obj, null, async_runner, thread);
+    }
+    for (int i = 0; i < n; i++) {
+        thread_t* thread = &t->threads[i];
+        unlock(thread->lock);
+    }
+}
+
+void async_dealloc(async t) {
+    sync(t, null);
+    for (int i = 0, n = len(t->work); i < n; i++) {
+        thread_t* thread = &t->threads[i];
+        drop(thread->lock);
+    }
+}
+
+
+object async_sync(async t, object w) {
+    int n = len(t->work);
+    object result = null;
+
+    if (w) {
+        /// in this mode, wait for one to finish
+        /// can we set a condition here or purely wait real fast?
+        for (;;) {
+            bool found = false;
+            lock(t->global);
+            for (int i = 0; i < n; i++) {
+                thread_t* thread = &t->threads[i];
+                lock(thread->lock);
+                if (thread->done) {
+                    result = copy(thread->w);
+                    thread->next = w;
+                    found = true;
+                    cond_signal(thread->lock);
+                    unlock(thread->lock);
+                    break;
+                }
+                unlock(thread->lock);
+            }
+            if (found) {
+                unlock(t->global);
+                if (found)
+                    break;
+            }
+            cond_wait(t->global);
+        }
+    } else {
+        for (int i = 0; i < n; i++) {
+            thread_t* thread = &t->threads[i];
+            lock(thread->lock);
+            thread->next = null;
+            unlock(thread->lock);
+            pthread_join(thread->obj, null);
+        }
+        // user can get thread->work for simple cases of sync
+        // why return either array or individual work based on argument?
+    }
+    return result;
+}
+
+define_class(async)
+
+/*
+struct inotify_event {
+    int wd;           // THIS is the ID of the watch
+    uint32_t mask;
+    uint32_t cookie;
+    uint32_t len;
+    char name[];      // Optional file name (if watching a dir)
+};
+*/
+
 none watch_init(watch a) {
     /// todo: a-perfectly-good-watch ... dont-throw-away
+
+    int fd = inotify_init1(IN_NONBLOCK);
+    if (fd < 0) {
+        perror("inotify_init1");
+        exit(1);
+    }
+
+    int wd = inotify_add_watch(fd, a->res->chars, IN_MODIFY | IN_CREATE | IN_DELETE);
+    if (wd == -1) {
+        perror("inotify_add_watch");
+        exit(1);
+    }
+
+    char buf[4096]
+        __attribute__((aligned(__alignof__(struct inotify_event))));
+    
+    while (1) {
+        #undef read
+        int len = read(fd, buf, sizeof(buf));
+        if (len <= 0) continue;
+
+        for (char *ptr = buf; ptr < buf + len; ) {
+            struct inotify_event *event = (struct inotify_event *) ptr;
+            printf("Event on %s: ", event->len ? event->name : "file");
+            if (event->mask & IN_CREATE) puts("Created");
+            if (event->mask & IN_DELETE) puts("Deleted");
+            if (event->mask & IN_MODIFY) puts("Modified");
+            ptr += sizeof(struct inotify_event) + event->len;
+        }
+        usleep(100000); // throttle
+    }
+
+    close(fd);
 }
 
 none watch_dealloc(watch a) {
@@ -3791,6 +3968,7 @@ define_primitive(handle, raw, 0)
 define_primitive(Member, raw, 0)
 define_primitive(ARef,   ref, 0)
 define_primitive(floats, raw, 0)
+define_primitive(hook,   raw, 0)
 
 define_class(line)
 

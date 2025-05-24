@@ -45,6 +45,7 @@ typedef struct _A**         ARef;
 typedef float*              floats;
 typedef struct _A*          A;
 typedef struct type_member_t* Member;
+typedef object(*hook)(object);
 
 #define forward(t) typedef struct _##t* t;
 
@@ -1788,6 +1789,7 @@ declare_abstract(imported)
 /// our numeric primitives have their constructs defined
 /// this is so we have a defined construction method for data conversion, we actually need it registered
 /// we may optimize the need for it to be called in C99 output once working
+#define ARef_schema(X,Y,...)        ref_schema(X,Y,...)
 #define i8_schema(X,Y,...)          numeric_schema(X,Y,...)
 #define i16_schema(X,Y,...)         numeric_schema(X,Y,...)
 #define i32_schema(X,Y,...)         numeric_schema(X,Y,...)
@@ -1811,8 +1813,7 @@ declare_abstract(imported)
 #define handle_schema(X,Y,...)      raw_schema(X,Y,...)
 #define AType_schema(X,Y,...)       raw_schema(X,Y,...)
 #define Member_schema(X,Y,...)      raw_schema(X,Y,...)
-#define ARef_schema(X,Y,...)        ref_schema(X,Y,...)
-
+#define hook_schema(X,Y,...)        raw_schema(X,Y,...)
 #define floats_schema(X,Y,...)      raw_schema(X,Y,...)
 
 /// meta gives us access to one token we can override with (F)
@@ -1837,6 +1838,8 @@ declare_primitive(num,          numeric)
 declare_primitive(sz,           numeric)
 declare_primitive(raw_t,        raw)
 declare_primitive(handle,       raw)
+declare_primitive(hook,         raw)
+
 /// whatever we can 'name', we can handle as a type of any pointer primitive
 declare_primitive(AType,        raw)
 declare_primitive(ARef,         ref)
@@ -2273,6 +2276,7 @@ declare_class(string)
     i_override  (X,Y, method, init)
 declare_class(watch)
 
+
 #define unit_schema(X,Y,...) \
     i_ctr       (X,Y, public, string) \
     i_prop      (X,Y, public, f64,   value) \
@@ -2280,12 +2284,27 @@ declare_class(watch)
     i_prop      (X,Y, public, AType, type)
 declare_class(unit)
 
+
 #define mutex_schema(X,Y,...) \
+    i_prop      (X,Y, public, bool, cond) \
     i_method    (X,Y, public, none, lock) \
     i_method    (X,Y, public, none, unlock) \
+    i_method    (X,Y, public, none, cond_wait) \
+    i_method    (X,Y, public, none, cond, bool) \
     i_prop      (X,Y, intern, struct mutex_t*, mtx, as, ARef) \
     i_override  (X,Y, method, init, dealloc)
 declare_class(mutex)
+
+
+#define async_schema(X,Y,...) \
+    i_prop      (X,Y, public, hook,     work_fn) \
+    i_prop      (X,Y, public, array,    work) \
+    i_prop      (X,Y, intern, mutex,    global) \
+    i_prop      (X,Y, intern, struct thread_t*, threads, as, ARef) \
+    i_method    (X,Y, public, object,   sync, object) \
+    i_override  (X,Y, method, init, dealloc)
+declare_class(async)
+
 
 #define path_schema(X,Y,...) \
     i_method    (X,Y, public, bool,   exists) \
@@ -2321,6 +2340,7 @@ declare_class(mutex)
     i_override  (X,Y, cast,   string)
 declare_mod(path, string)
 
+
 #define line_schema(X,Y,...) \
     i_prop(X,Y, public, i32, indent) \
     i_prop(X,Y, public, array, text)
@@ -2328,10 +2348,12 @@ declare_mod(path, string)
 #define line_intern(X,Y,...) line_schema(X,Y,__VA_ARGS__)
 declare_class(line)
 
+
 path path_temp(symbol tmpl);
 
 /// use %o to print objects, or % others -- octet is not a use-case we serve (use base-16 for that)
 object A_formatter(AType rtype, FILE* f, object opt, symbol templ, ...);
+
 
 #define Exists_schema(X,Y,...) \
     enum_value(X,Y, no) \

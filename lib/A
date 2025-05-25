@@ -2397,24 +2397,24 @@ cstr copy_cstr(cstr input);
 int A_exec(string cmd);
 
 #define backwards(container, E, e) \
-    if (len(((array)container))) for (E e = get(((array)container), len(((array)container)) - 1), e0 = 0; e0 == 0; e0++) \
+    if (container && len(((array)container))) for (E e = get(((array)container), len(((array)container)) - 1), e0 = 0; e0 == 0; e0++) \
         for (num __i = len(((array)container)); __i >= 0; __i--, e = __i >= 0 ? (E)get(((array)container), __i) : (E)null) \
 
 /// we can iterate through a collection with this strange code
 #define each(container, E, e) \
-    if (len(((array)container))) for (E e = get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
+    if (container && len(((array)container))) for (E e = get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
         for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = get(((array)container), __i)) \
 
 #define each_(container, E, e) \
-    if (len(((array)container))) for (E e = get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
+    if (container && len(((array)container))) for (E e = get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
         for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = get(((array)container), __i)) \
 
 #define values(container, E, e) \
-    if (len(((array)container))) for (E e = *(E*)get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
+    if (container && len(((array)container))) for (E e = *(E*)get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
         for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = *(E*)get(((array)container), __i)) \
 
 #define vec_values(container, E, e) \
-    if (len((container))) for (E e = get((container), 0), e0 = 0; e0 == 0; e0++) \
+    if (container && len((container))) for (E e = get((container), 0), e0 = 0; e0 == 0; e0++) \
         for (num __i = 0, __len = len((container)); __i < __len; __i++, e = get((container), __i)) \
 
 /// we can go through a map

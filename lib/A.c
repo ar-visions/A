@@ -249,6 +249,7 @@ A_f** A_types(num* length) {
 AType A_find_type(symbol name) {
     for (int i = 0; i < types_len; i++) {
         AType type = types[i];
+        //print("type: %s", type->name);
         if (strcmp(type->name, name) == 0)
             return type;
     }
@@ -1786,12 +1787,14 @@ i32   string_index_num(string a, num index) {
 array string_split(string a, symbol sp) {
     cstr next = (cstr)a->chars;
     sz   slen = strlen(sp);
+    array result = array(alloc, 32);
     while (next) {
         cstr   n = strstr(&next[1], sp);
-        string v = new(string, chars, next, ref_length, n ? (sz)(1 + next - n) : 0);
+        string v = string(chars, next, ref_length, n ? (sz)(n - next) : 0);
         next = n ? n + slen : null;
+        push(result, v);
     }
-    return null;
+    return result;
 }
 
 void string_alloc_sz(string a, sz alloc) {

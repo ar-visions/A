@@ -91,21 +91,15 @@ if [ ! -f "$INIT_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INIT_HEADER" ]; then
     echo >> "$INIT_HEADER"
     
     # Process class/mod/meta/vector declarations
-    grep -o 'declare_\(class\|mod\|meta\|vector\)[[:space:]]*([[:space:]]*[^,)]*' "$PROJECT_HEADER" | \
-    $SED -E 's/declare_(class|mod|meta|vector)[[:space:]]*\([[:space:]]*([^,)]*)[[:space:]]*(,[[:space:]]*([^,)[:space:]]*))?/\1 \2 \4/' | \
+    grep -o 'declare_\(class\|class_2\|class_3\|vector\)[[:space:]]*([[:space:]]*[^,)]*' "$PROJECT_HEADER" | \
+    $SED -E 's/declare_(class|class_2|class_3|vector)[[:space:]]*\([[:space:]]*([^,)]*)[[:space:]]*(,[[:space:]]*([^,)[:space:]]*))?/\1 \2 \4/' | \
     while read type class_name arg; do
         if [ -z "${class_name}" ]; then
             continue
         fi
         
-        # Debug definitions
-        echo "#ifndef NDEBUG" >> "$INIT_HEADER"
-        echo "    //#define TC_${class_name}(MEMBER, VALUE) A_validate_type(VALUE, A_member(isa(instance), A_TYPE_PROP|A_TYPE_INTERN|A_TYPE_PRIV, #MEMBER)->type)" >> "$INIT_HEADER"
-        echo "    #define TC_${class_name}(MEMBER, VALUE) VALUE" >> "$INIT_HEADER"
-        echo "#else" >> "$INIT_HEADER"
-        echo "    #define TC_${class_name}(MEMBER, VALUE) VALUE" >> "$INIT_HEADER"
-        echo "#endif" >> "$INIT_HEADER"
-        
+        echo "#define TC_${class_name}(MEMBER, VALUE) ({ printf(\"setting field bit (id: %i): %s\\n\", (int)FIELD_ID(${class_name}, MEMBER), #MEMBER);   (*(u128*)&instance->f) |= ((u128)1) << FIELD_ID(${class_name}, MEMBER); VALUE; })" >> "$INIT_HEADER"
+
         # Variadic argument counting macros
         echo "#define _ARG_COUNT_IMPL_${class_name}(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N" >> "$INIT_HEADER"
         echo "#define _ARG_COUNT_I_${class_name}(...) _ARG_COUNT_IMPL_${class_name}(__VA_ARGS__, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)" >> "$INIT_HEADER"
@@ -198,7 +192,7 @@ if [ ! -f "$PUBLIC_HEADER" ] || [ "$PROJECT_HEADER" -nt "$PUBLIC_HEADER" ]; then
     echo >> "$PUBLIC_HEADER"
 
     # Iterate through all three types using a single loop
-    for type in "class" "mod" "meta" "struct"; do
+    for type in "class" "class_2" "class_3" "class_4" "struct"; do
         grep -o "declare_${type}[[:space:]]*([[:space:]]*[^,)]*" "$PROJECT_HEADER" | \
         $SED "s/declare_${type}[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/" | \
         while read class_name; do
@@ -227,7 +221,7 @@ if [ ! -f "$INTERN_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INTERN_HEADER" ]; then
     echo >> "$INTERN_HEADER"
     
     # Iterate through all three types using a single loop
-    for type in "class" "mod" "meta"; do
+    for type in "class" "class_2" "class_3" "class_4"; do
         grep -o "declare_${type}[[:space:]]*([[:space:]]*[^,)]*" "$PROJECT_HEADER" | \
         $SED "s/declare_${type}[[:space:]]*([[:space:]]*\([^,)]*\).*/\1/" | \
         while read class_name; do

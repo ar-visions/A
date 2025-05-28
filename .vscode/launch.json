@@ -306,6 +306,13 @@
             "cwd": "/src/tapestry/share/orbiter"
         },
         {
+            "name": "A-test",
+            "type": "lldb",
+            "request": "launch",
+            "program": "/src/A/debug/test/a-test",
+            "cwd": "/src/A/debug/test"
+        },
+        {
             "name": "A-reflect",
             "type": "cppdbg",
             "request": "launch",

@@ -26,7 +26,7 @@ int main(int argc, char **argv) {
 }
 
 define_class (tokens)
-define_mod   (silver, ether)
+define_class   (silver, ether)
 ```
 
 We have named arguments in our new() macro and that means 1 ctr/init to code not arbitrary amounts.  It's a far better and more productive pattern, and even more lean than Swift.  This is a post-init call, where we have already set the properties (where holds happen on non-primitives).  A-type standard destructor will also auto-drop member delegates that are object-based.  It just means you don't have to do much memory management at all.

@@ -7,6 +7,7 @@
 #undef USE_FFI
 #undef bool
 #include <sys/stat.h>
+#include <sys/time.h>
 #include <dirent.h>
 #include <endian-cross.h>
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386) || defined(_M_IX86)
@@ -25,6 +26,12 @@
 #endif
 
 object parse(cstr s, AType schema);
+
+i64 epoch_millis() {
+    struct timeval tv;
+    gettimeofday(&tv, null);
+    return (i64)(tv.tv_sec) * 1000 + (i64)(tv.tv_usec) / 1000;
+}
 
 shape shape_with_array(shape a, array dims) {
     num count = len(dims);
@@ -84,7 +91,7 @@ shape shape_new(i64 size, ...) {
     return res;
 }
 
-define_class(shape)
+define_class(shape, A)
 
 /// block-chain will go here in quanta
 
@@ -262,46 +269,74 @@ object A_new(AType type) {
     return res;
 }
 
+u128 A_fbits(object a) {
+    AType type = isa(a);
+    u128 fields = *(u128*)((i8*)a + type->size - (sizeof(void*) * 2));
+    return fields;
+}
+
 static void A_validator(object a) {
     AType type = isa(a);
-    for (num i = 0; i < type->member_count; i++) {
-        type_member_t* m = &type->members[i];
-        if (m->required) {
-            u8* ptr = (u8*)a + m->offset;
-            object*  ref = (object*)ptr;
-            verify(*ref, "required arg [%s] not set for class %s", m->name, type->name);
+
+    // now required args are set if (type->required & *(i64*)obj->f) == type->required
+    u128 fields = A_fbits(a);
+    if ((type->required & fields) != type->required) {
+        for (num i = 0; i < type->member_count; i++) {
+            type_member_t* m = &type->members[i];
+            if (m->required && ((((u128)1) << m->id) & fields) == 0) {
+                u8* ptr = (u8*)a + m->offset;
+                object*  ref = (object*)ptr;
+                fault("required arg [%s] not set for class %s",
+                    m->name, type->name);
+            }
         }
+        exit(2);
     }
 }
 
-i32 A_enum_value(AType type, cstr cs) {
+/// some changes being made to these, as enums can now be any primitive type
+/// we'll re-cast from i32 later; ptr is the VAL stored in static memory as the typed data in global constructor
+/// we must do this with our usage of static const; thats not always addressable
+i32* A_enum_default(AType type) {
+    for (num m = 0; m < type->member_count; m++) {
+        type_member_t* mem = &type->members[m];
+        if (mem->member_type & A_MEMBER_ENUMV)
+            return (i32*)mem->ptr;
+    }
+    return null;
+}
+
+i32* A_enum_value(AType type, cstr cs) {
     int cur = 0;
     int default_val = INT_MIN;
+    bool single = strlen(cs) == 1;
     for (num m = 0; m < type->member_count; m++) {
         type_member_t* mem = &type->members[m];
-        if (mem->member_type & A_MEMBER_ENUMV) {
-            if (!cs || strcmp(cs, mem->name) == 0)
-                return cur;
-            if (default_val == INT_MIN) default_val = cur;
-            cur++;
+        if ((mem->member_type & A_MEMBER_ENUMV) &&
+            (strcmp(mem->name, cs) == 0)) {
+            return mem->ptr;
         }
     }
-    if (default_val != INT_MIN)
-        return default_val;
+    for (num m = 0; m < type->member_count; m++) {
+        type_member_t* mem = &type->members[m];
+        if ((mem->member_type & A_MEMBER_ENUMV) &&
+            (mem->name[0] == cs[0])) {
+            return mem->ptr;
+        }
+    }
     fault("enum not found");
-    return -1;
+    return null;
 }
 
-string A_enum_string(AType type, i32 value) {
-    int cur = 0;
+string A_enum_string(AType type, i32* value) {
     for (num m = 0; m < type->member_count; m++) {
         type_member_t* mem = &type->members[m];
         if (mem->member_type & A_MEMBER_ENUMV) {
-            if (cur == value)
+            if (memcmp(mem->ptr, value, mem->type->size) == 0)
                 return string((symbol)mem->name); 
-            cur++;
         }
     }
+    // better to fault than default
     fault ("invalid enum-value of %i for type %s", value, type->name);
     return null;
 }
@@ -699,10 +734,18 @@ sz array_len(array a) {
 
 /// index of element that compares to 0 diff with item
 num array_index_of(array a, object b) {
-    for (num i = 0; i < a->len; i++) {
-        if (compare(a -> elements[i], b) == 0)
-            return i;
+    if (a->unmanaged) {
+        for (num i = 0; i < a->len; i++) {
+            if (a->elements[i] == b)
+                return i;
+        }
+    } else {
+        for (num i = 0; i < a->len; i++) {
+            if (compare(a -> elements[i], b) == 0)
+                return i;
+        }
     }
+
     return -1;
 }
 
@@ -860,14 +903,18 @@ void A_start() {
         /// for each member of type
         for (num m = 0; m < type->member_count; m++) {
             type_member_t* mem = &type->members[m];
-            if (strcmp(type->name, "rgb8") == 0) {
-                int test2 = 2;
-                test2 += 2; 
+            if (mem->required && (mem->member_type & A_MEMBER_PROP)) {
+                print("OR'ing required member bit: %s:%s", type->name, mem->name);
+                type->required |= 1 << mem->id;
+                // now required args are set if (type->required & *(i64*)obj->f) == type->required
             }
             if (mem->member_type & (A_MEMBER_IMETHOD | A_MEMBER_SMETHOD)) {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
                 assert(address, "no address");
+                if (!address) {
+                    printf("no addr?");
+                }
                 array args = create(array, alloc, mem->args.count);
                 for (num i = 0; i < mem->args.count; i++)
                     args->elements[i] = (object)((A_f**)&mem->args.meta_0)[i];
@@ -961,7 +1008,7 @@ type_member_t* A_hold_members(object instance) {
         type_member_t* mem = &type->members[i];
         object   *mdata = (object*)((cstr)instance + mem->offset);
         if (mem->member_type & (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN))
-            if (!(mem->type->traits & A_TRAIT_PRIMITIVE))
+            if (!(mem->type->traits & (A_TRAIT_ENUM | A_TRAIT_PRIMITIVE)))
                 A_hold(*mdata);
     }
     return 0;
@@ -1180,7 +1227,7 @@ string prep_cereal(cereal cs) {
     return res;
 }
 
-A A_with_cereal(object a, cereal cs) {
+A A_with_cereal(A a, cereal cs) {
     sz len = strlen(cs);
     A        f = A_header(a);
     AType type = f->type;
@@ -1268,11 +1315,11 @@ object construct_with(AType type, object data) {
         if (data_type->traits & A_TRAIT_INTEGRAL)
             v = read_integer(data_type);
         else if (data_type == typeid(symbol) || data_type == typeid(cstr))
-            v = A_enum_value (type, (cstr)data);
+            v = *A_enum_value (type, (cstr)data);
         else if (data_type == typeid(string))
-            v = A_enum_value (type, (cstr)((string)data)->chars);
+            v = *A_enum_value (type, (cstr)((string)data)->chars);
         else
-            v = A_enum_value (type, null);
+            v = *A_enum_value (type, null);
         result = A_alloc(type, 1, true);
         *((i32*)result) = (i32)v;
     }
@@ -1352,6 +1399,7 @@ void A_serialize(AType type, string res, object a) {
         else if (type == typeid(f32)) len = sprintf(buf, "%f",   *(f32*)a);
         else if (type == typeid(cstr)) len = sprintf(buf, "%s",  *(cstr*)a);
         else if (type == typeid(symbol)) len = sprintf(buf, "%s",  *(cstr*)a);
+        else if (type == typeid(hook)) len = sprintf(buf, "%p",  *(hook*)a);
         else {
             fault("implement primitive cast to str: %s", type->name);
         }
@@ -1646,7 +1694,13 @@ object A_formatter(AType type, FILE* f, object opt, symbol template, ...) {
         fwrite("\033[0m", 4, 1, f); // ANSI reset
         fflush(f);
     }
-    /// cereal is pretty available, and we only need this on string and path
+
+    if (type && (type->traits & A_TRAIT_ENUM)) {
+        // convert res to instance of this enum
+        object enum_v = A_enum_value(type, res->chars);
+        f32 test_v = *(f32*)enum_v;
+        return enum_v;
+    }
     return type ? (object)((A_f*)type)->with_cereal(A_alloc(type, 1, true), res->chars) : (object)res;
 }
 
@@ -1683,6 +1737,11 @@ real clampf(real i, real mn, real mx) {
 }
 
 void vector_init(vector a);
+
+vector vector_with_i32(vector a, i32 count) {
+    A_realloc(a, count);
+    return a;
+}
 
 sz vector_len(vector a) {
     return A_header(a)->count;
@@ -1776,6 +1835,14 @@ string string_copy(string a) {
     return string((symbol)a->chars);
 }
 
+bool A_inherits(AType src, AType check) {
+    while (src != typeid(A)) {
+        if (src == check) return true;
+        src = src->parent_type;
+    }
+    return src == check; // true for A-type against A-type
+}
+
 i32   string_index_num(string a, num index) {
     if (index < 0)
         index += a->len;
@@ -1842,6 +1909,27 @@ string string_trim(string a) {
         s++;
         count--;
     }
+    while (s[count - 1] == ' ')
+        count--;
+    
+    return string(chars, s, ref_length, count);
+}
+
+string string_ltrim(string a) {
+    cstr s = cstring(a);
+    int count = len(a);
+    while (*s == ' ') {
+        s++;
+        count--;
+    }
+    return string(chars, s, ref_length, count);
+}
+
+string string_rtrim(string a) {
+    cstr s = cstring(a);
+    int count = len(a);
+    while (s[count - 1] == ' ')
+        count--;
     return string(chars, s, ref_length, count);
 }
 
@@ -1923,7 +2011,7 @@ void string_init(string a) {
     }
 }
 
-string string_with_i32(string a, uint32_t value) {
+string string_with_i32(string a, i32 value) {
     // Check if the value is within the BMP (U+0000 - U+FFFF)
     if (value <= 0xFFFF) {
         a->len = 1;
@@ -1999,6 +2087,13 @@ item hashmap_fetch(hashmap a, object key) {
     n->key = a->unmanaged ? key : A_hold(key);
     a->count++;
     return n;
+}
+
+none hashmap_clear(hashmap a) {
+    each(a->data, list, bucket) {
+        while (bucket->first)
+            list_remove_item(bucket, bucket->first);
+    }
 }
 
 item hashmap_lookup(hashmap a, object key) {
@@ -2089,6 +2184,12 @@ bool map_rm(map a, object key) {
         return true;
     }
     return false;
+}
+
+none map_clear(map a) {
+    while (a->first)
+        list_remove_item(a, a->first);
+    hashmap_clear(a->hmap);
 }
 
 item map_lookup(map a, object key) {
@@ -2482,7 +2583,7 @@ void vector_init(vector a) {
     A_realloc(a, a->alloc);
 }
 
-none vector_with_path(vector a, path file_path) {
+vector vector_with_path(vector a, path file_path) {
     A f = A_header(a);
     f->scalar = typeid(i8);
     
@@ -2497,6 +2598,7 @@ none vector_with_path(vector a, path file_path) {
     size_t n = fread(f->data, 1, flen, ff);
     verify(n == flen, "could not read file: %o", f);
     fclose(ff);
+    return a;
 }
 
 ARef vector_get(vector a, num index) {
@@ -2568,7 +2670,7 @@ sz vector_count(vector a) {
     return f->count;
 }
 
-define_class(vector);
+define_class(vector, A);
 
 map map_of(symbol first_key, ...) {
     map a = new(map, hsize, 16);
@@ -3534,7 +3636,8 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
     }
     else if (*scan == '"' || *scan == '\'') {
         origin = scan;
-        res = construct_with(schema ? schema : typeid(string), parse_json_string(origin, &scan));
+        string js = parse_json_string(origin, &scan);
+        res = construct_with(schema ? schema : typeid(string), js);
     }
     else if (*scan == '{') { /// Type will make us convert to the object, from map, and set is_map back to false; what could possibly get crossed up with this one
         AType use_schema = schema ? schema : typeid(map);
@@ -3891,60 +3994,68 @@ bool is_alphabetic(char ch) {
     return false;
 }
 
+// would be nice if region could use these for the 4 coords
+// if unit could store percent we handle the use-case
+// t10%
+// type = xalign ()
 unit unit_with_string(unit a, string s) {
-    s     = trim(s);
-    sz ln = len(s);
+       s       = trim(s);
+    sz ln      = len (s);
+    a->percent = last(s) == '%';
+
+    if (a->percent)
+        s = mid(s, 0, ln - 1);
+
+    a->meta_type = isa(a)->meta.meta_0;
+    
+    verify(a->meta_type, "not a meta-type -- not turtle enough for turtle club");
+    a->enum_v = *A_enum_default(a->meta_type);
     if (ln == 0)
         return a;
-
-    AType  enum_type = isa(a)->meta.meta_0;
-    verify(enum_type, "not a meta-type -- not turtle enough for turtle club");
-    a->type = enum_type;
     
     bool al = is_alphabetic(last(s));
     if (!al) {
         verify(!is_alphabetic(first(s)), "expected single value when end is not alpha numeric");
-        a->unit  = 0;
-        verify (sscanf(s->chars, "%lf", &a->value) == 1,
+        verify (sscanf(s->chars, "%f", &a->scale_v) == 1,
             "unit parsing for %s failed: value is %s",
-            enum_type->name, s->chars);
+            a->meta_type->name, s->chars);
     } else {
         string u = null;
         for (int i = ln - 1; i >= 0; i--) {
             bool al = is_alphabetic(s->chars[i]);
             if (!al) {
-                u        = mid(s, i + 1, ln - (i + 1));
-                a->unit  = A_enum_value(enum_type, (cstr)u->chars);
-                string r = trim(mid(s, 0, i));
-                verify (sscanf(r->chars, "%lf", &a->value) == 1,
+                u = mid(s, i + 1, ln - (i + 1));
+                a->enum_v = *A_enum_value(a->meta_type, (cstr)u->chars);
+                string r = trim(mid(s, 0, clamp(i + 1, 0, len(s) - 1)));
+                verify (sscanf(r->chars, "%f", &a->scale_v) == 1,
                     "unit parsing for %s failed: value is %s",
-                    enum_type->name, r->chars);
+                    a->meta_type->name, r->chars);
 
                 break;
             }
         }
         if (!u) {
-            a->unit  = A_enum_value(enum_type, (cstr)s->chars);
-            a->value = 0;
+            a->enum_v  = *A_enum_value(a->meta_type, (cstr)s->chars);
+            a->scale_v = 0;
         }
     }
     return a;
 }
 
-define_class(A)
-define_meta(object, A, A)
+define_class(A, A)
+define_class(object,  A, A)
 
-define_class(watch)
-define_class(message)
-define_class(mutex)
-define_class(async)
+define_class(watch,   A)
+define_class(message, A)
+define_class(mutex,   A)
+define_class(async,   A)
 
-define_abstract(numeric)
-define_abstract(string_like)
-define_abstract(nil)
-define_abstract(raw)
-define_abstract(ref)
-define_abstract(imported)
+define_abstract(numeric,        0)
+define_abstract(string_like,    0)
+define_abstract(nil,            0)
+define_abstract(raw,            0)
+define_abstract(ref,            0)
+define_abstract(imported,       0)
 
 define_primitive( u8,    numeric, A_TRAIT_INTEGRAL | A_TRAIT_UNSIGNED)
 define_primitive(u16,    numeric, A_TRAIT_INTEGRAL | A_TRAIT_UNSIGNED)
@@ -3972,33 +4083,33 @@ define_primitive(ARef,   ref, 0)
 define_primitive(floats, raw, 0)
 define_primitive(hook,   raw, 0)
 
-define_class(line)
+define_class(line, A)
 
 define_enum(OPType)
 define_enum(Exists)
 define_enum(level)
 
-define_mod(path, string)
+define_class(path, string)
 //define_class(file)
-define_class(string)
+define_class(string, A)
 
-define_class(unit)
+define_class(unit, A)
 
-define_class(item)
+define_class(item, A)
 //define_proto(collection) -- disabling for now during reduction to base + class + mod
-define_class(list, object)
-define_class(array, object)
-define_class(hashmap)
-define_class(pair)
-define_mod(map, list) // never quite did one like this but it does make sense
-define_class(fn)
-define_class(subprocedure)
+define_class(list,          A, object)
+define_class(array,         A, object)
+define_class(hashmap,       A)
+define_class(pair,          A)
+define_class(map,           list) // never quite did one like this but it does make sense
+define_class(fn,            A)
+define_class(subprocedure,  A)
 
-define_class(AF)
+define_class(AF, A)
 
-define_meta(ATypes,           array, AType)
-define_meta(array_map,        array, map)
-define_meta(array_string,     array, string)
+define_class(ATypes,           array, AType)
+define_class(array_map,        array, map)
+define_class(array_string,     array, string)
 
 
 

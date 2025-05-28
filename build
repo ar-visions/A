@@ -26,6 +26,7 @@ import:
 export:
     $(bash $TAPESTRY/checkout/A/headers.sh)
     -fPIC
+	-fmacro-backtrace-limit=0
 	-Wno-write-strings
     -Wno-compare-distinct-pointer-types
     -Wno-deprecated-declarations

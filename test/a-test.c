@@ -5,21 +5,24 @@ typedef struct user {
     string a;
 } *user;
 
+
+
+
+
 int main(int n_args, char* v_args[]) {
     A_start();
-    /*
-    AF pool   = A_pool(1024);
-    A  fields = A_header(pool);
-    /// access the A-header direct, start of allocation, behind user memory
 
-    user    u = A_struct(user);
-    u->a      = new(string, chars, "Audrey");
-    map     m = new(map, hsize, 16);
-    set(m, u->a, A_bool(true));
-    print("m = %o", m);
-    
-    A_free(pool);
-    */
+    print("A_start ran");
+
+    /// lets init an object, and then enumerate which fields were given by checking afterwards.
+    /// this method will let us know primitives and structs; thats great!
+    /// no extra storage on the instance, either.  uses the same 'f' fields data; its used for this purpose!
+    object       obj = null;
+    subprocedure sub = subprocedure(
+        target, null, // <-- null value explicitly and it passes required.  so thats useful for design members
+        addr,   main);
+
+    AType sub_type = isa(sub);
 
     int sz1 = sizeof(struct _string);
     int sz2 = sizeof(struct _vector);
@@ -35,7 +38,7 @@ int main(int n_args, char* v_args[]) {
 
     string m = mid(s, 1, len(s) - 2);
     
-    A header = A_header(s);
+    A header = A_header((object)s);
     print("string2: %i, refs: %i, data: %p", s->alloc, header->refs, header->data);
 
     return 0;

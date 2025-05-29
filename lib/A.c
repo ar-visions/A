@@ -567,8 +567,10 @@ void array_push_weak(array a, object b) {
         array_expand(a);
     }
     AType t = isa(a);
-    if (is_meta((object)a))
+    if (is_meta((object)a)) {
+        AType type = isa(a);
         assert(is_meta_compatible((object)a, (object)b), "not meta compatible");
+    }
     a->elements[a->len++] = b;
 }
 
@@ -588,7 +590,7 @@ void array_push(array a, object b) {
         array_expand(a);
     }
     AType t = isa(a);
-    if (is_meta(a))
+    if (is_meta(a) && t->meta.meta_0 != typeid(object))
         assert(is_meta_compatible(a, b), "not meta compatible");
     a->elements[a->len++] = A_hold(b);
 }
@@ -904,7 +906,6 @@ void A_start() {
         for (num m = 0; m < type->member_count; m++) {
             type_member_t* mem = &type->members[m];
             if (mem->required && (mem->member_type & A_MEMBER_PROP)) {
-                print("OR'ing required member bit: %s:%s", type->name, mem->name);
                 type->required |= 1 << mem->id;
                 // now required args are set if (type->required & *(i64*)obj->f) == type->required
             }
@@ -912,9 +913,6 @@ void A_start() {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
                 assert(address, "no address");
-                if (!address) {
-                    printf("no addr?");
-                }
                 array args = create(array, alloc, mem->args.count);
                 for (num i = 0; i < mem->args.count; i++)
                     args->elements[i] = (object)((A_f**)&mem->args.meta_0)[i];
@@ -1840,6 +1838,10 @@ bool A_inherits(AType src, AType check) {
         if (src == check) return true;
         src = src->parent_type;
     }
+    if ((src   == typeid(A) || src   == typeid(object)) &&
+        (check == typeid(A) || check == typeid(object))) {
+        return true;
+    }
     return src == check; // true for A-type against A-type
 }
 
@@ -2543,7 +2545,7 @@ bool is_meta_compatible(object a, object b) {
         num found = 0;
         for (num i = 0; i < t->meta.count; i++) {
             AType mt = ((AType*)&t->meta.meta_0)[i];
-            if (mt == bt)
+            if (A_inherits(bt, mt))
                 found++;
         }
         return found > 0;

@@ -98,7 +98,7 @@ if [ ! -f "$INIT_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INIT_HEADER" ]; then
             continue
         fi
         
-        echo "#define TC_${class_name}(MEMBER, VALUE) ({ printf(\"setting field bit (id: %i): %s\\n\", (int)FIELD_ID(${class_name}, MEMBER), #MEMBER);   (*(u128*)&instance->f) |= ((u128)1) << FIELD_ID(${class_name}, MEMBER); VALUE; })" >> "$INIT_HEADER"
+        echo "#define TC_${class_name}(MEMBER, VALUE) ({ (*(u128*)&instance->f) |= ((u128)1) << FIELD_ID(${class_name}, MEMBER); VALUE; })" >> "$INIT_HEADER"
 
         # Variadic argument counting macros
         echo "#define _ARG_COUNT_IMPL_${class_name}(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, _21, _22, N, ...) N" >> "$INIT_HEADER"
@@ -160,7 +160,12 @@ if [ ! -f "$INIT_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INIT_HEADER" ]; then
     echo "#endif /* _${UPROJECT}_INIT_H_ */" >> "$INIT_HEADER"
 fi
 
-# Only regenerate if necessary
+# methods would be nicer if we could listen to their calls along with the argument and returns
+# this is far from easy, though -- it works for individual methods with names like:
+#   method(Type, obj, arg) <-- not sure if we want this throughout, though
+#   its more debuggable to be able to listen to methods, but thats actually only these types, not all
+#   further its quite a lot of conversion and boilerplate to effectively repeat the class name all over the place
+#   methods lose their edge
 if [ ! -f "$METHODS_HEADER" ] || [ "$PROJECT_HEADER" -nt "$METHODS_HEADER" ]; then
     rm -f "$METHODS_HEADER"
     echo "/* generated methods interface */" > "$METHODS_HEADER"

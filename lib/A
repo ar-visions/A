@@ -425,8 +425,9 @@ typedef bool(*global_init_fn)();
 #define EXPAND_ARGS_8(a, b, c, d, e, f, g, h)          8, (AType)&a##_type, (AType)&b##_type, (AType)&c##_type, (AType)&d##_type, (AType)&e##_type, (AType)&f##_type, (AType)&g##_type, (AType)&h##_type
 #define EXPAND_ARGS_9(a, b, c, d, e, f, g, h, ii)      9, (AType)&a##_type, (AType)&b##_type, (AType)&c##_type, (AType)&d##_type, (AType)&e##_type, (AType)&f##_type, (AType)&g##_type, (AType)&h##_type, (AType)&ii##_type
 #define EXPAND_ARGS_10(a, b, c, d, e, f, g, h, ii, j) 10, (AType)&a##_type, (AType)&b##_type, (AType)&c##_type, (AType)&d##_type, (AType)&e##_type, (AType)&f##_type, (AType)&g##_type, (AType)&h##_type, (AType)&ii##_type, (AType)&j##_type
-#define COUNT_ARGS_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, N, ...) N
-#define COUNT_ARGS(...)             COUNT_ARGS_IMPL(__VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1)
+//#define COUNT_ARGS_IMPL(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, N, ...) N
+#define COUNT_ARGS_IMPL(_0, _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, N, ...) N
+#define COUNT_ARGS(...)             COUNT_ARGS_IMPL(dummy, ## __VA_ARGS__, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 
 //#define EXPAND_ARGS2_0()                       
 #define EXPAND_ARGS2_1(a)                        a
@@ -445,7 +446,6 @@ typedef bool(*global_init_fn)();
 #define   i_ctr_interface_F_EXTERN(X, ARG)
 #define   i_ctr_interface_INST(X, ARG)
 #define   i_ctr_interface_INST_EXTERN(X, ARG)
-#define   i_ctr_interface_MDECL(X, ARG)
 #define   i_ctr_interface_DECL(X, ARG)
 #define   i_ctr_interface_MEMBER_INDEX(X, ARG)
 #define   i_ctr_interface_GENERICS(X, ARG)
@@ -462,7 +462,6 @@ typedef bool(*global_init_fn)();
 #define   i_ctr_public_F_EXTERN(X, ARG)
 #define   i_ctr_public_INST(X, ARG)
 #define   i_ctr_public_INST_EXTERN(X, ARG)
-#define   i_ctr_public_MDECL(X, ARG)
 #define   i_ctr_public_DECL(X, ARG) X X##_with_##ARG(X, ARG);
 #define   i_ctr_public_GENERICS(X, ARG) ARG: X##_type.with_##ARG,
 
@@ -491,7 +490,6 @@ typedef bool(*global_init_fn)();
 #define   i_prop_opaque_F_EXTERN(X, R, N) u8 N;
 #define   i_prop_opaque_INST(X, R, N)         R N;
 #define   i_prop_opaque_INST_EXTERN(X, R, N)  i_prop_public_INST(X, R, N)
-#define   i_prop_opaque_MDECL(X, R, N)        i_prop_public_MDECL(X, R, N)
 #define   i_prop_opaque_DECL(X, R, N)         i_prop_public_DECL(X, R, N)
 #define   i_prop_opaque_GENERICS(X, R, N)
 #define   i_prop_opaque_INIT(X, R, N)
@@ -502,7 +500,6 @@ typedef bool(*global_init_fn)();
 #define   i_prop_interface_F_EXTERN(X, R, N)
 #define   i_prop_interface_INST(X, R, N)
 #define   i_prop_interface_INST_EXTERN(X, R, N)
-#define   i_prop_interface_MDECL(X, R, N)
 #define   i_prop_interface_DECL(X, R, N)
 #define   i_prop_interface_GENERICS(X, R, N)
 #define   i_prop_interface_INIT(X, R, N) \
@@ -513,9 +510,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_public_F(X, R, N) u8 N;
 #define   i_prop_public_F_EXTERN(X, R, N) u8 N;
 #define   i_prop_public_INST(X, R, N)         R N;
-#define   i_prop_public_INST_EXTERN(X, R, N)  i_prop_public_INST(X, R, N)
-#define   i_prop_public_MDECL(X, R, N)        
-// static const i32 X##_member_##N = __COUNTER__;
+#define   i_prop_public_INST_EXTERN(X, R, N)  i_prop_public_INST(X, R, N)  
 #define   i_prop_public_DECL(X, R, N)               
 #define   i_prop_public_GENERICS(X, R, N)
 #define   i_prop_public_INIT(X, R, N) \
@@ -532,7 +527,6 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_F_EXTERN(X, R, N) u8 N;
 #define   i_prop_required_INST(X, R, N)         i_prop_public_INST(X, R, N)
 #define   i_prop_required_INST_EXTERN(X, R, N)  i_prop_public_INST(X, R, N)
-#define   i_prop_required_MDECL(X, R, N)        i_prop_public_MDECL(X, R, N)
 #define   i_prop_required_DECL(X, R, N)         i_prop_public_DECL(X, R, N)
 #define   i_prop_required_GENERICS(X, R, N)
 #define   i_prop_required_INIT(X, R, N) \
@@ -545,7 +539,6 @@ typedef bool(*global_init_fn)();
 #define   i_prop_intern_F_EXTERN(X, R, N) u8 N;
 #define   i_prop_intern_INST(X, R, N)           R N;
 #define   i_prop_intern_INST_EXTERN(X, R, N)    R _##N;
-#define   i_prop_intern_MDECL(X, R, N)          i_prop_public_MDECL(X, R, N)
 #define   i_prop_intern_DECL(X, R, N)           i_prop_public_DECL(X, R, N)
 #define   i_prop_intern_GENERICS(X, R, N)
 #define   i_prop_intern_INIT(X, R, N)
@@ -561,10 +554,16 @@ typedef bool(*global_init_fn)();
 #define   i_prop_public_F_EXTERN_field(X, R, N, M2)     u8 N;
 #define   i_prop_public_INST_field(X, R, N, M2)         R N;
 #define   i_prop_public_INST_EXTERN_field(X, R, N, M2)  i_prop_public_INST_field(X, R, N, M2)
-#define   i_prop_public_MDECL_field(X, R, N, M2)        i_prop_public_MDECL(X, R, N)
 #define   i_prop_public_DECL_field(X, R, N, M2) i_prop_public_DECL(X, R, N)
 #define   i_prop_public_GENERICS_field(X, R, N, M2)
-#define   i_prop_public_INIT_field(X, R, N, M2) i_prop_public_INIT(X, R, N)
+#define   i_prop_public_INIT_field(X, R, N, M2) \
+    X##_type.members[X##_type.member_count].name        = #M2;                               \
+    X##_type.members[X##_type.member_count].offset      = offsetof(struct _##X, N);          \
+    X##_type.members[X##_type.member_count].type        = (AType)&R##_type;                  \
+    X##_type.members[X##_type.member_count].member_type = A_MEMBER_PROP;                     \
+    X##_type.members[X##_type.member_count].id          = offsetof(struct X##_fields, N);    \
+    X##_type.member_count++;
+
 #define   i_prop_public_PROTO_field(X, R, N, M2)  
 #define   i_prop_public_METHOD_field(X, R, N, M2)
 
@@ -572,11 +571,11 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_F_EXTERN_field(X, R, N, M2)   u8 N;
 #define   i_prop_required_INST_field(X, R, N, M2)         i_prop_public_INST_field(X, R, N, M2)
 #define   i_prop_required_INST_EXTERN_field(X, R, N, M2)  i_prop_public_INST_field(X, R, N, M2)
-#define   i_prop_required_MDECL_field(X, R, N, M2)        i_prop_public_MDECL(X, R, N)
 #define   i_prop_required_DECL_field(X, R, N, M2)   i_prop_public_DECL(X, R, N)
 #define   i_prop_required_GENERICS_field(X, R, N, M2)
 #define   i_prop_required_INIT_field(X, R, N, M2) \
     X##_type.members[X##_type.member_count].required = true; \
+    printf("M2 = %s\n", #M2); \
     i_prop_public_INIT_field(X, R, N, M2)
 #define   i_prop_required_PROTO_field(X, R, N, M2)  
 #define   i_prop_required_METHOD_field(X, R, N, M2)
@@ -585,7 +584,6 @@ typedef bool(*global_init_fn)();
 #define   i_prop_intern_F_EXTERN_field(X, R, N, M2)         u8 N;
 #define   i_prop_intern_INST_field(X, R, N, M2)             R N;
 #define   i_prop_intern_INST_EXTERN_field(X, R, N, M2)
-#define   i_prop_intern_MDECL_field(X, R, N, M2)        i_prop_public_MDECL(X, R, N)
 #define   i_prop_intern_DECL_field(X, R, N, M2)     i_prop_public_DECL(X, R, N)
 #define   i_prop_intern_GENERICS_field(X, R, N, M2)
 #define   i_prop_intern_INIT_field(X, R, N, M2)          fault("field is not exposed when intern");
@@ -598,7 +596,6 @@ typedef bool(*global_init_fn)();
 #define   i_prop_public_F_EXTERN_of(X, R, N, M2) u8 N;
 #define   i_prop_public_INST_of(X, R, N, M2) R N;
 #define   i_prop_public_INST_EXTERN_of(X, R, N, M2) R N;
-#define   i_prop_public_MDECL_of(X, R, N, M2)        i_prop_public_MDECL(X, R, N)
 #define   i_prop_public_DECL_of(X, R, N, M2)        i_prop_public_DECL(X, R, N)
 #define   i_prop_public_GENERICS_of(X, R, N, M2)
 #define   i_prop_public_INIT_of(X, R, N, M2) \
@@ -612,7 +609,6 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_F_EXTERN_of(X, R, N, M2) u8 N;
 #define   i_prop_required_INST_of(X, R, N, M2) R N;
 #define   i_prop_required_INST_EXTERN_of(X, R, N, M2)
-#define   i_prop_required_MDECL_of(X, R, N, M2)        i_prop_public_MDECL(X, R, N)
 #define   i_prop_required_DECL_of(X, R, N, M2)      i_prop_public_DECL(X, R, N)
 #define   i_prop_required_GENERICS_of(X, R, N, M2)
 #define   i_prop_required_INIT_of(X, R, N, M2) \
@@ -624,7 +620,6 @@ typedef bool(*global_init_fn)();
 #define   i_prop_intern_F_EXTERN_of(X, R, N, M2) u8 N;
 #define   i_prop_intern_INST_of(X, R, N, M2)           R N;
 #define   i_prop_intern_INST_EXTERN_of(X, R, N, M2)    M2 _##N;
-#define   i_prop_intern_MDECL_of(X, R, N, M2)        i_prop_public_MDECL(X, R, N)
 #define   i_prop_intern_DECL_of(X, R, N, M2)        i_prop_public_DECL(X, R, N)
 #define   i_prop_intern_GENERICS_of(X, R, N, M2)
 #define   i_prop_intern_INIT_of(X, R, N, M2)
@@ -636,7 +631,6 @@ typedef bool(*global_init_fn)();
 #define   i_prop_public_F_EXTERN_as(X, R, N, M2) u8 N;
 #define   i_prop_public_INST_as(X, R, N, M2)
 #define   i_prop_public_INST_EXTERN_as(X, R, N, M2)
-#define   i_prop_public_MDECL_as(X, R, N, M2)       i_prop_public_MDECL(X, R, N)
 #define   i_prop_public_DECL_as(X, R, N, M2)        i_prop_public_DECL(X, R, N)
 #define   i_prop_public_GENERICS_as(X, R, N, M2)
 #define   i_prop_public_INIT_as(X, R, N, M2) \
@@ -648,7 +642,6 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_F_EXTERN_as(X, R, N, M2) u8 N;
 #define   i_prop_required_INST_as(X, R, N, M2)
 #define   i_prop_required_INST_EXTERN_as(X, R, N, M2)
-#define   i_prop_required_MDECL_as(X, R, N, M2)        i_prop_public_MDECL(X, R, N)
 #define   i_prop_required_DECL_as(X, R, N, M2)      i_prop_public_DECL(X, R, N)
 #define   i_prop_required_GENERICS_as(X, R, N, M2)
 #define   i_prop_required_INIT_as(X, R, N, M2) \
@@ -660,7 +653,6 @@ typedef bool(*global_init_fn)();
 #define   i_prop_intern_F_EXTERN_as(X, R, N, M2) u8 N;
 #define   i_prop_intern_INST_as(X, R, N, M2)           R N;
 #define   i_prop_intern_INST_EXTERN_as(X, R, N, M2)    M2 _##N;
-#define   i_prop_intern_MDECL_as(X, R, N, M2)          i_prop_public_MDECL(X, R, N)
 #define   i_prop_intern_DECL_as(X, R, N, M2)        i_prop_public_DECL(X, R, N)
 #define   i_prop_intern_GENERICS_as(X, R, N, M2)
 #define   i_prop_intern_INIT_as(X, R, N, M2)
@@ -694,7 +686,6 @@ typedef bool(*global_init_fn)();
 #define   i_vprop_interface_F_EXTERN(X, R, N)
 #define   i_vprop_interface_INST(X, R, N)
 #define   i_vprop_interface_INST_EXTERN(X, R, N)
-#define   i_vprop_interface_MDECL(X, R, N)        i_prop_public_MDECL(X, R, N)
 #define   i_vprop_interface_DECL(X, R, N)       i_prop_public_DECL(X, R, N)
 #define   i_vprop_interface_GENERICS(X, R, N) \
     member_validate[validate_count++] = #N;
@@ -705,7 +696,6 @@ typedef bool(*global_init_fn)();
 #define   i_vprop_public_F_EXTERN(X, R, N) u8 N;
 #define   i_vprop_public_INST(X, R, N)         R* N;
 #define   i_vprop_public_INST_EXTERN(X, R, N)  i_vprop_public_INST(X, R, N)
-#define   i_vprop_public_MDECL(X, R, N)        i_prop_public_MDECL(X, R, N)
 #define   i_vprop_public_DECL(X, R, N)          i_prop_public_DECL(X, R, N)
 #define   i_vprop_public_GENERICS(X, R, N)
 #define   i_vprop_public_INIT(X, R, N) \
@@ -721,7 +711,6 @@ typedef bool(*global_init_fn)();
 #define   i_vprop_required_F_EXTERN(X, R, N) u8 N;
 #define   i_vprop_required_INST(X, R, N)         i_vprop_public_INST(X, R, N)
 #define   i_vprop_required_INST_EXTERN(X, R, N)  i_vprop_public_INST(X, R, N)
-#define   i_vprop_required_MDECL(X, R, N)        i_prop_public_MDECL(X, R, N)
 #define   i_vprop_required_DECL(X, R, N)         i_prop_public_DECL(X, R, N)
 #define   i_vprop_required_GENERICS(X, R, N)
 #define   i_vprop_required_INIT(X, R, N) \
@@ -734,7 +723,6 @@ typedef bool(*global_init_fn)();
 #define   i_vprop_intern_F_EXTERN(X, R, N) u8 N;
 #define   i_vprop_intern_INST(X, R, N)           R* N;
 #define   i_vprop_intern_INST_EXTERN(X, R, N)
-#define   i_vprop_intern_MDECL(X, R, N)         i_prop_public_MDECL(X, R, N)
 #define   i_vprop_intern_DECL(X, R, N)          i_prop_public_DECL(X, R, N)
 #define   i_vprop_intern_GENERICS(X, R, N)
 #define   i_vprop_intern_INIT(X, R, N)
@@ -748,7 +736,6 @@ typedef bool(*global_init_fn)();
 #define i_attr_F_EXTERN(    X, ENUM, ID, VALUE, ...)
 #define i_attr_INST(        X, ENUM, ID, VALUE, ...)
 #define i_attr_INST_EXTERN( X, ENUM, ID, VALUE, ...)
-#define i_attr_MDECL(       X, ENUM, ID, VALUE, ...)
 #define i_attr_DECL(        X, ENUM, ID, VALUE, ...)
 #define i_attr_GENERICS(    X, ENUM, ID, VALUE, ...)
 #define i_attr_INIT(        X, ENUM, ID, VALUE, ...) \
@@ -768,7 +755,6 @@ typedef bool(*global_init_fn)();
 #define   i_array_interface_F_EXTERN(X, R, S, N)
 #define   i_array_interface_INST(X, R, S, N)
 #define   i_array_interface_INST_EXTERN(X, R, S, N)
-#define   i_array_interface_MDECL(X, R, S, N)
 #define   i_array_interface_DECL(X, R, S, N)
 #define   i_array_interface_GENERICS(X, R, S, N)
 #define   i_array_interface_INIT(X, R, S, N) \
@@ -781,7 +767,6 @@ typedef bool(*global_init_fn)();
 #define   i_array_public_F_EXTERN(X, R, S, N) u8 N;
 #define   i_array_public_INST(X, R, S, N)         R N[S];  
 #define   i_array_public_INST_EXTERN(X, R, S, N)  i_array_public_INST(X, R, S, N)
-#define   i_array_public_MDECL(X, R, S, N)        i_prop_public_MDECL(X, R, N)
 #define   i_array_public_DECL(X, R, S, N)           i_prop_public_DECL(X, R, N)
 #define   i_array_public_GENERICS(X, R, S, N)
 #define   i_array_public_INIT(X, R, S, N) \
@@ -795,7 +780,6 @@ typedef bool(*global_init_fn)();
 #define   i_array_intern_F_EXTERN(X, R, S, N) u8 N;
 #define   i_array_intern_INST(X, R, S, N)         R N[S];
 #define   i_array_intern_INST_EXTERN(X, R, S, N)  ARef _##N[S];
-#define   i_array_intern_MDECL(X, R, S, N)        i_prop_public_MDECL(X, R, N)
 #define   i_array_intern_DECL(X, R, S, N)         i_prop_public_DECL(X, R, N)
 #define   i_array_intern_GENERICS(X, R, S, N)
 #define   i_array_intern_INIT(X, R, S, N)
@@ -930,7 +914,6 @@ typedef bool(*global_init_fn)();
 #define   i_inlay_public_F_EXTERN(X, R, N)     u8 N;
 #define   i_inlay_public_INST(X, R, N)         struct _##R N;
 #define   i_inlay_public_INST_EXTERN(X, R, N)  struct _##R N;
-#define   i_inlay_public_MDECL(X, R, N)
 #define   i_inlay_public_DECL(X, R, N)
 #define   i_inlay_public_GENERICS(X, R, N)
 #define   i_inlay_public_INIT(X, R, N) \
@@ -946,7 +929,6 @@ typedef bool(*global_init_fn)();
 #define   i_inlay_required_F_EXTERN(X, R, N) u8 N;
 #define   i_inlay_required_INST(X, R, N)         i_inlay_public_INST(X, R, N)
 #define   i_inlay_required_INST_EXTERN(X, R, N)  i_inlay_public_INST_EXTERN(X, R, N)
-#define   i_inlay_required_MDECL(X, R, N)
 #define   i_inlay_required_DECL(X, R, N)
 #define   i_inlay_required_GENERICS(X, R, N)
 #define   i_inlay_required_INIT(X, R, N) \
@@ -959,7 +941,6 @@ typedef bool(*global_init_fn)();
 #define   i_inlay_intern_F_EXTERN(X, R, N)        u8 N;
 #define   i_inlay_intern_INST(X, R, N)            struct _##R N;
 #define   i_inlay_intern_INST_EXTERN(X, R, N)     i_inlay_intern_INST(X, R, N)
-#define   i_inlay_intern_MDECL(X, R, N)
 #define   i_inlay_intern_DECL(X, R, N)
 #define   i_inlay_intern_GENERICS(X, R, N)
 #define   i_inlay_intern_INIT(X, R, N)
@@ -973,7 +954,6 @@ typedef bool(*global_init_fn)();
 #define   s_method_interface_F_EXTERN(X, R, N, ...)
 #define   s_method_interface_INST(X, R, N, ...)
 #define   s_method_interface_INST_EXTERN(X, R, N, ...)
-#define   s_method_interface_MDECL(X, R, N, ...)
 #define   s_method_interface_DECL(X, R, N, ...)
 #define   s_method_interface_GENERICS(X, R, N, ...)
 #define   s_method_interface_INIT(X, R, N, ...) \
@@ -986,7 +966,6 @@ typedef bool(*global_init_fn)();
 #define   s_method_public_F_EXTERN(X, R, N, ...)
 #define   s_method_public_INST(X, R, N, ...)
 #define   s_method_public_INST_EXTERN(X, R, N, ...)
-#define   s_method_public_MDECL(X, R, N, ...)
 #define   s_method_public_DECL(X, R, N, ...)       R X##_##N(__VA_ARGS__);
 #define   s_method_public_GENERICS(X, R, N, ...)
 #define   s_method_public_INIT(X, R, N, ...) \
@@ -1004,7 +983,6 @@ typedef bool(*global_init_fn)();
 #define   s_method_intern_F_EXTERN(X, R, N, ...)
 #define   s_method_intern_INST(X, R, N, ...)
 #define   s_method_intern_INST_EXTERN(X, R, N, ...)
-#define   s_method_intern_MDECL(X, R, N, ...)
 #define   s_method_intern_DECL(X, R, N, ...)
 #define   s_method_intern_GENERICS(X, R, N, ...)
 #define   s_method_intern_INIT(X, R, N, ...)      
@@ -1016,7 +994,6 @@ typedef bool(*global_init_fn)();
 #define   i_method_interface_F_EXTERN(X, R, N, ...)
 #define   i_method_interface_INST(X, R, N, ...)
 #define   i_method_interface_INST_EXTERN(X, R, N, ...)
-#define   i_method_interface_MDECL(X, R, N, ...)
 #define   i_method_interface_DECL(X, R, N, ...)
 #define   i_method_interface_GENERICS(X, R, N, ...)
 #define   i_method_interface_INIT(X, R, N, ...) \
@@ -1028,7 +1005,6 @@ typedef bool(*global_init_fn)();
 #define   i_method_public_F_EXTERN(    X, R, N, ...)
 #define   i_method_public_INST(    X, R, N, ...)
 #define   i_method_public_INST_EXTERN(  X, R, N, ...)
-#define   i_method_public_MDECL(    X, R, N, ...)
 #define   i_method_public_DECL(    X, R, N, ...)    R X##_##N(__VA_ARGS__);
 #define   i_method_public_GENERICS(X, R, N, ...)
 #define   i_method_public_INIT(    X, R, N, ...) \
@@ -1047,7 +1023,6 @@ typedef bool(*global_init_fn)();
 #define   i_method_intern_F_EXTERN(    X, R, N, ...)
 #define   i_method_intern_INST(    X, R, N, ...)
 #define   i_method_intern_INST_EXTERN(  X, R, N, ...)
-#define   i_method_intern_MDECL(    X, R, N, ...)
 #define   i_method_intern_DECL(    X, R, N, ...)
 #define   i_method_intern_GENERICS(X, R, N, ...)
 #define   i_method_intern_INIT(    X, R, N, ...)    
@@ -1149,7 +1124,6 @@ CPU_Caps detect_cpu_caps();
 #define   i_operator_interface_F_EXTERN(X, R, N, ARG)
 #define   i_operator_interface_INST(X, R, N, ARG)
 #define   i_operator_interface_INST_EXTERN(X, R, N, ARG)
-#define   i_operator_interface_MDECL(X, R, N, ARG)
 #define   i_operator_interface_DECL(X, R, N, ARG)
 #define   i_operator_interface_GENERICS(X, R, N, ARG)
 #define   i_operator_interface_INIT(X, R, N, ARG) \
@@ -1161,7 +1135,6 @@ CPU_Caps detect_cpu_caps();
 #define   i_operator_public_F_EXTERN(X, R, N, ARG)
 #define   i_operator_public_INST(X, R, N, ARG)
 #define   i_operator_public_INST_EXTERN(X, R, N, ARG)
-#define   i_operator_public_MDECL(X, R, N, ARG)
 #define   i_operator_public_DECL(X, R, N, ARG)
 #define   i_operator_public_GENERICS(X, R, N, ARG)
 #define   i_operator_public_INIT(X, R, N, ARG) \
@@ -1180,7 +1153,6 @@ CPU_Caps detect_cpu_caps();
 #define   i_operator_intern_F_EXTERN(X, R, N, ARG)
 #define   i_operator_intern_INST(X, R, N, ARG)
 #define   i_operator_intern_INST_EXTERN(X, R, N, ARG)
-#define   i_operator_intern_MDECL(X, R, N, ARG)
 #define   i_operator_intern_DECL(X, R, N, ARG)
 #define   i_operator_intern_GENERICS(X, R, N, ARG)
 #define   i_operator_intern_INIT(X, R, N, ARG)      
@@ -1192,7 +1164,6 @@ CPU_Caps detect_cpu_caps();
 #define   i_cast_interface_F_EXTERN(X, R)
 #define   i_cast_interface_INST(X, R)
 #define   i_cast_interface_INST_EXTERN(X, R)
-#define   i_cast_interface_MDECL(X, R)
 #define   i_cast_interface_DECL(X, R)
 #define   i_cast_interface_GENERICS(X, R)
 #define   i_cast_interface_INIT(X, R) \
@@ -1204,7 +1175,6 @@ CPU_Caps detect_cpu_caps();
 #define   i_cast_public_F_EXTERN(X, R)
 #define   i_cast_public_INST(X, R)
 #define   i_cast_public_INST_EXTERN(X, R)
-#define   i_cast_public_MDECL(X, R)
 #define   i_cast_public_DECL(X, R)
 #define   i_cast_public_GENERICS(X, R)
 #define   i_cast_public_INIT(X, R) \
@@ -1222,7 +1192,6 @@ CPU_Caps detect_cpu_caps();
 #define   i_cast_intern_F_EXTERN(X, R)
 #define   i_cast_intern_INST(X, R)
 #define   i_cast_intern_INST_EXTERN(X, R)
-#define   i_cast_intern_MDECL(X, R)
 #define   i_cast_intern_DECL(X, R)
 #define   i_cast_intern_GENERICS(X, R)
 #define   i_cast_intern_INIT(X, R)          
@@ -1234,7 +1203,6 @@ CPU_Caps detect_cpu_caps();
 #define i_index_interface_F_EXTERN(X, R, ...)
 #define i_index_interface_INST(X, R, ...)
 #define i_index_interface_INST_EXTERN(X, R, ...)
-#define i_index_interface_MDECL(X, R, ...)
 #define i_index_interface_DECL(X, R, ...)
 #define i_index_interface_GENERICS(X, R, ...)
 #define i_index_interface_INIT(X, R, ...) \
@@ -1246,7 +1214,6 @@ CPU_Caps detect_cpu_caps();
 #define i_index_public_F_EXTERN(X, R, ...)
 #define i_index_public_INST(X, R, ...)
 #define i_index_public_INST_EXTERN(X, R, ...)
-#define i_index_public_MDECL(X, R, ...)
 #define i_index_public_DECL(X, R, ...)
 #define i_index_public_GENERICS(X, R, ...)
 #define i_index_public_INIT(X, R, ...) \
@@ -1264,7 +1231,6 @@ CPU_Caps detect_cpu_caps();
 #define i_index_intern_F_EXTERN(X, R, ...)
 #define i_index_intern_INST(X, R, ...)
 #define i_index_intern_INST_EXTERN(X, R, ...)
-#define i_index_intern_MDECL(X, R, ...)
 #define i_index_intern_DECL(X, R, ...)
 #define i_index_intern_GENERICS(X, R, ...)
 #define i_index_intern_INIT(X, R, ...)
@@ -1276,7 +1242,6 @@ CPU_Caps detect_cpu_caps();
 #define i_vargs_public_F_EXTERN(X, R, N, ...)
 #define i_vargs_public_INST(X, R, N, ...)
 #define i_vargs_public_INST_EXTERN(X, R, N, ...)
-#define i_vargs_public_MDECL(X, R, N, ...)
 #define i_vargs_public_DECL(X, R, N, ...)
 #define i_vargs_public_GENERICS(X, R, N, ...)
 #define i_vargs_public_INIT(X, R, N, ...)               i_method_public_INIT(X, R, N, __VA_ARGS__)  
@@ -1287,7 +1252,6 @@ CPU_Caps detect_cpu_caps();
 #define i_vargs_intern_F_EXTERN(X, R, N, ...)
 #define i_vargs_intern_INST(X, R, N, ...)
 #define i_vargs_intern_INST_EXTERN(X, R, N, ...)
-#define i_vargs_intern_MDECL(X, R, N, ...)
 #define i_vargs_intern_DECL(X, R, N, ...)
 #define i_vargs_intern_GENERICS(X, R, N, ...)
 #define i_vargs_intern_INIT(X, R, N, ...)               i_method_intern_INIT(X, R, N, __VA_ARGS__)  
@@ -1299,7 +1263,6 @@ CPU_Caps detect_cpu_caps();
 #define s_vargs_public_F_EXTERN(X, R, N, ...)
 #define s_vargs_public_INST(X, R, N, ...)
 #define s_vargs_public_INST_EXTERN(X, R, N, ...)
-#define s_vargs_public_MDECL(X, R, N, ...)
 #define s_vargs_public_DECL(X, R, N, ...)               R X##_##N(__VA_ARGS__, ...);
 #define s_vargs_public_GENERICS(X, R, N, ...)
 #define s_vargs_public_INIT(X, R, N, ...)               s_method_public_INIT(X, R, N, ##__VA_ARGS__)
@@ -1310,7 +1273,6 @@ CPU_Caps detect_cpu_caps();
 #define s_vargs_intern_F_EXTERN(X, R, N, ...)
 #define s_vargs_intern_INST(X, R, N, ...)
 #define s_vargs_intern_INST_EXTERN(X, R, N, ...)
-#define s_vargs_intern_MDECL(X, R, N, ...)
 #define s_vargs_intern_DECL(X, R, N, ...)
 #define s_vargs_intern_GENERICS(X, R, N, ...)
 #define s_vargs_intern_INIT(X, R, N, ...)               s_method_intern_INIT(X, R, N, ##__VA_ARGS__)
@@ -1322,7 +1284,6 @@ CPU_Caps detect_cpu_caps();
 #define i_override_method_F_EXTERN(X, N)
 #define i_override_method_INST(X, N)
 #define i_override_method_INST_EXTERN(X, N)
-#define i_override_method_MDECL(X, N)
 #define i_override_method_DECL(X, N)
 #define i_override_method_GENERICS(X, N)
 #define i_override_method_INIT(X, N) \
@@ -1335,7 +1296,6 @@ CPU_Caps detect_cpu_caps();
 #define i_override_ctr_F_EXTERN(X, R)
 #define i_override_ctr_INST(X, R)
 #define i_override_ctr_INST_EXTERN(X, N)
-#define i_override_ctr_MDECL(X, R)
 #define i_override_ctr_DECL(X, R)
 #define i_override_ctr_GENERICS(X, N)                   N: X##_type.with_##N,
 #define i_override_ctr_INIT(X, R) \
@@ -1354,7 +1314,6 @@ CPU_Caps detect_cpu_caps();
 #define i_override_cast_F_EXTERN(X, R)
 #define i_override_cast_INST(X, R)
 #define i_override_cast_INST_EXTERN(X, R)
-#define i_override_cast_MDECL(X, R)
 #define i_override_cast_DECL(X, R)
 #define i_override_cast_GENERICS(X, N)
 #define i_override_cast_INIT(X, R)                      X##_type . cast_##R = & X##_cast_##R;
@@ -1365,7 +1324,6 @@ CPU_Caps detect_cpu_caps();
 #define i_override_idx_F_EXTERN(X, R)
 #define i_override_idx_INST(X, R)
 #define i_override_idx_INST_EXTERN(X, R)
-#define i_override_idx_MDECL(X, R)
 #define i_override_idx_DECL(X, R)
 #define i_override_idx_GENERICS(X, R)
 #define i_override_idx_INIT(X, R)                    X##_type . idx_##R = & X##_idx_##R;
@@ -1569,6 +1527,7 @@ void A_lazy_init(global_init_fn fn);
             memcpy(type_ref, base_ref, sizeof(A_f)); \
             static type_member_t members[64 + ENUM_COUNT(E##_schema(E, T, COUNT)) + sizeof(E##_type) / sizeof(void*)]; \
             memset(&E##_type, 0, sizeof(E##_type)); \
+            E##_type.src      = typeid(T); \
             E##_type.parent_type = (__typeof__(E##_type.parent_type))& A_type; \
             E##_type.name     = #E;                 \
             E##_type.module   = MODULE;             \
@@ -1586,31 +1545,7 @@ void A_lazy_init(global_init_fn fn);
 #define define_enum( E ) \
     define_typed_enum(E, i32)
 
-#define COUNTER_DIFF(A, B, STEP) A - B - STEP
-
-// test this to be sure we have member id capability; 
-// emit pre-processed code to verify member id consistency
-#define MDECL_1(AA, COUNTER) \
-    AA##_schema(AA, MDECL, 0, __VA_ARGS__)
-
-#define MDECL_2(AA, A1, COUNTER) \
-    A1##_schema(AA, MDECL, 0, __VA_ARGS__) \
-    AA##_schema(AA, MDECL, COUNTER_DIFF(__COUNTER__, COUNTER, 1), __VA_ARGS__)
-
-#define MDECL_3(AA, A1, A2, COUNTER) \
-    A1##_schema(AA, MDECL, 0, __VA_ARGS__) \
-    A2##_schema(AA, MDECL, COUNTER_DIFF(__COUNTER__, COUNTER, 1), __VA_ARGS__) \
-    AA##_schema(AA, MDECL, COUNTER_DIFF(__COUNTER__, COUNTER, 2), __VA_ARGS__)
-
-#define MDECL_4(AA, A1, A2, A3, COUNTER) \
-    A1##_schema(AA, MDECL, 0, __VA_ARGS__) \
-    A2##_schema(AA, MDECL, COUNTER_DIFF(__COUNTER__, COUNTER, 1), __VA_ARGS__) \
-    A3##_schema(AA, MDECL, COUNTER_DIFF(__COUNTER__, COUNTER, 2), __VA_ARGS__) \
-    AA##_schema(AA, MDECL, COUNTER_DIFF(__COUNTER__, COUNTER, 3), __VA_ARGS__)
-
-/// 
 #define FIELD_ID(TYPE, MEMBER) offsetof(struct TYPE##_fields, MEMBER)
-
 
 #define declare_class\
 (AA, ...) \
@@ -1624,7 +1559,6 @@ void A_lazy_init(global_init_fn fn);
         struct _##AA##_f* f; \
         struct _##AA##_f* f2; \
     } *AA; \
-    MDECL_1(AA, __COUNTER__) \
     AA##_schema (AA, DECL, __VA_ARGS__) \
     typedef struct _##AA##_f { \
         A_f_members(AA) \
@@ -1649,7 +1583,6 @@ void A_lazy_init(global_init_fn fn);
         struct _##AA##_f* f; \
         struct _##AA##_f* f2; \
     } *AA; \
-    MDECL_2(AA, BB, __COUNTER__) \
     AA##_schema (AA, DECL, __VA_ARGS__) \
     typedef struct _##AA##_f { \
         A_f_members(AA) \
@@ -1676,7 +1609,6 @@ void A_lazy_init(global_init_fn fn);
         struct _##AA##_f* f; \
         struct _##AA##_f* f2; \
     } *AA; \
-    MDECL_3(AA, BB, CC, __COUNTER__) \
     AA##_schema (AA, DECL, __VA_ARGS__) \
     typedef struct _##AA##_f { \
         A_f_members(AA) \
@@ -1707,7 +1639,6 @@ void A_lazy_init(global_init_fn fn);
         struct _##AA##_f* f; \
         struct _##AA##_f* f2; \
     } *AA; \
-    MDECL_4(AA, BB, CC, DD, __COUNTER__) \
     AA##_schema (AA, DECL, __VA_ARGS__) \
     typedef struct _##AA##_f { \
         A_f_members(AA) \
@@ -1766,8 +1697,6 @@ void A_lazy_init(global_init_fn fn);
 
 void* primitive_ffi_arb(AType);
 
-
-
 /// alias lets use tag types with an array of types, enabling 
 /// design-time and runtime template-like functionality, with 
 /// permutation of the class-type and instance-type
@@ -1780,31 +1709,38 @@ void* primitive_ffi_arb(AType);
         TYPE##_f* type_ref = &TYPE##_type; \
         BASE##_f* base_ref = &BASE##_type; \
         int validate_count = 0; \
-        type_ref->src = (AType)base_ref != typeid(A) ? (AType)base_ref : (AType)null; \
         char* member_validate[256] = {}; \
+        printf("define_arb:  %s\n", #TYPE); \
         if ((AType)type_ref == (AType)base_ref) \
             type_ref->name = #TYPE; \
-        if ((AType)type_ref != (AType)base_ref && (!base_ref->traits && !base_ref->size)) { \
+        if ((AType)type_ref != (AType)base_ref && \
+            (!base_ref->traits && !base_ref->size)) { \
             A_lazy_init((global_init_fn)&Aglobal_##TYPE); \
             return false; \
         } else { \
             memset(type_ref, 0,        sizeof(TYPE##_f)); \
             memcpy(type_ref, base_ref, sizeof(BASE##_f)); \
-            static type_member_t members[64 + sizeof(TYPE##_type) / sizeof(void*)]; \
-            type_ref->parent_type = (__typeof__(type_ref->parent_type))&BASE##_type; \
-            type_ref->name     = #TYPE;       \
-            type_ref->module   = MODULE;    \
-            type_ref->members  = members;   \
-            type_ref->member_count = 0; \
-            type_ref->size     = TYPE_SZ;   \
+            static type_member_t \
+                members[64 + sizeof(TYPE##_type) / sizeof(void*)]; \
+            type_ref->src = (AType)base_ref != typeid(A) \
+                 ? (AType)base_ref : (AType)null; \
+            type_ref->parent_type = \
+                (__typeof__(type_ref->parent_type))&BASE##_type; \
+            type_ref->name          = #TYPE; \
+            type_ref->module        = MODULE; \
+            type_ref->members       = members; \
+            type_ref->member_count  = 0; \
+            type_ref->size          = TYPE_SZ; \
             type_ref->vmember_count = VMEMBER_COUNT; \
-            type_ref->vmember_type = (AType)VMEMBER_TYPE; \
-            type_ref->traits   = TRAIT;     \
-            type_ref->arb       = primitive_ffi_arb(typeid(TYPE)); \
+            type_ref->vmember_type  = (AType)VMEMBER_TYPE; \
+            type_ref->traits        = TRAIT; \
+            type_ref->meta          = (meta_t) { emit_types(__VA_ARGS__) }; \
+            printf("init for %s -- meta count: %i\n", type_ref->name, (int)type_ref->meta.count); \
+            type_ref->arb           = primitive_ffi_arb(typeid(TYPE)); \
             TYPE##_schema( TYPE, INIT, __VA_ARGS__ ) \
-            A_push_type((AType)type_ref);    \
+            A_push_type((AType)type_ref); \
             POST_PUSH; \
-            return true;                     \
+            return true; \
         } \
     } \
 

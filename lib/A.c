@@ -333,7 +333,7 @@ string A_enum_string(AType type, i32* value) {
         type_member_t* mem = &type->members[m];
         if (mem->member_type & A_MEMBER_ENUMV) {
             if (memcmp(mem->ptr, value, mem->type->size) == 0)
-                return string((symbol)mem->name); 
+                return mem->sname; 
         }
     }
     // better to fault than default
@@ -353,6 +353,8 @@ void A_init_recur(object a, AType current, raw last_init) {
     if (init && init != (void*)last_init) init(a); 
 }
 
+none A_hold_members(object);
+
 object A_initialize(object a) {
     A f           = A_header(a);
 
@@ -361,6 +363,7 @@ object A_initialize(object a) {
     #endif
 
     A_init_recur(a, f->type, null);
+    A_hold_members(a);
     return a;
 }
 
@@ -434,8 +437,16 @@ int A_exec(string cmd) {
     }
 }
 
+static int all_type_alloc;
+
+int A_alloc_count() {
+    return all_type_alloc;
+}
+
 object A_alloc_instance(AType type, int n_bytes) {
     object a;
+    type->global_count++;
+    all_type_alloc++;
     if (type->traits & A_TRAIT_PUBLIC)
         a = mmap(NULL, n_bytes,
             PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -448,14 +459,15 @@ object A_alloc(AType type, num count, bool af_pool) {
     sz map_sz = sizeof(map);
     sz A_sz   = sizeof(struct _A);
     object a = A_alloc_instance(type, A_sz + type->size * count);
-    a->refs       = af_pool ? 0 : 1;
+    a->refs       = 0;
     a->type       = type;
     a->data       = &a[1];
     a->count      = count;
     a->alloc      = count;
     if (af_pool) {
         a->ar_index = af_top->pool->len;
-        push(af_top->pool, a->data);
+        push_weak(af_top->pool, a->data);
+        push_weak(af_top->types, type);
     } else {
         a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
@@ -466,14 +478,15 @@ object A_alloc_extra(AType type, num extra, bool af_pool) {
     sz map_sz = sizeof(map);
     sz A_sz = sizeof(struct _A);
     object a      = A_alloc_instance(type, A_sz + type->size + extra);
-    a->refs       = af_pool ? 0 : 1;
+    a->refs       = 0;
     a->type       = type;
     a->data       = &a[1];
     a->count      = 1;
     a->alloc      = 1;
     if (af_pool) {
         a->ar_index = af_top->pool->len;
-        push(af_top->pool, a->data);
+        push_weak(af_top->pool, a->data);
+        push_weak(af_top->types, type);
     } else {
         a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
@@ -485,7 +498,7 @@ object A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool) {
     verify(scalar, "scalar not set");
     i64 A_sz      = sizeof(struct _A);
     object a      = A_alloc_instance(type, A_sz + type->size);
-    a->refs       = af_pool ? 0 : 1;
+    a->refs       = 0;
     a->scalar     = scalar;
     a->type       = type;
     a->data       = &a[1];
@@ -494,7 +507,8 @@ object A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool) {
     a->data       = calloc(alloc, scalar->size); /// incorrect!
     if (af_pool) {
         a->ar_index = af_top->pool->len;
-        push(af_top->pool, &a[1]);
+        push_weak(af_top->pool, &a[1]);
+        push_weak(af_top->types, type);
     } else {
         a->ar_index = 0;
     }
@@ -506,7 +520,7 @@ object A_alloc2(AType type, AType scalar, shape s, bool af_pool) {
     shape_ft* t2 = &shape_type;
     i64 count     = total(s);
     object a      = A_alloc_instance(type, A_sz + (scalar ? scalar->size : type->size) * count);
-    a->refs       = af_pool ? 0 : 1;
+    a->refs       = 0;
     a->scalar     = scalar;
     a->type       = type;
     a->data       = &a[1];
@@ -515,7 +529,8 @@ object A_alloc2(AType type, AType scalar, shape s, bool af_pool) {
     a->alloc      = count;
     if (af_pool) {
         a->ar_index = af_top->pool->len;
-        push(af_top->pool, a->data);
+        push_weak(af_top->pool, a->data);
+        push_weak(af_top->types, type);
     } else {
         a->ar_index = 0; // Indicate that this object is not in the auto-free pool
     }
@@ -563,14 +578,7 @@ void array_expand(array a) {
 }
 
 void array_push_weak(array a, object b) {
-    if (a->alloc == a->len) {
-        array_expand(a);
-    }
-    AType t = isa(a);
-    if (is_meta((object)a)) {
-        AType type = isa(a);
-        assert(is_meta_compatible((object)a, (object)b), "not meta compatible");
-    }
+    if (a->alloc == a->len) array_expand(a);
     a->elements[a->len++] = b;
 }
 
@@ -872,7 +880,7 @@ static __attribute__((constructor)) bool Aglobal_AF();
 void A_start() {
     fault_level = level_err;
     AF pool    = create(AF); /// leave pool open [ AF_type is not being populated; check for creation of AF_init and global
-    log_fields = new(map, hsize, 32);
+    log_fields = hold(new(map, hsize, 32));
 
     int remaining = call_after_count;
     while (remaining)
@@ -905,6 +913,8 @@ void A_start() {
         /// for each member of type
         for (num m = 0; m < type->member_count; m++) {
             type_member_t* mem = &type->members[m];
+            if (mem->name)
+                mem->sname = hold(string(mem->name));
             if (mem->required && (mem->member_type & A_MEMBER_PROP)) {
                 type->required |= 1 << mem->id;
                 // now required args are set if (type->required & *(i64*)obj->f) == type->required
@@ -913,11 +923,11 @@ void A_start() {
                 void* address = 0;
                 memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
                 assert(address, "no address");
+#ifdef USE_FFI
                 array args = create(array, alloc, mem->args.count);
                 for (num i = 0; i < mem->args.count; i++)
                     args->elements[i] = (object)((A_f**)&mem->args.meta_0)[i];
                 args->len = mem->args.count;
-#ifdef USE_FFI
                 mem->method = method_with_address(address, mem->type, args, type);
 #endif
             }
@@ -1000,21 +1010,30 @@ type_member_t* A_member(AType type, enum A_MEMBER member_type, symbol name, bool
     return 0;
 }
 
-type_member_t* A_hold_members(object instance) {
-    AType type = isa(instance);
-    for (num i = 0; i < type->member_count; i++) {
-        type_member_t* mem = &type->members[i];
-        object   *mdata = (object*)((cstr)instance + mem->offset);
-        if (mem->member_type & (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN))
-            if (!(mem->type->traits & (A_TRAIT_ENUM | A_TRAIT_PRIMITIVE)))
-                A_hold(*mdata);
-    }
-    return 0;
+bool A_is_inlay(type_member_t* m) {
+    return (m->type->traits & A_TRAIT_VECTOR    |
+            m->type->traits & A_TRAIT_STRUCT    | 
+            m->type->traits & A_TRAIT_PRIMITIVE | 
+            m->type->traits & A_TRAIT_ENUM      | 
+            m->member_type == A_MEMBER_INLAY) != 0;
 }
 
-bool A_is_inlay(type_member_t* m) {
-    return m->type->traits & A_TRAIT_PRIMITIVE | m->type->traits & A_TRAIT_ENUM | 
-        m->member_type == A_MEMBER_INLAY;
+none A_hold_members(object instance) {
+    AType type = isa(instance);
+    while (type != typeid(A)) {
+        for (num i = 0; i < type->member_count; i++) {
+            type_member_t* mem = &type->members[i];
+            object   *mdata = (object*)((cstr)instance + mem->offset);
+            if (mem->member_type & (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN))
+                if (!A_is_inlay(mem) && *mdata) { // was trying to isolate what class name was responsible for our problems
+                    object member_value = *mdata;
+                    A head = A_header(member_value);
+                    //printf("holding member: %s, of type: %s\n", mem->name, head->type->name);// i
+                    head->refs++;
+                }
+        }
+        type = type->parent_type;
+    }
 }
 
 object A_set_property(object instance, symbol name, object value) {
@@ -1057,10 +1076,9 @@ object A_get_property(object instance, symbol name) {
 /// everything should be A-based, and forget about the argument hacks?
 map A_arguments(int argc, symbol argv[], map default_values, object default_key) {
     map result = new(map, hsize, 16);
-    for (item ii = default_values->first; ii; ii = ii->next) {
-        pair  hm = ii->value;
-        object k = hm->key;
-        object v = hm->value;
+    for (item ii = default_values->fifo->first; ii; ii = ii->next) {
+        object k = ii->key;
+        object v = ii->value;
         set(result, k, v);
     }
     int    i = 1;
@@ -1077,12 +1095,11 @@ map A_arguments(int argc, symbol argv[], map default_values, object default_key)
             string s_key = new(string, chars, (cstr)&arg[doub + 1]);
             string s_val = new(string, chars, (cstr)argv[i + 1]);
 
-            for (item f = default_values->first; f; f = f->next) {
+            for (item f = default_values->fifo->first; f; f = f->next) {
                 /// import A types from runtime
-                pair      mi = (pair) f->value;
-                object def_value = mi->value;
+                object def_value = f->value;
                 AType   def_type = def_value ? isa(def_value) : typeid(string);
-                assert(f->key == mi->key, "keys do not match"); /// make sure we copy it over from refs
+                assert(f->key == f->key, "keys do not match"); /// make sure we copy it over from refs
                 if ((!doub && strncmp(((string)f->key)->chars, s_key->chars, 1) == 0) ||
                     ( doub && compare(f->key, s_key) == 0)) {
                     /// inter-op with object-based A-type sells it.
@@ -1132,38 +1149,37 @@ object A_u16(u16 data)   { return A_primitive(&u16_type, &data); }
 object A_i32(i32 data)   { return A_primitive(&i32_type, &data); }
 object A_u32(u32 data)   { return A_primitive(&u32_type, &data); }
 object A_i64(i64 data)   { return A_primitive(&i64_type, &data); }
-object     i(i64 data)   { return A_primitive(&i64_type, &data); }
+object i(i64 data)       { return A_primitive(&i64_type, &data); }
 object A_sz (sz  data)   { return A_primitive(&sz_type,  &data); }
 object A_u64(u64 data)   { return A_primitive(&u64_type, &data); }
 object A_f32(f32 data)   { return A_primitive(&f32_type, &data); }
-object  A_f64(f64 data)  { return A_primitive(&f64_type, &data); }
+object A_f64(f64 data)   { return A_primitive(&f64_type, &data); }
 object A_f128(f64 data)  { return A_primitive(&f128_type, &data); }
-object float32(f32 data)   { return A_primitive(&f32_type, &data); }
-object  real64(f64 data)   { return A_primitive(&f64_type, &data); }
+object float32(f32 data) { return A_primitive(&f32_type, &data); }
+object real64(f64 data)  { return A_primitive(&f64_type, &data); }
 object A_cstr(cstr data) { return A_primitive(&cstr_type, &data); }
 object A_none()          { return A_primitive(&none_type, NULL); }
 object A_bool(bool data) { return A_primitive(&bool_type, &data); }
 
 /// A -------------------------
 void A_init(A a) { }
-void A_dealloc(A a) {
-    // go through objects type fields/offsets; 
-    // when type is A-based, we release; 
-    // this part is 'auto-release', our pool is an AF pool, or auto-free.
-    // when new() is made, the reference goes into a pool
-    // 
+void A_dealloc(A a) { 
     A        f = A_header(a);
     AType type = f->type;
-    for (num i = 0; i < type->member_count; i++) {
-        type_member_t* m = &type->members[i];
-        if ((m->member_type == A_MEMBER_PROP || m->member_type == A_MEMBER_PRIV) && !(m->type->traits & A_TRAIT_PRIMITIVE)) {
-            u8* ptr = (u8*)a + m->offset;
-            A*  ref = ptr;
-            A_drop(*ref);
-            *ref = null;
+    while (type != typeid(A)) {
+        for (num i = 0; i < type->member_count; i++) {
+            type_member_t* m = &type->members[i];
+            if ((m->member_type & (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN)) &&
+                    !A_is_inlay(m)) {
+                //printf("A_dealloc: drop member %s.%s (%s)\n", type->name, m->name, m->type->name);
+                A*  ref = (A*)((u8*)a + m->offset);
+                A_drop(*ref);
+                *ref = null;
+            }
         }
+        type = type->parent_type;
     }
-    if (f->data) {
+    if (f->data != a) {
         A_drop(f->data);
         f->data = null;
     }
@@ -1695,7 +1711,7 @@ object A_formatter(AType type, FILE* f, object opt, symbol template, ...) {
 
     if (type && (type->traits & A_TRAIT_ENUM)) {
         // convert res to instance of this enum
-        object enum_v = A_enum_value(type, res->chars);
+        object enum_v = A_enum_value(type, (cstr)res->chars);
         f32 test_v = *(f32*)enum_v;
         return enum_v;
     }
@@ -1722,6 +1738,10 @@ u64 item_hash(item f) {
     return hash(f->key ? f->key : f->value);
 }
 
+item item_init(item a) {
+    return a;
+}
+
 num clamp(num i, num mn, num mx) {
     if (i < mn) return mn;
     if (i > mx) return mx;
@@ -1744,6 +1764,174 @@ vector vector_with_i32(vector a, i32 count) {
 sz vector_len(vector a) {
     return A_header(a)->count;
 }
+
+
+
+
+
+
+
+
+map map_init(map m) {
+    if (m->hsize <= 0) m->hsize = 8;
+    m->hlist = (item*)calloc(m->hsize, sizeof(item));
+    m->fifo = list();
+    return m;
+}
+
+none map_dealloc(map m) {
+    for (int b = 0; b < m->hsize; b++)
+        while (m->hlist[b]) {
+            item i = m->hlist[b];
+            item n = i->next;
+            drop(i->key);
+            //drop(i->value);
+            //drop(i->ref);
+            m->hlist[b] = n;
+        }
+
+    free(m->hlist);
+}
+
+item map_lookup(map m, object k) {
+    u64 h = hash(k);
+    i64 b = h % m->hsize;
+    for (item i = m->hlist[b]; i; i = i->next)
+        if (i->h == h && compare(i->key, k) == 0)
+            return i;
+    return null;
+}
+
+bool map_contains(map m, object k) {
+    return map_lookup(m, k) != null;
+}
+
+object map_get(map m, object k) {
+    item i = map_lookup(m, k);
+    return i ? i->value : null;
+}
+
+item map_fetch(map m, object k) {
+    item i = map_lookup(m, k);
+    if (!i) {
+        u64 h = hash(k);
+        i64 b = h % m->hsize;
+        m->hlist[b] = i = item(next, m->hlist[b], key, hold(k));
+        m->count++;
+    }
+    return i;
+}
+
+none map_set(map m, object k, object v) {
+    item i = map_fetch(m, k);
+    if (i->value) {
+        if (i->value != v) {
+            drop(i->value);
+            i->value = hold(v);
+        }
+    }
+    item ref = push(m->fifo, v);
+    ref->key = hold(k);
+    ref->ref = i; // these reference each other
+    i->ref = ref;
+}
+
+none map_rm_item(map m, item i) {
+    drop(i->key);
+    drop(i->value);
+    remove_item(m->fifo, i->ref);
+    drop(i);
+}
+
+none map_rm(map m, object k) {
+    u64  h    = hash(k);
+    i64  b    = h % m->hsize;
+    item prev = null;
+    for (item i = m->hlist[b]; i; i = i->next) {
+        if (i->h == h && compare(i->key, k) == 0) {
+            if (prev) {
+                prev->next = i->next;
+            } else {
+                m->hlist[b] = i->next;
+            }
+            map_rm_item(m, i);
+            return;
+        }
+        prev = i;
+    }
+}
+
+void map_clear(map m) {
+    for (int b = 0; b < m->hsize; b++) {
+        item prev = null;
+        item cur  = m->hlist[b];
+        item next = null;
+        while (cur) {
+            next = cur->next;
+            map_rm_item(m, cur);
+            cur = next;
+        }
+    }
+}
+
+sz map_len(map a) {
+    return a->count;
+}
+
+object map_index_sz(map a, sz index) {
+    assert(index >= 0 && index < a->count, "index out of range");
+    item i = list_get(a->fifo, A_sz(index));
+    return i ? i->value : null;
+}
+
+object map_index_object(map a, object key) {
+    return map_get(a, key);
+}
+
+map map_with_i32(map a, i32 size) {
+    a->hsize = size;
+    return a;
+}
+
+string map_cast_string(map a) {
+    string res  = string(alloc, 1024);
+    bool   once = false;
+    for (item i = a->fifo->first; i; i = i->next) {
+        string key   = cast(string, i->key);
+        string value = cast(string, i->value);
+        if (once) append(res, " ");
+        append(res, key->chars);
+        append(res, ":");
+        append(res, value->chars);
+        once = true;
+    }
+    return res;
+}
+
+void map_concat(map a, map b) {
+    pairs(b, e) set(a, e->key, e->value);
+}
+
+bool map_cast_bool(map a) {
+    return a->count > 0;
+}
+
+map map_of(symbol first_key, ...) {
+    map a = map(hsize, 16);
+    va_list args;
+    va_start(args, first_key);
+    symbol key = first_key;
+    for (;;) {
+        A arg = va_arg(args, A);
+        set(a, string(key), arg);
+        key = va_arg(args, cstr);
+        if (key == null)
+            break;
+    }
+    return a;
+}
+
+
 
 bool string_is_numeric(string a) {
     return a->chars[0] == '-' ||
@@ -1824,7 +2012,10 @@ string string_escape(string input) {
     return res;
 }
 
-void  string_dealloc(string a)          { free((cstr)a->chars); }
+void  string_dealloc(string a) {
+    printf("string_dealloc: %s", a->chars);
+    free((cstr)a->chars);
+}
 num   string_compare(string a, string b)   { return strcmp(a->chars, b->chars); }
 num   string_cmp(string a, symbol b)       { return strcmp(a->chars, b); }
 bool  string_eq(string a, symbol b)        { return strcmp(a->chars, b) == 0; }
@@ -2086,7 +2277,8 @@ item hashmap_fetch(hashmap a, object key) {
         if (compare(f->key, key) == 0)
             return f;
     item n = list_push(bucket, null);
-    n->key = a->unmanaged ? key : A_hold(key);
+    a->item_header = A_header(n);
+    n->key = hold(key);
     a->count++;
     return n;
 }
@@ -2157,6 +2349,11 @@ hashmap hashmap_init(hashmap a) {
     return a;
 }
 
+none hashmap_dealloc(hashmap a) {
+    clear(a);
+    free(a->data);
+}
+
 string hashmap_cast_string(hashmap a) {
     string res  = new(string, alloc, 1024);
     bool   once = false;
@@ -2173,79 +2370,6 @@ string hashmap_cast_string(hashmap a) {
         }
     }
     return res;
-}
-
-void map_concat(map a, map b) {
-    pairs(b, e) set(a, e->key, e->value);
-}
-
-bool map_rm(map a, object key) {
-    item i = lookup(a->hmap, key);
-    if (i) {
-        list_remove_item(a, i);
-        return true;
-    }
-    return false;
-}
-
-none map_clear(map a) {
-    while (a->first)
-        list_remove_item(a, a->first);
-    hashmap_clear(a->hmap);
-}
-
-item map_lookup(map a, object key) {
-    return lookup(a->hmap, key);
-}
-
-item map_fetch(map a, object key) {
-    num prev = a->hmap->count;
-    item i = fetch(a->hmap, key);
-    if (prev != a->hmap->count) {
-        pair mi = i->value = new(pair, key, key); // todo: make pair originate in hash; remove the key from item
-        mi->ref = push(a, i);
-        mi->ref->key = a->unmanaged ? key : A_hold(key);
-        mi->ref->value = mi; //
-    }
-    return i;
-}
-
-none map_set(map a, object key, object value) {
-    item i  = fetch(a->hmap, key);
-    pair mi = i->value;
-    if (mi) {
-        object before     = mi->value;
-        mi->value    = a->unmanaged ? value : A_hold(value);
-        if (!a->unmanaged) A_drop(before);
-    } else {
-        mi = i->value = new(pair, key, key, value, value); // todo: make pair originate in hash; remove the key from item
-        mi->ref      = push(a, i);
-        mi->ref->key = a->unmanaged ? key : A_hold(key);
-        mi->ref->value = mi;
-    }
-}
-
-object map_get(map a, object key) {
-    item i = lookup(a->hmap, key);
-    return (i && i->value) ? ((pair)i->value)->value : null;
-}
-
-bool map_contains(map a, object key) {
-    item i = lookup(a->hmap, key);
-    return i != null;
-}
-
-/// must store a ref to the ref item in hashmap item's value; we may call this an object map_value
-none map_remove(map a, object key) {
-    item i = lookup(a->hmap, key);
-    if (i) {
-        item ref = i->value;
-        remove_item(a, ref);
-    }
-}
-
-bool map_cast_bool(map a) {
-    return a->count > 0;
 }
 
 void list_quicksort(list a, i32(*sfn)(object, object)) {
@@ -2270,47 +2394,6 @@ void list_sort(list a, ARef fn) {
 
 object list_get(list a, object at_index);
 
-sz map_len(map a) {
-    return a->count;
-}
-
-object map_index_sz(map a, sz index) {
-    assert(index >= 0 && index < a->count, "index out of range");
-    item i = list_get(a, A_sz(index));
-    return i ? i->value : null;
-}
-
-object map_index_object(map a, object key) {
-    item i = get(a->hmap, key);
-    return i ? i->value : null;
-}
-
-map map_with_sz(map a, sz size) {
-    a->hsize = size;
-    return a;
-}
-
-void map_init(map a) {
-    if (!a->hsize) a->hsize = 1024;
-    a->hmap  = new(hashmap, alloc, a->hsize, unmanaged, a->unmanaged);
-}
-
-string map_cast_string(map a) {
-    string res  = new(string, alloc, 1024);
-    bool   once = false;
-    for (item i = a->first; i; i = i->next) {
-        pair   kv    = i->value;
-        string key   = cast(string, kv->key);
-        string value = cast(string, kv->value);
-        if (once) append(res, " ");
-        append(res, key->chars);
-        append(res, ":");
-        append(res, value->chars);
-        once = true;
-    }
-    return res;
-}
-
 object A_copy(A a) {
     A f = A_header(a);
     assert(f->count > 0, "invalid count");
@@ -2324,8 +2407,7 @@ object A_copy(A a) {
 object A_hold(object a) {
     if (a) {
         A f = A_header(a);
-        if (f->refs++ == 1 && f->ar_index > 0)
-            af_top->pool->elements[f->ar_index] = null; // index of 0 is occupied by the pool itself; just a sentinel 
+        f->refs++;
     }
     return a;
 }
@@ -2336,6 +2418,13 @@ void A_free(object a) {
     A       aa = A_header(a);
     A_f*  type = aa->type;
     void* prev = null;
+    if (--all_type_alloc < 0) {
+        printf("all_type_alloc < 0\n");
+    }
+    if (--type->global_count < 0) {
+        printf("global_count < for type %s\n", type->name);
+    }
+
     while (type) {
         if (prev != type->dealloc) {
             type->dealloc(a);
@@ -2349,7 +2438,11 @@ void A_free(object a) {
 }
 
 void A_drop(object a) {
-    if (a && --A_header(a)->refs == -1)
+    if (!a) return;
+    A header = A_header(a);
+    if (header->refs < 0)
+        printf("A_drop: data freed twice: %s\n", header->type->name);
+    else if (--header->refs == -1)
         A_free(a);
 }
 
@@ -2387,8 +2480,8 @@ object A_instanceof(object inst, AType type) {
 
 /// list -------------------------
 item list_push(list a, object e) {
-    item n = new(item);
-    n->value = e; /// held already by caller
+    item n = hold(new(item));
+    n->value = hold(e); /// held already by caller
     if (a->last) {
         a->last->next = n;
         n->prev       = a->last;
@@ -2398,6 +2491,15 @@ item list_push(list a, object e) {
     a->last = n;
     a->count++;
     return n;
+}
+
+
+none list_dealloc(list a) {
+    if (a->test2 == 2) {
+        int test2 = 2;
+        test2 += 2;
+    }
+    while (pop(a)) { }
 }
 
 item list_insert_after(list a, object e, i32 after) {
@@ -2411,7 +2513,7 @@ item list_insert_after(list a, object e, i32 after) {
             }
             index++;
         }
-    item n = item(value, e);
+    item n = hold(item(value, e));
     if (!found) {
         n->next = a->first;
         if (a->first)
@@ -2501,11 +2603,17 @@ num list_compare(list a, list b) {
 
 object list_pop(list a) {
     item l = a->last;
+    if (!l)
+        return null;
     a->last = a->last->prev;
     if (!a->last)
         a->first = null;
     l->prev = null;
+    if (!a->unmanaged)
+        drop(l->value);
+    drop(l->key);
     a->count--;
+    drop(l);
     return l;
 }
 
@@ -2674,23 +2782,6 @@ sz vector_count(vector a) {
 
 define_class(vector, A);
 
-map map_of(symbol first_key, ...) {
-    map a = new(map, hsize, 16);
-    va_list args;
-    va_start(args, first_key);
-    symbol key = first_key;
-    for (;;) {
-        A arg = va_arg(args, A);
-        set(a, string(key), arg);
-        key = va_arg(args, cstr);
-        if (key == null)
-            break;
-    }
-    return a;
-}
-
-
-
 
 object subprocedure_invoke(subprocedure a, object arg) {
     object(*addr)(object, object, object) = a->addr;
@@ -2699,12 +2790,61 @@ object subprocedure_invoke(subprocedure a, object arg) {
 
 void AF_init(AF a) {
     af_top = a;
-    a->pool = create(array, alloc, a->start_size ? a->start_size : 1024);
+    a->pool  = create(array, alloc, a->start_size ? a->start_size : 1024);
+    a->types = create(array, alloc, a->start_size ? a->start_size : 1024);
     push_weak(a->pool, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
+    push_weak(a->types, typeid(array));
 
     if (!af_stack) af_stack = create(array, alloc, 16);
     push_weak(af_stack, a);
 }
+
+void auto_free() {
+    array a = af_top->pool;
+    for (num i = 1; i < a->len; i++) {
+        A_drop(a->elements[i]);
+        a->elements[i] = null;
+    }
+    a->len = 1;
+}
+
+
+void auto_free2() {
+    array a = af_top->pool;
+    array types = af_top->types;
+    for (num i = 1; i < a->len; i++) {
+        object header = A_header(a->elements[i]);
+        if (header->refs != 0)
+            printf("left-over type: %s\n", header->type->name);
+        A_drop(a->elements[i]);
+        a->elements[i] = null;
+        types->elements[i] = null;
+    }
+    a->len = 1;
+    types->len = 1;
+}
+
+array auto_free_report() {
+    array a = af_top->pool;
+    array types = af_top->types;
+    array res = create(array, alloc, a->len);
+    for (num i = 1; i < a->len; i++) {
+        object obj = a->elements[i];
+        if   (!obj) continue;
+        AType type = isa(obj);
+        A        h = A_header(obj);
+        if (h->refs > 0) {
+            push(res, obj);
+        }
+        A_drop(obj);
+        a->elements[i] = null;
+        types->elements[i] = null;
+    }
+    a->len = 1;
+    types->len = 1;
+    return res;
+}
+
 
 AF AF_initialize(sz start_size) {
     AF a = create(AF, start_size, start_size);
@@ -3523,8 +3663,7 @@ string json(object a) {
             if (one) push(res, ',');
             type_member_t* mem = &type->members[m];
             if (!(mem->member_type & (A_MEMBER_PROP | A_MEMBER_INLAY))) continue;
-            string name = string(mem->name);
-            concat(res, json(name));
+            concat(res, json(mem->sname));
             push  (res, ':');
             object value = A_get_property(a, mem->name);
             concat(res, json(value));
@@ -3659,7 +3798,7 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
             for (int i = 0; i < use_schema->member_count; i++) {
                 type_member_t* mem = use_schema->members;
                 if (mem->required) {
-                    set(required, string(mem->name), A_bool(true)); // field-name
+                    set(required, mem->sname, A_bool(true)); // field-name
                 }
             }
         }
@@ -3694,12 +3833,6 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
                 verify(use_schema, "type not found: %o", type_name);
             }
             AType type = isa(value);
-            if (strcmp(type->name, "quatf") == 0) {
-                f32 values[4];
-                memcpy(values, value, sizeof(values));
-                int test2 = 2;
-                test2 += 2;
-            }
             scan = ws(&scan[0]);
             if   (!value)
                 return null;
@@ -3946,6 +4079,8 @@ struct inotify_event {
 none watch_init(watch a) {
     /// todo: a-perfectly-good-watch ... dont-throw-away
 
+    if (!a->res) return;
+
     int fd = inotify_init1(IN_NONBLOCK);
     if (fd < 0) {
         perror("inotify_init1");
@@ -4102,8 +4237,7 @@ define_class(item, A)
 define_class(list,          A, object)
 define_class(array,         A, object)
 define_class(hashmap,       A)
-define_class(pair,          A)
-define_class(map,           list) // never quite did one like this but it does make sense
+define_class(map,           A)
 define_class(fn,            A)
 define_class(subprocedure,  A)
 

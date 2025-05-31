@@ -134,19 +134,24 @@ typedef struct ftable_t {
     char*           module;
     int             size;
     int             msize;
+    int             global_count;
     shape           vmember_shape;
     int             vmember_count;
     AType           vmember_type;
     int             member_count;
     struct type_member_t* members;
     int             traits;
+    u128            required;
     AType           src;
     void*           arb;
     meta_t          meta;
 } ftable_t;
 
+typedef struct _string* string;
+
 typedef struct type_member_t {
     char*           name;
+    string          sname;
     AType           type;
     int             offset;
     int             count;
@@ -1426,6 +1431,7 @@ typedef struct method_t {
     char*           module; \
     int             size; \
     int             msize; \
+    int             global_count; \
     shape           vmember_shape; \
     int             vmember_count; \
     AType           vmember_type; \
@@ -1710,7 +1716,6 @@ void* primitive_ffi_arb(AType);
         BASE##_f* base_ref = &BASE##_type; \
         int validate_count = 0; \
         char* member_validate[256] = {}; \
-        printf("define_arb:  %s\n", #TYPE); \
         if ((AType)type_ref == (AType)base_ref) \
             type_ref->name = #TYPE; \
         if ((AType)type_ref != (AType)base_ref && \
@@ -1735,7 +1740,6 @@ void* primitive_ffi_arb(AType);
             type_ref->vmember_type  = (AType)VMEMBER_TYPE; \
             type_ref->traits        = TRAIT; \
             type_ref->meta          = (meta_t) { emit_types(__VA_ARGS__) }; \
-            printf("init for %s -- meta count: %i\n", type_ref->name, (int)type_ref->meta.count); \
             type_ref->arb           = primitive_ffi_arb(typeid(TYPE)); \
             TYPE##_schema( TYPE, INIT, __VA_ARGS__ ) \
             A_push_type((AType)type_ref); \
@@ -1901,11 +1905,14 @@ declare_primitive(floats,       raw)
 
 /// doubly-linked item type, integrated key so we dont also need a 'field' type
 #define item_schema(X,Y,...) \
-    i_prop    (X,Y, public, X,         next) \
-    i_prop    (X,Y, public, X,         prev) \
-    i_prop    (X,Y, public, object,    value) \
-    i_prop    (X,Y, public, object,    key) \
-    i_override(X,Y, method, hash)    
+    i_prop    (X,Y, opaque, X,         next) \
+    i_prop    (X,Y, opaque, X,         prev) \
+    i_prop    (X,Y, opaque, object,    ref) \
+    i_prop    (X,Y, opaque, object,    value) \
+    i_prop    (X,Y, opaque, object,    key) \
+    i_prop    (X,Y, opaque, u64,       h) \
+    i_override(X,Y, method, hash) \
+    i_override(X,Y, method, init)
 declare_class(item)
 
 /// lets mimmick the structure in llama.cpp
@@ -1918,9 +1925,11 @@ declare_class(message)
 
 /// linked-list of elemental data
 #define list_schema(X,Y,...) \
-    i_prop  (X,Y, public,    item,    first) \
-    i_prop  (X,Y, public,    item,    last)  \
+    i_prop  (X,Y, opaque,    item,    first) \
+    i_prop  (X,Y, opaque,    item,    last)  \
+    i_prop  (X,Y, public,    bool,    unmanaged)  \
     i_prop  (X,Y, public,    i64,     count) \
+    i_prop  (X,Y, public,    i64,     test2) \
     i_method(X,Y, public,    object,  pop) \
     i_method(X,Y, public,    item,    push, object) \
     i_method(X,Y, public,    item,    insert_after, object, i32) \
@@ -1930,7 +1939,8 @@ declare_class(message)
     i_method(X,Y, public,    none,    remove, num) \
     i_method(X,Y, public,    none,    remove_item, item) \
     i_method(X,Y, public,    object,  get,  object) \
-    i_method(X,Y, public,    num,     count)
+    i_method(X,Y, public,    num,     count) \
+    i_override(X,Y, method, dealloc)
 declare_class(list)
 
 /// array of elemental data
@@ -2210,6 +2220,7 @@ declare_class_2(ATypes, array, AType)
 
 #define AF_schema(X,Y,...) \
     i_prop      (X,Y, public, array, pool) \
+    i_prop      (X,Y, public, array, types) \
     i_prop      (X,Y, public, sz,    start_size) \
     s_method    (X,Y, public, AF,    fetch, num) \
     s_method    (X,Y, public, AF,    initialize, sz) \
@@ -2217,11 +2228,16 @@ declare_class_2(ATypes, array, AType)
     i_override  (X,Y, method, dealloc)
 declare_class(AF)
 
+void  auto_free();
+void  auto_free2();
+array auto_free_report(); // returns a list of objects that will persist
+
 #define hashmap_schema(X,Y,...) \
-    i_prop      (X,Y, public, list,  data) \
+    i_prop      (X,Y, opaque, list,  data) \
     i_prop      (X,Y, public, num,   alloc) \
     i_prop      (X,Y, public, num,   count) \
     i_prop      (X,Y, public, bool,  unmanaged) \
+    i_prop      (X,Y, intern, A, item_header) \
     i_method    (X,Y, public, none,  remove, object) \
     i_method    (X,Y, public, none,  set, object, object) \
     i_method    (X,Y, public, object,get, object) \
@@ -2231,15 +2247,9 @@ declare_class(AF)
     i_method    (X,Y, public, none,  clear) \
     i_index     (X,Y, public, object, object) \
     i_override  (X,Y, cast,   string) \
-    i_override  (X,Y, method, init) \
+    i_override  (X,Y, method, init, dealloc) \
     i_override  (X,Y, cast,   bool)
 declare_class(hashmap)
-
-#define pair_schema(X,Y,...) \
-    i_prop      (X,Y, public, item,    ref) \
-    i_prop      (X,Y, public, object,  key) \
-    i_prop      (X,Y, public, object,  value)
-declare_class(pair)
 
 extern int fault_level;
 
@@ -2249,26 +2259,32 @@ extern int fault_level;
     enum_value(E,T,Y, err,    2)
 declare_enum(level)
 
-/// hmap stores the item, and our refs list has a value that holds that (origin = hmap)
+
 #define map_schema(X,Y,...) \
-    i_prop      (X,Y, intern,  hashmap,    hmap) \
-    i_prop      (X,Y, public,  sz,         hsize) \
-    i_prop      (X,Y, public,  bool,       unmanaged) \
-    i_method    (X,Y, public,  none,       clear) \
+    i_prop      (X,Y, opaque,  list,       fifo) \
+    i_prop      (X,Y, opaque,  i64,        count) \
+    i_prop      (X,Y, public,  i32,        hsize) \
+    i_prop      (X,Y, intern,  item*,      hlist) \
+    i_prop      (X,Y, public,  bool,       unmanaged)  \
     i_method    (X,Y, public,  none,       set,        object, object) \
+    i_method    (X,Y, public,  object,     get,        object) \
     i_method    (X,Y, public,  item,       lookup,     object) \
     i_method    (X,Y, public,  item,       fetch,      object) \
-    i_method    (X,Y, public,  bool,       rm,         object) \
+    i_method    (X,Y, public,  none,       rm,         object) \
+    i_method    (X,Y, public,  none,       rm_item,    item) \
     i_method    (X,Y, public,  bool,       contains,   object) \
     i_method    (X,Y, public,  none,       concat,     map) \
+    i_method    (X,Y, public,  none,       clear) \
     i_method    (X,Y, public,  sz,         len) \
-    i_index     (X,Y, public,  object, sz) \
-    i_index     (X,Y, public,  object, object) \
-    i_override  (X,Y, method,  get) \
+    i_index     (X,Y, public,  object,     sz) \
+    i_index     (X,Y, public,  object,     object) \
+    i_ctr       (X,Y, public,  i32) \
     i_override  (X,Y, method,  init) \
+    i_override  (X,Y, method,  dealloc) \
     i_override  (X,Y, cast,    string) \
     i_override  (X,Y, cast,    bool)
-declare_class_2(map, list)
+declare_class(map)
+
 
 #define fn_schema(X,Y,...) \
     i_prop      (X,Y, intern, method_t*, method) \
@@ -2441,14 +2457,18 @@ extern FILE* logger;
 #define       assert(a, t, ...) do { } while(0)
 #endif
 #define       verify(a, t, ...) \
-    do { \
+    ({ \
         if (!(a)) { \
             A_formatter((AType)null, stderr, (object)true,  (symbol)t, ## __VA_ARGS__); \
             if (level_err >= fault_level) { \
                 exit(1); \
             } \
+            false; \
+        } else { \
+            true; \
         } \
-    } while(0)
+        true; \
+    })
 
 cstr copy_cstr(cstr input);
 
@@ -2477,8 +2497,8 @@ int A_exec(string cmd);
 
 /// we can go through a map
 #define pairs(MM, EE) \
-    if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
-        for (pair EE = (pair)_i->value, e0 = EE; EE == e0; e0++) \
+    if (MM && cast(bool, MM)) for (item _i = MM->fifo->first, EE = null; _i; _i = _i->next) \
+        for (item EE = (item)_i->value, e0 = EE; EE == e0; e0++) \
 
 #define evalues(MM, TT, EE) \
     if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
@@ -2486,11 +2506,7 @@ int A_exec(string cmd);
 
 #define ekeys(MM, TT, EE) \
     if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
-        for (TT EE = ((pair)_i->value)->key, e0 = EE; EE == e0; e0++) \
-
-#define pairs_(MM, EE) \
-    if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
-        for (pair EE = (pair)_i->value, e0 = EE; EE == e0; e0++) \
+        for (TT EE = ((item)_i->value)->key, e0 = EE; EE == e0; e0++) \
 
 #define min(A, B) ({ \
     __typeof__(A) a = A; \
@@ -2518,6 +2534,7 @@ object     A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool
 string     evaluate(string, map);
 string     serialize_environment(map, bool);
 i64        epoch_millis();
+none       A_hold_members(object);
 
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size
@@ -2598,6 +2615,7 @@ void        A_start();
 map         A_args(int argc, symbol argv[], symbol default_arg, ...);
 A           A_header(object instance);
 pid_t       A_last_pid();
+int         A_alloc_count();
 
 #define head(o) A_header((object)o)
 

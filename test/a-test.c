@@ -11,6 +11,28 @@ typedef struct user {
 
 int main(int n_args, char* v_args[]) {
     A_start();
+    auto_free();
+
+    AType map_t    = &map_type; // 1
+    AType string_t = &string_type; // 223
+    AType item_t   = &item_type; // 0
+
+    for (int base = A_alloc_count(), count = base;
+            verify(base == count, "too many alloc");
+            count = A_alloc_count()) {
+
+        string k = string("key");
+        object b = A_bool(true);
+        map    m = map(16);
+        
+        A      m_header = A_header(m);
+        A      b_header = A_header(b);
+        A      k_header = A_header(k);
+        set(m, k, b);
+        auto_free();
+        count = A_alloc_count();
+        count = A_alloc_count();
+    }
 
     print("A_start ran");
 

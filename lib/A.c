@@ -455,6 +455,27 @@ object A_alloc_instance(AType type, int n_bytes) {
     return a;
 }
 
+object A_alloc_dbg(AType type, num count, bool af_pool, cstr source, int line) {
+    sz map_sz = sizeof(map);
+    sz A_sz   = sizeof(struct _A);
+    object a = A_alloc_instance(type, A_sz + type->size * count);
+    a->refs       = 0;
+    a->type       = type;
+    a->data       = &a[1];
+    a->count      = count;
+    a->alloc      = count;
+    a->source     = source;
+    a->line       = line;
+    if (af_pool) {
+        a->ar_index = af_top->pool->len;
+        push_weak(af_top->pool, a->data);
+        push_weak(af_top->types, type);
+    } else {
+        a->ar_index = 0; // Indicate that this object is not in the auto-free pool
+    }
+    return a->data; /// return fields (object)
+}
+
 object A_alloc(AType type, num count, bool af_pool) {
     sz map_sz = sizeof(map);
     sz A_sz   = sizeof(struct _A);
@@ -600,14 +621,15 @@ void array_push(array a, object b) {
     AType t = isa(a);
     if (is_meta(a) && t->meta.meta_0 != typeid(object))
         assert(is_meta_compatible(a, b), "not meta compatible");
-    a->elements[a->len++] = A_hold(b);
+    a->elements[a->len++] = a->unmanaged ? b : A_hold(b);
 }
 
 void array_clear(array a) {
-    for (num i = 0; i < a->len; i++) {
-        A_drop(a->elements[i]);
-        a->elements[i] = null;
-    }
+    if (!a->unmanaged)
+        for (num i = 0; i < a->len; i++) {
+            A_drop(a->elements[i]);
+            a->elements[i] = null;
+        }
     a->len = 0;
 }
 
@@ -768,6 +790,12 @@ bool array_cast_bool(array a) { return a && a->len > 0; }
 none array_init(array a) {
     if (a->alloc)
         array_alloc_sz(a, a->alloc);
+}
+
+none array_dealloc(array a) {
+    clear(a);
+    free(a->elements);
+    a->elements = null;
 }
 
 #ifdef USE_FFI
@@ -1774,31 +1802,34 @@ sz vector_len(vector a) {
 
 map map_init(map m) {
     if (m->hsize <= 0) m->hsize = 8;
-    m->hlist = (item*)calloc(m->hsize, sizeof(item));
     m->fifo = list();
     return m;
 }
 
 none map_dealloc(map m) {
-    for (int b = 0; b < m->hsize; b++)
-        while (m->hlist[b]) {
-            item i = m->hlist[b];
-            item n = i->next;
-            drop(i->key);
-            //drop(i->value);
-            //drop(i->ref);
-            m->hlist[b] = n;
-        }
-
-    free(m->hlist);
+    if (m->hlist) {
+        for (int b = 0; b < m->hsize; b++)
+            while (m->hlist[b]) {
+                item i = m->hlist[b];
+                item n = i->next;
+                drop(i->key);
+                drop(i->value);
+                //drop(i->ref);
+                m->hlist[b] = n;
+            }
+        free(m->hlist);
+        m->hlist = null;
+    }
 }
 
 item map_lookup(map m, object k) {
+    if (!m->hlist) return null;
     u64 h = hash(k);
     i64 b = h % m->hsize;
-    for (item i = m->hlist[b]; i; i = i->next)
+    for (item i = m->hlist[b]; i; i = i->next) {
         if (i->h == h && compare(i->key, k) == 0)
             return i;
+    }
     return null;
 }
 
@@ -1816,19 +1847,24 @@ item map_fetch(map m, object k) {
     if (!i) {
         u64 h = hash(k);
         i64 b = h % m->hsize;
-        m->hlist[b] = i = item(next, m->hlist[b], key, hold(k));
+        m->hlist[b] = i = hold(item(next, m->hlist[b], key, hold(k), h, h));
         m->count++;
     }
     return i;
 }
 
 none map_set(map m, object k, object v) {
+    if (!m->hlist) m->hlist = (item*)calloc(m->hsize, sizeof(item));
     item i = map_fetch(m, k);
     if (i->value) {
         if (i->value != v) {
             drop(i->value);
             i->value = hold(v);
+        } else {
+            return;
         }
+    } else {
+        i->value = hold(v);
     }
     item ref = push(m->fifo, v);
     ref->key = hold(k);
@@ -1921,6 +1957,7 @@ map map_of(symbol first_key, ...) {
     va_list args;
     va_start(args, first_key);
     symbol key = first_key;
+    if (!key) return a;
     for (;;) {
         A arg = va_arg(args, A);
         set(a, string(key), arg);
@@ -2418,6 +2455,7 @@ void A_free(object a) {
     A       aa = A_header(a);
     A_f*  type = aa->type;
     void* prev = null;
+
     if (--all_type_alloc < 0) {
         printf("all_type_alloc < 0\n");
     }
@@ -2442,8 +2480,9 @@ void A_drop(object a) {
     A header = A_header(a);
     if (header->refs < 0)
         printf("A_drop: data freed twice: %s\n", header->type->name);
-    else if (--header->refs == -1)
+    else if (--header->refs == -1) {
         A_free(a);
+    }
 }
 
 object A_data(A instance) {
@@ -2495,10 +2534,6 @@ item list_push(list a, object e) {
 
 
 none list_dealloc(list a) {
-    if (a->test2 == 2) {
-        int test2 = 2;
-        test2 += 2;
-    }
     while (pop(a)) { }
 }
 
@@ -2802,49 +2837,14 @@ void AF_init(AF a) {
 void auto_free() {
     array a = af_top->pool;
     for (num i = 1; i < a->len; i++) {
-        A_drop(a->elements[i]);
-        a->elements[i] = null;
-    }
-    a->len = 1;
-}
-
-
-void auto_free2() {
-    array a = af_top->pool;
-    array types = af_top->types;
-    for (num i = 1; i < a->len; i++) {
-        object header = A_header(a->elements[i]);
-        if (header->refs != 0)
-            printf("left-over type: %s\n", header->type->name);
-        A_drop(a->elements[i]);
-        a->elements[i] = null;
-        types->elements[i] = null;
-    }
-    a->len = 1;
-    types->len = 1;
-}
-
-array auto_free_report() {
-    array a = af_top->pool;
-    array types = af_top->types;
-    array res = create(array, alloc, a->len);
-    for (num i = 1; i < a->len; i++) {
         object obj = a->elements[i];
-        if   (!obj) continue;
-        AType type = isa(obj);
-        A        h = A_header(obj);
-        if (h->refs > 0) {
-            push(res, obj);
-        }
+        A head = A_header(obj);
+        AType ty = isa(obj);
         A_drop(obj);
         a->elements[i] = null;
-        types->elements[i] = null;
     }
     a->len = 1;
-    types->len = 1;
-    return res;
 }
-
 
 AF AF_initialize(sz start_size) {
     AF a = create(AF, start_size, start_size);

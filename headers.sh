@@ -137,7 +137,8 @@ if [ ! -f "$INIT_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INIT_HEADER" ]; then
         
         # Main constructor macro
         echo "#define ${class_name}(...) ({ \\" >> "$INIT_HEADER"
-        echo "    ${class_name} instance = (${class_name})A_alloc(typeid(${class_name}), 1, true); \\" >> "$INIT_HEADER"
+        echo "    ${class_name} instance = (${class_name})A_alloc_dbg(typeid(${class_name}), 1, true, __FILE__, __LINE__); \\" >> "$INIT_HEADER"
+        #echo "    ${class_name} instance = (${class_name})A_alloc(typeid(${class_name}), 1, true); \\" >> "$INIT_HEADER"
         echo "    _N_ARGS_${class_name}(${class_name}, ## __VA_ARGS__); \\" >> "$INIT_HEADER"
         echo "    A_initialize((object)instance); \\" >> "$INIT_HEADER"
         echo "    instance; \\" >> "$INIT_HEADER"

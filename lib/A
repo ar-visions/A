@@ -1797,6 +1797,8 @@ struct _sz { i64 value; };
     i_prop  (X,Y, opaque, i64,       ar_index) \
     i_prop  (X,Y, opaque, object,    data) \
     i_prop  (X,Y, opaque, shape,     shape) \
+    i_prop  (X,Y, opaque, cstr,      source) \
+    i_prop  (X,Y, opaque, i64,       line) \
     i_prop  (X,Y, opaque, i64,       alloc) \
     i_prop  (X,Y, opaque, i64,       count) \
     i_method(X,Y, public, none,      init) \
@@ -1929,7 +1931,6 @@ declare_class(message)
     i_prop  (X,Y, opaque,    item,    last)  \
     i_prop  (X,Y, public,    bool,    unmanaged)  \
     i_prop  (X,Y, public,    i64,     count) \
-    i_prop  (X,Y, public,    i64,     test2) \
     i_method(X,Y, public,    object,  pop) \
     i_method(X,Y, public,    item,    push, object) \
     i_method(X,Y, public,    item,    insert_after, object, i32) \
@@ -2211,6 +2212,7 @@ declare_class(subprocedure)
     i_index          (X,Y, public, O, num) \
     i_ctr            (X,Y, public, i32) \
     i_override       (X,Y, method, init) \
+    i_override       (X,Y, method, dealloc) \
     i_override       (X,Y, cast,   bool) \
     i_override       (X,Y, cast,   string)
 declare_class(array, object)
@@ -2229,8 +2231,6 @@ declare_class_2(ATypes, array, AType)
 declare_class(AF)
 
 void  auto_free();
-void  auto_free2();
-array auto_free_report(); // returns a list of objects that will persist
 
 #define hashmap_schema(X,Y,...) \
     i_prop      (X,Y, opaque, list,  data) \
@@ -2247,7 +2247,8 @@ array auto_free_report(); // returns a list of objects that will persist
     i_method    (X,Y, public, none,  clear) \
     i_index     (X,Y, public, object, object) \
     i_override  (X,Y, cast,   string) \
-    i_override  (X,Y, method, init, dealloc) \
+    i_override  (X,Y, method, init) \
+    i_override  (X,Y, method, dealloc) \
     i_override  (X,Y, cast,   bool)
 declare_class(hashmap)
 
@@ -2259,9 +2260,8 @@ extern int fault_level;
     enum_value(E,T,Y, err,    2)
 declare_enum(level)
 
-
 #define map_schema(X,Y,...) \
-    i_prop      (X,Y, opaque,  list,       fifo) \
+    i_prop      (X,Y, public,  list,       fifo) \
     i_prop      (X,Y, opaque,  i64,        count) \
     i_prop      (X,Y, public,  i32,        hsize) \
     i_prop      (X,Y, intern,  item*,      hlist) \
@@ -2367,7 +2367,8 @@ declare_class(unit)
     i_method    (X,Y, public, none, cond_signal) \
     i_method    (X,Y, public, none, cond_broadcast) \
     i_prop      (X,Y, intern, struct mutex_t*, mtx, as, ARef) \
-    i_override  (X,Y, method, init, dealloc)
+    i_override  (X,Y, method, init) \
+    i_override  (X,Y, method, dealloc)
 declare_class(mutex)
 
 
@@ -2377,7 +2378,8 @@ declare_class(mutex)
     i_prop      (X,Y, intern, mutex,    global) \
     i_prop      (X,Y, intern, struct thread_t*, threads, as, ARef) \
     i_method    (X,Y, public, object,   sync, object) \
-    i_override  (X,Y, method, init, dealloc)
+    i_override  (X,Y, method, init) \
+    i_override  (X,Y, method, dealloc)
 declare_class(async)
 
 
@@ -2491,22 +2493,10 @@ int A_exec(string cmd);
     if (container && len(((array)container))) for (E e = *(E*)get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
         for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = *(E*)get(((array)container), __i)) \
 
-#define vec_values(container, E, e) \
-    if (container && len((container))) for (E e = get((container), 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, __len = len((container)); __i < __len; __i++, e = get((container), __i)) \
-
 /// we can go through a map
 #define pairs(MM, EE) \
     if (MM && cast(bool, MM)) for (item _i = MM->fifo->first, EE = null; _i; _i = _i->next) \
-        for (item EE = (item)_i->value, e0 = EE; EE == e0; e0++) \
-
-#define evalues(MM, TT, EE) \
-    if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
-        for (TT EE = ((item)_i->value)->value, e0 = EE; EE == e0; e0++) \
-
-#define ekeys(MM, TT, EE) \
-    if (MM && cast(bool, MM)) for (item _i = MM->first, EE = null; _i; _i = _i->next) \
-        for (TT EE = ((item)_i->value)->key, e0 = EE; EE == e0; e0++) \
+        for (item EE = (item)_i, e0 = EE; EE == e0; e0++) \
 
 #define min(A, B) ({ \
     __typeof__(A) a = A; \
@@ -2527,9 +2517,10 @@ int A_exec(string cmd);
     if (len(arr)) for (E e = *(E*)get(arr, 0), e0 = 0; e0 == 0; e0++) \
         for (num i = 0, __len = len(arr); i < __len; i++, e = *(E*)get(arr, i)) \
 
-object     A_alloc (AType type, num    count, bool af_pool);
+object     A_alloc      (AType type, num count, bool af_pool);
+object     A_alloc_dbg  (AType type, num count, bool af_pool, cstr source, int line);
 object     A_alloc_extra(AType type, num extra, bool af_pool);
-object     A_alloc2(AType type, AType scalar, shape shape, bool af_pool);
+object     A_alloc2     (AType type, AType scalar, shape shape, bool af_pool);
 object     A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool);
 string     evaluate(string, map);
 string     serialize_environment(map, bool);

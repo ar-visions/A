@@ -101,7 +101,7 @@ __thread   AF      af_top;
 static global_init_fn* call_after;
 static num             call_after_alloc;
 static num             call_after_count;
-static map             log_fields;
+static map             log_funcs;
 
 static CPU_Caps        cpu_caps;
 
@@ -173,7 +173,7 @@ CPU_Caps detect_cpu_caps() {
     #endif
 }
 
-void A_lazy_init(global_init_fn fn) {
+none A_lazy_init(global_init_fn fn) {
     if (call_after_count == call_after_alloc) {
         global_init_fn* prev      = call_after;
         num            alloc_prev = call_after_alloc;
@@ -202,7 +202,7 @@ A A_header(object instance) {
     return (((struct _A*)instance) - 1);
 }
 
-void A_module_init(bool(*fn)()) {
+none A_module_init(bool(*fn)()) {
     /// these should be loaded after the types are loaded.. the module inits are used for setting module-members (not globals!)
     if (call_last_count == call_last_alloc) {
         global_init_fn* prev      = call_last;
@@ -221,7 +221,7 @@ static A_f**           types;
 static num             types_alloc;
 static num             types_len;
 
-void A_push_type(AType type) {
+none A_push_type(AType type) {
     if (types_alloc == types_len) {
         A_f** prev = types;
         num   alloc_prev = types_alloc;
@@ -275,8 +275,9 @@ u128 A_fbits(object a) {
     return fields;
 }
 
-static void A_validator(object a) {
+static bool A_validator(object a) {
     AType type = isa(a);
+    if (type->magic != 1337) return false;
 
     // now required args are set if (type->required & *(i64*)obj->f) == type->required
     u128 fields = A_fbits(a);
@@ -292,6 +293,7 @@ static void A_validator(object a) {
         }
         exit(2);
     }
+    return true;
 }
 
 /// some changes being made to these, as enums can now be any primitive type
@@ -306,6 +308,20 @@ i32* A_enum_default(AType type) {
     return null;
 }
 
+static object enum_member_value(AType type, type_member_t* mem) {
+    if (type->src == typeid(u8))  return A_u8(*(u8*)mem->ptr);
+    if (type->src == typeid(i8))  return A_i8(*(i8*)mem->ptr);
+    if (type->src == typeid(u16)) return A_u16(*(u16*)mem->ptr);
+    if (type->src == typeid(i16)) return A_i16(*(i16*)mem->ptr);
+    if (type->src == typeid(u32)) return A_u32(*(u32*)mem->ptr);
+    if (type->src == typeid(i32)) return A_i32(*(i32*)mem->ptr);
+    if (type->src == typeid(u64)) return A_u64(*(u64*)mem->ptr);
+    if (type->src == typeid(i64)) return A_i64(*(i64*)mem->ptr);
+    if (type->src == typeid(f32)) return A_f32(*(f32*)mem->ptr);
+    fault("implement enum conversion: %s", type->name);
+    return null;
+}
+
 i32* A_enum_value(AType type, cstr cs) {
     int cur = 0;
     int default_val = INT_MIN;
@@ -314,14 +330,14 @@ i32* A_enum_value(AType type, cstr cs) {
         type_member_t* mem = &type->members[m];
         if ((mem->member_type & A_MEMBER_ENUMV) &&
             (strcmp(mem->name, cs) == 0)) {
-            return mem->ptr;
+            return (i32*)enum_member_value(type, mem);
         }
     }
     for (num m = 0; m < type->member_count; m++) {
         type_member_t* mem = &type->members[m];
         if ((mem->member_type & A_MEMBER_ENUMV) &&
             (mem->name[0] == cs[0])) {
-            return mem->ptr;
+            return (i32*)enum_member_value(type, mem);
         }
     }
     fault("enum not found");
@@ -341,16 +357,16 @@ string A_enum_string(AType type, i32* value) {
     return null;
 }
 
-void debug() {
+none debug() {
     return;
 }
 
 
-void A_init_recur(object a, AType current, raw last_init) {
+none A_init_recur(object a, AType current, raw last_init) {
     if (current == &A_type) return;
-    void(*init)(object) = ((A_f*)current)->init;
+    none(*init)(object) = ((A_f*)current)->init;
     A_init_recur(a, current->parent_type, (raw)init);
-    if (init && init != (void*)last_init) init(a); 
+    if (init && init != (none*)last_init) init(a); 
 }
 
 none A_hold_members(object);
@@ -443,10 +459,15 @@ int A_alloc_count() {
     return all_type_alloc;
 }
 
+//static cstr alloc_src = null;
+//static int  alloc_line = 0;
+
 object A_alloc_instance(AType type, int n_bytes) {
     object a;
     type->global_count++;
     all_type_alloc++;
+    //printf("alloc: %s (%s:%i)\n", type->name, alloc_src, alloc_line);
+
     if (type->traits & A_TRAIT_PUBLIC)
         a = mmap(NULL, n_bytes,
             PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -456,6 +477,8 @@ object A_alloc_instance(AType type, int n_bytes) {
 }
 
 object A_alloc_dbg(AType type, num count, bool af_pool, cstr source, int line) {
+    //alloc_src  = source;
+    //alloc_line = line;
     sz map_sz = sizeof(map);
     sz A_sz   = sizeof(struct _A);
     object a = A_alloc_instance(type, A_sz + type->size * count);
@@ -560,7 +583,7 @@ object A_alloc2(AType type, AType scalar, shape s, bool af_pool) {
 
 
 /// array -------------------------
-void array_alloc_sz(array a, sz alloc) {
+none array_alloc_sz(array a, sz alloc) {
     object* elements = (object*)calloc(alloc, sizeof(struct _A*));
     memcpy(elements, a->elements, sizeof(struct _A*) * a->len);
     
@@ -569,7 +592,7 @@ void array_alloc_sz(array a, sz alloc) {
     a->alloc = alloc;
 }
 
-void array_fill(array a, object f) {
+none array_fill(array a, object f) {
     for (int i = 0; i < a->alloc; i++)
         push(a, f);
 }
@@ -593,12 +616,12 @@ array array_reverse(array a) {
     return r;
 }
 
-void array_expand(array a) {
+none array_expand(array a) {
     num alloc = 32 + (a->alloc << 1);
     array_alloc_sz(a, alloc);
 }
 
-void array_push_weak(array a, object b) {
+none array_push_weak(array a, object b) {
     if (a->alloc == a->len) array_expand(a);
     a->elements[a->len++] = b;
 }
@@ -614,7 +637,7 @@ array array_with_i32(array a, i32 alloc) {
     return a;
 }
 
-void array_push(array a, object b) {
+none array_push(array a, object b) {
     if (a->alloc == a->len) {
         array_expand(a);
     }
@@ -624,7 +647,7 @@ void array_push(array a, object b) {
     a->elements[a->len++] = a->unmanaged ? b : A_hold(b);
 }
 
-void array_clear(array a) {
+none array_clear(array a) {
     if (!a->unmanaged)
         for (num i = 0; i < a->len; i++) {
             A_drop(a->elements[i]);
@@ -645,7 +668,7 @@ object array_index_num(array a, num i) {
     return a->elements[i];
 }
 
-void array_remove(array a, num b) {
+none array_remove(array a, num b) {
     for (num i = b; i < a->len; i++) {
         object prev = a->elements[b];
         a->elements[b] = a->elements[b + 1];
@@ -654,7 +677,7 @@ void array_remove(array a, num b) {
     a->elements[--a->len] = null;
 }
 
-void array_remove_weak(array a, num b) {
+none array_remove_weak(array a, num b) {
     for (num i = b; i < a->len; i++) {
         object prev = a->elements[b];
         a->elements[b] = a->elements[b + 1];
@@ -662,11 +685,11 @@ void array_remove_weak(array a, num b) {
     a->elements[--a->len] = null;
 }
 
-void array_operator__assign_add(array a, object b) {
+none array_operator__assign_add(array a, object b) {
     array_push(a, b);
 }
 
-void array_operator__assign_sub(array a, num b) {
+none array_operator__assign_sub(array a, num b) {
     array_remove(a, b);
 }
 
@@ -680,7 +703,7 @@ object array_last(array a) {
     return a->elements[a->len - 1];
 }
 
-void array_push_symbols(array a, ...) {
+none array_push_symbols(array a, ...) {
     va_list args;
     va_start(args, a);
     char* value;
@@ -691,7 +714,7 @@ void array_push_symbols(array a, ...) {
     va_end(args);
 }
 
-void array_push_objects(array a, A f, ...) {
+none array_push_objects(array a, A f, ...) {
     va_list args;
     va_start(args, f);
     A value;
@@ -725,7 +748,7 @@ array array_of_cstr(cstr first, ...) {
     return a;
 }
 
-void  array_weak_push(array a, object obj) {
+none  array_weak_push(array a, object obj) {
     if (a->alloc == a->len) {
         array_expand(a);
     }
@@ -781,7 +804,7 @@ num array_index_of(array a, object b) {
     return -1;
 }
 
-void br() {
+none br() {
     usleep(0);
 }
 
@@ -806,7 +829,7 @@ method_t* method_with_address(handle address, AType rtype, array atypes, AType m
     method->ffi_args = calloc(max_args, sizeof(ffi_type*));
 
 
-    //_Generic(("hi"), string_schema(string, GENERICS) const void *: (void)0)("hi")  
+    //_Generic(("hi"), string_schema(string, GENERICS) const none *: (none)0)("hi")  
 
 
     method->atypes   = new(array);
@@ -841,14 +864,14 @@ fn A_lambda(object target, Member member, object context) {
 #ifdef USE_FFI
 object A_method_call(method_t* a, array args) {
     const num max_args = 8;
-    void* arg_values[max_args];
+    none* arg_values[max_args];
     assert(args->len == a->atypes->len, "arg count mismatch");
     for (num i = 0; i < args->len; i++) {
         A_f* arg_type = (A_f*)a->atypes->elements[i];
         arg_values[i] = (arg_type->traits & (A_TRAIT_PRIMITIVE | A_TRAIT_ENUM)) ? 
-            (void*)args->elements[i] : (void*)&args->elements[i];
+            (none*)args->elements[i] : (none*)&args->elements[i];
     }
-    void* result[8]; /// enough space to handle all primitive data
+    none* result[8]; /// enough space to handle all primitive data
     ffi_call((ffi_cif*)a->ffi_cif, a->address, result, arg_values);
     if (a->rtype->traits & A_TRAIT_PRIMITIVE)
         return A_primitive(a->rtype, result);
@@ -905,10 +928,38 @@ int fault_level;
 
 static __attribute__((constructor)) bool Aglobal_AF();
 
-void A_start() {
+none A_start(int argc, symbol argv[]) {
     fault_level = level_err;
     AF pool    = create(AF); /// leave pool open [ AF_type is not being populated; check for creation of AF_init and global
-    log_fields = hold(new(map, hsize, 32));
+    log_funcs = hold(new(map, hsize, 32, unmanaged, true));
+
+    /// initialize logging; * == all
+    bool explicit_listen = false;
+    for (int i = 0; i < argc; i++) {
+        if (strcmp(argv[i], "-l") == 0) {
+            string s = string(argv[i + 1]);
+            array  a = split(s, ",");
+            each(a, string, s) {
+                set(log_funcs, eq(s, "all") ? string("*") : s, A_bool(true));
+                explicit_listen = true;
+            }
+        }
+    }
+
+#ifndef NDEBUG
+    if (!explicit_listen)
+        set(log_funcs, string("*"), A_bool(true));
+#endif
+
+    if (len(log_funcs)) {
+        string topics = string(alloc, 32);
+        pairs(log_funcs, i) {
+            if (len(topics) > 0)
+                append(topics, ", ");
+            concat(topics, (string)i->key);
+        }
+        printf("listening-to: %s\n", topics->chars);
+    }
 
     int remaining = call_after_count;
     while (remaining)
@@ -948,8 +999,8 @@ void A_start() {
                 // now required args are set if (type->required & *(i64*)obj->f) == type->required
             }
             if (mem->member_type & (A_MEMBER_IMETHOD | A_MEMBER_SMETHOD)) {
-                void* address = 0;
-                memcpy(&address, &((u8*)type)[mem->offset], sizeof(void*));
+                none* address = 0;
+                memcpy(&address, &((u8*)type)[mem->offset], sizeof(none*));
                 assert(address, "no address");
 #ifdef USE_FFI
                 array args = create(array, alloc, mem->args.count);
@@ -961,6 +1012,7 @@ void A_start() {
             }
         }
     }
+    path_app((cstr)argv[0]);
 }
 
 
@@ -1017,14 +1069,14 @@ map A_args(int argc, symbol argv[], symbol default_arg, ...) {
         default_arg ? str(default_arg) : null);
 }
 
-none A_tap(symbol f, subprocedure sub) {
+none A_tap(symbol f, hook sub) {
     string fname = str(f);
-    set(log_fields, fname, sub ? (object)sub : (object)A_bool(true)); /// if subprocedure, then it may receive calls for the logging
+    set(log_funcs, fname, sub ? (object)sub : (object)A_bool(true)); /// if subprocedure, then it may receive calls for the logging
 }
 
 none A_untap(symbol f) {
     string fname = str(f);
-    set(log_fields, fname, A_bool(false));
+    set(log_funcs, fname, A_bool(false));
 }
 
 type_member_t* A_member(AType type, enum A_MEMBER member_type, symbol name, bool poly) {
@@ -1155,7 +1207,7 @@ map A_arguments(int argc, symbol argv[], map default_values, object default_key)
 /// primitives are based on A alone
 /// i wonder if we can add more constructors or even methods to the prims
 
-object A_primitive(AType type, void* data) {
+object A_primitive(AType type, none* data) {
     assert(type->traits & A_TRAIT_PRIMITIVE, "must be primitive");
     object copy = A_alloc(type, type->size, true);
     memcpy(copy, data, type->size);
@@ -1190,8 +1242,8 @@ object A_none()          { return A_primitive(&none_type, NULL); }
 object A_bool(bool data) { return A_primitive(&bool_type, &data); }
 
 /// A -------------------------
-void A_init(A a) { }
-void A_dealloc(A a) { 
+none A_init(A a) { }
+none A_dealloc(A a) { 
     A        f = A_header(a);
     AType type = f->type;
     while (type != typeid(A)) {
@@ -1207,7 +1259,7 @@ void A_dealloc(A a) {
         }
         type = type->parent_type;
     }
-    if (f->data != a) {
+    if ((object)f->data != (object)a) {
         A_drop(f->data);
         f->data = null;
     }
@@ -1279,6 +1331,9 @@ A A_with_cereal(A a, cereal cs) {
     else if (type == typeid(u32)) sscanf(cs, "%u",   (u32*)a);
     else if (type == typeid(i64)) sscanf(cs, "%lli", (i64*)a);
     else if (type == typeid(u64)) sscanf(cs, "%llu", (u64*)a);
+    else if (type == typeid(bool)) {
+        *(bool*)a = (cs[0] == 't' || cs[0] == 'T' || cs[0] == '1');
+    }
     else if (type == typeid(string)) {
         string  res = a;
         sz     a_ln = len > -1 ? len : strlen(cs);
@@ -1334,17 +1389,19 @@ object construct_with(AType type, object data) {
     for (int i = 0; i < type->member_count; i++) {
         Member mem = &type->members[i];
         if (!mem->ptr) continue;
-        void* addr = mem->ptr;
+        none* addr = mem->ptr;
         if (mem->member_type == A_MEMBER_CONSTRUCT) {
             /// no meaningful way to do this generically, we prefer to call these first
             if (mem->type == typeid(path) && data_type == typeid(string)) {
                 result = A_alloc(type, 1, true);
-                ((void(*)(object, path))addr)(result, path(((string)data)));
+                result = ((object(*)(object, path))addr)(result, path(((string)data)));
+                verify(A_validator(result), "invalid object");
                 break;
             }
             if (mem->type == data_type) {
                 result = A_alloc(type, 1, true);
-                ((void(*)(object, object))addr)(result, data);
+                result = ((object(*)(object, object))addr)(result, data);
+                verify(A_validator(result), "invalid object");
                 break;
             }
         }
@@ -1383,38 +1440,38 @@ object construct_with(AType type, object data) {
     for (int i = 0; i < type->member_count; i++) {
         Member mem = &type->members[i];
         if (!mem->ptr) continue;
-        void* addr = mem->ptr;
+        none* addr = mem->ptr;
         /// check for compatible constructors
         if (mem->member_type == A_MEMBER_CONSTRUCT) {
             u64 combine = mem->type->traits & data_type->traits;
             if (combine & A_TRAIT_INTEGRAL) {
                 i64 v = read_integer(data);
                 result = A_alloc(type, 1, true);
-                     if (mem->type == typeid(i8))   ((void(*)(object, i8))  addr)(result, (i8)  v);
-                else if (mem->type == typeid(i16))  ((void(*)(object, i16)) addr)(result, (i16) v);
-                else if (mem->type == typeid(i32))  ((void(*)(object, i32)) addr)(result, (i32) v);
-                else if (mem->type == typeid(i64))  ((void(*)(object, i64)) addr)(result, (i64) v);
+                     if (mem->type == typeid(i8))   ((none(*)(object, i8))  addr)(result, (i8)  v);
+                else if (mem->type == typeid(i16))  ((none(*)(object, i16)) addr)(result, (i16) v);
+                else if (mem->type == typeid(i32))  ((none(*)(object, i32)) addr)(result, (i32) v);
+                else if (mem->type == typeid(i64))  ((none(*)(object, i64)) addr)(result, (i64) v);
             } else if (combine & A_TRAIT_REALISTIC) {
                 result = A_alloc(type, 1, true);
                 if (mem->type == typeid(f64))
-                    ((void(*)(object, double))addr)(result, (double)*(float*)data);
+                    ((none(*)(object, double))addr)(result, (double)*(float*)data);
                 else
-                    ((void(*)(object, float)) addr)(result, (float)*(double*)data);
+                    ((none(*)(object, float)) addr)(result, (float)*(double*)data);
                 break;
             } else if ((mem->type == typeid(symbol) || mem->type == typeid(cstr)) && 
                        (data_type == typeid(symbol) || data_type == typeid(cstr))) {
                 result = A_alloc(type, 1, true);
-                ((void(*)(object, cstr))addr)(result, data);
+                ((none(*)(object, cstr))addr)(result, data);
                 break;
             } else if ((mem->type == typeid(string)) && 
                        (data_type == typeid(symbol) || data_type == typeid(cstr))) {
                 result = A_alloc(type, 1, true);
-                ((void(*)(object, string))addr)(result, string((symbol)data));
+                ((none(*)(object, string))addr)(result, string((symbol)data));
                 break;
             } else if ((mem->type == typeid(symbol) || mem->type == typeid(cstr)) && 
                        (data_type == typeid(string))) {
                 result = A_alloc(type, 1, true);
-                ((void(*)(object, cstr))addr)(result, (cstr)((string)data)->chars);
+                ((none(*)(object, cstr))addr)(result, (cstr)((string)data)->chars);
                 break;
             }
         }
@@ -1422,7 +1479,7 @@ object construct_with(AType type, object data) {
     return result ? A_initialize(result) : null;
 }
 
-void A_serialize(AType type, string res, object a) {
+none A_serialize(AType type, string res, object a) {
     if (type->traits & A_TRAIT_PRIMITIVE) {
         char buf[128];
         int len = 0;
@@ -1598,7 +1655,7 @@ Exists A_exists(object o) {
 
 /// these pointers are invalid for A since they are in who-knows land, but the differences would be the same
 i32 A_compare(A a, A b) {
-    return (i32)((sz)(void*)a - (sz)(void*)b);
+    return (i32)((sz)(none*)a - (sz)(none*)b);
 }
 
 num parse_formatter(cstr start, cstr res, num sz) {
@@ -1695,7 +1752,7 @@ object A_formatter(AType type, FILE* f, object opt, symbol template, ...) {
                         f_len = snprintf(end, avail, formatter, va_arg(args, int));
                     else
                         f_len = snprintf(
-                            end, avail, formatter, va_arg(args, void*));
+                            end, avail, formatter, va_arg(args, none*));
                     if (f_len > avail) {
                         reserve(res, res->alloc << 1);
                         continue;
@@ -1708,30 +1765,47 @@ object A_formatter(AType type, FILE* f, object opt, symbol template, ...) {
         }
     }
     va_end(args);
+    bool symbolic_logging = false;
+    
+    // handle generic logging with type and function name labels, ability to filter based on log_funcs global map
+    // map is setup with *:true on debug builds, unless we explicitly listen
     if (f && field) {
-        object fvalue = get(log_fields, field); // make get be harmless to map; null is absolutely fine identity wise to understand that
-        if (!fvalue) return null;
-        verify(fvalue, "map integrity failure");
-        bool b = fvalue ? cast(bool, fvalue) : false;
-        if (!b) return null; /// need to guard for this in string opt callers
-        string ff = instanceof(fvalue, string);
-        
-        /// if logging is set to a blank string then you simply get all log messages
-        /// if logging is set to a bool of true you get a breakpoint
-        /// if logging is set to a non-blank string, it breaks at your filter
-        if (!ff || (ff->chars[0] && index_of(res, ff->chars) >= 0))
-            raise(SIGTRAP);
+        char info[256];
+        symbolic_logging = true;
+        object fvalue = get(log_funcs, field); // make get be harmless to map; null is absolutely fine identity wise to understand that
+        int    l      = 0;
+        string tname  = null;
+        string fname  = field;
+        static string  asterick = null;
+        if (!asterick) asterick = hold(string("*"));
+        bool   listen = fvalue ? cast(bool, fvalue) : false;
+        if ((l = index_of(fname, "_")) > 1) {
+            tname = mid(fname, 0, l);
+            fname = mid(fname, l + 1, len(fname) - (l + 1));
+            if (!listen && (contains(log_funcs, tname) || contains(log_funcs, fname)))
+                listen = true;
+        }
+        if (!listen && !contains(log_funcs, asterick)) return null;
+        // write type / function
+        if (tname)
+            sprintf(info, "%s::%s: ", tname->chars, fname->chars);
+        else
+            sprintf(info, "%s: ", fname->chars);
+        fwrite(info, strlen(info), 1, f);
     }
-    if (f == stderr) {
+
+    if (f == stderr)
         fwrite("\033[1;33m", 7, 1, f);
-    }
+
     if (f) {
+        // write message
         write(res, f, false);
-        if (write_ln) {
+        if (symbolic_logging || write_ln) {
             fwrite("\n", 1, 1, f);
             fflush(f);
         }
     }
+    
     if (f == stderr) {
         fwrite("\033[0m", 4, 1, f); // ANSI reset
         fflush(f);
@@ -1746,7 +1820,7 @@ object A_formatter(AType type, FILE* f, object opt, symbol template, ...) {
     return type ? (object)((A_f*)type)->with_cereal(A_alloc(type, 1, true), res->chars) : (object)res;
 }
 
-u64 fnv1a_hash(const void* data, size_t length, u64 hash) {
+u64 fnv1a_hash(const none* data, size_t length, u64 hash) {
     const u8* bytes = (const u8*)data;
     for (size_t i = 0; i < length; ++i) {
         hash ^= bytes[i];  // xor bottom with current byte
@@ -1766,8 +1840,7 @@ u64 item_hash(item f) {
     return hash(f->key ? f->key : f->value);
 }
 
-item item_init(item a) {
-    return a;
+none item_init(item a) {
 }
 
 num clamp(num i, num mn, num mx) {
@@ -1782,7 +1855,7 @@ real clampf(real i, real mn, real mx) {
     return i;
 }
 
-void vector_init(vector a);
+none vector_init(vector a);
 
 vector vector_with_i32(vector a, i32 count) {
     A_realloc(a, count);
@@ -1800,10 +1873,9 @@ sz vector_len(vector a) {
 
 
 
-map map_init(map m) {
+none map_init(map m) {
     if (m->hsize <= 0) m->hsize = 8;
-    m->fifo = list();
-    return m;
+    m->fifo = list(unmanaged, m->unmanaged);
 }
 
 none map_dealloc(map m) {
@@ -1814,6 +1886,7 @@ none map_dealloc(map m) {
                 item n = i->next;
                 drop(i->key);
                 drop(i->value);
+                drop(i);
                 //drop(i->ref);
                 m->hlist[b] = n;
             }
@@ -1897,7 +1970,7 @@ none map_rm(map m, object k) {
     }
 }
 
-void map_clear(map m) {
+none map_clear(map m) {
     for (int b = 0; b < m->hsize; b++) {
         item prev = null;
         item cur  = m->hlist[b];
@@ -1944,7 +2017,7 @@ string map_cast_string(map a) {
     return res;
 }
 
-void map_concat(map a, map b) {
+none map_concat(map a, map b) {
     pairs(b, e) set(a, e->key, e->value);
 }
 
@@ -2049,7 +2122,7 @@ string string_escape(string input) {
     return res;
 }
 
-void  string_dealloc(string a) {
+none  string_dealloc(string a) {
     printf("string_dealloc: %s", a->chars);
     free((cstr)a->chars);
 }
@@ -2094,7 +2167,7 @@ array string_split(string a, symbol sp) {
     return result;
 }
 
-void string_alloc_sz(string a, sz alloc) {
+none string_alloc_sz(string a, sz alloc) {
     char* chars = calloc(1 + alloc, sizeof(char));
     memcpy(chars, a->chars, sizeof(char) * a->len);
     chars[a->len] = 0;
@@ -2104,6 +2177,12 @@ void string_alloc_sz(string a, sz alloc) {
 }
 
 string string_mid(string a, num start, num len) {
+    if (start < 0)
+        start = a->len + start;
+    if (start < 0)
+        start = 0;
+    if (start + len > a->len)
+        len = a->len - start;
     return new(string, chars, &a->chars[start], ref_length, len);
 }
 
@@ -2215,17 +2294,17 @@ u64 string_hash(string a) {
     return a->h;
 }
 
-void message_init(message a) {
+none message_init(message a) {
     a->role = strdup(a->role);
     a->content = strdup(a->content);
 }
 
-void message_dealloc(message a) {
+none message_dealloc(message a) {
     free(a->role);
     free(a->content);
 }
 
-void string_init(string a) {
+none string_init(string a) {
     cstr value = (cstr)a->chars;
     if (a->alloc)
         a->chars = (char*)calloc(1, 1 + a->alloc);
@@ -2307,7 +2386,7 @@ bool string_ends_with(string a, symbol value) {
 item list_push(list a, object e);
 
 item hashmap_fetch(hashmap a, object key) {
-    u64 h = a->unmanaged ? (u64)((void*)key) : hash(key);
+    u64 h = a->unmanaged ? (u64)((none*)key) : hash(key);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     for (item f = bucket->first; f; f = f->next)
@@ -2328,7 +2407,7 @@ none hashmap_clear(hashmap a) {
 }
 
 item hashmap_lookup(hashmap a, object key) {
-    u64 h = a->unmanaged ? (u64)((void*)key) : hash(key);
+    u64 h = a->unmanaged ? (u64)((none*)key) : hash(key);
     u64 k = h % a->alloc;
     list bucket = &a->data[k];
     if (a->unmanaged) {
@@ -2379,11 +2458,10 @@ object hashmap_index_object(hashmap a, object key) {
     return get(a, key);
 }
 
-hashmap hashmap_init(hashmap a) {
+none hashmap_init(hashmap a) {
     if (!a->alloc)
          a->alloc = 16;
     a->data  = (list)calloc(a->alloc, sizeof(struct _list)); /// we can zero-init a vectorized set of objects with A-type
-    return a;
 }
 
 none hashmap_dealloc(hashmap a) {
@@ -2409,7 +2487,7 @@ string hashmap_cast_string(hashmap a) {
     return res;
 }
 
-void list_quicksort(list a, i32(*sfn)(object, object)) {
+none list_quicksort(list a, i32(*sfn)(object, object)) {
     item f = a->first;
     int  n = a->count;
     for (int i = 0; i < n - 1; i++) {
@@ -2425,7 +2503,7 @@ void list_quicksort(list a, i32(*sfn)(object, object)) {
     }
 }
 
-void list_sort(list a, ARef fn) {
+none list_sort(list a, ARef fn) {
     list_quicksort(a, (i32(*)(object, object))fn);
 }
 
@@ -2451,10 +2529,10 @@ object A_hold(object a) {
 
 //#undef dealloc
 
-void A_free(object a) {
+none A_free(object a) {
     A       aa = A_header(a);
     A_f*  type = aa->type;
-    void* prev = null;
+    none* prev = null;
 
     if (--all_type_alloc < 0) {
         printf("all_type_alloc < 0\n");
@@ -2462,6 +2540,8 @@ void A_free(object a) {
     if (--type->global_count < 0) {
         printf("global_count < for type %s\n", type->name);
     }
+
+    //printf("free: %s (%s:%i)\n", type->name, aa->source, (int)aa->line);
 
     while (type) {
         if (prev != type->dealloc) {
@@ -2475,7 +2555,7 @@ void A_free(object a) {
     free(aa);
 }
 
-void A_drop(object a) {
+none A_drop(object a) {
     if (!a) return;
     A header = A_header(a);
     if (header->refs < 0)
@@ -2492,7 +2572,7 @@ object A_data(A instance) {
 
 i64 A_data_stride(A a) {
     AType t = A_data_type(a);
-    return t->size - (t->traits & A_TRAIT_PRIMITIVE ? 0 : sizeof(void*));
+    return t->size - (t->traits & A_TRAIT_PRIMITIVE ? 0 : sizeof(none*));
 }
 
 AType A_data_type(A a) {
@@ -2519,7 +2599,7 @@ object A_instanceof(object inst, AType type) {
 
 /// list -------------------------
 item list_push(list a, object e) {
-    item n = hold(new(item));
+    item n = hold(item());
     n->value = hold(e); /// held already by caller
     if (a->last) {
         a->last->next = n;
@@ -2593,7 +2673,7 @@ item list_item_of(list a, object value) {
     return null;
 }
 
-void list_remove(list a, num index) {
+none list_remove(list a, num index) {
     num i = 0;
     item res = null;
     for (item ai = a->first; ai; ai = ai->next) {
@@ -2610,7 +2690,7 @@ void list_remove(list a, num index) {
     }
 }
 
-void list_remove_item(list a, item ai) {
+none list_remove_item(list a, item ai) {
     num i = 0;
     if (ai) {
         if (ai == a->first) a->first = ai->next;
@@ -2718,7 +2798,7 @@ object A_resize(object a, sz count) {
     return f->data;
 }
 
-void vector_init(vector a) {
+none vector_init(vector a) {
     A f = A_header(a);
     f->count = 0;
     f->scalar = f->type->meta.meta_0 ? f->type->meta.meta_0 : a->type ? a->type : typeid(i8);
@@ -2758,15 +2838,15 @@ none vector_set(vector a, num index, ARef element) {
     memcpy(&arb[location], element, a->type->size); 
 }
 
-void vector_realloc(vector a, sz size) {
+none vector_realloc(vector a, sz size) {
     A_realloc(a, size);
 }
 
-void vector_resize(vector a, sz size) {
+none vector_resize(vector a, sz size) {
     A_resize(a, size);
 }
 
-void vector_concat(vector a, ARef any, num count) {
+none vector_concat(vector a, ARef any, num count) {
     if (count <= 0) return;
     AType type = data_type(a);
     A f = A_header(a);
@@ -2781,7 +2861,7 @@ void vector_concat(vector a, ARef any, num count) {
         a->vshape->data[a->vshape->count - 1] = f->count;
 }
 
-void vector_push(vector a, A any) {
+none vector_push(vector a, A any) {
     vector_concat(a, any, 1);
 }
 
@@ -2823,7 +2903,7 @@ object subprocedure_invoke(subprocedure a, object arg) {
     return addr(a->target, arg, a->ctx);
 }
 
-void AF_init(AF a) {
+none AF_init(AF a) {
     af_top = a;
     a->pool  = create(array, alloc, a->start_size ? a->start_size : 1024);
     a->types = create(array, alloc, a->start_size ? a->start_size : 1024);
@@ -2834,7 +2914,7 @@ void AF_init(AF a) {
     push_weak(af_stack, a);
 }
 
-void auto_free() {
+none auto_free() {
     array a = af_top->pool;
     for (num i = 1; i < a->len; i++) {
         object obj = a->elements[i];
@@ -2856,7 +2936,7 @@ AF A_pool(sz start_size) {
     return AF_initialize(start_size);
 }
 
-void AF_dealloc(AF a) {
+none AF_dealloc(AF a) {
     int f = index_of(af_stack, a);
     assert(f >= 0, "invalid af-stack index");
     remove_weak(af_stack, f);
@@ -2903,7 +2983,7 @@ bool create_symlink(path target, path link) {
 }
 
 /*
-void file_init(file f) {
+none file_init(file f) {
     verify(!(f->read && f->write), "cannot open for both read and write");
     cstr src = (cstr)(f->src ? f->src->chars : null);
     if (!f->id && (f->read || f->write)) {
@@ -2916,7 +2996,7 @@ void file_init(file f) {
             path   p      = null;
             do {
                 h   = (i64)rand() << 32 | (i64)rand();
-                r   = formatter("/tmp/f%p", (void*)h);
+                r   = formatter("/tmp/f%p", (none*)h);
                 src = (cstr)r->chars;
                 p   = new(path, chars, r);
             } while (exists(p));
@@ -2979,14 +3059,14 @@ object file_file_read(file f, AType type) {
     return success ? o : null;
 }
 
-void file_file_close(file f) {
+none file_file_close(file f) {
     if (f->id) {
         fclose(f->id);
         f->id = null;
     }
 }
 
-void file_dealloc(file f) {
+none file_dealloc(file f) {
     file_file_close(f);
 }
 */
@@ -3009,7 +3089,7 @@ path path_temp(symbol tmpl) {
     path p = null;
     do {
         i64    h = (i64)rand() << 32 | (i64)rand();
-        string r = formatter("/tmp/%p.%s", (void*)h, tmpl);
+        string r = formatter("/tmp/%p.%s", (none*)h, tmpl);
         p        = path(chars, r->chars);
     } while (exists(p));
     return p;
@@ -3536,7 +3616,7 @@ object path_read(path a, AType type) {
     return null;
 }
 
-void* primitive_ffi_arb(AType ptype) {
+none* primitive_ffi_arb(AType ptype) {
 #ifdef USE_FFI
     if (ptype == typeid(u8))        return &ffi_type_uint8;
     if (ptype == typeid(i8))        return &ffi_type_sint8;
@@ -3632,7 +3712,8 @@ array path_ls(path a, string pattern, bool recur) {
                     path subdir = new(path, chars, abs);
                     array sublist = ls(subdir, pattern, recur);
                     concat(list, sublist);
-                }
+                } else if (!pattern)
+                    push(list, new(path, chars, abs));
             }
         }
     }
@@ -3989,7 +4070,7 @@ static none async_runner(thread_t* thread) {
     unlock(thread->lock);
 }
 
-void async_init(async t) {
+none async_init(async t) {
     i32    n = len(t->work);
     verify(n > 0, "no work given, no threads needed");
     // we can then have a worker modulo restriction
@@ -4013,7 +4094,7 @@ void async_init(async t) {
     }
 }
 
-void async_dealloc(async t) {
+none async_dealloc(async t) {
     sync(t, null);
     for (int i = 0, n = len(t->work); i < n; i++) {
         thread_t* thread = &t->threads[i];

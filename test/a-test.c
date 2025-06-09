@@ -10,12 +10,18 @@ typedef struct user {
 
 
 int main(int n_args, char* v_args[]) {
-    A_start();
+    A_start(n_args, v_args);
     auto_free();
 
     AType map_t    = &map_type; // 1
     AType string_t = &string_type; // 223
     AType item_t   = &item_type; // 0
+    int test2 = 2;
+    test2    += 2;
+    test2    += 2;
+    test2    += 2;
+    test2    += 2;
+    test2    += 2;
 
     for (int base = A_alloc_count(), count = base;
             verify(base == count, "too many alloc");

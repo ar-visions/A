@@ -13,6 +13,10 @@
 			"path": "../tapestry"
 		},
 		{
+			"name": "dbg",
+			"path": "../dbg"
+		},
+		{
 			"name": "ether",
 			"path": "../ether"
 		},

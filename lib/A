@@ -134,6 +134,7 @@ typedef struct ftable_t {
     char*           module;
     int             size;
     int             msize;
+    int             magic;
     int             global_count;
     shape           vmember_shape;
     int             vmember_count;
@@ -172,7 +173,7 @@ typedef bool(*global_init_fn)();
 #define true                (bool)1
 #define false               (bool)0
 #define stringify(x)        #x
-#ifdef __cpp
+#ifdef __cplusplus
 #define null                nullptr
 #else
 #define null                ((void*)0)
@@ -1431,6 +1432,7 @@ typedef struct method_t {
     char*           module; \
     int             size; \
     int             msize; \
+    int             magic; \
     int             global_count; \
     shape           vmember_shape; \
     int             vmember_count; \
@@ -1533,6 +1535,7 @@ void A_lazy_init(global_init_fn fn);
             memcpy(type_ref, base_ref, sizeof(A_f)); \
             static type_member_t members[64 + ENUM_COUNT(E##_schema(E, T, COUNT)) + sizeof(E##_type) / sizeof(void*)]; \
             memset(&E##_type, 0, sizeof(E##_type)); \
+            E##_type.magic = 1337; \
             E##_type.src      = typeid(T); \
             E##_type.parent_type = (__typeof__(E##_type.parent_type))& A_type; \
             E##_type.name     = #E;                 \
@@ -1725,6 +1728,7 @@ void* primitive_ffi_arb(AType);
         } else { \
             memset(type_ref, 0,        sizeof(TYPE##_f)); \
             memcpy(type_ref, base_ref, sizeof(BASE##_f)); \
+            type_ref->magic = 1337; \
             static type_member_t \
                 members[64 + sizeof(TYPE##_type) / sizeof(void*)]; \
             type_ref->src = (AType)base_ref != typeid(A) \
@@ -2446,9 +2450,16 @@ extern FILE* logger;
 #define         exec(t, ...)      A_exec(((string)A_formatter((AType)null, null, (object)false, (symbol)t, ## __VA_ARGS__)))
 #define          tap(L)           (A_tap(L))
 #define        untap(L)           (A_untap(L))
-#define        A_log(L, t, ...)   A_formatter((AType)null,      stdout, str(L),  t, ## __VA_ARGS__)
+
+#define        A_log(sL, t, ...)   A_formatter((AType)null,      stdout, string(sL),  t, ## __VA_ARGS__)
+#define        print(t, ...)   ({\
+    static string _topic = null; \
+    if (!_topic) _topic = hold(string(__func__)); \
+    A_formatter((AType)null, stdout, (object)_topic, t, ## __VA_ARGS__); \
+})
+
 #define          put(t,    ...)   A_formatter((AType)null,      stdout, (object)false, (symbol)t, ## __VA_ARGS__)
-#define        print(t,    ...)   A_formatter((AType)null,      stdout, (object)true,  (symbol)t, ## __VA_ARGS__)
+//#define        print(L, t,    ...) A_formatter((AType)null,      stdout, (object)true,  (symbol)t, ## __VA_ARGS__)
 #define        error(t, ...)      A_formatter((AType)null,      stderr, (object)true,  (symbol)t, ## __VA_ARGS__)
 #define        fault(t, ...) do { A_formatter((AType)null,      stderr, (object)true,  (symbol)t, ## __VA_ARGS__); exit(1); } while(0)
 #define  file_exists(t, ...)     (A_exists(A_formatter((AType)null, null, (object)false, (symbol)t, ## __VA_ARGS__)) == Exists_file)
@@ -2495,8 +2506,7 @@ int A_exec(string cmd);
 
 /// we can go through a map
 #define pairs(MM, EE) \
-    if (MM && cast(bool, MM)) for (item _i = MM->fifo->first, EE = null; _i; _i = _i->next) \
-        for (item EE = (item)_i, e0 = EE; EE == e0; e0++) \
+    for (item EE = (MM && MM->fifo) ? MM->fifo->first : (item)null; EE; EE = EE->next)
 
 #define min(A, B) ({ \
     __typeof__(A) a = A; \
@@ -2549,7 +2559,7 @@ object      A_hold(object a);
 AType       A_lookup_type(cstr);
 void        A_drop(object a);
 sz          A_len(object a);
-none        A_tap(symbol, subprocedure);
+none        A_tap(symbol, hook);
 none        A_untap(symbol);
 object      A_set_property(object instance, symbol name, object value);
 object      A_get_property(object instance, symbol name);
@@ -2561,8 +2571,8 @@ real        clampf(real, real, real);
 object      construct_with(AType type, object data);
 bool        constructs_with(AType type, AType data_type);
 i64         read_integer(object data);
-#define     drop(a) A_drop(a)
-#define     hold(a) (__typeof__(a))A_hold(a)
+#define     drop(a) A_drop((object)a)
+#define     hold(a) (__typeof__(a))A_hold((object)a)
 
 
 /// should be adapted to work with schemas 
@@ -2602,7 +2612,7 @@ object      A_realloc(object, sz);
 object      A_resize(object, sz);
 string      A_cast_string(A a);
 void        A_push(object, object);
-void        A_start();
+void        A_start(int, symbol[]);
 map         A_args(int argc, symbol argv[], symbol default_arg, ...);
 A           A_header(object instance);
 pid_t       A_last_pid();

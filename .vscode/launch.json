@@ -303,7 +303,9 @@
             "type": "lldb",
             "request": "launch",
             "program": "/src/tapestry/bin/orbiter",
-            "cwd": "/src/tapestry/share/orbiter"
+            "cwd": "/src/tapestry/share/orbiter",
+            "args": [],
+            "env": {"LD_LIBRARY_PATH":"/src/tapestry/lib"},
         },
         {
             "name": "A-test",

@@ -9,7 +9,7 @@ A-type is a C-based object system designed for clear maintainable code that is r
 #include <A>
 
 int main(int argc, char **argv) {
-    A_start();
+    A_start(argc, argv);
     cstr        src = getenv("SRC");
     cstr     import = getenv("IMPORT");
     map        args = A_args(argc, argv,

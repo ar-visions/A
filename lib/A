@@ -27,6 +27,7 @@ typedef unsigned short      u16;
 typedef unsigned int        u32;
 typedef unsigned long long  u64;
 typedef __uint128_t         u128;
+typedef u128                AF;
 typedef long long           num;
 typedef long long           sz;      /// a signed 64 bit size lets us act like python, so this is a type for the purpose of indexing and all valid sizes
 #ifndef __cplusplus
@@ -2224,18 +2225,6 @@ declare_class(array, object)
 #define ATypes_schema(X,Y,...)
 declare_class_2(ATypes, array, AType)
 
-#define AF_schema(X,Y,...) \
-    i_prop      (X,Y, public, array, pool) \
-    i_prop      (X,Y, public, array, types) \
-    i_prop      (X,Y, public, sz,    start_size) \
-    s_method    (X,Y, public, AF,    fetch, num) \
-    s_method    (X,Y, public, AF,    initialize, sz) \
-    i_override  (X,Y, method, init) \
-    i_override  (X,Y, method, dealloc)
-declare_class(AF)
-
-void  auto_free();
-
 #define hashmap_schema(X,Y,...) \
     i_prop      (X,Y, opaque, list,  data) \
     i_prop      (X,Y, public, num,   alloc) \
@@ -2454,7 +2443,7 @@ extern FILE* logger;
 #define        A_log(sL, t, ...)   A_formatter((AType)null,      stdout, string(sL),  t, ## __VA_ARGS__)
 #define        print(t, ...)   ({\
     static string _topic = null; \
-    if (!_topic) _topic = hold(string(__func__)); \
+    if (!_topic) _topic = string(__func__); \
     A_formatter((AType)null, stdout, (object)_topic, t, ## __VA_ARGS__); \
 })
 
@@ -2628,9 +2617,13 @@ void        br();
 bool        A_reflect(symbol location);
 
 vector      vector_with_path(vector a, path file_path);
-u128        A_fbits(object a);
 
-object parse(cstr s, AType schema);
+AF          AF_bits(object a);
+void        AF_set_id(object a, int id);
+void        AF_set_name(object a, cstr name);
+bool        AF_query_name(object a, cstr name);
+
+object      parse(cstr s, AType schema);
 
 #define vdata(instance) A_data(instance)
 

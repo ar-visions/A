@@ -269,10 +269,30 @@ object A_new(AType type) {
     return res;
 }
 
-u128 A_fbits(object a) {
+u128 AF_bits(object a) {
     AType type = isa(a);
     u128 fields = *(u128*)((i8*)a + type->size - (sizeof(void*) * 2));
     return fields;
+}
+
+void AF_set_id(object a, int id) {
+    AType t = isa(a);
+    u128* fields = (u128*)((i8*)a + t->size - (sizeof(void*) * 2));
+    *fields |= ((u128)1) << id;
+}
+
+void AF_set_name(object a, cstr name) {
+    AType t = isa(a);
+    type_member_t* m = A_member(t, A_MEMBER_PROP|A_MEMBER_VPROP, name, true);
+    u128* fields = (u128*)((i8*)a + t->size - (sizeof(void*) * 2));
+    *fields |= ((u128)1) << m->id;
+}
+
+bool AF_query_name(object a, cstr name) {
+    AType          t = isa(a);
+    type_member_t* m = A_member(t, A_MEMBER_PROP|A_MEMBER_VPROP, name, true);
+    u128           f = AF_bits(a);
+    return (f & (((u128)1) << m->id)) != 0;
 }
 
 static bool A_validator(object a) {
@@ -280,7 +300,7 @@ static bool A_validator(object a) {
     if (type->magic != 1337) return false;
 
     // now required args are set if (type->required & *(i64*)obj->f) == type->required
-    u128 fields = A_fbits(a);
+    u128 fields = AF_bits(a);
     if ((type->required & fields) != type->required) {
         for (num i = 0; i < type->member_count; i++) {
             type_member_t* m = &type->members[i];
@@ -379,7 +399,7 @@ object A_initialize(object a) {
     #endif
 
     A_init_recur(a, f->type, null);
-    A_hold_members(a);
+    //A_hold_members(a);
     return a;
 }
 
@@ -644,7 +664,7 @@ none array_push(array a, object b) {
     AType t = isa(a);
     if (is_meta(a) && t->meta.meta_0 != typeid(object))
         assert(is_meta_compatible(a, b), "not meta compatible");
-    a->elements[a->len++] = a->unmanaged ? b : A_hold(b);
+    a->elements[a->len++] = b;
 }
 
 none array_clear(array a) {
@@ -930,8 +950,7 @@ static __attribute__((constructor)) bool Aglobal_AF();
 
 none A_start(int argc, symbol argv[]) {
     fault_level = level_err;
-    AF pool    = create(AF); /// leave pool open [ AF_type is not being populated; check for creation of AF_init and global
-    log_funcs = hold(new(map, hsize, 32, unmanaged, true));
+    log_funcs   = map(hsize, 32, unmanaged, true);
 
     /// initialize logging; * == all
     bool explicit_listen = false;
@@ -993,7 +1012,7 @@ none A_start(int argc, symbol argv[]) {
         for (num m = 0; m < type->member_count; m++) {
             type_member_t* mem = &type->members[m];
             if (mem->name)
-                mem->sname = hold(string(mem->name));
+                mem->sname = string(mem->name);
             if (mem->required && (mem->member_type & A_MEMBER_PROP)) {
                 type->required |= 1 << mem->id;
                 // now required args are set if (type->required & *(i64*)obj->f) == type->required
@@ -1476,6 +1495,15 @@ object construct_with(AType type, object data) {
             }
         }
     }
+
+    // set field bits here (removed case where json parser was doing this)
+    if (result && data_type == typeid(map)) {
+        map f = (map)data;
+        pairs(f, i) {
+            string name = i->key;
+            AF_set_name(result, name->chars);
+        }
+    }
     return result ? A_initialize(result) : null;
 }
 
@@ -1777,7 +1805,7 @@ object A_formatter(AType type, FILE* f, object opt, symbol template, ...) {
         string tname  = null;
         string fname  = field;
         static string  asterick = null;
-        if (!asterick) asterick = hold(string("*"));
+        if (!asterick) asterick = string("*");
         bool   listen = fvalue ? cast(bool, fvalue) : false;
         if ((l = index_of(fname, "_")) > 1) {
             tname = mid(fname, 0, l);
@@ -1920,7 +1948,7 @@ item map_fetch(map m, object k) {
     if (!i) {
         u64 h = hash(k);
         i64 b = h % m->hsize;
-        m->hlist[b] = i = hold(item(next, m->hlist[b], key, hold(k), h, h));
+        m->hlist[b] = i = item(next, m->hlist[b], key, hold(k), h, h);
         m->count++;
     }
     return i;
@@ -2424,7 +2452,7 @@ item hashmap_lookup(hashmap a, object key) {
 none hashmap_set(hashmap a, object key, object value) {
     item i = fetch(a, key);
     object prev = i->value;
-    i->value = a->unmanaged ? value : A_hold(value);
+    i->value = value;
     if (!a->unmanaged) A_drop(prev);
 }
 
@@ -2599,8 +2627,8 @@ object A_instanceof(object inst, AType type) {
 
 /// list -------------------------
 item list_push(list a, object e) {
-    item n = hold(item());
-    n->value = hold(e); /// held already by caller
+    item n = item();
+    n->value = e; /// held already by caller
     if (a->last) {
         a->last->next = n;
         n->prev       = a->last;
@@ -2628,7 +2656,7 @@ item list_insert_after(list a, object e, i32 after) {
             }
             index++;
         }
-    item n = hold(item(value, e));
+    item n = item(value, e);
     if (!found) {
         n->next = a->first;
         if (a->first)
@@ -2903,67 +2931,9 @@ object subprocedure_invoke(subprocedure a, object arg) {
     return addr(a->target, arg, a->ctx);
 }
 
-none AF_init(AF a) {
-    af_top = a;
-    a->pool  = create(array, alloc, a->start_size ? a->start_size : 1024);
-    a->types = create(array, alloc, a->start_size ? a->start_size : 1024);
-    push_weak(a->pool, a); // push self to pool, now all indices are > 0; obviously we dont want to free this though
-    push_weak(a->types, typeid(array));
-
-    if (!af_stack) af_stack = create(array, alloc, 16);
-    push_weak(af_stack, a);
-}
-
-none auto_free() {
-    array a = af_top->pool;
-    for (num i = 1; i < a->len; i++) {
-        object obj = a->elements[i];
-        A head = A_header(obj);
-        AType ty = isa(obj);
-        A_drop(obj);
-        a->elements[i] = null;
-    }
-    a->len = 1;
-}
-
-AF AF_initialize(sz start_size) {
-    AF a = create(AF, start_size, start_size);
-    //AF_init(a);
-    return a;
-}
-
-AF A_pool(sz start_size) {
-    return AF_initialize(start_size);
-}
-
-none AF_dealloc(AF a) {
-    int f = index_of(af_stack, a);
-    assert(f >= 0, "invalid af-stack index");
-    remove_weak(af_stack, f);
-    if (af_top == a)
-        af_top = af_stack->len ? af_stack->elements[af_stack->len - 1] : null;
-    for (int i = 1; i < a->pool->len; i++) {
-        A ref = a->pool->elements[i];
-        if (ref) {
-            A_free(ref);
-        }
-    }
-    A_free(a->pool);
-    a->pool = null;
-}
-
-AF AF_fetch(num index) {
-    if (af_stack && abso((int)index) < af_stack->len)
-        return index < 0 ? af_stack->elements[af_stack->len + index] :
-                           af_stack->elements[index];
-    else
-        return null;
-}
-
 bool isname(char n) {
     return (n >= 'a' && n <= 'z') || (n >= 'A' && n <= 'Z') || (n == '_');
 }
-
 
 u64 fn_hash(fn f) {
     return (u64)f->method->address;
@@ -3648,6 +3618,7 @@ static none copy_file(path from, path to) {
     path f_to = is_dir(to) ? form(path, "%o/%o", to, filename(from)) : hold(to);
     FILE *src = fopen(cstring(from), "rb");
     FILE *dst = fopen(cstring(f_to), "wb");
+    drop(f_to);
     verify(src && dst, "copy_file: cannot open file");
 
     char buffer[8192];
@@ -3864,25 +3835,6 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
     else if (*scan == '{') { /// Type will make us convert to the object, from map, and set is_map back to false; what could possibly get crossed up with this one
         AType use_schema = schema ? schema : typeid(map);
         bool is_map = use_schema == typeid(map);
-        map required = null;
-        array fields = null;
-        type_member_t* fields_member = null;
-        if (use_schema) {
-            fields_member = A_member(use_schema, A_MEMBER_PROP, "fields", true);
-            if (fields_member && fields_member->type == typeid(array))
-                fields = array();
-        }
-
-        if (!is_map) {
-            /// required fields
-            required = map();
-            for (int i = 0; i < use_schema->member_count; i++) {
-                type_member_t* mem = use_schema->members;
-                if (mem->required) {
-                    set(required, mem->sname, A_bool(true)); // field-name
-                }
-            }
-        }
         scan = ws(&scan[1]);
         map props = map(hsize, 16);
         for (;;) {
@@ -3894,7 +3846,6 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
             if (*scan != '\"') return null;
             origin        = scan;
             string name   = parse_json_string(origin, &scan);
-            if (fields) push(fields, name);
             bool is_type  = cmp(name, "Type") == 0;
             Member member = is_map ? null : A_member(use_schema, A_MEMBER_PROP, name->chars, true);
             if (!is_type && !member && !is_map) {
@@ -3904,9 +3855,6 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
             scan = ws(&scan[0]);
             if (*scan != ':') return null;
             scan = ws(&scan[1]);
-            if (required && contains(required, name)) {
-                rm(required, name);
-            }
             object value = parse_object(scan, member ? member->type : null, member ? member->args.meta_0 : null, &scan); /// issue with parsing a map type (attributes)
             if (is_type) {
                 string type_name = value;
@@ -3928,17 +3876,9 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
                 return null;
         }
         /// check for remaining required
-        if (required && len(required)) {
-            string r = string();
-            pairs(required, i) {
-                r = form(string, "%o%s%o", r, len(r) ? " " : "", i->key);
-            }
-            fault("required fields not set: %o", r); // in public case, no required fields
-        }
+
         if (remainder) *remainder = ws(scan);
         res = construct_with(use_schema, props); // makes a bit more sense to implement required here
-        if (fields_member)
-            memcpy(&((i8*)res)[fields_member->offset], &fields, sizeof(array));
     }
     if (remainder) *remainder = scan;
     return res;
@@ -4081,12 +4021,12 @@ none async_init(async t) {
     for (int i = 0; i < n; i++) {
         thread_t* thread = &t->threads[i];
         thread->index = i;
-        thread->w     = hold(get(t->work, i));
+        thread->w     = get(t->work, i);
         thread->next  = thread->w;
-        thread->t     = hold(t);
+        thread->t     = t;
         thread->lock  = mutex(cond, true);
         lock(thread->lock);
-        pthread_create    (&thread->obj, null, async_runner, thread);
+        pthread_create(&thread->obj, null, async_runner, thread);
     }
     for (int i = 0; i < n; i++) {
         thread_t* thread = &t->threads[i];

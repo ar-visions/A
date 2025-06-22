@@ -75,7 +75,6 @@ struct A {
     pub _type_:         *mut f_A,
     pub _scalar_:       *mut f_A,
     pub refs:           i64,
-    pub ar_index:       i64,
     pub data:           *mut c_void,
     pub shape:          *mut VecI64,
     pub alloc:          i64,
@@ -278,7 +277,6 @@ pub struct obj {
     pub _type_:                    *mut f_A,
     pub _scalar_:                  *mut f_A,
     pub refs:                      i64,
-    pub ar_index:                  i64,
     pub data:                      *mut c_void,
     pub shape:                     *mut VecI64,
     pub alloc:                     i64,
@@ -289,7 +287,6 @@ A_type!(obj {
     prop pub _type_:                    *mut f_A;
     prop pub _scalar_:                  *mut f_A;
     prop pub refs:                      i64;
-    prop pub ar_index:                  i64;
     prop pub data:                      *mut c_void;
     prop pub shape:                     *mut VecI64;
     prop pub alloc:                     i64;

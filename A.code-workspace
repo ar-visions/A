@@ -17,6 +17,10 @@
 			"path": "../dbg"
 		},
 		{
+			"name": "llm",
+			"path": "../llm"
+		},
+		{
 			"name": "ether",
 			"path": "../ether"
 		},

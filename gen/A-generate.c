@@ -56,7 +56,7 @@ static string generate(string prompt) {
 };
 
 int main(int n_args, cstr* v_args) {
-    A_start(n_args, v_args);
+    A_start(v_args);
   //string a          = string("Audrey");
     symbol model_file = "bartowski_Meta-Llama-3-8B-Instruct-GGUF_Meta-Llama-3-8B-Instruct-Q4_K_M.gguf"; /// form this from two parts
     path   model_path = form(path, "%s/.cache/llama.cpp/%s", getenv("HOME"), model_file);
@@ -124,7 +124,7 @@ int main(int n_args, cstr* v_args) {
         if (!query)
             break;
         print("now i am going to send to the bot...");
-        message req     = message(role, "user", content, (cstr)query->chars);
+        message req = message(role, "user", content, (cstr)query->chars);
         push(messages, req);
 
         int new_len = llama_chat_apply_template(tmpl, vdata(messages), len(messages), true, vdata(formatted), len(formatted));

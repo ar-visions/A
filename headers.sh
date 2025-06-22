@@ -29,7 +29,9 @@ if [ ! -f "$HEADER" ] || [ "$PROJECT_HEADER" -nt "$HEADER" ]; then
     mv "$GEN_DIR/temp" "$HEADER"
 fi
 
-
+# should rebuild if last build failed, i think.
+# that may be stored in a file before we make the time stamp, called tapestry-result
+# if that is 0 then we may remake it
 if [ ! -f "$IMPORT_HEADER" ] || [ "$BUILD_FILE" -nt "$IMPORT_HEADER" ]; then
     rm -f "$IMPORT_HEADER"
     echo "/* generated import interface */" >> "$IMPORT_HEADER"
@@ -115,7 +117,7 @@ if [ ! -f "$INIT_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INIT_HEADER" ]; then
         if [ "$type" = "meta" ] || [ "$type" = "vector" ]; then
             echo "#define _N_ARGS_${class_name}_1( TYPE, a)" >> "$INIT_HEADER"
         else
-            echo "#define _N_ARGS_${class_name}_1( TYPE, a) _Generic((a), TYPE##_schema(TYPE, GENERICS, object) const void *: (void)0)(instance, a)" >> "$INIT_HEADER"
+            echo "#define _N_ARGS_${class_name}_1( TYPE, a) _Generic((a), TYPE##_schema(TYPE, GENERICS, object) A_schema(A, GENERICS, object) const void *: (void)0)(instance, a)" >> "$INIT_HEADER"
         fi
         
         # Property assignment macros for various argument counts
@@ -137,7 +139,7 @@ if [ ! -f "$INIT_HEADER" ] || [ "$PROJECT_HEADER" -nt "$INIT_HEADER" ]; then
         
         # Main constructor macro
         echo "#define ${class_name}(...) ({ \\" >> "$INIT_HEADER"
-        echo "    ${class_name} instance = (${class_name})A_alloc_dbg(typeid(${class_name}), 1, true, __FILE__, __LINE__); \\" >> "$INIT_HEADER"
+        echo "    ${class_name} instance = (${class_name})A_alloc_dbg(typeid(${class_name}), 1, __FILE__, __LINE__); \\" >> "$INIT_HEADER"
         #echo "    ${class_name} instance = (${class_name})A_alloc(typeid(${class_name}), 1, true); \\" >> "$INIT_HEADER"
         echo "    _N_ARGS_${class_name}(${class_name}, ## __VA_ARGS__); \\" >> "$INIT_HEADER"
         echo "    A_initialize((object)instance); \\" >> "$INIT_HEADER"

@@ -1,16 +1,7 @@
 #include <import>
 
-/// @brief can reference the 'struct type' as inlay, and 'type' as ptr
-typedef struct user {
-    string a;
-} *user;
-
-
-
-
-
 int main(int n_args, symbol v_args[]) {
-    A_start(n_args, v_args);
+    A_start(v_args);
 
     int test2 = 2; // testing step in dbg repo
     test2    += 2;

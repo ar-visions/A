@@ -58,6 +58,34 @@
             }
         },
         {
+            "label": "build-llm",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../llm"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "windows": {
+                "command": "msbuild llm.sln /t:llm"
+            },
+            "osx": {
+                "command": "make -j8"
+            },
+            "linux": {
+                "command": "make -j8"
+            }
+        },
+        {
             "label": "build-dbg",
             "type": "shell",
 			"options": {

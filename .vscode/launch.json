@@ -86,6 +86,15 @@
             }
         },
         {
+            "name":       "tapestry (llm)",
+            "type":       "lldb",
+            "request":    "launch",
+            "program":    "/src/tapestry/bin/tapestry",
+            "args":     [ "/src/llm" ],
+            "cwd":        "/src/tapestry",
+            "env":      { "VERBOSE": "1", "CC": "clang" }
+        },
+        {
             "name":       "tapestry (orbiter)",
             "type":       "lldb",
             "request":    "launch",
@@ -95,25 +104,22 @@
             "env":      { "VERBOSE": "1", "CC": "clang" }
         },
         {
-            "name": "tapestry (vec)",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "/src/tapestry/bin/tapestry",
-            "args": [
-                "/src/vec"
-            ],
-            "stopAtEntry": false,
-            "cwd": "/src/tapestry",
-            "environment": [
-                {
-                    "name": "VERBOSE",
-                    "value": "1"
-                },
-                {
-                    "name": "CC",
-                    "value": "clang"
-                }
-            ]
+            "name":       "tapestry (img)",
+            "type":       "lldb",
+            "request":    "launch",
+            "program":    "/src/tapestry/bin/tapestry",
+            "args":     [ "/src/img" ],
+            "cwd":        "/src/tapestry",
+            "env":      { "VERBOSE": "1", "CC": "clang" }
+        },
+        {
+            "name":       "tapestry (vec)",
+            "type":       "lldb",
+            "request":    "launch",
+            "program":    "/src/tapestry/bin/tapestry",
+            "args":     [ "/src/vec" ],
+            "cwd":        "/src/tapestry",
+            "env":      { "VERBOSE": "1", "CC": "clang" }
         },
         {
             "name": "tapestry (ether)",
@@ -196,21 +202,13 @@
             ]
         },
         {
-            "name": "tapestry (hyperspace)",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "/src/tapestry/bin/tapestry",
-            "args": [
-                "/src/hyperspace"
-            ],
-            "stopAtEntry": false,
-            "cwd": "/src/hyperspace",
-            "environment": [
-                {
-                    "name": "CC",
-                    "value": "clang"
-                }
-            ]
+            "name":       "tapestry (hyperspace)",
+            "type":       "lldb",
+            "request":    "launch",
+            "program":    "/src/tapestry/bin/tapestry",
+            "args":     [ "/src/hyperspace" ],
+            "cwd":        "/src/tapestry",
+            "env":      { "VERBOSE": "1", "CC": "clang" }
         },
         {
             "name": "silver",
@@ -299,11 +297,29 @@
             "MIMode": "gdb"
         },
         {
+            "name": "llm",
+            "type": "lldb",
+            "request": "launch",
+            "program": "/src/tapestry/bin/llm",
+            "cwd": "/src/tapestry/share/llm",
+            "args": [],
+            "env": {"LD_LIBRARY_PATH":"/src/tapestry/lib"},
+        },
+        {
             "name": "orbiter",
             "type": "lldb",
             "request": "launch",
             "program": "/src/tapestry/bin/orbiter",
             "cwd": "/src/tapestry/share/orbiter",
+            "args": [],
+            "env": {"LD_LIBRARY_PATH":"/src/tapestry/lib"},
+        },
+        {
+            "name": "hyperspace",
+            "type": "lldb",
+            "request": "launch",
+            "program": "/src/tapestry/bin/hyperspace",
+            "cwd": "/src/tapestry/share/hyperspace",
             "args": [],
             "env": {"LD_LIBRARY_PATH":"/src/tapestry/lib"},
         },

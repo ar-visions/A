@@ -40,14 +40,20 @@ typedef double              real;    /// real enough
 typedef void*               handle;
 typedef char*               cstr;
 typedef const char*         symbol;
-typedef const char*         cereal;
+//typedef const char*         cereal;
+
+typedef struct cereal { char* value; } cereal;
+
 //typedef struct A_f*       AType;
 typedef struct _object*     object;
 typedef struct _A**         ARef;
 typedef float*              floats;
 typedef struct _A*          A;
 typedef struct type_member_t* Member;
-typedef object(*hook)(object);
+typedef cstr* cstrs;
+
+typedef object (*hook)    (object);
+typedef object (*callback)(object, object); // target and argument
 
 #define forward(t) typedef struct _##t* t;
 
@@ -79,6 +85,7 @@ struct _array;
 struct _A_f;
 
 #define a(...) array_of(__VA_ARGS__ __VA_OPT__(,) null)
+#define m(...)   map_of(__VA_ARGS__ __VA_OPT__(,) null)
 
 
 /// our A-type classes have many types of methods
@@ -129,12 +136,15 @@ typedef struct meta_t {
 
 forward(shape)
 
+typedef struct af_recycler af_recycler;
+
 typedef struct ftable_t {
     struct ftable_t* parent_type;
     char*           name;
     char*           module;
     int             size;
     int             msize;
+    af_recycler*    af;
     int             magic;
     int             global_count;
     shape           vmember_shape;
@@ -331,14 +341,14 @@ typedef bool(*global_init_fn)();
 
 #define new(TYPE, ...) \
     ({ \
-        TYPE instance = (TYPE)A_alloc(typeid(TYPE), 1, true); \
+        TYPE instance = (TYPE)A_alloc(typeid(TYPE), 1); \
         _N_ARGS(TYPE, ## __VA_ARGS__); \
         A_initialize((object)instance); \
         instance; \
     })
 #define new2(TYPE, ...) \
     ({ \
-        TYPE instance = (TYPE)A_alloc(typeid(TYPE), 1, true); \
+        TYPE instance = (TYPE)A_alloc(typeid(TYPE), 1); \
         TYPE##_N_ARGS(TYPE, ## __VA_ARGS__); \
         A_initialize((object)instance); \
         instance; \
@@ -362,7 +372,7 @@ typedef bool(*global_init_fn)();
 /// with construct we give it a dynamic type, symbols and A-values
 #define construct(type, ...) \
     ({ \
-        T instance = (T)A_alloc(type, 1, true); \
+        T instance = (T)A_alloc(type, 1); \
         _N_ARGS(instance, ## __VA_ARGS__); \
         A_initialize((A)instance); \
         instance; \
@@ -370,7 +380,7 @@ typedef bool(*global_init_fn)();
 
 #define new0(T, ...) \
     ({ \
-        T instance = (T)A_alloc(typeid(T), 1, true); \
+        T instance = (T)A_alloc(typeid(T), 1); \
         _N_ARGS(instance, ## __VA_ARGS__); \
         A_initialize((A)instance); \
         instance; \
@@ -378,7 +388,7 @@ typedef bool(*global_init_fn)();
 
 #define create(T, ...) \
     ({ \
-        T instance = (T)A_alloc(typeid(T), 1, false); \
+        T instance = (T)A_alloc(typeid(T), 1); \
         _N_ARGS(instance, ## __VA_ARGS__); \
         A_initialize((A)instance); \
         instance; \
@@ -386,16 +396,16 @@ typedef bool(*global_init_fn)();
 
 #define allocate(T, ...) \
     ({ \
-        T instance = (T)A_alloc(typeid(T), 1, false); \
+        T instance = (T)A_alloc(typeid(T), 1); \
         _N_ARGS(instance, ## __VA_ARGS__); \
         instance; \
     })
 
-#define valloc(T, N)                ((A)A_alloc(typeid(T), N, false))
+#define valloc(T, N)                ((A)A_alloc(typeid(T), N))
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
 #define isa(INSTANCE)               (INSTANCE ? (struct _A_f*)((struct _A*)INSTANCE - 1)->type : (struct _A_f*)0)
 // see: javascript; returns null if its not an instance-of; faults if you give it a null
-#define instanceof(left, type)      A_instanceof(left, typeid(type))
+#define instanceof(left, type)      (type)A_instanceof(left, typeid(type))
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 #define fcall(I,M,...)              ({ __typeof__(I) _i_ = I; ftableI(_i_)->M(_i_, ## __VA_ARGS__); })
 #define mcall(I,M,...)              ({ __typeof__(I) _i_ = I; (_i_) ? ftableI(_i_)->M(_i_, ## __VA_ARGS__) : 0; })
@@ -406,10 +416,10 @@ typedef bool(*global_init_fn)();
 #define idx(I,V1)                   M(I, index ##_## num, V1)
 #define cast(T,I)                   fcall(I, cast_##T)
 #define meta_t(I,IDX)               isa(I) -> meta.meta_##IDX
-#define ctr(T,WITH,...)             A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
-#define ctr1(T,WITH,...)            A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, true), ## __VA_ARGS__))
-#define alloc_ctr(T,WITH,...)       A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1, false), ## __VA_ARGS__))
-#define str(CSTR)                   string_type.with_symbol((string)A_alloc((AType)&string_type, 1, true), (symbol)(CSTR))
+#define ctr(T,WITH,...)             A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1), ## __VA_ARGS__))
+#define ctr1(T,WITH,...)            A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1), ## __VA_ARGS__))
+#define alloc_ctr(T,WITH,...)       A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1), ## __VA_ARGS__))
+#define str(CSTR)                   string_type.with_symbol((string)A_alloc((AType)&string_type, 1), (symbol)(CSTR))
 #define addr_validateI(I)           ({ \
     __typeof__(I) *addr = &I; \
     I \
@@ -1017,7 +1027,7 @@ typedef bool(*global_init_fn)();
 #define   i_method_public_INIT(    X, R, N, ...) \
     X##_type . N = & X## _ ## N; \
     X##_type.members[X##_type.member_count].name    = #N; \
-    X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(X, ##__VA_ARGS__) }; \
+    X##_type.members[X##_type.member_count].args    = (meta_t) { emit_types(__VA_ARGS__) }; \
     X##_type.members[X##_type.member_count].type    = (AType)&R##_type; \
     X##_type.members[X##_type.member_count].offset  = offsetof(X##_f, N); \
     X##_type.members[X##_type.member_count].member_type = A_MEMBER_IMETHOD; \
@@ -1427,12 +1437,14 @@ typedef struct method_t {
 // when scalar is set, this is known as a class that shapes this data
 // the complexity arises when we may want to perform shape on this high level class
 // at the moment, a simple rule is sufficient for our use-cases, when scalar is set, it takes the shape
+
 #define A_f_members(B) \
     struct _ ## B ## _f* parent_type; \
     char*           name; \
     char*           module; \
     int             size; \
     int             msize; \
+    af_recycler*    af; \
     int             magic; \
     int             global_count; \
     shape           vmember_shape; \
@@ -1707,11 +1719,24 @@ void A_lazy_init(global_init_fn fn);
 
 void* primitive_ffi_arb(AType);
 
+// auto-free recycler
+struct af_recycler {
+    // auto-free
+    A** af;
+    i64 af_count;
+    i64 af_alloc;
+
+    A** re;
+    i64 re_count;
+    i64 re_alloc;
+};
+
 /// alias lets use tag types with an array of types, enabling 
 /// design-time and runtime template-like functionality, with 
 /// permutation of the class-type and instance-type
 #define define_arb(TYPE, BASE, TYPE_SZ, TRAIT, VMEMBER_COUNT, VMEMBER_TYPE, POST_PUSH, ...) \
     _Pragma("pack(push, 1)") \
+    __thread af_recycler TYPE##_af; \
     A       TYPE##_head; \
     TYPE##_f  TYPE##_type; \
     _Pragma("pack(pop)") \
@@ -1728,7 +1753,11 @@ void* primitive_ffi_arb(AType);
             return false; \
         } else { \
             memset(type_ref, 0,        sizeof(TYPE##_f)); \
-            memcpy(type_ref, base_ref, sizeof(BASE##_f)); \
+            if ((AType)type_ref != (AType)base_ref) \
+                memcpy(type_ref, base_ref, sizeof(BASE##_f)); \
+            type_ref->af = &TYPE##_af; \
+            type_ref->af->re_alloc = 1024; \
+            type_ref->af->re = (A**)calloc(1024, sizeof(A*)); \
             type_ref->magic = 1337; \
             static type_member_t \
                 members[64 + sizeof(TYPE##_type) / sizeof(void*)]; \
@@ -1782,7 +1811,7 @@ for (int i = 0; i < validate_count; i++) { \
     define_any(A0, A1, sizeof(struct _##A0), A_TRAIT_PUBLIC, __VA_ARGS__)
 
 #define define_struct(A0, ...) \
-    define_any(A0, A, sizeof(struct _##A0), A_TRAIT_STRUCT, __VA_ARGS__)
+    define_any(A0, A0, sizeof(struct _##A0), A_TRAIT_STRUCT, __VA_ARGS__)
 
 #define define_primitive(A0, A1, traits, ...) \
     define_any(A0, A1, sizeof(A0), traits | A_TRAIT_PRIMITIVE, __VA_ARGS__)
@@ -1799,13 +1828,14 @@ struct _sz { i64 value; };
     i_prop  (X,Y, opaque, AType,     type) \
     i_prop  (X,Y, opaque, AType,     scalar) \
     i_prop  (X,Y, opaque, i64,       refs) \
-    i_prop  (X,Y, opaque, i64,       ar_index) \
     i_prop  (X,Y, opaque, object,    data) \
     i_prop  (X,Y, opaque, shape,     shape) \
     i_prop  (X,Y, opaque, cstr,      source) \
     i_prop  (X,Y, opaque, i64,       line) \
     i_prop  (X,Y, opaque, i64,       alloc) \
     i_prop  (X,Y, opaque, i64,       count) \
+    i_prop  (X,Y, opaque, i64,       recycle) \
+    i_prop  (X,Y, opaque, i64,       af_index) \
     i_method(X,Y, public, none,      init) \
     i_method(X,Y, public, none,      dealloc) \
     i_method(X,Y, public, i32,       compare,    X) \
@@ -1814,7 +1844,9 @@ struct _sz { i64 value; };
     i_method(X,Y, public, object,    data) \
     i_method(X,Y, public, AType,     data_type) \
     i_method(X,Y, public, i64,       data_stride) \
+    i_method(X,Y, public, callback,  bind, A, bool, AType, AType, symbol) \
     i_ctr(   X,Y, public, cereal) \
+    i_ctr(   X,Y, public, cstrs) \
     i_cast(  X,Y, public, string) \
     i_cast(  X,Y, public, bool)
 #define A_intern(AA,YY,...)      A_schema(AA,YY,__VA_ARGS__)
@@ -1869,13 +1901,15 @@ declare_abstract(imported)
 #define sz_schema(X,Y,...)          numeric_schema(X,Y,...)
 #define cstr_schema(X,Y,...)        string_like_schema(X,Y,...)
 #define symbol_schema(X,Y,...)      string_like_schema(X,Y,...)
-#define cereal_schema(X,Y,...)      string_like_schema(X,Y,...)
+#define cereal_schema(X,Y,...)      raw_schema(X,Y,...)
 #define none_schema(X,Y,...)        nil_schema(X,Y,...)
 #define raw_t_schema(X,Y,...)       raw_schema(X,Y,...)
 #define handle_schema(X,Y,...)      raw_schema(X,Y,...)
 #define AType_schema(X,Y,...)       raw_schema(X,Y,...)
 #define Member_schema(X,Y,...)      raw_schema(X,Y,...)
 #define hook_schema(X,Y,...)        raw_schema(X,Y,...)
+#define callback_schema(X,Y,...)    raw_schema(X,Y,...)
+#define cstrs_schema(X,Y,...)       raw_schema(X,Y,...)
 #define floats_schema(X,Y,...)      raw_schema(X,Y,...)
 
 /// meta gives us access to one token we can override with (F)
@@ -1894,7 +1928,7 @@ declare_primitive(f128,         numeric)
 declare_primitive(AMember,      numeric)
 declare_primitive(cstr,         string_like)
 declare_primitive(symbol,       string_like)
-declare_primitive(cereal,       string_like)
+declare_primitive(cereal,       raw)
 declare_primitive(bool,       numeric)
 declare_primitive(none,         nil)
 declare_primitive(num,          numeric)
@@ -1902,6 +1936,8 @@ declare_primitive(sz,           numeric)
 declare_primitive(raw_t,        raw)
 declare_primitive(handle,       raw)
 declare_primitive(hook,         raw)
+declare_primitive(callback,     raw)
+declare_primitive(cstrs,        raw)
 
 /// whatever we can 'name', we can handle as a type of any pointer primitive
 declare_primitive(AType,        raw)
@@ -1931,9 +1967,11 @@ declare_class(item)
 declare_class(message)
 
 /// linked-list of elemental data
+forward(map)
 #define list_schema(X,Y,...) \
     i_prop  (X,Y, opaque,    item,    first) \
     i_prop  (X,Y, opaque,    item,    last)  \
+    i_prop  (X,Y, opaque,    map,     assoc)  \
     i_prop  (X,Y, public,    bool,    unmanaged)  \
     i_prop  (X,Y, public,    i64,     count) \
     i_method(X,Y, public,    object,  pop) \
@@ -2378,6 +2416,8 @@ declare_class(async)
 
 #define path_schema(X,Y,...) \
     i_method    (X,Y, public, bool,   exists) \
+    i_method    (X,Y, public, bool,   is_symlink) \
+    i_method    (X,Y, public, path,   resolve) \
     i_method    (X,Y, public, bool,   make_dir) \
     i_method    (X,Y, public, bool,   is_ext, symbol) \
     i_method    (X,Y, public, bool,   is_empty) \
@@ -2387,6 +2427,7 @@ declare_class(async)
     i_method    (X,Y, public, none,   cd) \
     i_method    (X,Y, public, string, stem) \
     i_method    (X,Y, public, string, ext) \
+    i_override  (X,Y, method, eq) \
     i_method    (X,Y, public, string, filename) \
     i_method    (X,Y, public, path,   absolute) \
     i_method    (X,Y, public, path,   parent) \
@@ -2443,7 +2484,7 @@ extern FILE* logger;
 #define        A_log(sL, t, ...)   A_formatter((AType)null,      stdout, string(sL),  t, ## __VA_ARGS__)
 #define        print(t, ...)   ({\
     static string _topic = null; \
-    if (!_topic) _topic = string(__func__); \
+    if (!_topic) _topic = hold(string(__func__)); \
     A_formatter((AType)null, stdout, (object)_topic, t, ## __VA_ARGS__); \
 })
 
@@ -2516,11 +2557,9 @@ int A_exec(string cmd);
     if (len(arr)) for (E e = *(E*)get(arr, 0), e0 = 0; e0 == 0; e0++) \
         for (num i = 0, __len = len(arr); i < __len; i++, e = *(E*)get(arr, i)) \
 
-object     A_alloc      (AType type, num count, bool af_pool);
-object     A_alloc_dbg  (AType type, num count, bool af_pool, cstr source, int line);
-object     A_alloc_extra(AType type, num extra, bool af_pool);
-object     A_alloc2     (AType type, AType scalar, shape shape, bool af_pool);
-object     A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool);
+object     A_alloc      (AType type, num count);
+object     A_alloc_dbg  (AType type, num count, cstr source, int line);
+object     A_alloc2     (AType type, AType scalar, shape shape);
 string     evaluate(string, map);
 string     serialize_environment(map, bool);
 i64        epoch_millis();
@@ -2528,7 +2567,7 @@ none       A_hold_members(object);
 
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size
-#define A_struct(T) A_alloc(typeid(u8), sizeof(T), true)
+#define A_struct(T) A_alloc(typeid(u8), sizeof(T))
 
 string      A_enum_string(AType type, i32* value);
 i32*        A_enum_value(AType type, cstr cs);
@@ -2544,9 +2583,9 @@ object      A_initialize(object); /// called after 'construction' ... this is so
 object      A_convert(AType, object);
 type_member_t* A_constructor(AType, AType); // find a constructor method (used for dynamic construction)
 object      A_instanceof(object, AType); // would be nice to actually allow typeid vs typeid here
-object      A_hold(object a);
+A           A_hold(A a);
+void        A_drop(A a);
 AType       A_lookup_type(cstr);
-void        A_drop(object a);
 sz          A_len(object a);
 none        A_tap(symbol, hook);
 none        A_untap(symbol);
@@ -2560,8 +2599,8 @@ real        clampf(real, real, real);
 object      construct_with(AType type, object data);
 bool        constructs_with(AType type, AType data_type);
 i64         read_integer(object data);
-#define     drop(a) A_drop((object)a)
-#define     hold(a) (__typeof__(a))A_hold((object)a)
+#define     drop(a) A_drop((A)a)
+#define     hold(a) (__typeof__(a))A_hold((A)a)
 
 
 /// should be adapted to work with schemas 
@@ -2601,11 +2640,13 @@ object      A_realloc(object, sz);
 object      A_resize(object, sz);
 string      A_cast_string(A a);
 void        A_push(object, object);
-void        A_start(int, symbol[]);
-map         A_args(int argc, symbol argv[], symbol default_arg, ...);
+void        A_start(symbol[]);
+map         A_args(cstrs argv, symbol default_arg, ...);
 A           A_header(object instance);
 pid_t       A_last_pid();
 int         A_alloc_count();
+none recycle();
+none recycle_stop(int);
 
 #define head(o) A_header((object)o)
 

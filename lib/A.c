@@ -3,6 +3,7 @@
 #include <A-init>
 #include <A-methods>
 #include <A-reserve>
+#undef realloc
 //#include <ffi.h>
 #undef USE_FFI
 #undef bool
@@ -21,6 +22,8 @@
 #include <sys/inotify.h>
 
 
+
+
 #ifndef line
 #define line(...)       new(line,       __VA_ARGS__)
 #endif
@@ -36,7 +39,7 @@ i64 epoch_millis() {
 shape shape_with_array(shape a, array dims) {
     num count = len(dims);
     each (dims, object, e) {
-        i64* i = instanceof(e, i64);
+        i64* i = (i64*)instanceof(e, i64);
         a->data[a->count++] = *i;
     }
     return a;
@@ -264,7 +267,7 @@ AType A_find_type(symbol name) {
 }
 
 object A_new(AType type) {
-    object res = A_alloc(type, 1, true);
+    object res = A_alloc(type, 1);
     // todo: do not call init in A_alloc
     return res;
 }
@@ -399,7 +402,7 @@ object A_initialize(object a) {
     #endif
 
     A_init_recur(a, f->type, null);
-    //A_hold_members(a);
+    A_hold_members(a);
     return a;
 }
 
@@ -482,26 +485,47 @@ int A_alloc_count() {
 //static cstr alloc_src = null;
 //static int  alloc_line = 0;
 
-object A_alloc_instance(AType type, int n_bytes) {
-    object a;
-    type->global_count++;
-    all_type_alloc++;
-    //printf("alloc: %s (%s:%i)\n", type->name, alloc_src, alloc_line);
+A A_alloc_instance(AType type, int n_bytes, int recycle_size) {
+    A a = null;
+    af_recycler* af = type->af;
+    bool use_recycler = af && n_bytes == recycle_size;
 
-    if (type->traits & A_TRAIT_PUBLIC)
-        a = mmap(NULL, n_bytes,
-            PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    else
-        a = calloc(1, n_bytes);
+    if (use_recycler && af->re_count) {
+        a = af->re[--af->re_count];
+        memset(a, 0, n_bytes);
+    } else {
+        type->global_count++;
+        all_type_alloc++;
+
+        if (type->traits & A_TRAIT_PUBLIC)
+            a = mmap(NULL, n_bytes,
+                PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+        else
+            a = calloc(1, n_bytes);
+        a->recycle = use_recycler;
+    }
+    if (use_recycler) {
+        if ((af->af_count + 1) >= af->af_alloc) {
+            i64 next_size = af->af_alloc << 1;
+            if (next_size == 0) next_size = 1024;
+            af->af = realloc(af->af, next_size * sizeof(A*));
+            af->af[0] = 0x00;
+            af->af_alloc = next_size;
+        }
+        a->af_index = 1 + af->af_count;
+        af->af[a->af_index] = a;
+        af->af_count++;
+    }
     return a;
 }
 
-object A_alloc_dbg(AType type, num count, bool af_pool, cstr source, int line) {
+object A_alloc_dbg(AType type, num count, cstr source, int line) {
     //alloc_src  = source;
     //alloc_line = line;
     sz map_sz = sizeof(map);
     sz A_sz   = sizeof(struct _A);
-    object a = A_alloc_instance(type, A_sz + type->size * count);
+    A a = A_alloc_instance(type,
+        A_sz + type->size * count, A_sz + type->size);
     a->refs       = 0;
     a->type       = type;
     a->data       = &a[1];
@@ -509,81 +533,28 @@ object A_alloc_dbg(AType type, num count, bool af_pool, cstr source, int line) {
     a->alloc      = count;
     a->source     = source;
     a->line       = line;
-    if (af_pool) {
-        a->ar_index = af_top->pool->len;
-        push_weak(af_top->pool, a->data);
-        push_weak(af_top->types, type);
-    } else {
-        a->ar_index = 0; // Indicate that this object is not in the auto-free pool
-    }
     return a->data; /// return fields (object)
 }
 
-object A_alloc(AType type, num count, bool af_pool) {
+object A_alloc(AType type, num count) {
     sz map_sz = sizeof(map);
     sz A_sz   = sizeof(struct _A);
-    object a = A_alloc_instance(type, A_sz + type->size * count);
+    object a = A_alloc_instance(type,
+        A_sz + type->size * count, A_sz + type->size);
     a->refs       = 0;
     a->type       = type;
     a->data       = &a[1];
     a->count      = count;
     a->alloc      = count;
-    if (af_pool) {
-        a->ar_index = af_top->pool->len;
-        push_weak(af_top->pool, a->data);
-        push_weak(af_top->types, type);
-    } else {
-        a->ar_index = 0; // Indicate that this object is not in the auto-free pool
-    }
     return a->data; /// return fields (object)
 }
 
-object A_alloc_extra(AType type, num extra, bool af_pool) {
-    sz map_sz = sizeof(map);
-    sz A_sz = sizeof(struct _A);
-    object a      = A_alloc_instance(type, A_sz + type->size + extra);
-    a->refs       = 0;
-    a->type       = type;
-    a->data       = &a[1];
-    a->count      = 1;
-    a->alloc      = 1;
-    if (af_pool) {
-        a->ar_index = af_top->pool->len;
-        push_weak(af_top->pool, a->data);
-        push_weak(af_top->types, type);
-    } else {
-        a->ar_index = 0; // Indicate that this object is not in the auto-free pool
-    }
-    return a->data; /// return fields (object)
-}
-
-object A_valloc(AType type, AType scalar, int alloc, int count, bool af_pool) {
-    verify(type,   "type not set");
-    verify(scalar, "scalar not set");
-    i64 A_sz      = sizeof(struct _A);
-    object a      = A_alloc_instance(type, A_sz + type->size);
-    a->refs       = 0;
-    a->scalar     = scalar;
-    a->type       = type;
-    a->data       = &a[1];
-    a->count      = count;
-    a->alloc      = alloc;
-    a->data       = calloc(alloc, scalar->size); /// incorrect!
-    if (af_pool) {
-        a->ar_index = af_top->pool->len;
-        push_weak(af_top->pool, &a[1]);
-        push_weak(af_top->types, type);
-    } else {
-        a->ar_index = 0;
-    }
-    return a->data;
-}
-
-object A_alloc2(AType type, AType scalar, shape s, bool af_pool) {
+object A_alloc2(AType type, AType scalar, shape s) {
     i64 A_sz      = sizeof(struct _A);
     shape_ft* t2 = &shape_type;
     i64 count     = total(s);
-    object a      = A_alloc_instance(type, A_sz + (scalar ? scalar->size : type->size) * count);
+    object a      = A_alloc_instance(type,
+        A_sz + scalar->size * count, A_sz + scalar->size);
     a->refs       = 0;
     a->scalar     = scalar;
     a->type       = type;
@@ -591,13 +562,6 @@ object A_alloc2(AType type, AType scalar, shape s, bool af_pool) {
     a->shape      = A_hold(s);
     a->count      = count;
     a->alloc      = count;
-    if (af_pool) {
-        a->ar_index = af_top->pool->len;
-        push_weak(af_top->pool, a->data);
-        push_weak(af_top->types, type);
-    } else {
-        a->ar_index = 0; // Indicate that this object is not in the auto-free pool
-    }
     return a->data; /// return fields (object)
 }
 
@@ -664,7 +628,7 @@ none array_push(array a, object b) {
     AType t = isa(a);
     if (is_meta(a) && t->meta.meta_0 != typeid(object))
         assert(is_meta_compatible(a, b), "not meta compatible");
-    a->elements[a->len++] = b;
+    a->elements[a->len++] = a->unmanaged ? b : hold(b);
 }
 
 none array_clear(array a) {
@@ -764,7 +728,7 @@ array array_of_cstr(cstr first, ...) {
     va_list args;
     va_start(args, first);
     for (cstr arg = first; arg; arg = va_arg(args, A))
-        push(a, create(string, chars, arg));
+        push(a, string(chars, arg));
     return a;
 }
 
@@ -948,9 +912,16 @@ int fault_level;
 
 static __attribute__((constructor)) bool Aglobal_AF();
 
-none A_start(int argc, symbol argv[]) {
+static bool started = false;
+
+none A_start(symbol argv[]) {
+    if (started) return;
+
+    int argc    = 0;
+    while (argv[argc]) argc++;
+    started     = true;
     fault_level = level_err;
-    log_funcs   = map(hsize, 32, unmanaged, true);
+    log_funcs   = hold(map(hsize, 32, unmanaged, true));
 
     /// initialize logging; * == all
     bool explicit_listen = false;
@@ -1011,8 +982,11 @@ none A_start(int argc, symbol argv[]) {
         /// for each member of type
         for (num m = 0; m < type->member_count; m++) {
             type_member_t* mem = &type->members[m];
-            if (mem->name)
-                mem->sname = string(mem->name);
+            if (mem->name) {
+                mem->sname = hold(string(mem->name));
+                A info = head(mem->sname);
+                info->source = "member";
+            }
             if (mem->required && (mem->member_type & A_MEMBER_PROP)) {
                 type->required |= 1 << mem->id;
                 // now required args are set if (type->required & *(i64*)obj->f) == type->required
@@ -1073,14 +1047,16 @@ none mutex_cond_wait(mutex m) {
 }
 
 
-map A_args(int argc, symbol argv[], symbol default_arg, ...) {
+map A_args(cstrs argv, symbol default_arg, ...) {
+    int argc = 0;
+    while (argv[argc]) argc++;
     va_list  args;
     va_start(args, default_arg);
     symbol arg = default_arg;
     map    defaults = new(map);
     while (arg) {
         object val = va_arg(args, object);
-        set(defaults, str(arg), val);
+        set(defaults, str(arg), hold(val));
         arg = va_arg(args, symbol);
     }
     va_end(args);
@@ -1140,8 +1116,9 @@ object A_set_property(object instance, symbol name, object value) {
     type_member_t* m = A_member(type, (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN), (cstr)name, true);
     verify(m, "%s not found on object %s", name, type->name);
     object   *mdata = (object*)((cstr)instance + m->offset);
+    AType value_type = isa(value);
+
     if (m->type->traits & A_TRAIT_STRUCT) {
-        AType value_type = isa(value);
         A header = A_header(value);
         verify(value_type == m->type->vmember_type, "%s: expected vmember_type (%s) to equal isa(value) (%s)",
             name, m->type->vmember_type->name, type->name);
@@ -1151,6 +1128,10 @@ object A_set_property(object instance, symbol name, object value) {
         // copy inlay data
         memcpy(mdata, value, m->type->size);
     } else {
+
+        verify(value_type == m->type || value_type == m->type->parent_type, "%s:%s: must convert data from %s to %s",
+            type->name, name, value_type->name, m->type->name);
+
         object prev = *mdata;
         // assign as object, increase ref count
         *mdata = A_hold(value); 
@@ -1228,7 +1209,7 @@ map A_arguments(int argc, symbol argv[], map default_values, object default_key)
 
 object A_primitive(AType type, none* data) {
     assert(type->traits & A_TRAIT_PRIMITIVE, "must be primitive");
-    object copy = A_alloc(type, type->size, true);
+    object copy = A_alloc(type, type->size);
     memcpy(copy, data, type->size);
     return copy;
 }
@@ -1236,7 +1217,7 @@ object A_primitive(AType type, none* data) {
 object A_enum(AType type, i32 data) {
     assert(type->traits & A_TRAIT_ENUM, "must be enum");
     assert(type->size == sizeof(i32), "enum size invalid");
-    object copy = A_alloc(type, type->size, true);
+    object copy = A_alloc(type, type->size);
     memcpy(copy, &data, type->size);
     return copy;
 }
@@ -1310,7 +1291,7 @@ static cstr ws(cstr p) {
 
 // lets handle both quoted and non-quoted string serialization
 string prep_cereal(cereal cs) {
-    cstr   scan = (cstr)cs;
+    cstr   scan = (cstr)cs.value;
     string res;
 
     if (*scan == '\"') {
@@ -1340,7 +1321,43 @@ string prep_cereal(cereal cs) {
     return res;
 }
 
-A A_with_cereal(A a, cereal cs) {
+A A_with_cstrs(A a, cstrs argv) {
+    A_start(argv);
+    int argc = 0;
+    while (argv[argc]) { // C standard puts a null char* on end, by law (see: Brannigans law)
+        cstr arg = argv[argc];
+        if (arg[0] == '-') {
+            bool single = arg[1] != '-';
+            type_member_t* mem = null;
+            AType type = isa(a);
+            while (type != typeid(A)) {
+                for (int i = 0; i < type->member_count; i++) {
+                    type_member_t* m = &type->members[i];
+                    if ((m->member_type & A_MEMBER_PROP) && 
+                        ( single &&        m->name[0] == arg[1]) ||
+                        (!single && strcmp(m->name,     &arg[2]))) {
+                        mem = m;
+                        break;
+                    }
+                }
+                type = type->parent_type;
+            }
+            verify(mem, "member not found: %s", &arg[1 + !single]);
+            cstr value = argv[++argc];
+            verify(value, "expected value after %s", &arg[1 + !single]);
+            
+            object conv = A_convert(mem->type, string(value));
+            A_set_property(a, mem->name, conv);
+        }
+        argc++;
+    }
+    
+    print("got argv[0] of %s", argv[0]);
+    return a;
+}
+
+A A_with_cereal(A a, cereal _cs) {
+    cstr cs = _cs.value;
     sz len = strlen(cs);
     A        f = A_header(a);
     AType type = f->type;
@@ -1396,7 +1413,7 @@ object construct_with(AType type, object data) {
 
     if (!(type->traits & A_TRAIT_PRIMITIVE) && data_type == typeid(map)) {
         map m = data;
-        result = A_alloc(type, 1, true);
+        result = A_alloc(type, 1);
         pairs(m, i) {
             verify(isa(i->key) == typeid(string), "expected string key when constructing object from map");
             string s_key = instanceof(i->key, string);
@@ -1412,13 +1429,13 @@ object construct_with(AType type, object data) {
         if (mem->member_type == A_MEMBER_CONSTRUCT) {
             /// no meaningful way to do this generically, we prefer to call these first
             if (mem->type == typeid(path) && data_type == typeid(string)) {
-                result = A_alloc(type, 1, true);
+                result = A_alloc(type, 1);
                 result = ((object(*)(object, path))addr)(result, path(((string)data)));
                 verify(A_validator(result), "invalid object");
                 break;
             }
             if (mem->type == data_type) {
-                result = A_alloc(type, 1, true);
+                result = A_alloc(type, 1);
                 result = ((object(*)(object, object))addr)(result, data);
                 verify(A_validator(result), "invalid object");
                 break;
@@ -1438,7 +1455,7 @@ object construct_with(AType type, object data) {
             v = *A_enum_value (type, (cstr)((string)data)->chars);
         else
             v = *A_enum_value (type, null);
-        result = A_alloc(type, 1, true);
+        result = A_alloc(type, 1);
         *((i32*)result) = (i32)v;
     }
 
@@ -1447,11 +1464,11 @@ object construct_with(AType type, object data) {
     if ((type->traits & A_TRAIT_PRIMITIVE) && (data_type == typeid(string) ||
                                                data_type == typeid(cstr)   ||
                                                data_type == typeid(symbol))) {
-        result = A_alloc(type, 1, true);
+        result = A_alloc(type, 1);
         if (data_type == typeid(string))
-            A_with_cereal(result, (cereal)((string)data)->chars);
+            A_with_cereal(result, (cereal) { .value = (cstr)((string)data)->chars } );
         else
-            A_with_cereal(result, (cereal)data);
+            A_with_cereal(result, (cereal) { .value = data });
     }
 
     /// check for compatible constructor
@@ -1465,13 +1482,13 @@ object construct_with(AType type, object data) {
             u64 combine = mem->type->traits & data_type->traits;
             if (combine & A_TRAIT_INTEGRAL) {
                 i64 v = read_integer(data);
-                result = A_alloc(type, 1, true);
+                result = A_alloc(type, 1);
                      if (mem->type == typeid(i8))   ((none(*)(object, i8))  addr)(result, (i8)  v);
                 else if (mem->type == typeid(i16))  ((none(*)(object, i16)) addr)(result, (i16) v);
                 else if (mem->type == typeid(i32))  ((none(*)(object, i32)) addr)(result, (i32) v);
                 else if (mem->type == typeid(i64))  ((none(*)(object, i64)) addr)(result, (i64) v);
             } else if (combine & A_TRAIT_REALISTIC) {
-                result = A_alloc(type, 1, true);
+                result = A_alloc(type, 1);
                 if (mem->type == typeid(f64))
                     ((none(*)(object, double))addr)(result, (double)*(float*)data);
                 else
@@ -1479,17 +1496,17 @@ object construct_with(AType type, object data) {
                 break;
             } else if ((mem->type == typeid(symbol) || mem->type == typeid(cstr)) && 
                        (data_type == typeid(symbol) || data_type == typeid(cstr))) {
-                result = A_alloc(type, 1, true);
+                result = A_alloc(type, 1);
                 ((none(*)(object, cstr))addr)(result, data);
                 break;
             } else if ((mem->type == typeid(string)) && 
                        (data_type == typeid(symbol) || data_type == typeid(cstr))) {
-                result = A_alloc(type, 1, true);
+                result = A_alloc(type, 1);
                 ((none(*)(object, string))addr)(result, string((symbol)data));
                 break;
             } else if ((mem->type == typeid(symbol) || mem->type == typeid(cstr)) && 
                        (data_type == typeid(string))) {
-                result = A_alloc(type, 1, true);
+                result = A_alloc(type, 1);
                 ((none(*)(object, cstr))addr)(result, (cstr)((string)data)->chars);
                 break;
             }
@@ -1501,7 +1518,7 @@ object construct_with(AType type, object data) {
         map f = (map)data;
         pairs(f, i) {
             string name = i->key;
-            AF_set_name(result, name->chars);
+            AF_set_name(result, (cstr)name->chars);
         }
     }
     return result ? A_initialize(result) : null;
@@ -1805,7 +1822,7 @@ object A_formatter(AType type, FILE* f, object opt, symbol template, ...) {
         string tname  = null;
         string fname  = field;
         static string  asterick = null;
-        if (!asterick) asterick = string("*");
+        if (!asterick) asterick = hold(string("*"));
         bool   listen = fvalue ? cast(bool, fvalue) : false;
         if ((l = index_of(fname, "_")) > 1) {
             tname = mid(fname, 0, l);
@@ -1845,7 +1862,9 @@ object A_formatter(AType type, FILE* f, object opt, symbol template, ...) {
         f32 test_v = *(f32*)enum_v;
         return enum_v;
     }
-    return type ? (object)((A_f*)type)->with_cereal(A_alloc(type, 1, true), res->chars) : (object)res;
+    return type ? (object)
+        ((A_f*)type)->with_cereal(A_alloc(type, 1), (cereal) { .value = (cstr)res->chars }) :
+        (object)res;
 }
 
 u64 fnv1a_hash(const none* data, size_t length, u64 hash) {
@@ -1904,9 +1923,11 @@ sz vector_len(vector a) {
 none map_init(map m) {
     if (m->hsize <= 0) m->hsize = 8;
     m->fifo = list(unmanaged, m->unmanaged);
+    m->fifo->assoc = m;
 }
 
 none map_dealloc(map m) {
+    A info = head(m);
     if (m->hlist) {
         for (int b = 0; b < m->hsize; b++)
             while (m->hlist[b]) {
@@ -1960,14 +1981,14 @@ none map_set(map m, object k, object v) {
     if (i->value) {
         if (i->value != v) {
             drop(i->value);
-            i->value = hold(v);
+            i->value = m->unmanaged ? v : hold(v);
         } else {
             return;
         }
     } else {
-        i->value = hold(v);
+        i->value = m->unmanaged ? v : hold(v);
     }
-    item ref = push(m->fifo, v);
+    item ref = push(m->fifo, m->unmanaged ? v : hold(v));
     ref->key = hold(k);
     ref->ref = i; // these reference each other
     i->ref = ref;
@@ -2191,6 +2212,8 @@ array string_split(string a, symbol sp) {
         string v = string(chars, next, ref_length, n ? (sz)(n - next) : 0);
         next = n ? n + slen : null;
         push(result, v);
+        if (!next || !next[0])
+            break;
     }
     return result;
 }
@@ -2452,7 +2475,7 @@ item hashmap_lookup(hashmap a, object key) {
 none hashmap_set(hashmap a, object key, object value) {
     item i = fetch(a, key);
     object prev = i->value;
-    i->value = value;
+    i->value = hold(value);
     if (!a->unmanaged) A_drop(prev);
 }
 
@@ -2541,56 +2564,144 @@ object A_copy(A a) {
     A f = A_header(a);
     assert(f->count > 0, "invalid count");
     AType type = isa(a);
-    object b = A_alloc(type, f->count, true);
+    object b = A_alloc(type, f->count);
     memcpy(b, a, f->type->size * f->count);
     A_hold_members(b);
     return b;
 }
 
-object A_hold(object a) {
+A A_hold(A a) {
     if (a) {
         A f = A_header(a);
         f->refs++;
+
+        af_recycler* af = f->type->af;
+        if (f->af_index > 0) {
+            af->af[f->af_index] = null;
+            f->af_index = 0;
+        }
     }
     return a;
 }
 
 //#undef dealloc
 
+static int recycle_stop_at;
+
+none recycle_stop(int at) {
+    recycle_stop_at = at;
+}
+
+none recycle() {
+    A_f** types = A_types(&types_len);
+
+    int r_count = 0;
+    
+    /// iterate through types
+    for (num i = 0; i < types_len; i++) {
+        A_f* type = types[i];
+        af_recycler* af = type->af;
+        if (af && af->af_count) {
+            for (int i = 0; i <= af->af_count; i++) {
+                A a = af->af[i];
+                if (a && a->refs == 0) {
+                    r_count++;
+                    if (recycle_stop_at && r_count >= recycle_stop_at) {
+                        array val = &a[1];
+                        A info = a;
+                        af->af_count = 0;
+                        return;
+                    }
+                    A_free(&a[1]);
+                }
+            }
+            af->af_count = 0;
+        }
+    }
+}
+
 none A_free(object a) {
     A       aa = A_header(a);
     A_f*  type = aa->type;
     none* prev = null;
 
-    if (--all_type_alloc < 0) {
-        printf("all_type_alloc < 0\n");
-    }
-    if (--type->global_count < 0) {
-        printf("global_count < for type %s\n", type->name);
+    if (aa->source && strcmp(aa->source, "member") == 0) {
+        int test = 0;
+        test++;
     }
 
-    //printf("free: %s (%s:%i)\n", type->name, aa->source, (int)aa->line);
+    if (strcmp(type->name, "target") == 0) {
+        int test = 0;
+        test++;
+    }
 
-    while (type) {
-        if (prev != type->dealloc) {
-            type->dealloc(a);
-            prev = type->dealloc;
+    A_f*  cur = type;
+    while (cur) {
+        if (prev != cur->dealloc) {
+            cur->dealloc(a);
+            prev = cur->dealloc;
         }
-        if (type == &A_type)
+        if (cur == &A_type)
             break;
-        type = type->parent_type;
+        cur = cur->parent_type;
     }
-    free(aa);
+    
+    af_recycler* af = type->af;    
+    if (!af || af->re_alloc == af->re_count) {
+        memset(aa, 0xff, type->size);
+        free(aa);
+        if (--all_type_alloc < 0) {
+            printf("all_type_alloc < 0\n");
+        }
+        if (--type->global_count < 0) {
+            printf("global_count < 0 for type %s\n", type->name);
+        }
+    } else if (af) {
+        aa->af_index = 0;
+        af->re[af->re_count++] = aa;
+    }
 }
 
-none A_drop(object a) {
+none A_drop(A a) {
     if (!a) return;
     A header = A_header(a);
+
     if (header->refs < 0)
         printf("A_drop: data freed twice: %s\n", header->type->name);
-    else if (--header->refs == -1) {
+    else if (--header->refs <= 0) {
+        // ref:0 on new, and then ref:+1 when added to list
+        // when removing from list, that object is freed.
+        // a = new(object) ... then drop(a) ref:-1 also frees.
+        // this is to facilitate push(array, new(obj)) <- ends up with a ref of 1.
+        // also set(map, string("key"), string("value")) <- both are 1
+
+        // quirks are only seen at top level use of objects,
+        // where it is not required to drop a list and the objects you allocated for it.
+        // if you dont have a list, then you must drop the objects.
+
+        if (header->af_index > 0) {
+            header->type->af->af[header->af_index] = null;
+            header->af_index = 0;
+        }
         A_free(a);
     }
+}
+
+/// bind works with delegate callback registration efficiently to 
+/// avoid namespace collisions, and allow enumerable interfaces without override and base object boilerplate
+callback A_bind(A a, A target, bool required, AType rtype, AType arg_type, symbol name) {
+    AType self_type   = isa(a);
+    AType target_type = isa(target);
+    bool inherits     = A_instanceof(target, self_type) != null;
+    string method     = f(string, "%s%s%s", !inherits ? self_type->name : "", !inherits ? "_" : "", name);
+    type_member_t* m  = A_member(target_type, A_MEMBER_IMETHOD, method->chars, true);
+    verify(!required || m, "bind: required method not found: %o", method);
+    callback f       = m->ptr;
+    verify(f, "expected method address");
+    verify(m->args.count  == 2, "%s: expected method address with instance, and arg*", name);
+    verify(!arg_type || m->args.meta_1 == arg_type, "%s: expected arg type: %s", name, arg_type->name);
+    verify(!rtype    || m->type        == rtype,    "%s: expected return type: %s", name, rtype->name);
+    return f;
 }
 
 object A_data(A instance) {
@@ -2628,7 +2739,7 @@ object A_instanceof(object inst, AType type) {
 /// list -------------------------
 item list_push(list a, object e) {
     item n = item();
-    n->value = e; /// held already by caller
+    n->value = a->unmanaged ? e : hold(e); /// held already by caller
     if (a->last) {
         a->last->next = n;
         n->prev       = a->last;
@@ -2656,7 +2767,7 @@ item list_insert_after(list a, object e, i32 after) {
             }
             index++;
         }
-    item n = item(value, e);
+    item n = hold(item(value, e));
     if (!found) {
         n->next = a->first;
         if (a->first)
@@ -2748,6 +2859,7 @@ object list_pop(list a) {
     item l = a->last;
     if (!l)
         return null;
+    A info = head(a);
     a->last = a->last->prev;
     if (!a->last)
         a->first = null;
@@ -2879,7 +2991,7 @@ none vector_concat(vector a, ARef any, num count) {
     AType type = data_type(a);
     A f = A_header(a);
     if (f->alloc < f->count + count)
-        realloc(a, (a->alloc << 1) + 32 + count);
+        vector_realloc(a, (a->alloc << 1) + 32 + count);
     
     u8* ptr  = data(a);
     i64 size = data_stride(a);
@@ -2901,12 +3013,13 @@ vector vector_slice(vector a, num from, num to) {
     A      f   = A_header(a);
     /// allocate the data type (no i8 bytes)
     num count = (1 + abso(from - to)); // + 31 & ~31;
-    object res = A_alloc(f->type, 1, true);
+    object res = A_alloc(f->type, 1);
     A      res_f = A_header(res);
 
     /// allocate 
     u8* src   = f->data;
-    u8* dst   = A_valloc(f->type, f->scalar, count, count, true);
+    u8* dst   = null; //A_valloc(f->type, f->scalar, count, count);
+    fault("implement vector_slice allocator");
     i64 stride = data_stride(a);
     if (from <  to)
         memcpy(dst, &src[from * stride], count * stride);
@@ -3021,7 +3134,7 @@ object file_file_read(file f, AType type) {
         bytes[nbytes] = 0;
         return string(bytes); 
     }
-    object o = A_alloc(type, 1, true);
+    object o = A_alloc(type, 1);
     sz size = isa(o)->size;
     f->location += size;
     verify(type->traits & A_TRAIT_PRIMITIVE, "not a primitive type");
@@ -3353,11 +3466,35 @@ path path_app(cstr name) {
     return res;
 }
 
+bool path_is_symlink(path p) {
+    struct stat st;
+    return lstat(p->chars, &st) == 0 && S_ISLNK(st.st_mode);
+}
+
+path path_resolve(path p) {
+    char buf[PATH_MAX];
+    ssize_t len = readlink(p->chars, buf, sizeof(buf) - 1);
+    if (len == -1) return hold(p);
+    buf[len] = '\0';
+    return path(buf);
+}
+ 
+bool path_eq(path a, path b) {
+    struct stat sa, sb;
+    int ia = stat(a->chars, &sa);
+    int ib = stat(b->chars, &sb);
+    return ia == 0 &&
+           ib == 0 &&
+           sa.st_ino == sb.st_ino &&
+           sa.st_dev == sb.st_dev;
+}
+
 /// public statics are not 'static'
 path path_cwd(sz size) {
     path a = new(path);
     a->chars = calloc(size, 1);
     char* res = getcwd((cstr)a->chars, size);
+    a->len   = strlen(a->chars);
     assert(res != null, "getcwd failure");
     return a;
 }
@@ -3879,6 +4016,8 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
 
         if (remainder) *remainder = ws(scan);
         res = construct_with(use_schema, props); // makes a bit more sense to implement required here
+        if (use_schema != typeid(map))
+            drop(props);
     }
     if (remainder) *remainder = scan;
     return res;
@@ -3915,7 +4054,7 @@ object parse_array(cstr s, AType schema, AType meta_type, cstr* remainder) {
     } else if (schema->vmember_type == typeid(i64)) { // should support all vector types of i64 (needs type bounds check with vmember_count)
         array arb = parse_array_objects(&scan, typeid(i64));
         int vcount = len(arb);
-        res = A_alloc2(schema, typeid(i64), shape_new(vcount, 0), true);
+        res = A_alloc2(schema, typeid(i64), shape_new(vcount, 0));
         int n = 0;
         each(arb, object, a) {
             verify(isa(a) == typeid(i64), "expected i64");
@@ -3924,7 +4063,7 @@ object parse_array(cstr s, AType schema, AType meta_type, cstr* remainder) {
     } else if (schema->vmember_type == typeid(f32)) { // should support all vector types of f32 (needs type bounds check with vmember_count)
         array arb = parse_array_objects(&scan, typeid(f32));
         int vcount = len(arb);
-        res = A_alloc(typeid(f32), vcount, true);
+        res = A_alloc(typeid(f32), vcount);
         int n = 0;
         each(arb, object, a) {
             AType a_type = isa(a);
@@ -3945,7 +4084,7 @@ object parse_array(cstr s, AType schema, AType meta_type, cstr* remainder) {
         // this should contain multiple arrays of scalar values; we want to convert each array to our 'scalar_type'
         // for instance, we may parse [[1,2,3,4,5...16],...] mat4x4's; we merely need to validate vmember_count and vmember_type and convert
         // if we have a vmember_count of 0 then we are dealing with a single primitive type
-        vector vres = A_alloc(schema, 1, true);
+        vector vres = A_alloc(schema, 1);
         vres->vshape = shape_new(count, 0);
         A_initialize(vres);
         i8* vdata = data(vres);
@@ -4232,7 +4371,7 @@ define_primitive(f128,   numeric, A_TRAIT_REALISTIC)
 define_primitive(AMember, numeric, A_TRAIT_INTEGRAL | A_TRAIT_UNSIGNED)
 define_primitive(cstr,   string_like, 0)
 define_primitive(symbol, string_like, 0)
-define_primitive(cereal, string_like, 0)
+define_primitive(cereal, raw, 0)
 define_primitive(none,   nil, 0)
 define_primitive(AType,  raw, 0)
 define_primitive(handle, raw, 0)
@@ -4240,6 +4379,8 @@ define_primitive(Member, raw, 0)
 define_primitive(ARef,   ref, 0)
 define_primitive(floats, raw, 0)
 define_primitive(hook,   raw, 0)
+define_primitive(callback, raw, 0)
+define_primitive(cstrs, raw, 0)
 
 define_class(line, A)
 
@@ -4261,8 +4402,6 @@ define_class(hashmap,       A)
 define_class(map,           A)
 define_class(fn,            A)
 define_class(subprocedure,  A)
-
-define_class(AF, A)
 
 define_class(ATypes,           array, AType)
 define_class(array_map,        array, map)

@@ -315,6 +315,15 @@
             "env": {"LD_LIBRARY_PATH":"/src/tapestry/lib"},
         },
         {
+            "name": "asnes",
+            "type": "lldb",
+            "request": "launch",
+            "program": "/src/tapestry/bin/asnes",
+            "cwd": "/src/tapestry/share/asnes",
+            "args": ["--rom", "rom/mario.smc", "--spc_rom", "bin/spc700.rom"],
+            "env": {"LD_LIBRARY_PATH":"/src/tapestry/lib"},
+        },
+        {
             "name": "hyperspace",
             "type": "lldb",
             "request": "launch",

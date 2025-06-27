@@ -488,7 +488,7 @@ int A_alloc_count() {
 A A_alloc_instance(AType type, int n_bytes, int recycle_size) {
     A a = null;
     af_recycler* af = type->af;
-    bool use_recycler = af && n_bytes == recycle_size;
+    bool use_recycler = false; //af && n_bytes == recycle_size;
 
     if (use_recycler && af->re_count) {
         a = af->re[--af->re_count];
@@ -881,8 +881,7 @@ object A_method(AType type, cstr method_name, array args) {
 
 object A_convert(AType type, object input) {
     if (type == isa(input)) return input;
-    assert(false, "not implemented");
-    return input;
+    return construct_with(type, input);
 }
 
 object A_method_vargs(object instance, cstr method_name, int n_args, ...) {
@@ -1265,7 +1264,14 @@ none A_dealloc(A a) {
     }
 }
 u64  A_hash      (A a) { return (u64)(size_t)a; }
-bool A_cast_bool (A a) { return A_header(a)->count > 0; }
+bool A_cast_bool (A a) {
+    A info = A_header(a);
+    bool has_count = info->count > 0;
+    if (has_count && info->type == typeid(bool))
+        return *(bool*)a;
+
+    return has_count;
+}
 
 i64 read_integer(object data) {
     AType data_type = isa(data);
@@ -1335,7 +1341,7 @@ A A_with_cstrs(A a, cstrs argv) {
                     type_member_t* m = &type->members[i];
                     if ((m->member_type & A_MEMBER_PROP) && 
                         ( single &&        m->name[0] == arg[1]) ||
-                        (!single && strcmp(m->name,     &arg[2]))) {
+                        (!single && strcmp(m->name,     &arg[2]) == 0)) {
                         mem = m;
                         break;
                     }
@@ -1351,8 +1357,6 @@ A A_with_cstrs(A a, cstrs argv) {
         }
         argc++;
     }
-    
-    print("got argv[0] of %s", argv[0]);
     return a;
 }
 
@@ -2595,8 +2599,6 @@ none recycle_stop(int at) {
 none recycle() {
     A_f** types = A_types(&types_len);
 
-    int r_count = 0;
-    
     /// iterate through types
     for (num i = 0; i < types_len; i++) {
         A_f* type = types[i];
@@ -2605,13 +2607,6 @@ none recycle() {
             for (int i = 0; i <= af->af_count; i++) {
                 A a = af->af[i];
                 if (a && a->refs == 0) {
-                    r_count++;
-                    if (recycle_stop_at && r_count >= recycle_stop_at) {
-                        array val = &a[1];
-                        A info = a;
-                        af->af_count = 0;
-                        return;
-                    }
                     A_free(&a[1]);
                 }
             }
@@ -2647,7 +2642,7 @@ none A_free(object a) {
     }
     
     af_recycler* af = type->af;    
-    if (!af || af->re_alloc == af->re_count) {
+    if (true || !af || af->re_alloc == af->re_count) {
         memset(aa, 0xff, type->size);
         free(aa);
         if (--all_type_alloc < 0) {
@@ -2666,9 +2661,13 @@ none A_drop(A a) {
     if (!a) return;
     A header = A_header(a);
 
-    if (header->refs < 0)
+    if (header->refs < 0) {
+        if (strcmp(header->type->name, "array") == 0) {
+            int test = 2;
+            test += 2;
+        }
         printf("A_drop: data freed twice: %s\n", header->type->name);
-    else if (--header->refs <= 0) {
+    } else if (--header->refs <= 0) {
         // ref:0 on new, and then ref:+1 when added to list
         // when removing from list, that object is freed.
         // a = new(object) ... then drop(a) ref:-1 also frees.
@@ -2689,13 +2688,15 @@ none A_drop(A a) {
 
 /// bind works with delegate callback registration efficiently to 
 /// avoid namespace collisions, and allow enumerable interfaces without override and base object boilerplate
-callback A_bind(A a, A target, bool required, AType rtype, AType arg_type, symbol name) {
+callback A_bind(A a, A target, bool required, AType rtype, AType arg_type, symbol id, symbol name) {
     AType self_type   = isa(a);
     AType target_type = isa(target);
     bool inherits     = A_instanceof(target, self_type) != null;
-    string method     = f(string, "%s%s%s", !inherits ? self_type->name : "", !inherits ? "_" : "", name);
+    string method     = f(string, "%s%s%s", id ? id : 
+        (!inherits ? self_type->name : ""), (id || !inherits) ? "_" : "", name);
     type_member_t* m  = A_member(target_type, A_MEMBER_IMETHOD, method->chars, true);
     verify(!required || m, "bind: required method not found: %o", method);
+    if (!m) return null;
     callback f       = m->ptr;
     verify(f, "expected method address");
     verify(m->args.count  == 2, "%s: expected method address with instance, and arg*", name);
@@ -4018,6 +4019,8 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
         res = construct_with(use_schema, props); // makes a bit more sense to implement required here
         if (use_schema != typeid(map))
             drop(props);
+        else
+            hold(props);
     }
     if (remainder) *remainder = scan;
     return res;
@@ -4338,6 +4341,22 @@ unit unit_with_string(unit a, string s) {
     }
     return a;
 }
+
+
+object subs_invoke(subs a, object arg) {
+    each (a->entries, subscriber, sub) {
+        sub->method(sub->target, arg);
+    }
+    return null;
+}
+
+none subs_add(subs a, object target, callback fn) {
+    subscriber sub = subscriber(target, target, method, fn);
+    push(a->entries, sub);
+}
+
+define_class(subscriber, A)
+define_class(subs, A)
 
 define_class(A, A)
 define_class(object,  A, A)

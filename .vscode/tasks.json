@@ -371,6 +371,31 @@
             }
         },
         {
+            "label": "build-asnes",
+            "type": "shell",
+			"options": {
+                "cwd": "${workspaceFolder}/../asnes"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "group": "build0",
+                "clear": true
+            },
+			"isBackground": false,
+			"problemMatcher": ["$gcc"],
+            "osx": {
+                "command": "make -j8"
+            },
+            "linux": {
+                "command": "make -j8"
+            }
+        },
+        {
             "label": "build-quanta",
             "type": "shell",
 			"options": {

@@ -5,6 +5,10 @@
 			"path": "."
 		},
 		{
+			"name":	"asnes",
+			"path": "../asnes"
+		},
+		{
 			"name": "silver",
 			"path": "../silver"
 		},
@@ -23,10 +27,6 @@
 		{
 			"name": "ether",
 			"path": "../ether"
-		},
-		{
-			"name": "ion",
-			"path": "../ion"
 		},
 		{
 			"name": "vec",

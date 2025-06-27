@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <pthread.h>
+#include <math.h>
 
 /// end-trim
 
@@ -106,7 +107,7 @@ enum A_MEMBER {
     A_MEMBER_ENUMV     = 2048,
     A_MEMBER_OVERRIDE  = 4096,
     A_MEMBER_VPROP     = 8192,
-    A_MEMBER_ATTR      = 16384,
+    A_MEMBER_ATTR      = 16384
 };
 
 typedef enum A_MEMBER AMember;
@@ -1047,6 +1048,8 @@ typedef bool(*global_init_fn)();
 #define   i_method_intern_METHOD(X, R, N, ...)      
 
 
+
+
 typedef enum {
     CPU_CAP_NONE      = 0,
     CPU_CAP_SSE       = 1 << 0,  // Bit 0
@@ -1844,7 +1847,7 @@ struct _sz { i64 value; };
     i_method(X,Y, public, object,    data) \
     i_method(X,Y, public, AType,     data_type) \
     i_method(X,Y, public, i64,       data_stride) \
-    i_method(X,Y, public, callback,  bind, A, bool, AType, AType, symbol) \
+    i_method(X,Y, public, callback,  bind, A, bool, AType, AType, symbol, symbol) \
     i_ctr(   X,Y, public, cereal) \
     i_ctr(   X,Y, public, cstrs) \
     i_cast(  X,Y, public, string) \
@@ -2452,6 +2455,18 @@ declare_class(async)
 declare_class_2(path, string)
 
 
+#define subscriber_schema(X,Y,...) \
+    i_prop    (X,Y, required, object,   target) \
+    i_prop    (X,Y, required, callback, method)
+declare_class(subscriber)
+
+#define subs_schema(X,Y,...) \
+    i_prop    (X,Y, public,   array,  entries, of, subscriber) \
+    i_method  (X,Y, public,   none,   add,    object, callback) \
+    i_method  (X,Y, public,   object, invoke, object)
+declare_class(subs)
+
+
 #define line_schema(X,Y,...) \
     i_prop(X,Y, public, i32, indent) \
     i_prop(X,Y, public, array, text)
@@ -2516,6 +2531,16 @@ extern FILE* logger;
 cstr copy_cstr(cstr input);
 
 int A_exec(string cmd);
+
+/// useful utility for smooth movement of any variable in a variable-step-rate
+/// used in Hyper Race physics to make adjustments to cars at frame-rate
+static inline f32 creep(f32 current, f32 goal, f32 amount, f32 rate) {
+    f32 decay = powf(1.0f - amount, rate);
+    if (goal != 0.0f)
+        return current + ((goal - current) * (1.0f - decay));
+    else
+        return current * decay;
+}
 
 #define backwards(container, E, e) \
     if (container && len(((array)container))) for (E e = get(((array)container), len(((array)container)) - 1), e0 = 0; e0 == 0; e0++) \
@@ -2693,10 +2718,169 @@ declare_class_2(array_map,        array, map)
 
 unit unit_with_string(unit a, string s);
 
-// shape-specific vector implementations
-// declare vector types for common numeric types
-// we still define type + shape together, so vec + 3 is vec3, if its mat, 4x4 then mat4x4f.. its simple shape in type
-// it has its own unique type identity.
+
+/// use i_struct_ctr_obj for objects or primitives
+/// use i_struct_ctr for structs.. this is because we cannot separate * from the token
+#define vec_methods(O, Y, T, ...) \
+    i_struct_ctr_obj(O,Y, floats) \
+    i_struct_method(O, Y, T,    length) \
+    i_struct_method(O, Y, O,    add,      O*) \
+    i_struct_method(O, Y, O,    sub,      O*) \
+    i_struct_method(O, Y, O,    mul,      O*) \
+    i_struct_method(O, Y, O,    scale,    f32) \
+    i_struct_method(O, Y, T,    dot,      O*) \
+    i_struct_method(O, Y, O,    normalize) \
+    i_struct_method(O, Y, O,    mix,      O*, f64) \
+    i_struct_cast  (O, Y, string)
+
+#define rgb8_schema(O, Y, ...) \
+    i_struct_prop(O,Y,u8, r) \
+    i_struct_prop(O,Y,u8, g) \
+    i_struct_prop(O,Y,u8, b)
+declare_struct(rgb8)
+
+#define rgbf_schema(O, Y, ...) \
+    i_struct_prop(O,Y, f32, r) \
+    i_struct_prop(O,Y, f32, g) \
+    i_struct_prop(O,Y, f32, b)
+declare_struct(rgbf)
+
+#define rgba8_schema(O, Y, ...) \
+    i_struct_prop(O,Y,u8, r) \
+    i_struct_prop(O,Y,u8, g) \
+    i_struct_prop(O,Y,u8, b) \
+    i_struct_prop(O,Y,u8, a)
+declare_struct(rgba8)
+
+typedef struct _vec3f vec3f;
+
+#define vec4f_schema(O, Y, T, ...) \
+    i_struct_ctr(O,Y, vec3f) \
+    i_struct_prop  (O, Y, T, x) \
+    i_struct_prop  (O, Y, T, y) \
+    i_struct_prop  (O, Y, T, z) \
+    i_struct_prop  (O, Y, T, w) \
+    vec_methods(O, Y, T, __VA_ARGS__)
+declare_struct(vec4f, f32)
+
+#define rgbaf_schema(O, Y, ...) \
+    i_struct_ctr(O,Y, vec4f) \
+    i_struct_prop(O,Y, f32, r) \
+    i_struct_prop(O,Y, f32, g) \
+    i_struct_prop(O,Y, f32, b) \
+    i_struct_prop(O,Y, f32, a)
+declare_struct(rgbaf)
+
+#define vec3f_schema(O, Y, T, ...) \
+    i_struct_prop  (O, Y, T, x) \
+    i_struct_prop  (O, Y, T, y) \
+    i_struct_prop  (O, Y, T, z) \
+    i_struct_method(O, Y, O, cross, O*) \
+    i_struct_static(O, Y, O, rand) \
+    vec_methods(O, Y, T)
+declare_struct(vec3f, f32)
+
+#define quatf_schema(O, Y, ...) \
+    i_struct_ctr(O,Y, vec4f) \
+    i_struct_prop(O,Y,f32, x) \
+    i_struct_prop(O,Y,f32, y) \
+    i_struct_prop(O,Y,f32, z) \
+    i_struct_prop(O,Y,f32, w)
+declare_struct(quatf)
+
+#define rgba_schema(O, Y, ...) \
+    i_prop(O,Y, public, f32, r) \
+    i_prop(O,Y, public, f32, g) \
+    i_prop(O,Y, public, f32, b) \
+    i_prop(O,Y, public, f32, a) \
+    i_method(O,Y, public, rgba, mix, rgba, f32) \
+    i_ctr(O,Y, public, cstr) \
+    i_ctr(O,Y, public, string)
+declare_class(rgba)
+
+f32 degrees(f32 rads);
+f32 radians(f32 degs);
+
+#define vec2f_schema(O, Y, T, ...) \
+    i_struct_prop (O, Y, T, x) \
+    i_struct_prop (O, Y, T, y) \
+    vec_methods   (O, Y, T, __VA_ARGS__)
+declare_struct(vec2f, f32)
+
+#define rect_schema(O, Y, ...) \
+    i_prop (O, Y, public, f32, x) \
+    i_prop (O, Y, public, f32, y) \
+    i_prop (O, Y, public, f32, w) \
+    i_prop (O, Y, public, f32, h) \
+    i_method(O, Y, public, vec2f, xy) \
+    s_method(O, Y, public, rect, from_plots, vec2f, vec2f)
+declare_class(rect)
+
+#define mat4f_schema(O, Y, T, ...) \
+    i_struct_array  (O, Y, f32,   16, m) \
+    i_struct_ctr_obj(O, Y, floats) \
+    i_struct_ctr    (O, Y, quatf) \
+    i_struct_method (O, Y, O,        inverse) \
+    i_struct_method (O, Y, O,        transpose) \
+    i_struct_static (O, Y, O,        ident) \
+    i_struct_static (O, Y, O,        perspective, f32, f32, f32, f32) \
+    i_struct_static (O, Y, O,        ortho,      f32, f32, f32, f32, f32, f32) \
+    i_struct_static (O, Y, O,        look_at,    vec3f*, vec3f*, vec3f*) \
+    i_struct_method (O, Y, O,        scale,      vec3f*) \
+    i_struct_method (O, Y, O,        translate,  vec3f*) \
+    i_struct_method (O, Y, O,        rotate,     quatf*) \
+    i_struct_method (O, Y, vec4f,    mul_v4,     vec4f*) \
+    i_struct_method (O, Y, none,     set_identity) \
+    i_struct_method (O, Y, O,        mul,        O*) \
+    i_struct_cast   (O, Y, string)
+declare_struct(mat4f, f32)
+
+// will need to adjust json serialization to facilitate vector with meta types
+#define vector_mat4f_schema(X,Y,...)
+declare_class_2(vector_mat4f, vector, mat4f)
+
+#define vector_vec4f_schema(X,Y,...)
+declare_class_2(vector_vec4f, vector, vec4f)
+
+#define vector_vec3f_schema(X,Y,...)
+declare_class_2(vector_vec3f, vector, vec3f)
+
+#define vector_vec2f_schema(X,Y,...)
+declare_class_2(vector_vec2f, vector, vec2f)
+
+#define vector_i8_schema(X,Y,...)
+declare_class_2(vector_i8, vector, i8)
+
+#define vector_f32_schema(X,Y,...)
+declare_class_2(vector_f32, vector, f32)
+
+#define vector_f64_schema(X,Y,...)
+declare_class_2(vector_f64, vector, f64)
+
+#define vector_i64_schema(X,Y,...)
+declare_class_2(vector_i64, vector, i64)
+
+#define vector_rgba8_schema(X,Y,...)
+declare_class_2(vector_rgba8, vector, rgba8)
+
+#define vector_rgbaf_schema(X,Y,...)
+declare_class_2(vector_rgbaf, vector, rgbaf)
+
+#define vector_rgb8_schema(X,Y,...)
+declare_class_2(vector_rgb8, vector, rgb8)
+
+#define vector_rgbf_schema(X,Y,...)
+declare_class_2(vector_rgbf, vector, rgbf)
+
+vector_f32   vector_f32_new  (shape count, ...);
+vector_f64   vector_f64_new  (shape count, ...);
+vector_i8    vector_i8_new   (shape count, ...);
+vector_i64   vector_i64_new  (shape count, ...);
+vector_rgba8 vector_rgba8_new(shape count, ...);
+vector_rgbaf vector_rgbaf_new(shape count, ...);
+vector_rgb8  vector_rgb8_new (shape count, ...);
+vector_rgbf  vector_rgbf_new (shape count, ...);
+
 
 #include <A-public>
 #ifdef __cplusplus

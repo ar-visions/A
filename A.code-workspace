@@ -29,10 +29,6 @@
 			"path": "../ether"
 		},
 		{
-			"name": "vec",
-			"path": "../vec"
-		},
-		{
 			"name":	"gltf",
 			"path": "../gltf"
 		},
@@ -329,7 +325,6 @@
 			"sk": "cpp",
 			"sk-methods": "c",
 			"__std_stream": "c",
-			"ion": "c",
 			"ion-init": "c",
 			"ion-methods": "c"
 		}

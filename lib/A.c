@@ -395,7 +395,9 @@ none A_init_recur(object a, AType current, raw last_init) {
 none A_hold_members(object);
 
 object A_initialize(object a) {
-    A f           = A_header(a);
+    A   f = A_header(a);
+    if (f->type->traits & A_TRAIT_USER_INIT) return a; // in ux, we call our own method on 'mount'
+    // this may be skipped with macro generators, but it would still be broken in new() -- so its wise to keep this
 
     #ifndef NDEBUG
     A_validator(a);
@@ -1242,8 +1244,9 @@ object A_bool(bool data) { return A_primitive(&bool_type, &data); }
 
 /// A -------------------------
 none A_init(A a) { }
-none A_dealloc(A a) { 
-    A        f = A_header(a);
+
+none A_drop_members(object a) {
+    A        f = A_header((A)a);
     AType type = f->type;
     while (type != typeid(A)) {
         for (num i = 0; i < type->member_count; i++) {
@@ -1258,6 +1261,13 @@ none A_dealloc(A a) {
         }
         type = type->parent_type;
     }
+}
+
+none A_dealloc(A a) { 
+    A        f = A_header(a);
+    AType type = f->type;
+    if (!(type->traits & A_TRAIT_USER_INIT)) // composer does this for an 'unmount' operation, and its non-mount results in no holds at all (which is why we must compensate here)
+        A_drop_members(a);
     if ((object)f->data != (object)a) {
         A_drop(f->data);
         f->data = null;

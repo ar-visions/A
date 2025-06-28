@@ -124,7 +124,8 @@ enum A_TRAIT {
     A_TRAIT_VECTOR    = 256,
     A_TRAIT_STRUCT    = 512,
     A_TRAIT_PTR_SIZE  = 1024,
-    A_TRAIT_PUBLIC    = 2048
+    A_TRAIT_PUBLIC    = 2048,
+    A_TRAIT_USER_INIT = 4096
 };
 
 _Pragma("pack(push, 1)")
@@ -394,6 +395,13 @@ typedef bool(*global_init_fn)();
         A_initialize((A)instance); \
         instance; \
     })
+
+#define ux(T, ...) \
+({ \
+    T instance = (T)A_alloc(typeid(T), 1); \
+    _N_ARGS(instance, ## __VA_ARGS__); \
+    instance; \
+})
 
 #define allocate(T, ...) \
     ({ \
@@ -2589,6 +2597,7 @@ string     evaluate(string, map);
 string     serialize_environment(map, bool);
 i64        epoch_millis();
 none       A_hold_members(object);
+none       A_drop_members(object);
 
 /// we are not registering struct types because we have no idea of membership
 /// however we may allocate based on their size
@@ -2605,6 +2614,7 @@ object      A_new(AType);
 object      A_construct(AType, int, ...);
 void        A_serialize(AType type, string res, object a);
 object      A_initialize(object); /// called after 'construction' ... this is so we do something generic in init, and support named args
+none        A_init_recur(object a, AType current, raw last_init);
 object      A_convert(AType, object);
 type_member_t* A_constructor(AType, AType); // find a constructor method (used for dynamic construction)
 object      A_instanceof(object, AType); // would be nice to actually allow typeid vs typeid here

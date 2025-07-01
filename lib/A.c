@@ -2629,18 +2629,7 @@ none A_free(object a) {
     A       aa = A_header(a);
     A_f*  type = aa->type;
     none* prev = null;
-
-    if (aa->source && strcmp(aa->source, "member") == 0) {
-        int test = 0;
-        test++;
-    }
-
-    if (strcmp(type->name, "target") == 0) {
-        int test = 0;
-        test++;
-    }
-
-    A_f*  cur = type;
+    A_f*   cur = type;
     while (cur) {
         if (prev != cur->dealloc) {
             cur->dealloc(a);

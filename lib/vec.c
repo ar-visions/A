@@ -559,6 +559,7 @@ vector_impl(f64,   f64)
 vector_impl(rgb8,  rgb8)
 vector_impl(rgbf,  rgbf)
 vector_impl(rgba8, rgba8)
+vector_impl(rgba16, rgba16)
 vector_impl(rgbaf, rgbaf)
 
 rgbaf rgbaf_with_vec4f(vec4f* v4) {
@@ -573,6 +574,9 @@ define_vector(rgbf, f32, 3)
 
 define_struct(rgba8, u8)
 define_vector(rgba8, u8, 4)
+
+define_struct(rgba16, u16)
+define_vector(rgba16, u16, 4)
 
 define_struct(rgbaf, f32)
 define_vector(rgbaf, f32, 4)
@@ -598,6 +602,7 @@ define_class(vector_rgbf,  vector, rgbf)
 define_class(vector_rgb8,  vector, rgb8)
 define_class(vector_rgbaf, vector, rgbaf)
 define_class(vector_rgba8, vector, rgba8)
+define_class(vector_rgba16, vector, rgba16)
 define_class(vector_i8,    vector, i8)
 define_class(vector_i64,   vector, i64)
 define_class(vector_f32,   vector, f32)

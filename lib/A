@@ -2560,8 +2560,8 @@ static inline f32 creep(f32 current, f32 goal, f32 amount, f32 rate) {
         for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = get(((array)container), __i)) \
 
 #define each_(container, E, e) \
-    if (container && len(((array)container))) for (E e = get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = get(((array)container), __i)) \
+    if (container && len(((array)container))) for (E e = (E)get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
+        for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = (E)get(((array)container), __i)) \
 
 #define values(container, E, e) \
     if (container && len(((array)container))) for (E e = *(E*)get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
@@ -2762,6 +2762,13 @@ declare_struct(rgbf)
     i_struct_prop(O,Y,u8, a)
 declare_struct(rgba8)
 
+#define rgba16_schema(O, Y, ...) \
+    i_struct_prop(O,Y,u16, r) \
+    i_struct_prop(O,Y,u16, g) \
+    i_struct_prop(O,Y,u16, b) \
+    i_struct_prop(O,Y,u16, a)
+declare_struct(rgba16)
+
 typedef struct _vec3f vec3f;
 
 #define vec4f_schema(O, Y, T, ...) \
@@ -2873,6 +2880,9 @@ declare_class_2(vector_i64, vector, i64)
 #define vector_rgba8_schema(X,Y,...)
 declare_class_2(vector_rgba8, vector, rgba8)
 
+#define vector_rgba16_schema(X,Y,...)
+declare_class_2(vector_rgba16, vector, rgba16)
+
 #define vector_rgbaf_schema(X,Y,...)
 declare_class_2(vector_rgbaf, vector, rgbaf)
 
@@ -2886,6 +2896,7 @@ vector_f32   vector_f32_new  (shape count, ...);
 vector_f64   vector_f64_new  (shape count, ...);
 vector_i8    vector_i8_new   (shape count, ...);
 vector_i64   vector_i64_new  (shape count, ...);
+vector_rgba16 vector_rgba16_new(shape count, ...);
 vector_rgba8 vector_rgba8_new(shape count, ...);
 vector_rgbaf vector_rgbaf_new(shape count, ...);
 vector_rgb8  vector_rgb8_new (shape count, ...);

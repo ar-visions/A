@@ -28,7 +28,7 @@
 #define line(...)       new(line,       __VA_ARGS__)
 #endif
 
-object parse(cstr s, AType schema);
+object parse(cstr s, AType schema, ctx context);
 
 i64 epoch_millis() {
     struct timeval tv;
@@ -759,8 +759,41 @@ num array_compare(array a, array b) {
     return 0;
 }
 
+object array_peek(array a, num i) {
+    if (i < 0 || i >= a->len)
+        return null;
+    return a->elements[i];
+}
+
+array array_mix(array a, array b, f32 f) {
+    int ln0 = len(a);
+    int ln1 = len(b);
+    if (ln0 != ln1) return b;
+
+    type_member_t* fmix = null;
+    AType expect = null;
+    array res = array(ln0);
+    for (int i = 0; i < ln0; i++) {
+        object aa = a->elements[i];
+        object bb = b->elements[i];
+
+        AType at = isa(aa);
+        AType bt = isa(bb);
+
+        if (!expect) expect = at;
+        verify(expect == at, "disperate types in array during mix");
+        verify(at == bt, "types do not match");
+
+        if (!fmix) fmix = A_member(at, A_MEMBER_IMETHOD, "mix", false);
+        verify(fmix, "implement mix method for type %s", at->name);
+        object e = ((mix_fn)fmix->ptr)(aa, bb, f);
+        push(res, e);
+    }
+    return res;
+}
+
 object array_get(array a, num i) {
-    if (i < 0 || i > a->len)
+    if (i < 0 || i >= a->len)
         fault("out of bounds: %i, len = %i", i, a->len);
     return a->elements[i];
 }
@@ -883,7 +916,7 @@ object A_method(AType type, cstr method_name, array args) {
 
 object A_convert(AType type, object input) {
     if (type == isa(input)) return input;
-    return construct_with(type, input);
+    return construct_with(type, input, null);
 }
 
 object A_method_vargs(object instance, cstr method_name, int n_args, ...) {
@@ -1100,8 +1133,11 @@ none A_hold_members(object instance) {
         for (num i = 0; i < type->member_count; i++) {
             type_member_t* mem = &type->members[i];
             object   *mdata = (object*)((cstr)instance + mem->offset);
-            if (mem->member_type & (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN))
+            if (mem->member_type & (A_MEMBER_PROP | A_MEMBER_PRIV))
                 if (!A_is_inlay(mem) && *mdata) { // was trying to isolate what class name was responsible for our problems
+                    if (mem->args.meta_0 == typeid(weak))
+                        continue;
+
                     object member_value = *mdata;
                     A head = A_header(member_value);
                     //printf("holding member: %s, of type: %s\n", mem->name, head->type->name);// i
@@ -1114,7 +1150,9 @@ none A_hold_members(object instance) {
 
 object A_set_property(object instance, symbol name, object value) {
     AType type = isa(instance);
-    type_member_t* m = A_member(type, (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN), (cstr)name, true);
+    type_member_t* m = A_member(type, A_MEMBER_PROP, (cstr)name, true);
+    A_member_set(instance, m, value);
+    /*
     verify(m, "%s not found on object %s", name, type->name);
     object   *mdata = (object*)((cstr)instance + m->offset);
     AType value_type = isa(value);
@@ -1137,7 +1175,7 @@ object A_set_property(object instance, symbol name, object value) {
         // assign as object, increase ref count
         *mdata = A_hold(value); 
         A_drop(prev);
-    }
+    }*/
     return value;
 }
 
@@ -1251,8 +1289,10 @@ none A_drop_members(object a) {
     while (type != typeid(A)) {
         for (num i = 0; i < type->member_count; i++) {
             type_member_t* m = &type->members[i];
-            if ((m->member_type & (A_MEMBER_PROP | A_MEMBER_PRIV | A_MEMBER_INTERN)) &&
+            if ((m->member_type & (A_MEMBER_PROP | A_MEMBER_PRIV)) &&
                     !A_is_inlay(m)) {
+                if (m->args.meta_0 == typeid(weak))
+                    continue;
                 //printf("A_dealloc: drop member %s.%s (%s)\n", type->name, m->name, m->type->name);
                 A*  ref = (A*)((u8*)a + m->offset);
                 A_drop(*ref);
@@ -1300,8 +1340,25 @@ i64 read_integer(object data) {
 
 static cstr ws(cstr p) {
     cstr scan = p;
-    while (*scan && isspace(*scan))
-        scan++;
+    bool retry = true;
+    while (retry) {
+        retry = false;
+        while (*scan && isspace(*scan))
+            scan++;
+        if (*scan == '#') {
+            scan++;
+            while (*scan && *scan != '\n')
+                scan++;
+            retry = *scan != 0;
+        } else if (strncmp(scan, "/*", 2) == 0) {
+            scan += 2;
+            scan = strstr(scan, "*/");
+            if (scan) {
+                scan = scan + 2;
+                retry = true;
+            }
+        }
+    }
     return scan;
 }
 
@@ -1395,7 +1452,7 @@ A A_with_cereal(A a, cereal _cs) {
     else {
         bool can = constructs_with(f->type, typeid(string));
         if (can) {
-            return construct_with(f->type, string(cs));
+            return construct_with(f->type, string(cs), null);
         }
         printf("implement ctr cstr for %s\n", f->type->name);
         exit(-1);
@@ -1415,7 +1472,7 @@ bool constructs_with(AType type, AType with_type) {
 }
 
 /// used by parse (from json) to construct objects from data
-object construct_with(AType type, object data) {
+object construct_with(AType type, object data, ctx context) {
     if (type == typeid(map)) {
         verify(isa(data) == typeid(map), "expected map");
         return hold(data);
@@ -1424,37 +1481,55 @@ object construct_with(AType type, object data) {
     /// this will lookup ways to construct the type from the available data
     AType data_type = isa(data);
     object result = null;
+    map    mdata  = null;
 
+    /// construct with map of fields
     if (!(type->traits & A_TRAIT_PRIMITIVE) && data_type == typeid(map)) {
         map m = data;
         result = A_alloc(type, 1);
         pairs(m, i) {
-            verify(isa(i->key) == typeid(string), "expected string key when constructing object from map");
+            verify(isa(i->key) == typeid(string),
+                "expected string key when constructing object from map");
             string s_key = instanceof(i->key, string);
             A_set_property(result, s_key->chars, i->value);
         }
+        mdata = m;
     }
-
     /// check for identical constructor
-    for (int i = 0; i < type->member_count; i++) {
-        Member mem = &type->members[i];
-        if (!mem->ptr) continue;
-        none* addr = mem->ptr;
-        if (mem->member_type == A_MEMBER_CONSTRUCT) {
-            /// no meaningful way to do this generically, we prefer to call these first
-            if (mem->type == typeid(path) && data_type == typeid(string)) {
-                result = A_alloc(type, 1);
-                result = ((object(*)(object, path))addr)(result, path(((string)data)));
-                verify(A_validator(result), "invalid object");
-                break;
-            }
-            if (mem->type == data_type) {
-                result = A_alloc(type, 1);
-                result = ((object(*)(object, object))addr)(result, data);
-                verify(A_validator(result), "invalid object");
-                break;
+    AType atype = type;
+    while (atype != typeid(A)) {
+        for (int i = 0; i < atype->member_count; i++) {
+            Member mem = &atype->members[i];
+            
+            if (!result && mem->member_type == A_MEMBER_CONSTRUCT) {
+                none* addr = mem->ptr;
+                /// no meaningful way to do this generically, we prefer to call these first
+                if (mem->type == typeid(path) && data_type == typeid(string)) {
+                    result = A_alloc(type, 1);
+                    result = ((object(*)(object, path))addr)(result, path(((string)data)));
+                    verify(A_validator(result), "invalid object");
+                    break;
+                }
+                if (mem->type == data_type) {
+                    result = A_alloc(type, 1);
+                    result = ((object(*)(object, object))addr)(result, data);
+                    verify(A_validator(result), "invalid object");
+                    break;
+                }
+            } else if (context && result && mdata) {
+                // lets set required properties from context
+                if (mem->required && (mem->member_type & A_MEMBER_PROP) && 
+                    !contains(mdata, mem->sname))
+                {
+                    object from_ctx = get(context, mem->sname);
+                    verify(from_ctx,
+                        "context requires property: %s (%s) in class %s",
+                            mem->name, mem->type->name, atype->name);
+                    A_member_set(result, mem, from_ctx);
+                }
             }
         }
+        atype = atype->parent_type;
     }
 
     /// simple enum conversion, with a default handled in A_enum_value and type-based match here
@@ -1535,6 +1610,16 @@ object construct_with(AType type, object data) {
             AF_set_name(result, (cstr)name->chars);
         }
     }
+    
+    if (!result && data) {
+        // if constructor not found
+        verify(data_type == typeid(string) || data_type == typeid(path),
+            "failed to construct type %s with %s", type->name, data_type->name);
+
+        // load from presumed .json as fallback
+        path f = (data_type == typeid(string)) ? path((string)data) : (path)data;
+        return read(f, type, null);
+    }
     return result ? A_initialize(result) : null;
 }
 
@@ -1572,6 +1657,64 @@ none A_serialize(AType type, string res, object a) {
         } else
             append(res, "null");
     }
+}
+
+int A_memcmp(A a, A b) {
+    AType atype = isa(a);
+    AType btype = isa(b);
+    if (atype != btype) return ((ssize_t)atype - (ssize_t)btype) < 0 ? -1 : 1;
+    return memcmp(a, b, atype->size);
+}
+
+bool A_member_set(A a, type_member_t* m, object value) {
+    if (!(m->member_type & A_MEMBER_PROP))
+        return false;
+
+    bool  is_primitive = (m->type->traits & A_TRAIT_PRIMITIVE) != 0;
+    bool  is_enum      = (m->type->traits & A_TRAIT_ENUM)      != 0;
+    bool  is_struct    = (m->type->traits & A_TRAIT_STRUCT)    != 0;
+    bool  is_inlay     = (m->member_type  & A_MEMBER_INLAY)    != 0;
+    ARef  member_ptr   = (cstr)a + m->offset;
+    AType vtype        = isa(value);
+    A     info         = head(value);
+
+    if (is_enum || is_struct || is_inlay || is_primitive) {
+        verify(!is_struct || vtype == m->type ||
+            vtype == m->type->vmember_type,
+            "%s: expected vmember_type (%s) to equal isa(value) (%s)",
+            m->name, m->type->vmember_type->name, vtype->name);
+        verify(!is_struct || vtype == m->type ||
+            m->type->size == vtype->size * info->count,
+            "vector size mismatch for %s", m->name);
+        int sz = m->type->size < vtype->size ? m->type->size : vtype->size;
+        memcpy(member_ptr, value, sz);
+    } else if (*member_ptr != value) {
+        verify(A_inherits(vtype, m->type), "type mismatch: setting %s on member %s %s",
+            vtype->name, m->type->name, m->name);
+        drop(*member_ptr);
+        *member_ptr = hold(value);
+    }
+    AF_set_name(a, m->name);
+    return true;
+}
+
+// try to use this where possible
+object A_member_object(A a, type_member_t* m) {
+    if (!(m->member_type & A_MEMBER_PROP))
+        return null; // we do this so much, that its useful as a filter in for statements
+
+    bool is_primitive = (m->type->traits & A_TRAIT_PRIMITIVE) | 
+                        (m->type->traits & A_TRAIT_STRUCT);
+    bool is_inlay     = (m->member_type  & A_MEMBER_INLAY);
+    object result;
+    ARef   member_ptr = (cstr)a + m->offset;
+    if (is_inlay || is_primitive) {
+        result = A_alloc(m->type, 1);
+        memcpy(result, member_ptr, m->type->size);
+    } else {
+        result = *member_ptr;
+    }
+    return result;
 }
 
 string A_cast_string(A a) {
@@ -2283,7 +2426,7 @@ string string_trim(string a) {
         s++;
         count--;
     }
-    while (s[count - 1] == ' ')
+    while (count && s[count - 1] == ' ')
         count--;
     
     return string(chars, s, ref_length, count);
@@ -2661,10 +2804,6 @@ none A_drop(A a) {
     A header = A_header(a);
 
     if (header->refs < 0) {
-        if (strcmp(header->type->name, "array") == 0) {
-            int test = 2;
-            test += 2;
-        }
         printf("A_drop: data freed twice: %s\n", header->type->name);
     } else if (--header->refs <= 0) {
         // ref:0 on new, and then ref:+1 when added to list
@@ -3676,7 +3815,7 @@ static cstr read_indent(cstr i, i32* result) {
 
 static array read_lines(path f) {
     array  lines   = array(256);
-    string content = read(f, typeid(string));
+    string content = read(f, typeid(string), null);
     cstr   scan    = cstring(content);
 
     while (*scan) {
@@ -3699,7 +3838,7 @@ static array read_lines(path f) {
     return lines;
 }
 
-object path_read(path a, AType type) {
+object path_read(path a, AType type, ctx context) {
     if (type == typeid(array))
         return read_lines(a);
     FILE* f = fopen(a->chars, "rb");
@@ -3716,7 +3855,7 @@ object path_read(path a, AType type) {
     if (type == typeid(string))
         return str;
     if (is_obj) {
-        object obj = parse((cstr)str->chars, type);
+        object obj = parse((cstr)str->chars, type, context);
         return obj;
     }
     assert(false, "not implemented");
@@ -3865,12 +4004,42 @@ string json(object a) {
     return res;
 }
 
-string parse_json_string(cstr origin, cstr* remainder) {
-    if (*origin != '\"') return null;
+string parse_symbol(cstr input, cstr* remainder, ctx context) {
+    cstr start = null;
+    bool second = false;
+    while ((!second && isalpha(*input)) || 
+           ( second && isalnum(*input)) ||
+           ((*input == '-' || *input == '_')  && second))
+    {
+        if (!start) start = input;
+        input++;
+        second = true;
+    }
+    *remainder = ws(input);
+
+    if (start) {
+        string r = string(chars, start, ref_length, (size_t)input - (size_t)start);
+        for (int i = 0; i < r->len; i++)
+            if (r->chars[i] == '-') ((cstr)r->chars)[i] = '_';
+        return r;
+    }
+    
+    return null;
+}
+
+object parse_json_string(cstr origin, cstr* remainder, bool is_field, ctx context) {
+    if (*origin != '\"' && *origin != '\'') {
+        if (is_field && context) {
+            string sym = parse_symbol(origin, remainder, context);
+            object val = get(context, sym);
+        }
+        return null;
+    }
+    char delim = *origin;
     string res = string(alloc, 64);
     cstr scan;
     for (scan = &origin[1]; *scan;) {
-        if (*scan == '\"') {
+        if (*scan == delim) {
             scan++;
             break;
         }
@@ -3920,9 +4089,9 @@ string parse_json_string(cstr origin, cstr* remainder) {
     return res;
 }
 
-object parse_array(cstr s, AType schema, AType meta, cstr* remainder);
+object parse_array(cstr s, AType schema, AType meta, cstr* remainder, ctx context);
 
-object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) {
+object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder, ctx context) {
     cstr   scan   = ws(input);
     cstr   origin = null;
     object res    = null;
@@ -3931,45 +4100,122 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
     if (remainder)
        *remainder = null;
 
-    if (strncmp(scan, "true", 4) == 0 || strncmp(scan, "false", 5) == 0) {
+    string sym     = parse_symbol(scan, &scan, context);
+    bool   set_ctx = sym && context && !remainder && context->establishing && eq(sym, "ctx");
+    bool   is_true = false;
+    if (sym && ((is_true = eq(sym, "true")) || eq(sym, "false"))) {
         verify(!schema || schema == typeid(bool), "type mismatch");
-        bool is_true = strncmp(scan, "true", 4) == 0;
-        if (is_true)
-            *remainder = scan + 4;
-        else
-            *remainder = scan + 5;
+        if (remainder)
+            *remainder = ws(scan);
         return A_bool(is_true); 
     }
     else if (*scan == '[') {
-        return parse_array (scan, schema, meta_type, remainder);
+        if (sym) {
+            // can be an enum, can be a struct, or class
+            // for these special syntax, we cannot take schema & meta_type into account
+            // this is effectively 'ason' syntax
+            scan = ws(scan + 1);
+            AType type = A_find_type(sym->chars);
+            verify(type, "type not found: %o", sym);
+            if (type->traits & A_TRAIT_ENUM) {
+                // its possible we could reference a context variable within this enum [ value-area ]
+                // in which case, we could effectively look it up
+                //
+                object evalue = A_alloc(type, 1);
+                string enum_symbol = parse_symbol(scan, &scan, context);
+                verify(enum_symbol, "enum symbol expected");
+                verify(*scan == ']', "expected ']' after enum symbol");
+                scan++;
+                type_member_t* e = A_member(
+                    type, A_MEMBER_ENUMV, enum_symbol->chars, false);
+                verify(e, "enum symbol %o not found in type %s", enum_symbol, type->name);
+                memcpy(evalue, e->ptr, e->type->size);
+                if (remainder)
+                    *remainder = ws(scan);
+                return evalue;
+            } else if (type->traits & A_TRAIT_STRUCT) {
+                object svalue = A_alloc(type, 1);
+                for (int i = 0; i < type->member_count; i++) {
+                    type_member_t* m = &type->members[i];
+                    if (!(m->member_type & A_MEMBER_PROP)) continue;
+                    object f = (object)((cstr)svalue + m->offset);
+                    object r = parse_object(scan, null, null, &scan, context);
+                    verify(r && isa(r) == m->type, "type mismatch while parsing struct %s:%s (read: %s, expect: %s)",
+                        type->name, m->name, !r ? "null" : isa(r)->name, m->type->name);
+                    if (*scan == ',') scan = ws(scan + 1); // these dumb things are optional
+                }
+                scan++;
+                if (remainder)
+                    *remainder = ws(scan);
+                return svalue;
+            }
+            // this is parsing a 'constructor call', so we must effectively call this constructor with the arg given
+            // only a singular arg is allowed for these
+            object r = parse_object(scan, null, null, &scan, context);
+            verify(r, "expected value to give to type %s", type->name);
+            verify(*scan == ']', "expected ']' after construction of %s", type->name);
+            scan++;
+            if (remainder)
+                *remainder = ws(scan);
+            return construct_with(type, r, null);
+        }
+        return parse_array (scan, schema, meta_type, remainder, context);
     }
-    
     else if ((*scan >= '0' && *scan <= '9') || *scan == '-') {
+        verify(!sym, "unexpected numeric after symbol %o", sym);
         origin = scan;
         int has_dot = 0;
         while (*++scan) {
             has_dot += *scan == '.';
+            if (*scan == 'f')
+                break;
             if (*scan != '.' && !(*scan >= '0' && *scan <= '9'))
                 break;
         }
+
         if (has_dot || (schema && schema->traits & A_TRAIT_REALISTIC)) {
+            bool force_f32 = false;
+            if (has_dot) {
+                force_f32 = *scan == 'f';
+                if (force_f32) scan++;
+            }
             if (schema == typeid(i64)) {
                 double v = strtod(origin, &scan);
                 res = A_i64((i64)floor(v));
             }
-            else if (schema == typeid(f32))
+            else if (force_f32 || schema == typeid(f32)) {
                 res = A_f32(strtof(origin, &scan));
+                if (force_f32)
+                    scan++; // f++
+            }
             else
                 res = A_f64(strtod(origin, &scan));
         } else
             res = A_i64(strtoll(origin, &scan, 10));
     }
     else if (*scan == '"' || *scan == '\'') {
+        verify(!sym, "unexpected string after symbol %o", sym);
+        bool is_interp = *scan == '\'';
         origin = scan;
-        string js = parse_json_string(origin, &scan);
-        res = construct_with(schema ? schema : typeid(string), js);
+        string js = parse_json_string(origin, &scan, false, is_interp ? context : null); // todo: use context for string interpolation
+        res = construct_with((schema && schema != typeid(object)) 
+            ? schema : typeid(string), js, context);
     }
     else if (*scan == '{') { /// Type will make us convert to the object, from map, and set is_map back to false; what could possibly get crossed up with this one
+        if (sym) {
+            verify(!schema || schema == typeid(object) || eq(sym, schema->name),
+                "expected type: %s, found %o", schema->name, sym);
+
+            if (!schema) {
+                schema = A_find_type(sym->chars);
+                verify(schema, "type not found: %o", sym);
+            }
+
+            if (schema == typeid(object)) {
+                schema = A_find_type(sym->chars);
+                verify(schema, "%s not found", sym->chars);
+            }
+        }
         AType use_schema = schema ? schema : typeid(map);
         bool is_map = use_schema == typeid(map);
         scan = ws(&scan[1]);
@@ -3980,27 +4226,53 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
                 break;
             }
             scan = ws(&scan[0]);
-            if (*scan != '\"') return null;
+            
+            if (!context && *scan != '\"')
+                return null;
             origin        = scan;
-            string name   = parse_json_string(origin, &scan);
+            string name   = (*scan != '\"' && *scan != '\'') ?
+                (string)parse_symbol(origin, &scan, context) : 
+                (string)parse_json_string(origin, &scan, true, *scan == '\'' ? context : null);
+            if (eq(name, "editor")) {
+                int test2 = 2;
+                test2 += 2;
+            }
             bool is_type  = cmp(name, "Type") == 0;
-            Member member = is_map ? null : A_member(use_schema, A_MEMBER_PROP, name->chars, true);
-            if (!is_type && !member && !is_map) {
+            Member member = (is_map) ? null : 
+                A_member(use_schema, A_MEMBER_PROP, name->chars, true);
+            
+            if (!is_type && !member && !is_map && !context) {
                 print("property '%o' not found in type: %s", name, use_schema->name);
                 return null;
             }
             scan = ws(&scan[0]);
-            if (*scan != ':') return null;
-            scan = ws(&scan[1]);
-            object value = parse_object(scan, member ? member->type : null, member ? member->args.meta_0 : null, &scan); /// issue with parsing a map type (attributes)
+            bool short_hand_key = false;
+            if (context && *scan == '{') {
+                scan = ws(origin); // nice trick here for this mode, effectively reads symbol again in parse_object
+                short_hand_key = true;
+            } else if (*scan != ':')
+                return null;
+            else
+                scan = ws(&scan[1]);
+
+            object value = parse_object(scan, (member ? member->type : null),
+                (member ? member->args.meta_0 : null),
+                &scan, context);
+
+            if (set_ctx && value)
+                set(context, name, value);
+
+            AType vtype = isa(value);
+            
             if (is_type) {
                 string type_name = value;
                 use_schema = A_find_type(type_name->chars);
                 verify(use_schema, "type not found: %o", type_name);
             }
+
             AType type = isa(value);
             scan = ws(&scan[0]);
-            if   (!value)
+            if (!value)
                 return null;
             if (!is_type) {
                 string s_value = value;
@@ -4009,31 +4281,45 @@ object parse_object(cstr input, AType schema, AType meta_type, cstr* remainder) 
             if (*scan == ',') {
                 scan++;
                 continue;
-            } else if (*scan != '}')
+            } else if (!context && *scan != '}')
                 return null;
         }
         /// check for remaining required
 
         if (remainder) *remainder = ws(scan);
-        res = construct_with(use_schema, props); // makes a bit more sense to implement required here
+        object tt = context ? get(context, string("t")) : null;
+
+        if (set_ctx && use_schema == typeid(ctx)) // nothing complex; we have a ctx already and will merge these props in
+            use_schema = typeid(map);
+        
+        res = construct_with(use_schema, props, context); // makes a bit more sense to implement required here
         if (use_schema != typeid(map))
             drop(props);
         else
             hold(props);
+    } else {
+        res = (context && sym) ? get(context, sym) : null;
+        if (res) {
+            verify(!schema || A_inherits(isa(res), schema),
+                "variable type mismatch: %s does not match expected %s",
+                isa(res)->name, schema->name);
+        } else
+            verify(!sym, "cannot resolve symbol: %o", sym);
     }
-    if (remainder) *remainder = scan;
+    if (remainder) *remainder = ws(scan);
     return res;
 }
  
-array parse_array_objects(cstr* s, AType element_type) {
+array parse_array_objects(cstr* s, AType element_type, ctx context) {
     cstr scan = *s;
     array res = array(alloc, 64);
+
     for (;;) {
         if (scan[0] == ']') {
             scan = ws(&scan[1]);
             break;
         }
-        object a = parse_object(scan, element_type, null, &scan);
+        object a = parse_object(scan, element_type, null, &scan, context);
         push(res, a);
         scan = ws(scan);
         if (scan && scan[0] == ',') {
@@ -4045,16 +4331,16 @@ array parse_array_objects(cstr* s, AType element_type) {
     return res;
 }
 
-object parse_array(cstr s, AType schema, AType meta_type, cstr* remainder) {
+object parse_array(cstr s, AType schema, AType meta_type, cstr* remainder, ctx context) {
     cstr scan = ws(s);
     verify(*scan == '[', "expected array '['");
     scan = ws(&scan[1]);
     object res = null;
     if (!schema || (schema == typeid(array) || schema->src == typeid(array))) {
         AType element_type = meta_type ? meta_type : (schema ? schema->meta.meta_0 : typeid(object));
-        res = parse_array_objects(&scan, element_type);
+        res = parse_array_objects(&scan, element_type, context);
     } else if (schema->vmember_type == typeid(i64)) { // should support all vector types of i64 (needs type bounds check with vmember_count)
-        array arb = parse_array_objects(&scan, typeid(i64));
+        array arb = parse_array_objects(&scan, typeid(i64), context);
         int vcount = len(arb);
         res = A_alloc2(schema, typeid(i64), shape_new(vcount, 0));
         int n = 0;
@@ -4063,7 +4349,7 @@ object parse_array(cstr s, AType schema, AType meta_type, cstr* remainder) {
             ((i64*)res)[n++] = *(i64*)a;
         }
     } else if (schema->vmember_type == typeid(f32)) { // should support all vector types of f32 (needs type bounds check with vmember_count)
-        array arb = parse_array_objects(&scan, typeid(f32));
+        array arb = parse_array_objects(&scan, typeid(f32), context);
         int vcount = len(arb);
         res = A_alloc(typeid(f32), vcount);
         int n = 0;
@@ -4075,13 +4361,14 @@ object parse_array(cstr s, AType schema, AType meta_type, cstr* remainder) {
             else fault("unexpected type");
         }
     } else if (constructs_with(schema, typeid(array))) {
-        array arb = parse_array_objects(&scan, typeid(i64));
-        res = construct_with(schema, arb);
+        // i forget where we use this!
+        array arb = parse_array_objects(&scan, typeid(i64), context);
+        res = construct_with(schema, arb, null);
     } else if (schema->src == typeid(vector)) {
         AType scalar_type = schema->meta.meta_0;
         verify(scalar_type, "scalar type required when using vector (define a meta-type of vector with type)");
         
-        array prelim = parse_array_objects(&scan, null);
+        array prelim = parse_array_objects(&scan, null, context);
         int count = len(prelim);
         // this should contain multiple arrays of scalar values; we want to convert each array to our 'scalar_type'
         // for instance, we may parse [[1,2,3,4,5...16],...] mat4x4's; we merely need to validate vmember_count and vmember_type and convert
@@ -4109,11 +4396,70 @@ object parse_array(cstr s, AType schema, AType meta_type, cstr* remainder) {
     return res;
 }
 
-// root will apply to objects contained within an array, or a top level object
-object parse(cstr s, AType schema) {
-    return parse_object(s, schema, null, null);
+static map ctx_checksums; // where context goes to live, lol.
+
+string extract_context(cstr src, cstr *endptr) {
+    src = ws(src);
+    const char *start = strstr(src, "ctx");
+    if (!start) return NULL;
+
+    const char *scan = start;
+    while (*scan && *scan != '{') scan++;  // find first {
+    if (*scan != '{') return NULL;
+    scan++;  // past initial {
+
+    int depth = 1;
+    bool in_string = false;
+    char string_delim = 0;
+
+    while (*scan && depth > 0) {
+        if (in_string) {
+            if (*scan == '\\' && scan[1]) {
+                scan += 2;
+                continue;
+            } else if (*scan == string_delim) {
+                in_string = false;
+                scan++;
+                continue;
+            }
+        } else {
+            if (*scan == '\'' || *scan == '"') {
+                in_string = true;
+                string_delim = *scan++;
+                continue;
+            } else if (*scan == '#' || strncmp(scan, "/*", 2) == 0) {
+                scan = ws(scan);
+                continue;
+            } else if (*scan == '{') {
+                depth++;
+            } else if (*scan == '}') {
+                depth--;
+            }
+        }
+        scan++;
+    }
+
+    size_t len = scan - start;
+    if (endptr) *endptr = scan;
+    return string(chars, start, ref_length, len);
 }
 
+object parse(cstr s, AType schema, ctx context) {
+    if (context) {
+        if (!ctx_checksums) ctx_checksums = hold(map(hsize, 32));
+        string key = f(string, "%p", context);
+        u64*   chk = get(ctx_checksums, key);
+        string ctx = extract_context(s, &s);
+        u64 h = hash(ctx);
+        if (!chk || *chk != h) {
+            set(ctx_checksums, key, A_u64(h));
+            context->establishing = true;
+            map ctx_update = parse_object(ctx->chars, null, null, null, context);
+            context->establishing = false;
+        }
+    }
+    return parse_object(s, schema, null, null, context);
+}
 
 typedef struct thread_t {
     pthread_t       obj;
@@ -4371,6 +4717,8 @@ define_abstract(nil,            0)
 define_abstract(raw,            0)
 define_abstract(ref,            0)
 define_abstract(imported,       0)
+define_abstract(weak,           0)
+define_abstract(functional,     0)
 
 define_primitive( u8,    numeric, A_TRAIT_INTEGRAL | A_TRAIT_UNSIGNED)
 define_primitive(u16,    numeric, A_TRAIT_INTEGRAL | A_TRAIT_UNSIGNED)
@@ -4418,6 +4766,7 @@ define_class(list,          A, object)
 define_class(array,         A, object)
 define_class(hashmap,       A)
 define_class(map,           A)
+define_class(ctx,           map)
 define_class(fn,            A)
 define_class(subprocedure,  A)
 

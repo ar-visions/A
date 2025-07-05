@@ -107,7 +107,8 @@ enum A_MEMBER {
     A_MEMBER_ENUMV     = 2048,
     A_MEMBER_OVERRIDE  = 4096,
     A_MEMBER_VPROP     = 8192,
-    A_MEMBER_ATTR      = 16384
+    A_MEMBER_ATTR      = 16384,
+    A_MEMBER_OPAQUE    = 32768
 };
 
 typedef enum A_MEMBER AMember;
@@ -512,15 +513,16 @@ typedef bool(*global_init_fn)();
 #define   i_ctr_intern_METHOD(X, ARG)
 #define   i_ctr(X, Y, T, ARG)              i_ctr_##T##_##Y(X, ARG)
 
-#define   i_prop_opaque_F(X, R, N) u8 N;
-#define   i_prop_opaque_F_EXTERN(X, R, N) u8 N;
-#define   i_prop_opaque_INST(X, R, N)         R N;
-#define   i_prop_opaque_INST_EXTERN(X, R, N)  i_prop_public_INST(X, R, N)
-#define   i_prop_opaque_DECL(X, R, N)         i_prop_public_DECL(X, R, N)
+#define   i_prop_opaque_F(X, R, N)              u8 N;
+#define   i_prop_opaque_F_EXTERN(X, R, N)       u8 N;
+#define   i_prop_opaque_INST(X, R, N)           R N;
+#define   i_prop_opaque_INST_EXTERN(X, R, N)    i_prop_public_INST(X, R, N)
+#define   i_prop_opaque_DECL(X, R, N)           i_prop_public_DECL(X, R, N)
 #define   i_prop_opaque_GENERICS(X, R, N)
 #define   i_prop_opaque_INIT(X, R, N)
 #define   i_prop_opaque_PROTO(X, R, N)  
 #define   i_prop_opaque_METHOD(X, R, N)
+
 
 #define   i_prop_interface_F(X, R, N)
 #define   i_prop_interface_F_EXTERN(X, R, N)
@@ -533,10 +535,10 @@ typedef bool(*global_init_fn)();
 #define   i_prop_interface_PROTO(X, R, N)  
 #define   i_prop_interface_METHOD(X, R, N)
 
-#define   i_prop_public_F(X, R, N) u8 N;
-#define   i_prop_public_F_EXTERN(X, R, N) u8 N;
-#define   i_prop_public_INST(X, R, N)         R N;
-#define   i_prop_public_INST_EXTERN(X, R, N)  i_prop_public_INST(X, R, N)  
+#define   i_prop_public_F(X, R, N)              u8 N;
+#define   i_prop_public_F_EXTERN(X, R, N)       u8 N;
+#define   i_prop_public_INST(X, R, N)           R N;
+#define   i_prop_public_INST_EXTERN(X, R, N)    i_prop_public_INST(X, R, N)  
 #define   i_prop_public_DECL(X, R, N)               
 #define   i_prop_public_GENERICS(X, R, N)
 #define   i_prop_public_INIT(X, R, N) \
@@ -549,8 +551,8 @@ typedef bool(*global_init_fn)();
 #define   i_prop_public_PROTO(X, R, N)  
 #define   i_prop_public_METHOD(X, R, N)
 
-#define   i_prop_required_F(X, R, N) u8 N;
-#define   i_prop_required_F_EXTERN(X, R, N) u8 N;
+#define   i_prop_required_F(X, R, N)            u8 N;
+#define   i_prop_required_F_EXTERN(X, R, N)     u8 N;
 #define   i_prop_required_INST(X, R, N)         i_prop_public_INST(X, R, N)
 #define   i_prop_required_INST_EXTERN(X, R, N)  i_prop_public_INST(X, R, N)
 #define   i_prop_required_DECL(X, R, N)         i_prop_public_DECL(X, R, N)
@@ -561,8 +563,8 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_PROTO(X, R, N)  
 #define   i_prop_required_METHOD(X, R, N)
 
-#define   i_prop_intern_F(X, R, N) u8 N;
-#define   i_prop_intern_F_EXTERN(X, R, N) u8 N;
+#define   i_prop_intern_F(X, R, N)              u8 N;
+#define   i_prop_intern_F_EXTERN(X, R, N)       u8 N;
 #define   i_prop_intern_INST(X, R, N)           R N;
 #define   i_prop_intern_INST_EXTERN(X, R, N)    R _##N;
 #define   i_prop_intern_DECL(X, R, N)           i_prop_public_DECL(X, R, N)
@@ -593,15 +595,14 @@ typedef bool(*global_init_fn)();
 #define   i_prop_public_PROTO_field(X, R, N, M2)  
 #define   i_prop_public_METHOD_field(X, R, N, M2)
 
-#define   i_prop_required_F_field(X, R, N, M2)          u8 N;
-#define   i_prop_required_F_EXTERN_field(X, R, N, M2)   u8 N;
-#define   i_prop_required_INST_field(X, R, N, M2)         i_prop_public_INST_field(X, R, N, M2)
-#define   i_prop_required_INST_EXTERN_field(X, R, N, M2)  i_prop_public_INST_field(X, R, N, M2)
-#define   i_prop_required_DECL_field(X, R, N, M2)   i_prop_public_DECL(X, R, N)
+#define   i_prop_required_F_field(X, R, N, M2)              u8 N;
+#define   i_prop_required_F_EXTERN_field(X, R, N, M2)       u8 N;
+#define   i_prop_required_INST_field(X, R, N, M2)           i_prop_public_INST_field(X, R, N, M2)
+#define   i_prop_required_INST_EXTERN_field(X, R, N, M2)    i_prop_public_INST_field(X, R, N, M2)
+#define   i_prop_required_DECL_field(X, R, N, M2)           i_prop_public_DECL(X, R, N)
 #define   i_prop_required_GENERICS_field(X, R, N, M2)
 #define   i_prop_required_INIT_field(X, R, N, M2) \
     X##_type.members[X##_type.member_count].required = true; \
-    printf("M2 = %s\n", #M2); \
     i_prop_public_INIT_field(X, R, N, M2)
 #define   i_prop_required_PROTO_field(X, R, N, M2)  
 #define   i_prop_required_METHOD_field(X, R, N, M2)
@@ -609,7 +610,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_intern_F_field(X, R, N, M2)                u8 N;
 #define   i_prop_intern_F_EXTERN_field(X, R, N, M2)         u8 N;
 #define   i_prop_intern_INST_field(X, R, N, M2)             R N;
-#define   i_prop_intern_INST_EXTERN_field(X, R, N, M2)
+#define   i_prop_intern_INST_EXTERN_field(X, R, N, M2)      R N;
 #define   i_prop_intern_DECL_field(X, R, N, M2)     i_prop_public_DECL(X, R, N)
 #define   i_prop_intern_GENERICS_field(X, R, N, M2)
 #define   i_prop_intern_INIT_field(X, R, N, M2)          fault("field is not exposed when intern");
@@ -618,45 +619,49 @@ typedef bool(*global_init_fn)();
 
 
 
-#define   i_prop_public_F_of(X, R, N, M2) u8 N;
-#define   i_prop_public_F_EXTERN_of(X, R, N, M2) u8 N;
-#define   i_prop_public_INST_of(X, R, N, M2) R N;
-#define   i_prop_public_INST_EXTERN_of(X, R, N, M2) R N;
-#define   i_prop_public_DECL_of(X, R, N, M2)        i_prop_public_DECL(X, R, N)
-#define   i_prop_public_GENERICS_of(X, R, N, M2)
-#define   i_prop_public_INIT_of(X, R, N, M2) \
+
+
+
+#define   i_prop_public_F_meta(X, R, N, M2)             u8 N;
+#define   i_prop_public_F_EXTERN_meta(X, R, N, M2)      u8 N;
+#define   i_prop_public_INST_meta(X, R, N, M2)          R N;
+#define   i_prop_public_INST_EXTERN_meta(X, R, N, M2)   R N;
+#define   i_prop_public_DECL_meta(X, R, N, M2)        i_prop_public_DECL(X, R, N)
+#define   i_prop_public_GENERICS_meta(X, R, N, M2)
+#define   i_prop_public_INIT_meta(X, R, N, M2) \
     X##_type.members[X##_type.member_count].args = (meta_t) { 1, (AType)&M2##_type }; \
     i_prop_public_INIT(X, R, N)
 
-#define   i_prop_public_PROTO_of(X, R, N, M2)  
-#define   i_prop_public_METHOD_of(X, R, N, M2)
+#define   i_prop_public_PROTO_meta(X, R, N, M2)  
+#define   i_prop_public_METHOD_meta(X, R, N, M2)
 
-#define   i_prop_required_F_of(X, R, N, M2) u8 N;
-#define   i_prop_required_F_EXTERN_of(X, R, N, M2) u8 N;
-#define   i_prop_required_INST_of(X, R, N, M2) R N;
-#define   i_prop_required_INST_EXTERN_of(X, R, N, M2)
-#define   i_prop_required_DECL_of(X, R, N, M2)      i_prop_public_DECL(X, R, N)
-#define   i_prop_required_GENERICS_of(X, R, N, M2)
-#define   i_prop_required_INIT_of(X, R, N, M2) \
-    i_prop_public_INIT_of(X, R, N, M2)
-#define   i_prop_required_PROTO_of(X, R, N, M2)  
-#define   i_prop_required_METHOD_of(X, R, N, M2)
+#define   i_prop_required_F_meta(X, R, N, M2)           u8 N;
+#define   i_prop_required_F_EXTERN_meta(X, R, N, M2)    u8 N;
+#define   i_prop_required_INST_meta(X, R, N, M2)        R N;
+#define   i_prop_required_INST_EXTERN_meta(X, R, N, M2) R N;
+#define   i_prop_required_DECL_meta(X, R, N, M2)      i_prop_public_DECL(X, R, N)
+#define   i_prop_required_GENERICS_meta(X, R, N, M2)
+#define   i_prop_required_INIT_meta(X, R, N, M2) \
+    X##_type.members[X##_type.member_count].required = true; \
+    i_prop_public_INIT_meta(X, R, N, M2)
+#define   i_prop_required_PROTO_meta(X, R, N, M2)  
+#define   i_prop_required_METHOD_meta(X, R, N, M2)
 
-#define   i_prop_intern_F_of(X, R, N, M2) u8 N;
-#define   i_prop_intern_F_EXTERN_of(X, R, N, M2) u8 N;
-#define   i_prop_intern_INST_of(X, R, N, M2)           R N;
-#define   i_prop_intern_INST_EXTERN_of(X, R, N, M2)    M2 _##N;
-#define   i_prop_intern_DECL_of(X, R, N, M2)        i_prop_public_DECL(X, R, N)
-#define   i_prop_intern_GENERICS_of(X, R, N, M2)
-#define   i_prop_intern_INIT_of(X, R, N, M2)
-#define   i_prop_intern_PROTO_of(X, R, N, M2)  
-#define   i_prop_intern_METHOD_of(X, R, N, M2)  
+#define   i_prop_intern_F_meta(X, R, N, M2)             u8 N;
+#define   i_prop_intern_F_EXTERN_meta(X, R, N, M2)      u8 N;
+#define   i_prop_intern_INST_meta(X, R, N, M2)           R N;
+#define   i_prop_intern_INST_EXTERN_meta(X, R, N, M2)    R _##N;
+#define   i_prop_intern_DECL_meta(X, R, N, M2)        i_prop_public_DECL(X, R, N)
+#define   i_prop_intern_GENERICS_meta(X, R, N, M2)
+#define   i_prop_intern_INIT_meta(X, R, N, M2)
+#define   i_prop_intern_PROTO_meta(X, R, N, M2)  
+#define   i_prop_intern_METHOD_meta(X, R, N, M2)  
 
 
-#define   i_prop_public_F_as(X, R, N, M2) u8 N;
-#define   i_prop_public_F_EXTERN_as(X, R, N, M2) u8 N;
-#define   i_prop_public_INST_as(X, R, N, M2)
-#define   i_prop_public_INST_EXTERN_as(X, R, N, M2)
+#define   i_prop_public_F_as(X, R, N, M2)               u8 N;
+#define   i_prop_public_F_EXTERN_as(X, R, N, M2)        u8 N;
+#define   i_prop_public_INST_as(X, R, N, M2)            R N;
+#define   i_prop_public_INST_EXTERN_as(X, R, N, M2)     M2 N;
 #define   i_prop_public_DECL_as(X, R, N, M2)        i_prop_public_DECL(X, R, N)
 #define   i_prop_public_GENERICS_as(X, R, N, M2)
 #define   i_prop_public_INIT_as(X, R, N, M2) \
@@ -664,10 +669,10 @@ typedef bool(*global_init_fn)();
 #define   i_prop_public_PROTO_as(X, R, N, M2)  
 #define   i_prop_public_METHOD_as(X, R, N, M2)
 
-#define   i_prop_required_F_as(X, R, N, M2) u8 N;
-#define   i_prop_required_F_EXTERN_as(X, R, N, M2) u8 N;
-#define   i_prop_required_INST_as(X, R, N, M2)
-#define   i_prop_required_INST_EXTERN_as(X, R, N, M2)
+#define   i_prop_required_F_as(X, R, N, M2)             u8 N;
+#define   i_prop_required_F_EXTERN_as(X, R, N, M2)      u8 N;
+#define   i_prop_required_INST_as(X, R, N, M2)          R N;
+#define   i_prop_required_INST_EXTERN_as(X, R, N, M2)   M2 N;
 #define   i_prop_required_DECL_as(X, R, N, M2)      i_prop_public_DECL(X, R, N)
 #define   i_prop_required_GENERICS_as(X, R, N, M2)
 #define   i_prop_required_INIT_as(X, R, N, M2) \
@@ -675,8 +680,8 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_PROTO_as(X, R, N, M2)  
 #define   i_prop_required_METHOD_as(X, R, N, M2)
 
-#define   i_prop_intern_F_as(X, R, N, M2) u8 N;
-#define   i_prop_intern_F_EXTERN_as(X, R, N, M2) u8 N;
+#define   i_prop_intern_F_as(X, R, N, M2)               u8 N;
+#define   i_prop_intern_F_EXTERN_as(X, R, N, M2)        u8 N;
 #define   i_prop_intern_INST_as(X, R, N, M2)           R N;
 #define   i_prop_intern_INST_EXTERN_as(X, R, N, M2)    M2 _##N;
 #define   i_prop_intern_DECL_as(X, R, N, M2)        i_prop_public_DECL(X, R, N)
@@ -1969,6 +1974,7 @@ declare_primitive(floats,       raw)
     i_override(X,Y, method, init)
 declare_class(item)
 
+
 /// lets mimmick the structure in llama.cpp
 #define message_schema(X,Y,...) \
     i_prop(X,Y, public,   cstr, role) \
@@ -2237,6 +2243,8 @@ declare_class(subprocedure)
 
 #define subproc(targ, faddr, context) new(subprocedure, target, targ, ctx, context, addr, faddr) 
 
+typedef object(*mix_fn)(object, object, f32);
+
 #define array_schema(X,Y,O,...) \
     i_vprop          (X,Y, public, O,    elements) \
     i_prop           (X,Y, public, bool, unmanaged) \
@@ -2244,7 +2252,8 @@ declare_class(subprocedure)
     i_prop           (X,Y, public, i32,  len) \
     s_vargs          (X,Y, public, array,   of,             object) \
     s_vargs          (X,Y, public, array,   of_cstr,        cstr) \
-    i_method         (X,Y, public, O, first) \
+    i_method         (X,Y, public, array,   mix, array, f32) \
+    i_method         (X,Y, public, O,       first) \
     i_method         (X,Y, public, O,       last) \
     i_method         (X,Y, public, O,       pop) \
     i_method         (X,Y, public, none,    fill,           O) \
@@ -2255,7 +2264,8 @@ declare_class(subprocedure)
     i_method         (X,Y, public, none,    push_weak,      O) \
     i_method         (X,Y, public, none,    clear) \
     i_method         (X,Y, public, none,    concat,         array) \
-    i_method         (X,Y, public, O, get, num) \
+    i_method         (X,Y, public, O,       get,            num) \
+    i_method         (X,Y, public, O,       peek,           num) \
     i_method         (X,Y, public, num,     count) \
     i_method         (X,Y, public, sz,      len) \
     i_method         (X,Y, public, num,     index_of,       O) \
@@ -2326,6 +2336,11 @@ declare_enum(level)
     i_override  (X,Y, cast,    string) \
     i_override  (X,Y, cast,    bool)
 declare_class(map)
+
+#define ctx_schema(X,Y,...) \
+    i_prop(X,Y, public, object, app) \
+    i_prop(X,Y, intern, bool,   establishing)
+declare_class_2(ctx, map)
 
 
 #define fn_schema(X,Y,...) \
@@ -2442,7 +2457,7 @@ declare_class(async)
     i_method    (X,Y, public, string, filename) \
     i_method    (X,Y, public, path,   absolute) \
     i_method    (X,Y, public, path,   parent) \
-    i_method    (X,Y, public, object, read, AType) \
+    i_method    (X,Y, public, object, read, AType, ctx) \
     i_method    (X,Y, public, path,   change_ext, cstr) \
     i_method    (X,Y, public, array,  ls, string, bool) \
     i_method    (X,Y, public, bool,   move, path) \
@@ -2469,7 +2484,7 @@ declare_class_2(path, string)
 declare_class(subscriber)
 
 #define subs_schema(X,Y,...) \
-    i_prop    (X,Y, public,   array,  entries, of, subscriber) \
+    i_prop    (X,Y, public,   array,  entries, meta, subscriber) \
     i_method  (X,Y, public,   none,   add,    object, callback) \
     i_method  (X,Y, public,   object, invoke, object)
 declare_class(subs)
@@ -2551,21 +2566,21 @@ static inline f32 creep(f32 current, f32 goal, f32 amount, f32 rate) {
 }
 
 #define backwards(container, E, e) \
-    if (container && len(((array)container))) for (E e = get(((array)container), len(((array)container)) - 1), e0 = 0; e0 == 0; e0++) \
-        for (num __i = len(((array)container)); __i >= 0; __i--, e = __i >= 0 ? (E)get(((array)container), __i) : (E)null) \
+    if (container && len(((array)container))) for (E e = peek(((array)container), len(((array)container)) - 1), e0 = 0; e0 == 0; e0++) \
+        for (num __i = len(((array)container)); __i >= 0; __i--, e = __i >= 0 ? (E)peek(((array)container), __i) : (E)null) \
 
 /// we can iterate through a collection with this strange code
 #define each(container, E, e) \
-    if (container && len(((array)container))) for (E e = get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = get(((array)container), __i)) \
+    if (container && len(((array)container))) for (E e = peek(((array)container), 0), e0 = 0; e0 == 0; e0++) \
+        for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = peek(((array)container), __i)) \
 
 #define each_(container, E, e) \
-    if (container && len(((array)container))) for (E e = (E)get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = (E)get(((array)container), __i)) \
+    if (container && len(((array)container))) for (E e = (E)peek(((array)container), 0), e0 = 0; e0 == 0; e0++) \
+        for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = (E)peek(((array)container), __i)) \
 
 #define values(container, E, e) \
-    if (container && len(((array)container))) for (E e = *(E*)get(((array)container), 0), e0 = 0; e0 == 0; e0++) \
-        for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = *(E*)get(((array)container), __i)) \
+    if (container && len(((array)container))) for (E e = *(E*)peek(((array)container), 0), e0 = 0; e0 == 0; e0++) \
+        for (num __i = 0, __len = len(((array)container)); __i < __len; __i++, e = *(E*)peek(((array)container), __i)) \
 
 /// we can go through a map
 #define pairs(MM, EE) \
@@ -2587,8 +2602,8 @@ static inline f32 creep(f32 current, f32 goal, f32 amount, f32 rate) {
 
 /// possible to iterate safely through primitives
 #define primitives(arr, E, e) \
-    if (len(arr)) for (E e = *(E*)get(arr, 0), e0 = 0; e0 == 0; e0++) \
-        for (num i = 0, __len = len(arr); i < __len; i++, e = *(E*)get(arr, i)) \
+    if (len(arr)) for (E e = *(E*)peek(arr, 0), e0 = 0; e0 == 0; e0++) \
+        for (num i = 0, __len = len(arr); i < __len; i++, e = *(E*)peek(arr, i)) \
 
 object     A_alloc      (AType type, num count);
 object     A_alloc_dbg  (AType type, num count, cstr source, int line);
@@ -2631,7 +2646,7 @@ Exists      A_exists(object a);
 bool        A_inherits(AType src, AType check);
 num         clamp(num i, num mn, num mx);
 real        clampf(real, real, real);
-object      construct_with(AType type, object data);
+object      construct_with(AType type, object data, ctx context);
 bool        constructs_with(AType type, AType data_type);
 i64         read_integer(object data);
 #define     drop(a) A_drop((A)a)
@@ -2675,6 +2690,9 @@ object      A_realloc(object, sz);
 object      A_resize(object, sz);
 string      A_cast_string(A a);
 void        A_push(object, object);
+object      A_member_object(A a, type_member_t* mem);
+bool        A_member_set(A a, type_member_t* mem, object value);
+int         A_memcmp(A a, A b);
 void        A_start(symbol[]);
 map         A_args(cstrs argv, symbol default_arg, ...);
 A           A_header(object instance);
@@ -2684,6 +2702,7 @@ none recycle();
 none recycle_stop(int);
 
 #define head(o) A_header((object)o)
+
 
 //object      A_data(object instance);
 object      A_verify(object instance, AType type);
@@ -2699,7 +2718,7 @@ void        AF_set_id(object a, int id);
 void        AF_set_name(object a, cstr name);
 bool        AF_query_name(object a, cstr name);
 
-object      parse(cstr s, AType schema);
+object      parse(cstr s, AType schema, ctx context);
 
 #define vdata(instance) A_data(instance)
 
@@ -2728,6 +2747,9 @@ declare_class_2(array_map,        array, map)
 
 unit unit_with_string(unit a, string s);
 
+static inline f32 f32_mix(f32 a, f32 b, f32 f) {
+    return a * (1.0f - f) + b * f;
+}
 
 /// use i_struct_ctr_obj for objects or primitives
 /// use i_struct_ctr for structs.. this is because we cannot separate * from the token
@@ -2902,6 +2924,11 @@ vector_rgbaf vector_rgbaf_new(shape count, ...);
 vector_rgb8  vector_rgb8_new (shape count, ...);
 vector_rgbf  vector_rgbf_new (shape count, ...);
 
+#define weak_schema(X,Y,...)
+declare_abstract(weak)
+
+#define functional_schema(X,Y,...)
+declare_abstract(functional)
 
 #include <A-public>
 #ifdef __cplusplus

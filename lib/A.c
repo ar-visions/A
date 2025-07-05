@@ -1670,27 +1670,33 @@ bool A_member_set(A a, type_member_t* m, object value) {
     if (!(m->member_type & A_MEMBER_PROP))
         return false;
 
+    AType type         = isa(a);
     bool  is_primitive = (m->type->traits & A_TRAIT_PRIMITIVE) != 0;
     bool  is_enum      = (m->type->traits & A_TRAIT_ENUM)      != 0;
     bool  is_struct    = (m->type->traits & A_TRAIT_STRUCT)    != 0;
     bool  is_inlay     = (m->member_type  & A_MEMBER_INLAY)    != 0;
     ARef  member_ptr   = (cstr)a + m->offset;
     AType vtype        = isa(value);
-    A     info         = head(value);
+    A     vinfo        = head(value);
 
-    if (is_enum || is_struct || is_inlay || is_primitive) {
+    if (is_struct) {
+        //verify(vtype == m->type->vmember_type, "%s: expected vmember_type (%s) to equal isa(value) (%s)",
+        //    m->name, m->type->vmember_type->name, type->name);
+        verify(m->type->size == vtype->size * vinfo->count, "vector size mismatch for %s", m->name);
+        memcpy(member_ptr, value, m->type->size);
+    } else if (is_enum || is_inlay || is_primitive) {
         verify(!is_struct || vtype == m->type ||
             vtype == m->type->vmember_type,
             "%s: expected vmember_type (%s) to equal isa(value) (%s)",
             m->name, m->type->vmember_type->name, vtype->name);
         verify(!is_struct || vtype == m->type ||
-            m->type->size == vtype->size * info->count,
+            m->type->size == vtype->size * vinfo->count,
             "vector size mismatch for %s", m->name);
         int sz = m->type->size < vtype->size ? m->type->size : vtype->size;
         memcpy(member_ptr, value, sz);
     } else if (*member_ptr != value) {
-        verify(A_inherits(vtype, m->type), "type mismatch: setting %s on member %s %s",
-            vtype->name, m->type->name, m->name);
+        //verify(A_inherits(vtype, m->type), "type mismatch: setting %s on member %s %s",
+        //    vtype->name, m->type->name, m->name);
         drop(*member_ptr);
         *member_ptr = hold(value);
     }

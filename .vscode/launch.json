@@ -168,21 +168,13 @@
             ]
         },
         {
-            "name": "tapestry (silver)",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "/src/tapestry/bin/tapestry",
-            "args": [
-                "/src/silver"
-            ],
-            "stopAtEntry": false,
-            "cwd": "/src/tapestry",
-            "environment": [
-                {
-                    "name": "CC",
-                    "value": "clang"
-                }
-            ]
+            "name":       "tapestry (silver)",
+            "type":       "lldb",
+            "request":    "launch",
+            "program":    "/src/tapestry/bin/tapestry",
+            "args":     [ "/src/silver" ],
+            "cwd":        "/src/tapestry",
+            "env":      { "VERBOSE": "1", "CC": "clang", "TAPESTRY": "/src/tapestry" }
         },
         {
             "name": "tapestry (ai)",
@@ -211,22 +203,13 @@
             "env":      { "VERBOSE": "1", "CC": "clang" }
         },
         {
-            "name": "silver",
-            "type": "cppdbg",
-            "request": "launch",
-            "program": "/src/silver/debug/app/silver",
-            "args": [
-                "/src/silver/silver88.cms"
-            ],
-            "environment": [
-                {
-                    "name": "DYLD_LIBRARY_PATH",
-                    "value": "/Users/kalen/src/tapestry/lib"
-                }
-            ],
-            "stopAtEntry": false,
-            "cwd": "/src/silver/debug",
-            "MIMode": "lldb"
+            "name":       "silver",
+            "type":       "lldb",
+            "request":    "launch",
+            "program":    "/src/tapestry/bin/silver",
+            "args":     [ "/src/silver/silver88.sf" ],
+            "cwd":        "/src/tapestry/share/silver",
+            "env":      { "VERBOSE": "1", "CC": "clang" }
         },
         {
             "name": "tapestry",

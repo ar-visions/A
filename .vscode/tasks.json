@@ -47,9 +47,6 @@
             },
 			"isBackground": false,
 			"problemMatcher": ["$gcc"],
-            "windows": {
-                "command": "msbuild silver.sln /t:silver"
-            },
             "osx": {
                 "command": "make -j8"
             },

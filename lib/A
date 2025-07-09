@@ -88,9 +88,11 @@ struct _A_f;
 #define a(...) array_of(__VA_ARGS__ __VA_OPT__(,) null)
 #define m(...)   map_of(__VA_ARGS__ __VA_OPT__(,) null)
 
+#define len(I,...) ({ __typeof__(I) _i_ = I; _i_ ? (num)ftableI(_i_)->len(_i_, ## __VA_ARGS__) : (num)0; })
+
 
 /// our A-type classes have many types of methods
-/// constructor, i[nstance]-method, s[tatic]-method, operator (these are enumerable!), and index.  we index by 1 argument only in C but we may allow for more in silver
+/// constructor, i[nstance]-method, s[tatic]-method, operator (these are enumeration!), and index.  we index by 1 argument only in C but we may allow for more in silver
 enum A_MEMBER {
     A_MEMBER_NONE      = 0,
     A_MEMBER_CONSTRUCT = 1,
@@ -126,7 +128,9 @@ enum A_TRAIT {
     A_TRAIT_STRUCT    = 512,
     A_TRAIT_PTR_SIZE  = 1024,
     A_TRAIT_PUBLIC    = 2048,
-    A_TRAIT_USER_INIT = 4096
+    A_TRAIT_USER_INIT = 4096,
+    A_TRAIT_CLASS     = 8192,
+    A_TRAIT_BASE      = 16384
 };
 
 _Pragma("pack(push, 1)")
@@ -156,6 +160,7 @@ typedef struct ftable_t {
     int             member_count;
     struct type_member_t* members;
     int             traits;
+    void*           user;
     u128            required;
     AType           src;
     void*           arb;
@@ -206,8 +211,8 @@ typedef bool(*global_init_fn)();
     E##_type.members[E## _type.member_count].ptr      = &static_##N;\
     E##_type.members[E## _type.member_count].member_type = A_MEMBER_ENUMV; \
     E##_type.member_count++;
-#define   enum_value(E,T,Y, N, VAL)                enum_value_##Y(E, T, N, VAL)
 
+#define   enum_value(E,T,Y, N, VAL)                enum_value_##Y(E, T, N, VAL)
 
 #define   enum_method_DECL(E, T, R, N, ...)
 #define   enum_method_COUNT(E, T, R, N, ...)
@@ -389,13 +394,15 @@ typedef bool(*global_init_fn)();
         instance; \
     })
 
-#define create(T, ...) \
+#undef alloc
+#define alloc(T, ...) \
     ({ \
         T instance = (T)A_alloc(typeid(T), 1); \
         _N_ARGS(instance, ## __VA_ARGS__); \
         A_initialize((A)instance); \
         instance; \
     })
+
 
 #define ux(T, ...) \
 ({ \
@@ -415,15 +422,15 @@ typedef bool(*global_init_fn)();
 #define ftable(TYPE, INSTANCE)      ((TYPE##_f*)((A)INSTANCE)[-1].type)
 #define isa(INSTANCE)               (INSTANCE ? (struct _A_f*)((struct _A*)INSTANCE - 1)->type : (struct _A_f*)0)
 // see: javascript; returns null if its not an instance-of; faults if you give it a null
-#define instanceof(left, type)      (type)A_instanceof(left, typeid(type))
+#define instanceof(left, type)      A_instanceof(left, typeid(type))
 #define ftableI(I)                  ((__typeof__((I)->f)) ((A)(I))[-1].type)
 #define fcall(I,M,...)              ({ __typeof__(I) _i_ = I; ftableI(_i_)->M(_i_, ## __VA_ARGS__); })
 #define mcall(I,M,...)              ({ __typeof__(I) _i_ = I; (_i_) ? ftableI(_i_)->M(_i_, ## __VA_ARGS__) : 0; })
 #define cstring(I)                  cast(cstr, I)
 #define val(T,V)                    A_primitive(typeid(T), (&(T){V}))
-#define idx_1(I,T1,V1)              M(I, index ##_## T1, V1)
-#define idx_2(I,T1,T2,V1,V2)        M(I, index ##_## T1 ##_## T2, V1, V2)
-#define idx(I,V1)                   M(I, index ##_## num, V1)
+#define idx_1(I,T1,V1)              fcall(I, index ##_## T1, V1)
+#define idx_2(I,T1,T2,V1,V2)        fcall(I, index ##_## T1 ##_## T2, V1, V2)
+#define idx(I,V1)                   fcall(I, index ##_## num, V1)
 #define cast(T,I)                   fcall(I, cast_##T)
 #define meta_t(I,IDX)               isa(I) -> meta.meta_##IDX
 #define ctr(T,WITH,...)             A_initialize(T##_type.with_##WITH(A_alloc(typeid(T), 1), ## __VA_ARGS__))
@@ -564,7 +571,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_METHOD(X, R, N)
 
 #define   i_prop_intern_F(X, R, N)              u8 N;
-#define   i_prop_intern_F_EXTERN(X, R, N)       u8 N;
+#define   i_prop_intern_F_EXTERN(X, R, N)       
 #define   i_prop_intern_INST(X, R, N)           R N;
 #define   i_prop_intern_INST_EXTERN(X, R, N)    R _##N;
 #define   i_prop_intern_DECL(X, R, N)           i_prop_public_DECL(X, R, N)
@@ -608,7 +615,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_METHOD_field(X, R, N, M2)
 
 #define   i_prop_intern_F_field(X, R, N, M2)                u8 N;
-#define   i_prop_intern_F_EXTERN_field(X, R, N, M2)         u8 N;
+#define   i_prop_intern_F_EXTERN_field(X, R, N, M2)         
 #define   i_prop_intern_INST_field(X, R, N, M2)             R N;
 #define   i_prop_intern_INST_EXTERN_field(X, R, N, M2)      R N;
 #define   i_prop_intern_DECL_field(X, R, N, M2)     i_prop_public_DECL(X, R, N)
@@ -648,7 +655,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_METHOD_meta(X, R, N, M2)
 
 #define   i_prop_intern_F_meta(X, R, N, M2)             u8 N;
-#define   i_prop_intern_F_EXTERN_meta(X, R, N, M2)      u8 N;
+#define   i_prop_intern_F_EXTERN_meta(X, R, N, M2)      
 #define   i_prop_intern_INST_meta(X, R, N, M2)           R N;
 #define   i_prop_intern_INST_EXTERN_meta(X, R, N, M2)    R _##N;
 #define   i_prop_intern_DECL_meta(X, R, N, M2)        i_prop_public_DECL(X, R, N)
@@ -681,7 +688,7 @@ typedef bool(*global_init_fn)();
 #define   i_prop_required_METHOD_as(X, R, N, M2)
 
 #define   i_prop_intern_F_as(X, R, N, M2)               u8 N;
-#define   i_prop_intern_F_EXTERN_as(X, R, N, M2)        u8 N;
+#define   i_prop_intern_F_EXTERN_as(X, R, N, M2)        
 #define   i_prop_intern_INST_as(X, R, N, M2)           R N;
 #define   i_prop_intern_INST_EXTERN_as(X, R, N, M2)    M2 _##N;
 #define   i_prop_intern_DECL_as(X, R, N, M2)        i_prop_public_DECL(X, R, N)
@@ -751,7 +758,7 @@ typedef bool(*global_init_fn)();
 #define   i_vprop_required_METHOD(X, R, N)
 
 #define   i_vprop_intern_F(X, R, N) u8 N;
-#define   i_vprop_intern_F_EXTERN(X, R, N) u8 N;
+#define   i_vprop_intern_F_EXTERN(X, R, N)
 #define   i_vprop_intern_INST(X, R, N)           R* N;
 #define   i_vprop_intern_INST_EXTERN(X, R, N)
 #define   i_vprop_intern_DECL(X, R, N)          i_prop_public_DECL(X, R, N)
@@ -808,7 +815,7 @@ typedef bool(*global_init_fn)();
 #define   i_array_public_METHOD(X, R, S, N)
 
 #define   i_array_intern_F(X, R, S, N) u8 N;
-#define   i_array_intern_F_EXTERN(X, R, S, N) u8 N;
+#define   i_array_intern_F_EXTERN(X, R, S, N)
 #define   i_array_intern_INST(X, R, S, N)         R N[S];
 #define   i_array_intern_INST_EXTERN(X, R, S, N)  ARef _##N[S];
 #define   i_array_intern_DECL(X, R, S, N)         i_prop_public_DECL(X, R, N)
@@ -969,7 +976,7 @@ typedef bool(*global_init_fn)();
 #define   i_inlay_required_METHOD(X, R, N)
 
 #define   i_inlay_intern_F(X, R, N)               u8 N;
-#define   i_inlay_intern_F_EXTERN(X, R, N)        u8 N;
+#define   i_inlay_intern_F_EXTERN(X, R, N)        
 #define   i_inlay_intern_INST(X, R, N)            struct _##R N;
 #define   i_inlay_intern_INST_EXTERN(X, R, N)     i_inlay_intern_INST(X, R, N)
 #define   i_inlay_intern_DECL(X, R, N)
@@ -1148,6 +1155,10 @@ CPU_Caps detect_cpu_caps();
 /// avoiding conflict with parsing i_method uses
 #define   i_method\
 (X, Y, T, R, N, ...) i_method_##T##_##Y(X, R, N, X, ## __VA_ARGS__)
+
+#define   i_guard\
+(X, Y, T, R, N, ...) i_method_##T##_##Y(X, R, N, X, ## __VA_ARGS__)
+
 
 // SIMD is public, since we modify the function table
 #define   i_SIMD\
@@ -1469,6 +1480,7 @@ typedef struct method_t {
     int             member_count; \
     type_member_t*  members; \
     int             traits; \
+    void*           user; \
     u128            required; \
     AType           src; \
     void*           arb; \
@@ -1763,8 +1775,7 @@ struct af_recycler {
         char* member_validate[256] = {}; \
         if ((AType)type_ref == (AType)base_ref) \
             type_ref->name = #TYPE; \
-        if ((AType)type_ref != (AType)base_ref && \
-            (!base_ref->traits && !base_ref->size)) { \
+        if ((AType)type_ref != (AType)base_ref && (!base_ref->traits)) { \
             A_lazy_init((global_init_fn)&Aglobal_##TYPE); \
             return false; \
         } else { \
@@ -1775,13 +1786,13 @@ struct af_recycler {
             type_ref->af->re_alloc = 1024; \
             type_ref->af->re = (A**)calloc(1024, sizeof(A*)); \
             type_ref->magic = 1337; \
-            static type_member_t \
-                members[64 + sizeof(TYPE##_type) / sizeof(void*)]; \
+            static type_member_t members[512]; \
             type_ref->src = (AType)base_ref != typeid(A) \
                  ? (AType)base_ref : (AType)null; \
             type_ref->parent_type = \
                 (__typeof__(type_ref->parent_type))&BASE##_type; \
             type_ref->name          = #TYPE; \
+            printf("set type name to %s (%p)\n", TYPE##_type.name, &TYPE##_type);  \
             type_ref->module        = MODULE; \
             type_ref->members       = members; \
             type_ref->member_count  = 0; \
@@ -1821,7 +1832,7 @@ for (int i = 0; i < validate_count; i++) { \
     define_arb(A0, A1, SZ, traits, 0, null, ({}), __VA_ARGS__)
 
 #define define_class(A0, A1, ...) \
-    define_any(A0, A1, sizeof(struct _##A0), 0, __VA_ARGS__)
+    define_any(A0, A1, sizeof(struct _##A0), A_TRAIT_CLASS, __VA_ARGS__)
 
 #define define_public(A0, A1, ...) \
     define_any(A0, A1, sizeof(struct _##A0), A_TRAIT_PUBLIC, __VA_ARGS__)
@@ -1869,16 +1880,31 @@ struct _sz { i64 value; };
 #define object_intern(AA,YY,...) AA##_schema(AA,YY,__VA_ARGS__)
 declare_base(A)
 
-declare_base_meta(object, A, A)
 
-#define object_schema(X,Y,...)
+#define object_schema(X,Y,...) \
+
+declare_base_meta(object, A, A)
 
 #define typeid(X)   ((AType)&X##_type)
 
 #define scalarof(X) head(X)->scalar
 
-#define numeric_schema(X,Y,...)
-declare_abstract(numeric)
+#define numeric_schema(X,Y,...) \
+    i_operator(X,Y, public, numeric, _add, numeric) \
+    i_operator(X,Y, public, numeric, _sub, numeric) \
+    i_operator(X,Y, public, numeric, _mul, numeric) \
+    i_operator(X,Y, public, numeric, _div, numeric) \
+    i_operator(X,Y, public, numeric, _or, numeric) \
+    i_operator(X,Y, public, numeric, _and, numeric) \
+    i_operator(X,Y, public, numeric, _xor, numeric) \
+    i_operator(X,Y, public, numeric, _mod, numeric) \
+    i_operator(X,Y, public, numeric, _right, numeric) \
+    i_operator(X,Y, public, numeric, _left,  numeric) \
+    i_operator(X,Y, public, numeric, _compare,   numeric) \
+    i_operator(X,Y, public, numeric, _equal,     numeric) \
+    i_operator(X,Y, public, numeric, _not_equal, numeric) \
+    i_operator(X,Y, public, none,    _assign,    numeric)
+declare_class(numeric)
 
 #define string_like_schema(X,Y,...)
 declare_abstract(string_like)
@@ -1899,22 +1925,22 @@ declare_abstract(imported)
 /// this is so we have a defined construction method for data conversion, we actually need it registered
 /// we may optimize the need for it to be called in C99 output once working
 #define ARef_schema(X,Y,...)        ref_schema(X,Y,...)
-#define i8_schema(X,Y,...)          numeric_schema(X,Y,...)
-#define i16_schema(X,Y,...)         numeric_schema(X,Y,...)
-#define i32_schema(X,Y,...)         numeric_schema(X,Y,...)
-#define i64_schema(X,Y,...)         numeric_schema(X,Y,...)
-#define u8_schema(X,Y,...)          numeric_schema(X,Y,...)
-#define u16_schema(X,Y,...)         numeric_schema(X,Y,...)
-#define u32_schema(X,Y,...)         numeric_schema(X,Y,...)
-#define u64_schema(X,Y,...)         numeric_schema(X,Y,...)
-#define u128_schema(X,Y,...)        numeric_schema(X,Y,...)
-#define f32_schema(X,Y,...)         numeric_schema(X,Y,...)
-#define f64_schema(X,Y,...)         numeric_schema(X,Y,...)
-#define f128_schema(X,Y,...)        numeric_schema(X,Y,...)
-#define AMember_schema(X,Y,...)     numeric_schema(X,Y,...)
-#define bool_schema(X,Y,...)        numeric_schema(X,Y,...)
-#define num_schema(X,Y,...)         numeric_schema(X,Y,...)
-#define sz_schema(X,Y,...)          numeric_schema(X,Y,...)
+#define i8_schema(X,Y,...)          numeric_schema(numeric,Y,...)
+#define i16_schema(X,Y,...)         numeric_schema(numeric,Y,...)
+#define i32_schema(X,Y,...)         numeric_schema(numeric,Y,...)
+#define i64_schema(X,Y,...)         numeric_schema(numeric,Y,...)
+#define u8_schema(X,Y,...)          numeric_schema(numeric,Y,...)
+#define u16_schema(X,Y,...)         numeric_schema(numeric,Y,...)
+#define u32_schema(X,Y,...)         numeric_schema(numeric,Y,...)
+#define u64_schema(X,Y,...)         numeric_schema(numeric,Y,...)
+#define u128_schema(X,Y,...)        numeric_schema(numeric,Y,...)
+#define f32_schema(X,Y,...)         numeric_schema(numeric,Y,...)
+#define f64_schema(X,Y,...)         numeric_schema(numeric,Y,...)
+#define f128_schema(X,Y,...)        numeric_schema(numeric,Y,...)
+#define AMember_schema(X,Y,...)     numeric_schema(numeric,Y,...)
+#define bool_schema(X,Y,...)        numeric_schema(numeric,Y,...)
+#define num_schema(X,Y,...)         numeric_schema(numeric,Y,...)
+#define sz_schema(X,Y,...)          numeric_schema(numeric,Y,...)
 #define cstr_schema(X,Y,...)        string_like_schema(X,Y,...)
 #define symbol_schema(X,Y,...)      string_like_schema(X,Y,...)
 #define cereal_schema(X,Y,...)      raw_schema(X,Y,...)
@@ -1957,7 +1983,7 @@ declare_primitive(cstrs,        raw)
 
 /// whatever we can 'name', we can handle as a type of any pointer primitive
 declare_primitive(AType,        raw)
-declare_primitive(ARef,         ref)
+declare_primitive(ARef, ref)
 declare_primitive(Member,       raw)
 
 declare_primitive(floats,       raw)
@@ -2003,6 +2029,7 @@ forward(map)
     i_method(X,Y, public,    num,     count) \
     i_override(X,Y, method, dealloc)
 declare_class(list)
+
 
 /// array of elemental data
 /// important to define the same operators here in silver definition of runtime
@@ -2224,7 +2251,7 @@ declare_class(shape)
     i_method    (X,Y, public, vector,  slice, num, num) \
     i_method    (X,Y, public, none,    realloc, sz) \
     i_method    (X,Y, public, none,    resize, sz) \
-    i_method    (X,Y, public, sz,      len) \
+    i_guard     (X,Y, public, sz,      len) \
     i_ctr       (X,Y, public, path) \
     i_ctr       (X,Y, public, i32) \
     i_override  (X,Y, method, init)
@@ -2245,9 +2272,12 @@ declare_class(subprocedure)
 
 typedef object(*mix_fn)(object, object, f32);
 
+
 #define array_schema(X,Y,O,...) \
     i_vprop          (X,Y, public, O,    elements) \
     i_prop           (X,Y, public, bool, unmanaged) \
+    i_prop           (X,Y, public, bool, assorted) \
+    i_prop           (X,Y, opaque, AType, last_type) \
     i_prop           (X,Y, public, i32,  alloc) \
     i_prop           (X,Y, public, i32,  len) \
     s_vargs          (X,Y, public, array,   of,             object) \
@@ -2267,7 +2297,7 @@ typedef object(*mix_fn)(object, object, f32);
     i_method         (X,Y, public, O,       get,            num) \
     i_method         (X,Y, public, O,       peek,           num) \
     i_method         (X,Y, public, num,     count) \
-    i_method         (X,Y, public, sz,      len) \
+    i_guard          (X,Y, public, sz,      len) \
     i_method         (X,Y, public, num,     index_of,       O) \
     i_operator       (X,Y, public, none,    _assign_add,    O) \
     i_operator       (X,Y, public, none,    _assign_sub,    num) \
@@ -2280,6 +2310,14 @@ typedef object(*mix_fn)(object, object, f32);
     i_override       (X,Y, cast,   bool) \
     i_override       (X,Y, cast,   string)
 declare_class(array, object)
+
+
+#define src_schema(X,Y,O,...) \
+    i_prop           (X,Y, public, object, obj) \
+    i_ctr            (X,Y, public, object) \
+    i_override       (X,Y, cast,   string)
+declare_class(src)
+
 
 #define ATypes_schema(X,Y,...)
 declare_class_2(ATypes, array, AType)
@@ -2316,8 +2354,10 @@ declare_enum(level)
     i_prop      (X,Y, public,  list,       fifo) \
     i_prop      (X,Y, opaque,  i64,        count) \
     i_prop      (X,Y, public,  i32,        hsize) \
-    i_prop      (X,Y, intern,  item*,      hlist) \
+    i_prop      (X,Y, opaque,  item*,      hlist) \
     i_prop      (X,Y, public,  bool,       unmanaged)  \
+    i_prop      (X,Y, opaque,  AType,      last_type) \
+    i_prop      (X,Y, public,  bool,       assorted)  \
     i_method    (X,Y, public,  none,       set,        object, object) \
     i_method    (X,Y, public,  object,     get,        object) \
     i_method    (X,Y, public,  item,       lookup,     object) \
@@ -2327,7 +2367,7 @@ declare_enum(level)
     i_method    (X,Y, public,  bool,       contains,   object) \
     i_method    (X,Y, public,  none,       concat,     map) \
     i_method    (X,Y, public,  none,       clear) \
-    i_method    (X,Y, public,  sz,         len) \
+    i_guard     (X,Y, public,  sz,         len) \
     i_index     (X,Y, public,  object,     sz) \
     i_index     (X,Y, public,  object,     object) \
     i_ctr       (X,Y, public,  i32) \
@@ -2361,7 +2401,7 @@ declare_class(fn)
     i_method  (X,Y,   public, i32,     first) \
     i_method  (X,Y,   public, i32,     last) \
     i_method  (X,Y,   public, f64,     real_value) \
-    i_method  (X,Y,   public, sz,      len) \
+    i_guard   (X,Y,   public, sz,      len) \
     i_method  (X,Y,   public, string,  ucase) \
     i_method  (X,Y,   public, string,  lcase) \
     i_method  (X,Y,   public, array,   split, symbol) \
@@ -2381,6 +2421,7 @@ declare_class(fn)
     i_method  (X,Y,   public, bool,    starts_with, symbol) \
     i_method  (X,Y,   public, num,     cmp, symbol) \
     i_method  (X,Y,   public, bool,    eq,  symbol) \
+    i_method  (X,Y,   public, string,  interpolate, map) \
     i_cast    (X,Y,   public, cstr) \
     i_cast    (X,Y,   public, sz) \
     i_cast    (X,Y,   public, path) \
@@ -2661,7 +2702,12 @@ map         A_arguments(int argc, symbol argv[], map default_values, object defa
 AF          A_pool(sz size);
 void        A_free(object a);
 A_f**       A_types(num* length);
+
+type_member_t* A_member_type(AType type, enum A_MEMBER mt, AType f, bool poly);
+object A_cast(A a, AType type);
+
 type_member_t* A_member(AType type, enum A_MEMBER member_type, symbol name, bool poly);
+type_member_t* A_member_first(AType type, AType find, bool poly);
 object      A_method_call(method_t* a, array args);
 object      A_method(AType type, char* method_name, array args);
 object      A_method_vargs(object instance, cstr method_name, int n_args, ...);

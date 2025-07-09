@@ -1,0 +1,298 @@
+class A
+    opaque type     : AType
+    opaque scalar   : AType
+    opaque refs     : i64
+    opaque data     : object
+    opaque shape    : shape
+    opaque source   : str
+    opaque line     : i64
+    opaque alloc    : i64
+    opaque count    : i64
+    opaque recycle  : i64
+    opaque af_index : i64
+
+    public init -> none
+    public dealloc -> none
+    public compare -> i32
+    public hash -> u64
+    public copy -> object
+    public data -> object
+    public data_type -> AType
+    public data_stride -> i64
+    public bind[ bool: A, AType: AType, symbol: symbol ] -> callback
+
+class string_like
+    opaque next  : X
+    opaque prev  : X
+    opaque ref   : object
+    opaque value : object
+    opaque key   : object
+    opaque h     : u64
+
+    override hash
+    override init
+
+class message
+    public role    : str
+    public content : str
+
+    override init
+    override dealloc
+
+class list
+    opaque first     : item
+    opaque last      : item
+    opaque assoc     : map
+    public unmanaged : bool
+    public count     : i64
+
+    public pop -> object
+    public push -> item
+    public insert_after[ i32: object ] -> item
+    public index_of -> num
+    public item_of -> item
+    public sort -> none
+    public remove -> none
+    public remove_item -> none
+    public get -> object
+    public count -> num
+    override dealloc
+
+class buffer
+    public data  : str
+    public count : i64
+    public alloc : i64
+
+    public append[ i32: object ] -> none
+    override dealloc
+
+class file
+    public src       : path
+    public read      : bool
+    public write     : bool
+    public size      : num
+    public location  : num
+    public id        : handle
+    public text_mode : bool
+
+    public write -> bool
+    public file_read -> object
+    public gets -> str
+    public file_close -> none
+    override init
+    override dealloc
+    override bool
+
+class shape
+    public count : i64
+    public data  : array[ i64 16 ]
+
+    public total -> i64
+    override compare
+
+class vector
+    public alloc  : num
+    public type   : AType
+    public vshape : shape
+
+    public concat[ num: ARef ] -> none
+    public get -> ARef
+    public set[ ARef: num ] -> none
+    public push -> none
+    public slice[ num: num ] -> vector
+    public realloc -> none
+    public resize -> none
+    public len -> sz
+
+class subprocedure
+    required target : object
+    public ctx      : object
+    required addr   : handle
+
+    public invoke -> object
+
+class ATypes : array, AType
+
+class hashmap
+    opaque data        : list
+    public alloc       : num
+    public count       : num
+    public unmanaged   : bool
+    intern item_header : A
+
+    public remove -> none
+    public set[ object: object ] -> none
+    public get -> object
+    public fetch -> item
+    public lookup -> item
+    public contains -> bool
+    public clear -> none
+
+class map
+    public fifo      : list
+    opaque count     : i64
+    public hsize     : i32
+    opaque hlist     : item*
+    public unmanaged : bool
+    opaque last_type : AType
+    public assorted  : bool
+
+    public set[ object: object ] -> none
+    public get -> object
+    public lookup -> item
+    public fetch -> item
+    public rm -> none
+    public rm_item -> none
+    public contains -> bool
+    public concat -> none
+    public clear -> none
+    public len -> sz
+
+class ctx : map
+    public app          : object
+    intern establishing : bool
+
+class fn
+    intern method  : method_t*
+    public target  : object
+    public context : object
+
+    public call -> object
+
+class string
+    public chars      : symbol
+    public alloc      : num
+    public ref_length : num
+    public len        : num
+    public h          : u64
+
+    public is_numeric -> bool
+    public first -> i32
+    public last -> i32
+    public real_value -> f64
+    public len -> sz
+    public ucase -> str
+    public lcase -> str
+    public split -> array
+    public escape -> str
+    public index_of -> num
+    public append -> none
+    public append_count[ i32: symbol ] -> none
+    public push -> none
+    public concat -> none
+    public trim -> str
+    public ltrim -> str
+    public rtrim -> str
+    public mid[ num: num ] -> str
+    public reserve -> none
+    public write[ bool: handle ] -> none
+    public ends_with -> bool
+    public starts_with -> bool
+    public cmp -> num
+    public eq -> bool
+    public interpolate -> str
+    override hash
+    override compare
+    override init
+    override bool
+    override copy
+
+class watch
+    public res      : path
+    public callback : ARef
+    public argument : ARef
+
+    public pause -> none
+    public start -> none
+
+class unit
+    public percent     : bool
+    public scale_v     : f32
+    public enum_v      : f32
+    public meta_type   : AType
+    public enum_member : ARef
+
+class mutex
+    public cond : bool
+    intern mtx  : struct mutex_t*
+
+    public lock -> none
+    public unlock -> none
+    public cond_wait -> none
+    public cond_signal -> none
+    public cond_broadcast -> none
+
+class async
+    public work_fn : hook
+    public work    : array
+    intern global  : mutex
+    intern threads : struct thread_t*
+
+    public sync -> object
+
+class path : string
+    public exists -> bool
+    public is_symlink -> bool
+    public resolve -> path
+    public make_dir -> bool
+    public is_ext -> bool
+    public is_empty -> bool
+    public is_dir -> bool
+    public cp[ bool: path ] -> none
+    public directory -> path
+    public cd -> none
+    public stem -> str
+    public ext -> str
+    public filename -> str
+    public absolute -> path
+    public parent -> path
+    public read[ ctx: AType ] -> object
+    public change_ext -> path
+    public ls[ bool: str ] -> array
+    public move -> bool
+    public latest_modified -> path
+    public modified_time -> i64
+
+class subscriber
+    required target : object
+    required method : callback
+
+class subs
+    public entries : array
+
+    public add[ callback: object ] -> none
+    public invoke -> object
+
+class line
+    public indent : i32
+    public text   : array
+
+class array_string : array, string
+
+class array_map : array, map
+
+class vector_mat4f : vector, mat4f
+
+class vector_vec4f : vector, vec4f
+
+class vector_vec3f : vector, vec3f
+
+class vector_vec2f : vector, vec2f
+
+class vector_i8 : vector, i8
+
+class vector_f32 : vector, f32
+
+class vector_f64 : vector, f64
+
+class vector_i64 : vector, i64
+
+class vector_rgba8 : vector, rgba8
+
+class vector_rgba16 : vector, rgba16
+
+class vector_rgbaf : vector, rgbaf
+
+class vector_rgb8 : vector, rgb8
+
+class vector_rgbf : vector, rgbf

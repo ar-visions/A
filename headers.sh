@@ -32,8 +32,9 @@ fi
 # should rebuild if last build failed, i think.
 # that may be stored in a file before we make the time stamp, called tapestry-result
 # if that is 0 then we may remake it
+rm -f "$IMPORT_HEADER" # todo: improve
+
 if [ ! -f "$IMPORT_HEADER" ] || [ "$BUILD_FILE" -nt "$IMPORT_HEADER" ]; then
-    rm -f "$IMPORT_HEADER"
     echo "/* generated import interface */" >> "$IMPORT_HEADER"
     echo "#ifndef _${UPROJECT}_IMPORT_${PROJECT}_" >> "$IMPORT_HEADER"
     echo "#define _${UPROJECT}_IMPORT_${PROJECT}_" >> "$IMPORT_HEADER"
@@ -176,14 +177,29 @@ if [ ! -f "$METHODS_HEADER" ] || [ "$PROJECT_HEADER" -nt "$METHODS_HEADER" ]; th
     echo "#define _${UPROJECT}_METHODS_H_" >> "$METHODS_HEADER"
     echo >> "$METHODS_HEADER"
     # Process method declarations (these apply to classes only, not structs; structs also cannot be poly)
+    TEMP_METHODS=$(mktemp)
+
+    grep -o 'i_guard[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*[[:alnum:]_]*' "$PROJECT_HEADER" | \
+    $SED 's/i_guard[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*\([[:alnum:]_]*\).*/\1/' | \
+    while read method; do
+        if [ -n "$method" ] && ! grep -qx "$method" "$TEMP_METHODS"; then
+            echo "$method" >> "$TEMP_METHODS"
+            echo "#undef $method" >> "$METHODS_HEADER"
+            echo "#define $method(I,...) ({ __typeof__(I) _i_ = I; (((A)_i_ != (A)0L) ? ftableI(_i_)->$method(_i_, ## __VA_ARGS__) : (__typeof__(ftableI(_i_)->$method(_i_, ## __VA_ARGS__)))0) ; })" >> "$METHODS_HEADER"
+        fi
+    done
+
     grep -o 'i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*[[:alnum:]_]*' "$PROJECT_HEADER" | \
     $SED 's/i_method[[:space:]]*([^,]*,[^,]*,[^,]*,[^,]*,[[:space:]]*\([[:alnum:]_]*\).*/\1/' | \
     while read method; do
-        if [ -n "$method" ]; then
-            echo "#undef $method" >> "$METHODS_HEADER"
+        if [ -n "$method" ] && ! grep -qx "$method" "$TEMP_METHODS"; then
+            echo "$method" >> "$TEMP_METHODS"
+            echo "#ifndef $method" >> "$METHODS_HEADER"
             echo "#define $method(I,...) ({ __typeof__(I) _i_ = I; ftableI(_i_)->$method(_i_, ## __VA_ARGS__); })" >> "$METHODS_HEADER"
+            echo "#endif" >> "$METHODS_HEADER"
         fi
     done
+
     # Close the include guard
     echo >> "$METHODS_HEADER"
     echo "#endif /* _${UPROJECT}_METHODS_H_ */" >> "$METHODS_HEADER"
